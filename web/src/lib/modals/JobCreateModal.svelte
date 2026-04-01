@@ -16,6 +16,7 @@
     { title: $t('admin.memory_cleanup_job'), value: ManualJobName.MemoryCleanup },
     { title: $t('admin.memory_generate_job'), value: ManualJobName.MemoryCreate },
     { title: $t('admin.backup_database'), value: ManualJobName.BackupDatabase },
+    { title: 'Person grouping', value: ManualJobName.PersonGroupMerge },
   ].map(({ value, title }) => ({ id: value, label: title, value }));
 
   let selectedJob: ComboBoxOption | undefined = $state(undefined);

@@ -299,6 +299,28 @@ export enum Permission {
   AdminAuthUnlinkAll = 'adminAuth.unlinkAll',
 }
 
+export enum SharingPermission {
+  All = 'all',
+
+  AssetRead = 'asset.read',
+  AssetUpdate = 'asset.update',
+  AssetEdit = 'asset.edit',
+  AssetDelete = 'asset.delete',
+  AssetShare = 'asset.share',
+
+  ExifRead = 'exif.read',
+
+  PersonRead = 'person.read',
+  PersonUpdate = 'person.update',
+  PersonMerge = 'person.merge',
+  PersonDelete = 'person.delete',
+}
+
+export const SharingPermissionSchema = z
+  .enum(SharingPermission)
+  .describe('Sharing permission schema')
+  .meta({ id: 'SharingPermission' });
+
 export enum SharedLinkType {
   Album = 'ALBUM',
 
@@ -397,6 +419,7 @@ export enum ManualJobName {
   MemoryCleanup = 'memory-cleanup',
   MemoryCreate = 'memory-create',
   BackupDatabase = 'backup-database',
+  PersonGroupMerge = 'person-group-merge',
 }
 
 export const ManualJobNameSchema = z.enum(ManualJobName).describe('Manual job name').meta({ id: 'ManualJobName' });
@@ -834,6 +857,7 @@ export enum JobName {
   PersonCleanup = 'PersonCleanup',
   PersonFileMigration = 'PersonFileMigration',
   PersonGenerateThumbnail = 'PersonGenerateThumbnail',
+  PersonGroupMerge = 'PersonGroupMerge',
 
   SessionCleanup = 'SessionCleanup',
 

@@ -4,8 +4,8 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { Route } from '$lib/route';
   import { locale } from '$lib/stores/preferences.store';
-  import { getPeopleThumbnailUrl } from '$lib/utils';
-  import { type AssetResponseDto } from '@immich/sdk';
+  import { getPeopleThumbnailUrl, hasPermissions } from '$lib/utils';
+  import { SharingPermission, type AssetResponseDto } from '@immich/sdk';
   import { IconButton, Text } from '@immich/ui';
   import { mdiEye, mdiEyeOff, mdiPencil, mdiPlus } from '@mdi/js';
   import { DateTime } from 'luxon';
@@ -13,11 +13,10 @@
 
   type Props = {
     asset: AssetResponseDto;
-    isOwner: boolean;
     previousRoute: string;
   };
 
-  const { asset, isOwner, previousRoute }: Props = $props();
+  const { asset, previousRoute }: Props = $props();
 
   const unassignedFaces = $derived(asset.unassignedFaces || []);
   const people = $derived(asset.people || []);
@@ -56,7 +55,7 @@
   );
 </script>
 
-{#if !authManager.isSharedLink && isOwner}
+{#if !authManager.isSharedLink && hasPermissions(asset, SharingPermission.PersonRead)}
   <section class="px-4 pt-4 text-sm">
     <div class="flex h-10 w-full items-center justify-between">
       <Text size="small" color="muted">{$t('people')}</Text>

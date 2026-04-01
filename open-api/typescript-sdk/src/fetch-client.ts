@@ -555,6 +555,14 @@ export type MapMarkerResponseDto = {
     /** State/Province name */
     state: string | null;
 };
+export type SharingOptionsResponseDto = {
+    inTimeline: boolean;
+    permissions: SharingPermission[];
+};
+export type UpdateSharingOptionsDto = {
+    inTimeline: boolean;
+    permissions: SharingPermission[];
+};
 export type UpdateAlbumUserDto = {
     role: AlbumUserRole;
 };
@@ -893,6 +901,7 @@ export type AssetResponseDto = {
     /** Owner user ID */
     ownerId: string;
     people?: PersonWithFacesResponseDto[];
+    permissions: SharingPermission[];
     /** Is resized */
     resized?: boolean;
     stack?: (AssetStackResponseDto) | null;
@@ -3806,6 +3815,32 @@ export function getAlbumMapMarkers({ id, key, slug }: {
     }))}`, {
         ...opts
     }));
+}
+/**
+ * Get own sharing permissions
+ */
+export function getOwnAlbumUser({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SharingOptionsResponseDto;
+    }>(`/albums/${encodeURIComponent(id)}/user/self`, {
+        ...opts
+    }));
+}
+/**
+ * Update own sharing permissions
+ */
+export function updateOwnAlbumUser({ id, updateSharingOptionsDto }: {
+    id: string;
+    updateSharingOptionsDto: UpdateSharingOptionsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/albums/${encodeURIComponent(id)}/user/self`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: updateSharingOptionsDto
+    })));
 }
 /**
  * Remove user from album
@@ -6794,6 +6829,19 @@ export enum BulkIdErrorReason {
     Unknown = "unknown",
     Validation = "validation"
 }
+export enum SharingPermission {
+    All = "all",
+    AssetRead = "asset.read",
+    AssetUpdate = "asset.update",
+    AssetEdit = "asset.edit",
+    AssetDelete = "asset.delete",
+    AssetShare = "asset.share",
+    ExifRead = "exif.read",
+    PersonRead = "person.read",
+    PersonUpdate = "person.update",
+    PersonMerge = "person.merge",
+    PersonDelete = "person.delete"
+}
 export enum Permission {
     All = "all",
     ActivityCreate = "activity.create",
@@ -7001,7 +7049,8 @@ export enum ManualJobName {
     UserCleanup = "user-cleanup",
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
-    BackupDatabase = "backup-database"
+    BackupDatabase = "backup-database",
+    PersonGroupMerge = "person-group-merge"
 }
 export enum QueueName {
     ThumbnailGeneration = "thumbnailGeneration",
@@ -7110,6 +7159,7 @@ export enum JobName {
     PersonCleanup = "PersonCleanup",
     PersonFileMigration = "PersonFileMigration",
     PersonGenerateThumbnail = "PersonGenerateThumbnail",
+    PersonGroupMerge = "PersonGroupMerge",
     SessionCleanup = "SessionCleanup",
     SendMail = "SendMail",
     SidecarQueueAll = "SidecarQueueAll",

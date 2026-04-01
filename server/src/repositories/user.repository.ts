@@ -325,4 +325,35 @@ export class UserRepository {
 
     await query.execute();
   }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getInSameTrustedGroup(userId: string) {
+    return this.db
+      .selectFrom('user')
+      .select('user.id')
+      .where('user.trustedGroupId', '=', (eb) =>
+        eb.selectFrom('user').select('user.trustedGroupId').where('user.id', '=', userId),
+      )
+      .execute()
+      .then((result) => result.map(({ id }) => id));
+  }
+
+  @GenerateSql({ params: [{ userId: DummyValue.UUID, userIdToMerge: DummyValue.UUID }] })
+  async mergeTrustedGroups({ userId, userIdToMerge }: { userId: string; userIdToMerge: string }) {
+    return this.db
+      .updateTable('user')
+      .from('user as u')
+      .where('u.id', '=', userId)
+      .where('user.trustedGroupId', '=', (eb) =>
+        eb
+          .selectFrom('user')
+          .select('user.trustedGroupId')
+          .where('user.id', '=', userIdToMerge)
+          .whereRef('user.trustedGroupId', '!=', 'u.trustedGroupId'),
+      )
+      .set((eb) => ({
+        trustedGroupId: eb.ref('u.trustedGroupId'),
+      }))
+      .executeTakeFirst();
+  }
 }

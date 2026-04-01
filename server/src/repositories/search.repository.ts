@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, OrderByDirection, Selectable, ShallowDehydrateObject, sql } from 'kysely';
+import { Kysely, NotNull, OrderByDirection, Selectable, ShallowDehydrateObject, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetStatus, AssetType, AssetVisibility, VectorIndex } from 'src/enum';
@@ -344,6 +344,41 @@ export class SearchRepository {
         )
         .selectFrom('cte')
         .selectAll()
+        .where('cte.distance', '<=', maxDistance)
+        .execute();
+    });
+  }
+
+  searchPeople({
+    userIds,
+    embedding,
+    maxDistance,
+    minBirthDate,
+  }: Omit<FaceEmbeddingSearch, 'numResults' | 'hasPerson'>) {
+    return this.db.transaction().execute(async (trx) => {
+      await sql`set local vchordrq.probes = ${sql.lit(probes[VectorIndex.Face])}`.execute(trx);
+      return await trx
+        .with('cte', (qb) =>
+          qb
+            .selectFrom('asset_face')
+            .select(['asset_face.personId', sql<number>`face_search.embedding <=> ${embedding}`.as('distance')])
+            .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+            .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+            .leftJoin('person', 'person.id', 'asset_face.personId')
+            .where('asset.ownerId', '=', anyUuid(userIds))
+            .where('asset.deletedAt', 'is', null)
+            .where('asset_face.personId', 'is not', null)
+            .$narrowType<{ personId: NotNull }>()
+            .$if(!!minBirthDate, (qb) =>
+              qb.where((eb) =>
+                eb.or([eb('person.birthDate', 'is', null), eb('person.birthDate', '<=', minBirthDate!)]),
+              ),
+            )
+            .orderBy('distance'),
+        )
+        .selectFrom('cte')
+        .select('cte.personId')
+        .groupBy('cte.personId')
         .where('cte.distance', '<=', maxDistance)
         .execute();
     });

@@ -202,7 +202,9 @@ export type ConcurrentQueueName = Exclude<
   | QueueName.BackupDatabase
 >;
 
-export type Jobs = { [K in JobItem['name']]: (JobItem & { name: K })['data'] };
+export type Jobs = {
+  [K in JobItem['name']]: 'data' extends keyof (JobItem & { name: K }) ? (JobItem & { name: K })['data'] : never;
+};
 export type JobOf<T extends JobName> = Jobs[T];
 
 export interface IBaseJob {
@@ -361,6 +363,7 @@ export type JobItem =
   | { name: JobName.FacialRecognitionQueueAll; data: INightlyJob }
   | { name: JobName.FacialRecognition; data: IDeferrableJob }
   | { name: JobName.PersonGenerateThumbnail; data: IEntityJob }
+  | { name: JobName.PersonGroupMerge }
 
   // Smart Search
   | { name: JobName.SmartSearchQueueAll; data: IBaseJob }

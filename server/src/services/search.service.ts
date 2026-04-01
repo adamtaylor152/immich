@@ -192,6 +192,7 @@ export class SearchService extends BaseService {
       repository: this.partnerRepository,
       timelineEnabled: true,
     });
+    console.log(auth.user.id, partnerIds);
     return [auth.user.id, ...partnerIds];
   }
 

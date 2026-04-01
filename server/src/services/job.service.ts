@@ -34,6 +34,10 @@ const asJobItem = (dto: JobCreateDto): JobItem => {
       return { name: JobName.DatabaseBackup };
     }
 
+    case ManualJobName.PersonGroupMerge: {
+      return { name: JobName.PersonGroupMerge };
+    }
+
     default: {
       throw new BadRequestException('Invalid job name');
     }

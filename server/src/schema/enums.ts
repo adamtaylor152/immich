@@ -4,6 +4,7 @@ import {
   AssetStatus,
   AssetVisibility,
   ChecksumAlgorithm,
+  SharingPermission,
   SourceType,
   VideoSegmentCodec,
 } from 'src/enum';
@@ -36,4 +37,9 @@ export const asset_checksum_algorithm_enum = registerEnum({
 export const video_stream_variant_codec_enum = registerEnum({
   name: 'video_stream_variant_codec_enum',
   values: Object.values(VideoSegmentCodec),
+});
+
+export const sharing_permission_enum = registerEnum({
+  name: 'sharing_permission_enum',
+  values: Object.values(SharingPermission),
 });

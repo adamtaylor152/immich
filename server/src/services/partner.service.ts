@@ -3,7 +3,7 @@ import { Partner } from 'src/database';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { PartnerCreateDto, PartnerResponseDto, PartnerSearchDto, PartnerUpdateDto } from 'src/dtos/partner.dto';
 import { mapUser } from 'src/dtos/user.dto';
-import { Permission } from 'src/enum';
+import { JobName, Permission, SharingPermission } from 'src/enum';
 import { PartnerDirection, PartnerIds } from 'src/repositories/partner.repository';
 import { BaseService } from 'src/services/base.service';
 
@@ -16,7 +16,16 @@ export class PartnerService extends BaseService {
       throw new BadRequestException(`Partner already exists`);
     }
 
-    const partner = await this.partnerRepository.create(partnerId);
+    const { numUpdatedRows } = await this.userRepository.mergeTrustedGroups({
+      userId: auth.user.id,
+      userIdToMerge: sharedWithId,
+    });
+    const partner = await this.partnerRepository.create({ ...partnerId, permissions: [SharingPermission.All] });
+
+    if (numUpdatedRows > 0) {
+      await this.jobRepository.queue({ name: JobName.PersonGroupMerge });
+    }
+
     return this.mapPartner(partner, PartnerDirection.SharedBy);
   }
 

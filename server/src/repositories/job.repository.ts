@@ -15,7 +15,7 @@ import { getKeyByValue, getMethodNames, ImmichStartupError } from 'src/utils/mis
 type JobMapItem = {
   jobName: JobName;
   queueName: QueueName;
-  handler: (job: JobOf<any>) => Promise<JobStatus>;
+  handler: (job?: JobOf<any>) => Promise<JobStatus>;
   label: string;
 };
 
@@ -95,14 +95,17 @@ export class JobRepository {
     }
   }
 
-  async run({ name, data }: JobItem) {
-    const item = this.handlers[name as JobName];
+  async run(job: JobItem) {
+    const item = this.handlers[job.name];
     if (!item) {
-      this.logger.warn(`Skipping unknown job: "${name}"`);
+      this.logger.warn(`Skipping unknown job: "${job.name}"`);
       return JobStatus.Skipped;
     }
 
-    return item.handler(data);
+    if ('data' in job) {
+      return item.handler(job.data);
+    }
+    return item.handler();
   }
 
   setConcurrency(queueName: QueueName, concurrency: number) {
@@ -167,13 +170,13 @@ export class JobRepository {
       const queueName = this.getQueueName(item.name);
       const job = {
         name: item.name,
-        data: item.data || {},
+        data: ('data' in item ? item.data : undefined) || {},
         options: this.getJobOptions(item) || undefined,
       } as JobItem & { data: any; options: JobsOptions | undefined };
 
       if (job.options?.jobId) {
         // need to use add() instead of addBulk() for jobId deduplication
-        promises.push(this.getQueue(queueName).add(item.name, item.data, job.options));
+        promises.push(this.getQueue(queueName).add(item.name, job.data, job.options));
       } else {
         itemsByQueue[queueName] = itemsByQueue[queueName] || [];
         itemsByQueue[queueName].push(job);

@@ -4,6 +4,7 @@ import {
   asset_face_source_type,
   asset_visibility_enum,
   assets_status_enum,
+  sharing_permission_enum,
 } from 'src/schema/enums';
 import {
   album_user_after_insert,
@@ -170,7 +171,13 @@ export class ImmichDatabase {
     asset_face_audit,
   ];
 
-  enum = [album_user_role_enum, assets_status_enum, asset_face_source_type, asset_visibility_enum];
+  enum = [
+    album_user_role_enum,
+    assets_status_enum,
+    asset_face_source_type,
+    asset_visibility_enum,
+    sharing_permission_enum,
+  ];
 }
 
 export interface Migrations {

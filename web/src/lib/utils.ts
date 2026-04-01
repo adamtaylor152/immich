@@ -2,6 +2,7 @@ import {
   AssetMediaSize,
   AssetTypeEnum,
   MemoryType,
+  SharingPermission,
   finishOAuth,
   getAssetOriginalPath,
   getAssetPlaybackPath,
@@ -412,4 +413,18 @@ export const transformToTitleCase = (text: string) => {
     result += word.charAt(0).toUpperCase() + word.slice(1) + ' ';
   }
   return result.trim();
+};
+
+export const hasPermissions = (asset: AssetResponseDto, ...permissions: SharingPermission[]) => {
+  if (asset.permissions.includes(SharingPermission.All)) {
+    return true;
+  }
+
+  for (const permission of permissions) {
+    if (!asset.permissions.includes(permission)) {
+      return false;
+    }
+  }
+
+  return true;
 };

@@ -159,7 +159,7 @@ export class PersonService extends BaseService {
 
   async getStatistics(auth: AuthDto, id: string): Promise<PersonStatisticsResponseDto> {
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
-    return this.personRepository.getStatistics(id);
+    return this.personRepository.getStatistics(auth.user.id, id);
   }
 
   async getThumbnail(auth: AuthDto, id: string): Promise<ImmichFileResponse> {
@@ -537,9 +537,49 @@ export class PersonService extends BaseService {
     if (personId) {
       this.logger.debug(`Assigning face ${id} to person ${personId}`);
       await this.personRepository.reassignFaces({ faceIds: [id], newPersonId: personId });
+      await this.handleFaceGroupMerge(
+        {
+          personId,
+          ownerId: face.asset.ownerId,
+          embedding: face.faceSearch.embedding,
+          fileCreatedAt: new Date(face.asset.fileCreatedAt),
+        },
+        machineLearning.facialRecognition.maxDistance,
+      );
     }
 
     return JobStatus.Success;
+  }
+
+  @OnJob({ name: JobName.PersonGroupMerge, queue: QueueName.FacialRecognition })
+  async handlePersonGroupMerge() {
+    const { machineLearning } = await this.getConfig({ withCache: true });
+
+    for await (const face of this.personRepository.streamForPeopleMerge()) {
+      await this.handleFaceGroupMerge(face, machineLearning.facialRecognition.maxDistance);
+    }
+  }
+
+  private async handleFaceGroupMerge(
+    face: {
+      personId: string;
+      ownerId: string;
+      embedding: string;
+      fileCreatedAt: Date;
+    },
+    maxRecognitionDistance: number,
+  ) {
+    const userIds = await this.userRepository.getInSameTrustedGroup(face.ownerId);
+    const peopleToGroup = await this.searchRepository.searchPeople({
+      userIds,
+      embedding: face.embedding,
+      maxDistance: maxRecognitionDistance,
+      minBirthDate: face.fileCreatedAt,
+    });
+    await this.personRepository.mergeIntoGroup(
+      face.personId,
+      peopleToGroup.map(({ personId }) => personId),
+    );
   }
 
   @OnJob({ name: JobName.PersonFileMigration, queue: QueueName.Migration })
@@ -613,6 +653,11 @@ export class PersonService extends BaseService {
         results.push({ id: mergeId, success: false, error: BulkIdErrorReason.UNKNOWN });
       }
     }
+
+    await this.personRepository.mergeIntoGroup(
+      id,
+      results.filter(({ success }) => success).map(({ id }) => id),
+    );
     return results;
   }
 

@@ -11,6 +11,7 @@ import {
   PluginContext,
   PluginTriggerType,
   SharedLinkType,
+  SharingPermission,
   SourceType,
   UserAvatarColor,
   UserStatus,
@@ -213,6 +214,7 @@ export type Partner = {
   updatedAt: Date;
   updateId: string;
   inTimeline: boolean;
+  permissions: SharingPermission[];
 };
 
 export type Place = {

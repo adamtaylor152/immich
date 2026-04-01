@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   ForeignKeyColumn,
   Generated,
+  GeneratedColumn,
   Index,
   PrimaryGeneratedColumn,
   Table,
@@ -66,4 +67,7 @@ export class PersonTable {
 
   @UpdateIdColumn({ index: true })
   updateId!: Generated<string>;
+
+  @GeneratedColumn('uuid')
+  groupId!: Generated<string>;
 }

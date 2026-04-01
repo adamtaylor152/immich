@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { ExpressionBuilder, Insertable, Kysely, Selectable, sql, Updateable } from 'kysely';
+import { ExpressionBuilder, Insertable, Kysely, NotNull, Selectable, sql, Updateable } from 'kysely';
 import { jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { AssetFace } from 'src/database';
 import { Chunked, ChunkedArray, DummyValue, GenerateSql } from 'src/decorators';
-import { AssetFileType, AssetVisibility, SourceType } from 'src/enum';
+import { AssetFileType, AssetVisibility, SharingPermission, SourceType } from 'src/enum';
+import { hasAssetPermissions } from 'src/repositories/asset.repository';
 import { DB } from 'src/schema';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
-import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { anyUuid, dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 
 export interface PersonSearchOptions {
@@ -74,6 +75,37 @@ const withFaceSearch = (eb: ExpressionBuilder<DB, 'asset_face'>) => {
     eb.selectFrom('face_search').selectAll('face_search').whereRef('face_search.faceId', '=', 'asset_face.id'),
   ).as('faceSearch');
 };
+
+export const hasPermissions =
+  (userId: string, permissions: SharingPermission[]) => (eb: ExpressionBuilder<DB, 'person'>) =>
+    eb.or([
+      eb.exists((eb) =>
+        eb
+          .selectFrom('partner')
+          .whereRef('partner.sharedById', '=', 'person.ownerId')
+          .where('partner.sharedWithId', '=', userId)
+          .where((eb) =>
+            eb.or([
+              eb(eb.val(SharingPermission.All), '=', eb.fn.any('partner.permissions')),
+              eb('partner.permissions', '@>', eb.val(permissions)),
+            ]),
+          ),
+      ),
+      eb.exists((eb) =>
+        eb
+          .selectFrom('album_user')
+          .where('album_user.albumId', 'in', (eb) =>
+            eb.selectFrom('album_user').select('album_user.albumId').where('album_user.userId', '=', userId),
+          )
+          .whereRef('album_user.userId', '=', 'person.ownerId')
+          .where((eb) =>
+            eb.or([
+              eb(eb.val(SharingPermission.All), '=', eb.fn.any('album_user.permissions')),
+              eb('album_user.permissions', '@>', eb.val(permissions)),
+            ]),
+          ),
+      ),
+    ]);
 
 @Injectable()
 export class PersonRepository {
@@ -153,6 +185,7 @@ export class PersonRepository {
     const items = await this.db
       .selectFrom('person')
       .selectAll('person')
+      .distinctOn('person.groupId')
       .innerJoin('asset_face', 'asset_face.personId', 'person.id')
       .innerJoin('asset', (join) =>
         join
@@ -160,9 +193,13 @@ export class PersonRepository {
           .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
           .on('asset.deletedAt', 'is', null),
       )
-      .where('person.ownerId', '=', userId)
+      .where((eb) =>
+        eb.or([eb('person.ownerId', '=', userId), hasPermissions(userId, [SharingPermission.PersonRead])(eb)]),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
+      .orderBy('person.groupId')
+      .orderBy((eb) => eb('person.ownerId', '=', userId), 'desc')
       .orderBy('person.isHidden', 'asc')
       .orderBy('person.isFavorite', 'desc')
       .having((eb) =>
@@ -317,7 +354,10 @@ export class PersonRepository {
       .selectAll('person')
       .where('person.ownerId', '=', userId)
       .where(() => sql`f_unaccent("person"."name") %> f_unaccent(${personName})`)
+      .orderBy('person.groupId')
       .orderBy(sql`f_unaccent("person"."name") <->>> f_unaccent(${personName})`)
+      .orderBy((eb) => eb('person.ownerId', '=', userId), 'desc')
+      .distinctOn('person.groupId')
       .limit(100)
       .$if(!withHidden, (qb) => qb.where('person.isHidden', '=', false))
       .execute();
@@ -335,7 +375,7 @@ export class PersonRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async getStatistics(personId: string): Promise<PersonStatistics> {
+  async getStatistics(userId: string, personId: string): Promise<PersonStatistics> {
     const result = await this.db
       .selectFrom('asset_face')
       .leftJoin('asset', (join) =>
@@ -344,6 +384,7 @@ export class PersonRepository {
           .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
           .on('asset.deletedAt', 'is', null),
       )
+      .where(hasAssetPermissions(userId, [SharingPermission.AssetRead], true))
       .select((eb) => eb.fn.count(eb.fn('distinct', ['asset.id'])).as('count'))
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
@@ -378,7 +419,9 @@ export class PersonRepository {
             ),
         ),
       )
-      .where('person.ownerId', '=', userId)
+      .where((eb) =>
+        eb.or([eb('person.ownerId', '=', userId), hasPermissions(userId, [SharingPermission.PersonRead])(eb)]),
+      )
       .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>(), zero).as('total'))
       .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>().filterWhere('isHidden', '=', true), zero).as('hidden'))
       .executeTakeFirstOrThrow();
@@ -576,5 +619,35 @@ export class PersonRepository {
       .where('asset_face.personId', '=', personId)
       .innerJoin('asset', (join) => join.onRef('asset.id', '=', 'asset_face.assetId').on('asset.isOffline', '=', false))
       .executeTakeFirst();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async mergeIntoGroup(personId: string, peopleIds: string[]) {
+    await this.db
+      .updateTable('person')
+      .where('person.groupId', 'in', (eb) =>
+        eb.selectFrom('person').select('person.groupId').where('person.id', '=', anyUuid(peopleIds)),
+      )
+      .from('person as p')
+      .where('p.id', '=', personId)
+      .set((eb) => ({
+        groupId: eb.ref('p.groupId'),
+      }))
+      .execute();
+  }
+
+  @GenerateSql({ params: [], stream: true })
+  streamForPeopleMerge() {
+    return (
+      this.db
+        .selectFrom('asset_face')
+        .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+        .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+        .select(['asset.ownerId', 'asset.fileCreatedAt', 'asset_face.personId', 'face_search.embedding'])
+        .where('asset_face.personId', 'is not', null)
+        // TODO remove with kysely 0.29
+        .$narrowType<{ personId: NotNull }>()
+        .stream()
+    );
   }
 }

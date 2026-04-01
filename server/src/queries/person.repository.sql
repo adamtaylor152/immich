@@ -24,8 +24,8 @@ limit
   3
 
 -- PersonRepository.getAllForUser
-select
-  "person".*
+select distinct
+  on ("person"."groupId") "person".*
 from
   "person"
   inner join "asset_face" on "asset_face"."personId" = "person"."id"
@@ -33,18 +33,55 @@ from
   and "asset"."visibility" = 'timeline'
   and "asset"."deletedAt" is null
 where
-  "person"."ownerId" = $1
+  (
+    "person"."ownerId" = $1
+    or (
+      exists (
+        select
+        from
+          "partner"
+        where
+          "partner"."sharedById" = "person"."ownerId"
+          and "partner"."sharedWithId" = $2
+          and (
+            $3 = any ("partner"."permissions")
+            or "partner"."permissions" @> $4
+          )
+      )
+      or exists (
+        select
+        from
+          "album_user"
+        where
+          "album_user"."albumId" in (
+            select
+              "album_user"."albumId"
+            from
+              "album_user"
+            where
+              "album_user"."userId" = $5
+          )
+          and "album_user"."userId" = "person"."ownerId"
+          and (
+            $6 = any ("album_user"."permissions")
+            or "album_user"."permissions" @> $7
+          )
+      )
+    )
+  )
   and "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
-  and "person"."isHidden" = $2
+  and "person"."isHidden" = $8
 group by
   "person"."id"
 having
   (
-    "person"."name" != $3
-    or count("asset_face"."assetId") >= $4
+    "person"."name" != $9
+    or count("asset_face"."assetId") >= $10
   )
 order by
+  "person"."groupId",
+  "person"."ownerId" = $11 desc,
   "person"."isHidden" asc,
   "person"."isFavorite" desc,
   NULLIF(person.name, '') is null asc,
@@ -52,9 +89,9 @@ order by
   NULLIF(person.name, '') asc nulls last,
   "person"."createdAt"
 limit
-  $5
+  $12
 offset
-  $6
+  $13
 
 -- PersonRepository.getAllWithoutFaces
 select
@@ -200,8 +237,8 @@ with
     select
       set_config('pg_trgm.word_similarity_threshold', '0.5', true) as "thresh"
   )
-select
-  "person".*
+select distinct
+  on ("person"."groupId") "person".*
 from
   "similarity_threshold",
   "person"
@@ -209,9 +246,11 @@ where
   "person"."ownerId" = $1
   and f_unaccent ("person"."name") %> f_unaccent ($2)
 order by
-  f_unaccent ("person"."name") <->>> f_unaccent ($3)
+  "person"."groupId",
+  f_unaccent ("person"."name") <->>> f_unaccent ($3),
+  "person"."ownerId" = $4 desc
 limit
-  $4
+  $5
 
 -- PersonRepository.getDistinctNames
 select distinct
@@ -234,9 +273,45 @@ from
   and "asset"."visibility" = 'timeline'
   and "asset"."deletedAt" is null
 where
-  "asset_face"."deletedAt" is null
+  (
+    "asset"."ownerId" = $1
+    or exists (
+      select
+      from
+        "partner"
+      where
+        "partner"."sharedById" = "asset"."ownerId"
+        and "partner"."sharedWithId" = $2
+        and (
+          $3 = any ("partner"."permissions")
+          or "partner"."permissions" @> $4
+        )
+    )
+    or exists (
+      select
+      from
+        "album_asset"
+        inner join "album_user" on "album_user"."albumId" = "album_asset"."albumId"
+        and "album_user"."userId" = $5
+      where
+        "album_asset"."assetId" = "asset"."id"
+        and "album_user"."albumId" in (
+          select
+            "album_user"."albumId"
+          from
+            "album_user"
+          where
+            "album_user"."userId" = "asset"."ownerId"
+            and (
+              $6 = any ("album_user"."permissions")
+              or "album_user"."permissions" @> $7
+            )
+        )
+    )
+  )
+  and "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
-  and "asset_face"."personId" = $1
+  and "asset_face"."personId" = $8
 
 -- PersonRepository.getNumberOfPeople
 select
@@ -269,7 +344,42 @@ where
           and "asset"."deletedAt" is null
       )
   )
-  and "person"."ownerId" = $3
+  and (
+    "person"."ownerId" = $3
+    or (
+      exists (
+        select
+        from
+          "partner"
+        where
+          "partner"."sharedById" = "person"."ownerId"
+          and "partner"."sharedWithId" = $4
+          and (
+            $5 = any ("partner"."permissions")
+            or "partner"."permissions" @> $6
+          )
+      )
+      or exists (
+        select
+        from
+          "album_user"
+        where
+          "album_user"."albumId" in (
+            select
+              "album_user"."albumId"
+            from
+              "album_user"
+            where
+              "album_user"."userId" = $7
+          )
+          and "album_user"."userId" = "person"."ownerId"
+          and (
+            $8 = any ("album_user"."permissions")
+            or "album_user"."permissions" @> $9
+          )
+      )
+    )
+  )
 
 -- PersonRepository.refreshFaces
 with
@@ -356,3 +466,33 @@ from
 where
   "asset_face"."assetId" = $2
   and "asset_face"."personId" = $3
+
+-- PersonRepository.mergeIntoGroup
+update "person"
+set
+  "groupId" = "p"."groupId"
+from
+  "person" as "p"
+where
+  "person"."groupId" in (
+    select
+      "person"."groupId"
+    from
+      "person"
+    where
+      "person"."id" = any ($1::uuid[])
+  )
+  and "p"."id" = $2
+
+-- PersonRepository.streamForPeopleMerge
+select
+  "asset"."ownerId",
+  "asset"."fileCreatedAt",
+  "asset_face"."personId",
+  "face_search"."embedding"
+from
+  "asset_face"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+  inner join "face_search" on "face_search"."faceId" = "asset_face"."id"
+where
+  "asset_face"."personId" is not null
