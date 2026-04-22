@@ -115,7 +115,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<string>No</string>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>MGLMapboxMetricsEnabledSettingShownInApp</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>

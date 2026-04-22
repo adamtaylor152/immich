@@ -5,7 +5,7 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
   func enable() throws {
     BackgroundWorkerApiImpl.scheduleRefreshWorker()
     BackgroundWorkerApiImpl.scheduleProcessingWorker()
-    print("BackgroundWorkerApiImpl:enable Background worker scheduled")
+    FileLogger.log("BackgroundWorkerApiImpl:enable Background worker scheduled")
   }
   
   func configure(settings: BackgroundWorkerSettings) throws {
@@ -19,7 +19,7 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
   func disable() throws {
     BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: BackgroundWorkerApiImpl.refreshTaskID);
     BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: BackgroundWorkerApiImpl.processingTaskID);
-    print("BackgroundWorkerApiImpl:disableUploadWorker Disabled background workers")
+    FileLogger.log("BackgroundWorkerApiImpl:disableUploadWorker Disabled background workers")
   }
   
   private static let refreshTaskID = "app.alextran.immich.background.refreshUpload"
@@ -30,6 +30,7 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
       BGTaskScheduler.shared.register(
           forTaskWithIdentifier: processingTaskID, using: nil) { task in
           if task is BGProcessingTask {
+            FileLogger.log("BackgroundWorkerApiImpl:BGProcessingTask Background Processing task received")
             handleBackgroundProcessing(task: task as! BGProcessingTask)
           }
       }
@@ -37,9 +38,11 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
       BGTaskScheduler.shared.register(
           forTaskWithIdentifier: refreshTaskID, using: nil) { task in
           if task is BGAppRefreshTask {
+            FileLogger.log("BackgroundWorkerApiImpl:BGAppRefreshTask Background Refresh task received")
             handleBackgroundRefresh(task: task as! BGAppRefreshTask)
           }
       }
+    FileLogger.log("BackgroundWorkerApiImpl:registerBackgroundWorkers Background workers registered")
   }
   
   private static func scheduleRefreshWorker() {
@@ -48,8 +51,9 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
 
       do {
           try BGTaskScheduler.shared.submit(backgroundRefresh)
+          FileLogger.log("BackgroundWorkerApiImpl:scheduleRefreshWorker Scheduled Refresh task")
       } catch {
-          print("Could not schedule the refresh upload task \(error.localizedDescription)")
+          FileLogger.log("BackgroundWorkerApiImpl:scheduleRefreshWorker Could not schedule the refresh upload task \(error.localizedDescription)")
       }
   }
 
@@ -61,25 +65,32 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
     
     do {
         try BGTaskScheduler.shared.submit(backgroundProcessing)
+        FileLogger.log("BackgroundWorkerApiImpl:scheduleProcessingWorker Scheduled Processing task")
     } catch {
-        print("Could not schedule the processing upload task \(error.localizedDescription)")
+        FileLogger.log("BackgroundWorkerApiImpl:scheduleProcessingWorker Could not schedule the processing upload task \(error.localizedDescription)")
     }
   }
   
   private static func handleBackgroundRefresh(task: BGAppRefreshTask) {
+    FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundRefresh Entered, re-queuing next refresh task")
     scheduleRefreshWorker()
     // If another task is running, cede the background time back to the OS
     if taskSemaphore.wait(timeout: .now()) == .success {
+      FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundRefresh Starting background worker")
       // Restrict the refresh task to run only for a maximum of (maxSeconds) seconds
       runBackgroundWorker(task: task, taskType: .refresh, maxSeconds: 20)
     } else {
+      FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundRefresh Processing task is in progress")
       task.setTaskCompleted(success: true)
     }
   }
   
   private static func handleBackgroundProcessing(task: BGProcessingTask) {
+    FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundProcessing Entered, re-queuing next processing task")
     scheduleProcessingWorker()
+    FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundProcessing Waiting for taskSemaphore")
     taskSemaphore.wait()
+    FileLogger.log("BackgroundWorkerApiImpl:handleBackgroundProcessing Semaphore acquired, starting background worker")
     // There are no restrictions for processing tasks. Although, the OS could signal expiration at any time
     runBackgroundWorker(task: task, taskType: .processing, maxSeconds: nil)
   }
@@ -105,11 +116,12 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
     }
 
     task.expirationHandler = {
+      FileLogger.log("BackgroundWorkerApiImpl:runBackgroundWorker iOS signaled expiration (taskType=\(taskType)), closing worker")
       DispatchQueue.main.async {
         backgroundWorker.close()
       }
       isSuccess = false
-      
+
       // Schedule a timer to signal the semaphore after 2 seconds
       Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
         semaphore.signal()
@@ -122,6 +134,6 @@ class BackgroundWorkerApiImpl: BackgroundWorkerFgHostApi {
 
     semaphore.wait()
     task.setTaskCompleted(success: isSuccess)
-    print("Background task completed with success: \(isSuccess)")
+    FileLogger.log("BackgroundWorkerApiImpl:runBackgroundWorker Background task completed with success: \(isSuccess)")
   }
 }

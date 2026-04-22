@@ -80,29 +80,34 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
    * starts the engine, and sets up a timeout timer if specified.
    */
   func run() {
+    FileLogger.log("BackgroundWorker:run Starting Flutter engine for taskType=\(taskType) maxSeconds=\(maxSeconds.map(String.init) ?? "nil")")
     // Start the Flutter engine with the specified callback as the entry point
     let isRunning = engine.run(
       withEntrypoint: "backgroundSyncNativeEntrypoint",
       libraryURI: "package:immich_mobile/domain/services/background_worker.service.dart"
     )
-    
+
     // Verify that the Flutter engine started successfully
     if !isRunning {
+      FileLogger.log("BackgroundWorker:run Flutter engine failed to start, completing with success=false")
       complete(success: false)
       return
     }
-    
+    FileLogger.log("BackgroundWorker:run Flutter engine started")
+
     // Register plugins in the new engine
     GeneratedPluginRegistrant.register(with: engine)
     // Register custom plugins
     AppDelegate.registerPlugins(with: engine, messenger: engine.binaryMessenger)
     flutterApi = BackgroundWorkerFlutterApi(binaryMessenger: engine.binaryMessenger)
     BackgroundWorkerBgHostApiSetup.setUp(binaryMessenger: engine.binaryMessenger, api: self)
-    
+    FileLogger.log("BackgroundWorker:run Plugins registered, waiting for Flutter onInitialized")
+
     // Set up a timeout timer if maxSeconds was specified to prevent runaway background tasks
     if maxSeconds != nil {
         // Schedule a timer to cancel the task after the specified timeout period
         Timer.scheduledTimer(withTimeInterval: TimeInterval(maxSeconds!), repeats: false) { _ in
+          FileLogger.log("BackgroundWorker:run maxSeconds=\(self.maxSeconds!) timer fired, closing task")
           self.close()
         }
     }
@@ -114,6 +119,7 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
    * This method acts as a bridge between the native iOS background task system and Flutter.
    */
   func onInitialized() throws {
+    FileLogger.log("BackgroundWorker:onInitialized Flutter ready, calling onIosUpload isRefresh=\(self.taskType == .refresh)")
     flutterApi?.onIosUpload(isRefresh: self.taskType == .refresh, maxSeconds: maxSeconds.map { Int64($0) }, completion: { result in
       self.handleHostResult(result: result)
     })
@@ -126,16 +132,22 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
    */
   func close() {
     if isComplete {
+      FileLogger.log("BackgroundWorker:close Already complete, ignoring close()")
       return
     }
+    FileLogger.log("BackgroundWorker:close Cancel requested, signaling Flutter (taskType=\(taskType))")
 
     flutterApi?.cancel { result in
+      FileLogger.log("BackgroundWorker:close Flutter cancel acknowledged")
       self.complete(success: false)
     }
 
     // Fallback safety mechanism: ensure completion is called within 2 seconds
     // This prevents the background task from hanging indefinitely if Flutter doesn't respond
     Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { _ in
+      if !self.isComplete {
+        FileLogger.log("BackgroundWorker:close 2s fallback fired, Flutter did not acknowledge cancel")
+      }
       self.complete(success: false)
     }
   }
@@ -149,8 +161,12 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
    */
   private func handleHostResult(result: Result<Void, PigeonError>) {
     switch result {
-      case .success(): self.complete(success: true)
-      case .failure(_): self.close()
+      case .success():
+        FileLogger.log("BackgroundWorker:handleHostResult Flutter onIosUpload succeeded (taskType=\(taskType))")
+        self.complete(success: true)
+      case .failure(let error):
+        FileLogger.log("BackgroundWorker:handleHostResult Flutter onIosUpload failed: \(error.localizedDescription) (taskType=\(taskType))")
+        self.close()
     }
   }
 
@@ -166,7 +182,8 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
     if(isComplete) {
       return
     }
-    
+
+    FileLogger.log("BackgroundWorker:complete Tearing down engine, success=\(success) (taskType=\(taskType))")
     isComplete = true
     AppDelegate.cancelPlugins(with: engine)
     engine.destroyContext()
