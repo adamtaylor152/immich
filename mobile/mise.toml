@@ -2,7 +2,7 @@
 flutter = "3.41.7"
 
 [tools."github:CQLabs/homebrew-dcm"]
-version = "1.30.0"
+version = "1.37.0"
 bin = "dcm"
 postinstall = "chmod +x $MISE_TOOL_INSTALL_PATH/dcm"
 
