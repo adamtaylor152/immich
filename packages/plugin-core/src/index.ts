@@ -11,31 +11,29 @@ type AssetFileFilterConfig = {
   caseSensitive?: boolean;
 };
 export const assetFileFilter = () => {
-  return wrapper<WorkflowType.AssetV1>(({ data, config }) => {
-    const {
-      pattern,
-      matchType = 'contains',
-      caseSensitive = false,
-    } = config as AssetFileFilterConfig;
+  return wrapper<WorkflowType.AssetV1, AssetFileFilterConfig>(
+    ({ data, config }) => {
+      const { pattern, matchType = 'contains', caseSensitive = false } = config;
 
-    const { asset } = data;
+      const { asset } = data;
 
-    const fileName = asset.originalFileName || '';
-    const searchName = caseSensitive ? fileName : fileName.toLowerCase();
-    const searchPattern = caseSensitive ? pattern : pattern.toLowerCase();
+      const fileName = asset.originalFileName || '';
+      const searchName = caseSensitive ? fileName : fileName.toLowerCase();
+      const searchPattern = caseSensitive ? pattern : pattern.toLowerCase();
 
-    if (matchType === 'exact') {
-      return { workflow: { continue: searchName === searchPattern } };
-    }
+      if (matchType === 'exact') {
+        return { workflow: { continue: searchName === searchPattern } };
+      }
 
-    if (matchType === 'regex') {
-      const flags = caseSensitive ? '' : 'i';
-      const regex = new RegExp(searchPattern, flags);
-      return { workflow: { continue: regex.test(fileName) } };
-    }
+      if (matchType === 'regex') {
+        const flags = caseSensitive ? '' : 'i';
+        const regex = new RegExp(searchPattern, flags);
+        return { workflow: { continue: regex.test(fileName) } };
+      }
 
-    return { workflow: { continue: searchName.includes(searchPattern) } };
-  });
+      return { workflow: { continue: searchName.includes(searchPattern) } };
+    },
+  );
 };
 
 type AssetArchiveConfig = {
@@ -54,7 +52,7 @@ export const assetArchive = () => {
           },
         };
       }
-    }
+    },
   );
 };
 
@@ -72,7 +70,7 @@ export const assetFavorite = () => {
           },
         };
       }
-    }
+    },
   );
 };
 
@@ -103,7 +101,7 @@ export const albumAddAssets = () => {
     ({ config, data, functions }) => {
       functions.albumAddAssets(config.albumId, [data.asset.id]);
       return {};
-    }
+    },
   );
 };
 

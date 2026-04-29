@@ -22,11 +22,11 @@ import {
 import { ArgOf } from 'src/repositories/event.repository';
 import { AlbumService } from 'src/services/album.service';
 import { BaseService } from 'src/services/base.service';
-import { JobOf } from 'src/types';
+import { DeepPartial, JobOf } from 'src/types';
 
-type ExecuteOptions<T extends WorkflowType = any> = {
-  read: (type: T) => Promise<{ authUserId: string; data: WorkflowEventData<T> }>;
-  write: (changes: Partial<WorkflowEventData<T>>) => Promise<void>;
+type ExecuteOptions<T extends WorkflowType> = {
+  read: (type: WorkflowType) => Promise<{ authUserId: string; data: WorkflowEventData<T> }>;
+  write: (changes: DeepPartial<WorkflowEventData<T>>) => Promise<void>;
 };
 
 export class WorkflowExecutionService extends BaseService {
@@ -53,7 +53,7 @@ export class WorkflowExecutionService extends BaseService {
 
     const albumService = BaseService.create(AlbumService, this);
 
-    const albumAddAssets = this.createFunction<[id: string, dto: BulkIdsDto]>(async (authDto, args) =>
+    const albumAddAssets = this.createFunction<[id: string, dto: BulkIdsDto]>((authDto, args) =>
       albumService.addAssets(authDto, ...args),
     );
 
@@ -218,10 +218,10 @@ export class WorkflowExecutionService extends BaseService {
 
   @OnJob({ name: JobName.WorkflowAssetCreate, queue: QueueName.Workflow })
   async handleWorkflowAssetCreate({ workflowId, assetId }: JobOf<JobName.WorkflowAssetCreate>) {
-    await this.execute(workflowId, (type: WorkflowType) => {
+    await this.execute(workflowId, (type) => {
       switch (type) {
         case WorkflowType.AssetV1: {
-          return <ExecuteOptions<WorkflowType.AssetV1>>{
+          return {
             read: async () => {
               const asset = await this.workflowRepository.getForAssetV1(assetId);
               return {
@@ -243,20 +243,23 @@ export class WorkflowExecutionService extends BaseService {
                 });
               }
             },
-          };
+          } satisfies ExecuteOptions<typeof type>;
         }
       }
     });
   }
 
-  private async execute(workflowId: string, getHandler: (type: WorkflowType) => ExecuteOptions | undefined) {
+  private async execute<T extends WorkflowType>(
+    workflowId: string,
+    getHandler: (type: T) => ExecuteOptions<T> | undefined,
+  ) {
     const workflow = await this.workflowRepository.getForWorkflowRun(workflowId);
     if (!workflow) {
       return;
     }
 
     // TODO infer from steps
-    const type = 'AssetV1' as WorkflowType;
+    const type = 'AssetV1' as T;
     const handler = getHandler(type);
     if (!handler) {
       this.logger.error(`Misconfigured workflow ${workflowId}: no handler for type ${type}`);
@@ -280,10 +283,10 @@ export class WorkflowExecutionService extends BaseService {
           data,
         };
 
-        const result = await this.pluginRepository.callMethod<WorkflowResponse>(step, payload);
+        const result = await this.pluginRepository.callMethod<WorkflowResponse<T>>(step, payload);
         if (result?.changes) {
           await write(result.changes);
-          data = await read(type);
+          ({ data } = await read(type));
         }
 
         const shouldContinue = result?.workflow?.continue ?? true;

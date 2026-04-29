@@ -23,8 +23,9 @@ import {
   WorkflowType,
 } from 'src/enum';
 
-export type DeepPartial<T> =
-  T extends Record<string, unknown>
+export type DeepPartial<T> = T extends Date
+  ? T
+  : T extends Record<string, unknown>
     ? { [K in keyof T]?: DeepPartial<T[K]> }
     : T extends Array<infer R>
       ? DeepPartial<R>[]

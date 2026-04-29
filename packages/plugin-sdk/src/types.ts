@@ -6,11 +6,13 @@ import type {
   WorkflowType,
 } from 'src/enum.js';
 
-type DeepPartial<T> = T extends object
-  ? {
-      [P in keyof T]?: DeepPartial<T[P]>;
-    }
-  : T;
+type DeepPartial<T> = T extends Date
+  ? T
+  : T extends Record<string, unknown>
+    ? { [K in keyof T]?: DeepPartial<T[K]> }
+    : T extends Array<infer R>
+      ? DeepPartial<R>[]
+      : T;
 
 export type WorkflowEventMap = {
   [WorkflowType.AssetV1]: AssetV1;
@@ -21,7 +23,7 @@ export type WorkflowEventData<T extends WorkflowType> = WorkflowEventMap[T];
 
 export type WorkflowEventPayload<
   T extends WorkflowType = WorkflowType,
-  TConfig = WorkflowStepConfig
+  TConfig = WorkflowStepConfig,
 > = {
   trigger: WorkflowTrigger;
   type: T;

@@ -6,6 +6,12 @@ declare module 'extism:host' {
 
 const host = Host.getFunctions();
 type HostFunctionName = keyof typeof host;
+type HostFunctionResult<T> =
+  | {
+      success: true;
+      response: T;
+    }
+  | { success: false; status: number; message: string };
 
 const call = <T, R>(name: HostFunctionName, authToken: string, args: T) => {
   const pointer1 = Memory.fromString(JSON.stringify({ authToken, args }));
@@ -13,12 +19,7 @@ const call = <T, R>(name: HostFunctionName, authToken: string, args: T) => {
   const handler = Memory.find(fn(pointer1.offset));
 
   try {
-    const result = JSON.parse(handler.readString()) as
-      | {
-          success: true;
-          response: R;
-        }
-      | { success: false; status: number; message: string };
+    const result = JSON.parse(handler.readString()) as HostFunctionResult<R>;
 
     if (result.success) {
       return result.response;
@@ -27,7 +28,7 @@ const call = <T, R>(name: HostFunctionName, authToken: string, args: T) => {
     throw new Error(
       `Failed to call host function "${name}", received ${
         result.status
-      } - ${JSON.stringify(result.message)}`
+      } - ${JSON.stringify(result.message)}`,
     );
   } finally {
     handler.free();
