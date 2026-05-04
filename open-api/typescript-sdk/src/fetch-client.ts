@@ -2307,6 +2307,10 @@ export type DatabaseBackupConfig = {
 export type SystemConfigBackupsDto = {
     database: DatabaseBackupConfig;
 };
+export type SystemConfigFFmpegRealtimeDto = {
+    /** Enable real-time HLS transcoding (alpha) */
+    enabled: boolean;
+};
 export type SystemConfigFFmpegDto = {
     accel: TranscodeHWAccel;
     /** Accelerated decode */
@@ -2330,6 +2334,7 @@ export type SystemConfigFFmpegDto = {
     preferredHwDevice: string;
     /** Preset */
     preset: string;
+    realtime: SystemConfigFFmpegRealtimeDto;
     /** References */
     refs: number;
     targetAudioCodec: AudioCodec;
@@ -4258,6 +4263,82 @@ export function playAssetVideo({ id, key, slug }: {
         status: 200;
         data: Blob;
     }>(`/assets/${encodeURIComponent(id)}/video/playback${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get HLS master playlist
+ */
+export function getMasterPlaylist({ id, key, slug }: {
+    id: string;
+    key?: string;
+    slug?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: string;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/master.m3u8${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * End HLS streaming session
+ */
+export function endSession({ id, key, sessionId, slug }: {
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Get HLS media playlist
+ */
+export function getMediaPlaylist({ id, key, sessionId, slug, variantIndex }: {
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+    variantIndex: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: string;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}/${encodeURIComponent(variantIndex)}/playlist.m3u8${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get HLS segment or init file
+ */
+export function getSegment({ filename, id, key, sessionId, slug, variantIndex }: {
+    filename: string;
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+    variantIndex: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}/${encodeURIComponent(variantIndex)}/${encodeURIComponent(filename)}${QS.query(QS.explode({
         key,
         slug
     }))}`, {
@@ -7098,6 +7179,7 @@ export enum JobName {
     LibrarySyncFilesQueueAll = "LibrarySyncFilesQueueAll",
     LibrarySyncFiles = "LibrarySyncFiles",
     LibraryScanQueueAll = "LibraryScanQueueAll",
+    HlsSessionCleanup = "HlsSessionCleanup",
     MemoryCleanup = "MemoryCleanup",
     MemoryGenerate = "MemoryGenerate",
     NotificationsCleanup = "NotificationsCleanup",
