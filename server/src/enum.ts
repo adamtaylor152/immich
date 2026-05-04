@@ -814,6 +814,8 @@ export enum JobName {
   LibrarySyncFiles = 'LibrarySyncFiles',
   LibraryScanQueueAll = 'LibraryScanQueueAll',
 
+  HlsSessionCleanup = 'HlsSessionCleanup',
+
   MemoryCleanup = 'MemoryCleanup',
   MemoryGenerate = 'MemoryGenerate',
 
@@ -906,6 +908,7 @@ export enum DatabaseLock {
   MaintenanceOperation = 621,
   MemoryCreation = 777,
   VersionCheck = 800,
+  HlsSessionCleanup = 850,
 }
 
 export enum MaintenanceAction {

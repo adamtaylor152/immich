@@ -2,7 +2,15 @@ import { Injectable } from '@nestjs/common';
 import archiver from 'archiver';
 import chokidar, { ChokidarOptions } from 'chokidar';
 import { escapePath, glob, globStream } from 'fast-glob';
-import { constants, createReadStream, createWriteStream, existsSync, mkdirSync, ReadOptionsWithBuffer } from 'node:fs';
+import {
+  constants,
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  ReadOptionsWithBuffer,
+  watch,
+} from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
@@ -257,6 +265,8 @@ export class StorageRepository {
 
     return () => watcher.close();
   }
+
+  watchDir = watch; // Native fs.watch without chokidar overhead
 
   private asGlob(pathToCrawl: string): string {
     const escapedPath = escapePath(pathToCrawl).replaceAll('"', '["]').replaceAll("'", "[']").replaceAll('`', '[`]');

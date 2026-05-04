@@ -222,7 +222,7 @@ export const SUPPORTED_HWA_CODECS: Record<TranscodeHardwareAcceleration, VideoCo
 
 export const HLS_BACKPRESSURE_PAUSE_SEGMENTS = 30;
 export const HLS_BACKPRESSURE_RESUME_SEGMENTS = 15;
-export const HLS_INACTIVITY_SWEEP_INTERVAL_MS = 60 * 1000;
+export const HLS_CLEANUP_INTERVAL_MS = 60 * 1000;
 export const HLS_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 export const HLS_LEASE_DURATION_MS = 30 * 60 * 1000;
 export const HLS_SEGMENT_DURATION = 2;
