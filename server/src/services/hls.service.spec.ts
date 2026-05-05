@@ -304,6 +304,7 @@ describe(HlsService.name, () => {
     });
 
     it('throws NotFoundException when the session does not exist', async () => {
+      mocks.videoStream.getSession.mockReset();
       await expect(sut.getSegment(auth, assetId, sessionId, variantIndex, 'init.mp4')).rejects.toBeInstanceOf(
         NotFoundException,
       );
