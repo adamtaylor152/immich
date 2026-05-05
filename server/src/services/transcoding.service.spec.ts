@@ -223,7 +223,6 @@ describe(TranscodingService.name, () => {
       '50',
       '-crf',
       '23',
-      '-start_at_zero',
       '-copyts',
       '-r',
       '50130000/2012441',
@@ -368,13 +367,12 @@ describe(TranscodingService.name, () => {
 
       const args = mocks.process.spawn.mock.calls[0][1] as string[];
       if (expected === 0) {
-        expect(args).toEqual(expect.arrayContaining(['-copyts', '-start_at_zero', '-avoid_negative_ts', 'disabled']));
+        expect(args).toEqual(expect.arrayContaining(['-copyts', '-avoid_negative_ts', 'disabled']));
         expect(args).not.toContain('-ss');
       } else {
         expect(args).toEqual(
           expect.arrayContaining(['-ss', String(expected), '-copyts', '-avoid_negative_ts', 'disabled']),
         );
-        expect(args).not.toContain('-start_at_zero');
       }
     });
   });

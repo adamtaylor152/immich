@@ -153,10 +153,6 @@ export class BaseConfig implements VideoCodecSWConfig {
       ...this.getPresetOptions(),
       ...this.getBitrateOptions(),
       ...this.getEncoderOptions(),
-      // -start_at_zero only applies meaningfully when seekSeconds is 0.
-      // Combined with -ss N -copyts, it would shift the first frame to t=0
-      // and break tfdt alignment with the playlist.
-      ...(options.seekSeconds ? [] : ['-start_at_zero']),
       '-copyts',
       '-r',
       `${options.packetCount * options.timeBase}/${options.totalDuration}`,
