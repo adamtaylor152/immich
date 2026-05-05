@@ -367,11 +367,14 @@ describe(TranscodingService.name, () => {
       await sut.onSegmentRequest({ sessionId, assetId, variantIndex: 0, segmentIndex });
 
       const args = mocks.process.spawn.mock.calls[0][1] as string[];
-      const ssIndex = args.indexOf('-ss');
       if (expected === 0) {
-        expect(ssIndex).toBe(-1);
+        expect(args).toEqual(expect.arrayContaining(['-copyts', '-start_at_zero', '-avoid_negative_ts', 'disabled']));
+        expect(args).not.toContain('-ss');
       } else {
-        expect(args[ssIndex + 1]).toBe(String(expected));
+        expect(args).toEqual(
+          expect.arrayContaining(['-ss', String(expected), '-copyts', '-avoid_negative_ts', 'disabled']),
+        );
+        expect(args).not.toContain('-start_at_zero');
       }
     });
   });
