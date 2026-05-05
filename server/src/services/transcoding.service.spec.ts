@@ -1,9 +1,26 @@
-import { HLS_CLEANUP_INTERVAL_MS, HLS_INACTIVITY_TIMEOUT_MS, HLS_LEASE_DURATION_MS } from 'src/constants';
+import {
+  HLS_CLEANUP_INTERVAL_MS,
+  HLS_INACTIVITY_TIMEOUT_MS,
+  HLS_LEASE_DURATION_MS,
+  HLS_SEGMENT_DURATION,
+} from 'src/constants';
 import { TranscodingService } from 'src/services/transcoding.service';
 import { VIDEO_STREAM_SESSION_PK_CONSTRAINT } from 'src/utils/database';
-import { eiffelTower } from 'test/fixtures/media.stub';
+import { eiffelTower, train, waterfall } from 'test/fixtures/media.stub';
 import { mockSpawn, newTestService, ServiceMocks } from 'test/utils';
 import { vi } from 'vitest';
+
+const eiffelSeeks = [
+  0, 1.98715, 3.994372222222222, 6.001594444444444, 8.008816666666666, 10.016038888888888, 12.023261111111111,
+  14.030483333333333, 16.037705555555554, 18.044927777777776, 20.052149999999997, 22.059372222222223,
+];
+const waterfallSeeks = [
+  0, 1.994642826321467, 4.006047357065803, 6.0174518878101395, 8.028856418554476, 10.040260949298812,
+];
+const trainSeeks = [
+  0, 1.9916666666666667, 3.9916666666666667, 5.991666666666666, 7.991666666666666, 9.991666666666667,
+  11.991666666666667, 13.991666666666667, 15.991666666666667, 17.991666666666667, 19.991666666666667,
+];
 
 describe(TranscodingService.name, () => {
   let sut: TranscodingService;
@@ -202,6 +219,163 @@ describe(TranscodingService.name, () => {
       expect(mocks.videoStream.deleteSession).toHaveBeenCalledWith('expired-1');
       expect(mocks.videoStream.deleteSession).toHaveBeenCalledWith('expired-2');
       expect(mocks.storage.unlinkDir).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('FFmpeg full command', () => {
+    const baseCommand = [
+      '-nostdin',
+      '-nostats',
+      '-i',
+      'eiffel-tower.mp4',
+      '-map',
+      '0:0',
+      '-map_metadata',
+      '-1',
+      '-map',
+      '0:1',
+      '-g',
+      '50',
+      '-keyint_min',
+      '50',
+      '-crf',
+      '23',
+      '-start_at_zero',
+      '-copyts',
+      '-r',
+      '50130000/2012441',
+      '-avoid_negative_ts',
+      'disabled',
+      '-f',
+      'hls',
+      '-hls_time',
+      '2',
+      '-hls_list_size',
+      '0',
+      '-hls_segment_type',
+      'fmp4',
+      '-hls_fmp4_init_filename',
+      'init.mp4',
+      '-hls_segment_options',
+      'movflags=+frag_discont',
+      '-hls_flags',
+      'temp_file',
+      '-start_number',
+      '0',
+    ];
+
+    it.each([
+      {
+        variantIndex: 6,
+        expected: [
+          ...baseCommand,
+          '-c:v',
+          'libsvtav1',
+          '-c:a',
+          'aac',
+          '-preset',
+          '12',
+          '-svtav1-params',
+          'hierarchical-levels=3:lookahead=0:enable-tf=0:mbr=4000k',
+          '-hls_segment_filename',
+          '/data/encoded-video/user-1/se/ss/6/seg_%d.m4s',
+          '/data/encoded-video/user-1/se/ss/6/playlist.m3u8',
+        ].sort(),
+      },
+      {
+        variantIndex: 4,
+        expected: [
+          ...baseCommand,
+          '-c:v',
+          'hevc',
+          '-c:a',
+          'aac',
+          '-tag:v',
+          'hvc1',
+          '-preset',
+          'ultrafast',
+          '-maxrate',
+          '2500k',
+          '-bufsize',
+          '5000k',
+          '-x265-params',
+          'no-scenecut=1:no-open-gop=1',
+          '-vf',
+          'scale=720:-2',
+          '-hls_segment_filename',
+          '/data/encoded-video/user-1/se/ss/4/seg_%d.m4s',
+          '/data/encoded-video/user-1/se/ss/4/playlist.m3u8',
+        ].sort(),
+      },
+      {
+        variantIndex: 2,
+        expected: [
+          ...baseCommand,
+          '-c:v',
+          'h264',
+          '-c:a',
+          'aac',
+          '-preset',
+          'ultrafast',
+          '-maxrate',
+          '2500k',
+          '-bufsize',
+          '5000k',
+          '-sc_threshold:v',
+          '0',
+          '-vf',
+          'scale=480:-2',
+          '-hls_segment_filename',
+          '/data/encoded-video/user-1/se/ss/2/seg_%d.m4s',
+          '/data/encoded-video/user-1/se/ss/2/playlist.m3u8',
+        ].sort(),
+      },
+    ])('builds the expected FFmpeg command for $codec (variant $variantIndex)', async ({ variantIndex, expected }) => {
+      mocks.process.spawn.mockReturnValue(mockSpawn(0, '', ''));
+
+      await sut.onSessionRequest({ sessionId, assetId, ownerId });
+      await sut.onSegmentRequest({ sessionId, assetId, variantIndex, segmentIndex: 0 });
+
+      expect(mocks.process.spawn.mock.calls[0][1].toSorted()).toEqual(expected);
+    });
+  });
+
+  describe('FFmpeg seek per segment', () => {
+    const cases = [
+      ...eiffelSeeks.map((expected, segmentIndex) => ({
+        name: `${eiffelTower.originalPath} K=${segmentIndex}`,
+        fixture: eiffelTower,
+        segmentIndex,
+        expected,
+      })),
+      ...waterfallSeeks.map((expected, segmentIndex) => ({
+        name: `${waterfall.originalPath} K=${segmentIndex}`,
+        fixture: waterfall,
+        segmentIndex,
+        expected,
+      })),
+      ...trainSeeks.map((expected, segmentIndex) => ({
+        name: `${train.originalPath} K=${segmentIndex}`,
+        fixture: train,
+        segmentIndex,
+        expected,
+      })),
+    ];
+
+    it.each(cases)('$name', async ({ fixture, segmentIndex, expected }) => {
+      mocks.videoStream.getForTranscoding.mockResolvedValue(fixture);
+      mocks.process.spawn.mockReturnValue(mockSpawn(0, '', ''));
+
+      await sut.onSessionRequest({ sessionId, assetId, ownerId });
+      await sut.onSegmentRequest({ sessionId, assetId, variantIndex: 0, segmentIndex });
+
+      const args = mocks.process.spawn.mock.calls[0][1] as string[];
+      const ssIndex = args.indexOf('-ss');
+      if (expected === 0) {
+        expect(ssIndex).toBe(-1);
+      } else {
+        expect(args[ssIndex + 1]).toBe(String(expected));
+      }
     });
   });
 });
