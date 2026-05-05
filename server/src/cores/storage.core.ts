@@ -137,10 +137,6 @@ export class StorageCore {
     return join(StorageCore.getHlsSessionFolder({ ownerId, sessionId }), variantIndex.toString());
   }
 
-  static getHlsSegmentPath({ ownerId, sessionId, variantIndex }: HlsVariantFolder) {
-    return join(StorageCore.getHlsVariantFolder({ ownerId, sessionId, variantIndex }), variantIndex.toString());
-  }
-
   static getAndroidMotionPath(asset: ThumbnailPathEntity, uuid: string) {
     return StorageCore.getNestedPath(StorageFolder.EncodedVideo, asset.ownerId, `${uuid}-MP.mp4`);
   }
