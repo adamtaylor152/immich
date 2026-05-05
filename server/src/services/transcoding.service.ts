@@ -165,12 +165,9 @@ export class TranscodingService extends BaseService {
   }
 
   private async startTranscode(session: Session, variantIndex: number, startSegment: number) {
-    const t0 = performance.now();
     const { ffmpeg } = await this.getConfig({ withCache: true });
-    const t1 = performance.now();
 
     const asset = await this.videoStreamRepository.getForTranscoding(session.assetId);
-    const t2 = performance.now();
     if (!asset) {
       this.logger.error(`Asset ${session.assetId} not found for HLS transcoding`);
       return;
@@ -223,7 +220,6 @@ export class TranscodingService extends BaseService {
       await this.failSession(session, `Failed to start transcode: ${error?.message ?? 'unknown error'}`);
       return;
     }
-    const t3 = performance.now();
     const args = config.getHlsCommand(
       {
         initFilename: 'init.mp4',
@@ -241,19 +237,11 @@ export class TranscodingService extends BaseService {
       asset.videoStream,
       asset.audioStream ?? undefined,
     );
-    const t4 = performance.now();
     this.logger.log(
       `Starting HLS transcode for asset ${session.assetId} variant ${variantIndex} with command: ffmpeg ${args.join(' ')}`,
     );
     const process = this.processRepository.spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    const t5 = performance.now();
-    this.attachProcessHandlers(process, session, variantIndex, t5);
-    this.logger.log(
-      `[TIMING] startTranscode session=${session.id} variant=${variantIndex} startSegment=${startSegment} ` +
-        `getConfig=${(t1 - t0).toFixed(1)}ms getAsset=${(t2 - t1).toFixed(1)}ms ` +
-        `config=${(t3 - t2).toFixed(1)}ms args=${(t4 - t3).toFixed(1)}ms ` +
-        `spawn=${(t5 - t4).toFixed(1)}ms total=${(t5 - t0).toFixed(1)}ms`,
-    );
+    this.attachProcessHandlers(process, session, variantIndex);
     return process;
   }
 
@@ -262,9 +250,8 @@ export class TranscodingService extends BaseService {
     return this.onSessionEnd({ sessionId: session.id });
   }
 
-  private attachProcessHandlers(process: ChildProcess, session: Session, variantIndex: number, spawnTime: number) {
+  private attachProcessHandlers(process: ChildProcess, session: Session, variantIndex: number) {
     let stderr = '';
-    let firstSegmentLogged = false;
     const variantDir = StorageCore.getHlsVariantFolder({
       ownerId: session.ownerId,
       sessionId: session.id,
@@ -284,13 +271,6 @@ export class TranscodingService extends BaseService {
         return;
       }
       const segmentIndex = Number.parseInt(match[1]);
-      if (!firstSegmentLogged) {
-        firstSegmentLogged = true;
-        this.logger.log(
-          `[TIMING] firstSegmentVisible session=${session.id} variant=${variantIndex} ` +
-            `segmentIndex=${segmentIndex} sinceSpawn=${(performance.now() - spawnTime).toFixed(1)}ms`,
-        );
-      }
       session.lastCompletedSegment = segmentIndex;
       this.websocketRepository.serverSend('HlsSegmentResult', {
         sessionId: session.id,

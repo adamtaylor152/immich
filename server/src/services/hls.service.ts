@@ -80,15 +80,12 @@ export class HlsService extends BaseService {
   }
 
   async getSegment(auth: AuthDto, assetId: string, sessionId: string, variantIndex: number, filename: string) {
-    const t0 = performance.now();
     await this.requireAccess({ auth, permission: Permission.AssetView, ids: [assetId] });
-    const t1 = performance.now();
 
     const session = await this.videoStreamRepository.getSession(sessionId);
     if (!session) {
       throw new NotFoundException('Session not found');
     }
-    const t2 = performance.now();
 
     const variantDir = StorageCore.getHlsVariantFolder({ ownerId: auth.user.id, sessionId, variantIndex });
     const path = join(variantDir, filename);
@@ -102,25 +99,11 @@ export class HlsService extends BaseService {
     this.websocketRepository.serverSend('HlsHeartbeat', { sessionId, variantIndex, segmentIndex });
 
     if (await this.storageRepository.checkFileExists(path, constants.R_OK)) {
-      this.logger.log(
-        `[TIMING] getSegment(cached) session=${sessionId} variant=${variantIndex} file=${filename} ` +
-          `auth=${(t1 - t0).toFixed(1)}ms session=${(t2 - t1).toFixed(1)}ms ` +
-          `total=${(performance.now() - t0).toFixed(1)}ms`,
-      );
       return response;
     }
-    const t3 = performance.now();
 
     this.websocketRepository.serverSend('HlsSegmentRequest', { sessionId, assetId, variantIndex, segmentIndex });
     await this.pendingSegments.wait(this.getSegmentKey({ sessionId, variantIndex, segmentIndex }));
-    const t4 = performance.now();
-
-    this.logger.log(
-      `[TIMING] getSegment(wait) session=${sessionId} variant=${variantIndex} file=${filename} ` +
-        `auth=${(t1 - t0).toFixed(1)}ms session=${(t2 - t1).toFixed(1)}ms ` +
-        `existsCheck=${(t3 - t2).toFixed(1)}ms wait=${(t4 - t3).toFixed(1)}ms ` +
-        `total=${(t4 - t0).toFixed(1)}ms`,
-    );
 
     return response;
   }
