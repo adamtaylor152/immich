@@ -267,6 +267,7 @@
     "notification_enable_email_notifications": "メール通知を有効にします",
     "notification_settings": "通知設定",
     "notification_settings_description": "メールを含む通知設定を管理します",
+    "oauth_allow_insecure_requests": "安全ではないリクエストを許可する",
     "oauth_auto_launch": "自動起動",
     "oauth_auto_launch_description": "ログインページに移動すると、OAuthログインフローが自動的に開始されます",
     "oauth_auto_register": "自動登録",
