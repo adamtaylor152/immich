@@ -186,16 +186,14 @@ export class HlsService extends BaseService {
 
   private getSegmentIndex(sessionId: string, filename: string) {
     const existing = this.sessions.get(sessionId);
-    let segmentIndex: number;
     if (filename.endsWith('.mp4')) {
-      segmentIndex = (existing?.lastRequestedSegment ?? -1) + 1;
+      return (existing?.lastRequestedSegment ?? -1) + 1;
+    }
+    const segmentIndex = Number.parseInt(SEGMENT_FILENAME_REGEX.exec(filename)![1]);
+    if (existing) {
+      existing.lastRequestedSegment = segmentIndex;
     } else {
-      segmentIndex = Number.parseInt(SEGMENT_FILENAME_REGEX.exec(filename)![1]);
-      if (existing) {
-        existing.lastRequestedSegment = segmentIndex;
-      } else {
-        this.sessions.set(sessionId, { lastRequestedSegment: segmentIndex });
-      }
+      this.sessions.set(sessionId, { lastRequestedSegment: segmentIndex });
     }
     return segmentIndex;
   }
