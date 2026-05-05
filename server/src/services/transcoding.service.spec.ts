@@ -1,9 +1,4 @@
-import {
-  HLS_CLEANUP_INTERVAL_MS,
-  HLS_INACTIVITY_TIMEOUT_MS,
-  HLS_LEASE_DURATION_MS,
-  HLS_SEGMENT_DURATION,
-} from 'src/constants';
+import { HLS_CLEANUP_INTERVAL_MS, HLS_INACTIVITY_TIMEOUT_MS, HLS_LEASE_DURATION_MS } from 'src/constants';
 import { TranscodingService } from 'src/services/transcoding.service';
 import { VIDEO_STREAM_SESSION_PK_CONSTRAINT } from 'src/utils/database';
 import { eiffelTower, train, waterfall } from 'test/fixtures/media.stub';
