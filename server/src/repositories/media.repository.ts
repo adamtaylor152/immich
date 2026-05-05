@@ -509,7 +509,7 @@ export class MediaRepository {
     return this.parseInt(b.bit_rate) - this.parseInt(a.bit_rate);
   }
 
-  /* Ported from https://code.ffmpeg.org/FFmpeg/FFmpeg/src/branch/master/fftools/ffmpeg_filter.c
+  /* Ported from https://code.ffmpeg.org/FFmpeg/FFmpeg/src/commit/5c44245878e235ae64fe87fb9877644856d33d1d/fftools/ffmpeg_filter.c
    * SPDX-License-Identifier: LGPL-2.1-or-later
    * Copyright (c) FFmpeg authors and contributors — https://ffmpeg.org/
    * Modifications: TS port operating on probe-derived packet metadata rather than decoded AVFrames. */
