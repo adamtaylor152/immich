@@ -16,13 +16,13 @@ class SystemConfigJobDto {
     required this.backgroundTask,
     required this.editor,
     required this.faceDetection,
-    required this.imageDescription,
-    required this.imageEnrichment,
+    this.imageDescription,
+    this.imageEnrichment,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
     required this.notifications,
-    required this.nsfwDetection,
+    this.nsfwDetection,
     required this.ocr,
     required this.search,
     required this.sidecar,
@@ -38,9 +38,21 @@ class SystemConfigJobDto {
 
   JobSettingsDto faceDetection;
 
-  JobSettingsDto imageDescription;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  JobSettingsDto? imageDescription;
 
-  JobSettingsDto imageEnrichment;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  JobSettingsDto? imageEnrichment;
 
   JobSettingsDto library_;
 
@@ -50,7 +62,13 @@ class SystemConfigJobDto {
 
   JobSettingsDto notifications;
 
-  JobSettingsDto nsfwDetection;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  JobSettingsDto? nsfwDetection;
 
   JobSettingsDto ocr;
 
@@ -92,13 +110,13 @@ class SystemConfigJobDto {
     (backgroundTask.hashCode) +
     (editor.hashCode) +
     (faceDetection.hashCode) +
-    (imageDescription.hashCode) +
-    (imageEnrichment.hashCode) +
+    (imageDescription == null ? 0 : imageDescription!.hashCode) +
+    (imageEnrichment == null ? 0 : imageEnrichment!.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
     (notifications.hashCode) +
-    (nsfwDetection.hashCode) +
+    (nsfwDetection == null ? 0 : nsfwDetection!.hashCode) +
     (ocr.hashCode) +
     (search.hashCode) +
     (sidecar.hashCode) +
@@ -115,13 +133,25 @@ class SystemConfigJobDto {
       json[r'backgroundTask'] = this.backgroundTask;
       json[r'editor'] = this.editor;
       json[r'faceDetection'] = this.faceDetection;
+    if (this.imageDescription != null) {
       json[r'imageDescription'] = this.imageDescription;
+    } else {
+    //  json[r'imageDescription'] = null;
+    }
+    if (this.imageEnrichment != null) {
       json[r'imageEnrichment'] = this.imageEnrichment;
+    } else {
+    //  json[r'imageEnrichment'] = null;
+    }
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
       json[r'notifications'] = this.notifications;
+    if (this.nsfwDetection != null) {
       json[r'nsfwDetection'] = this.nsfwDetection;
+    } else {
+    //  json[r'nsfwDetection'] = null;
+    }
       json[r'ocr'] = this.ocr;
       json[r'search'] = this.search;
       json[r'sidecar'] = this.sidecar;
@@ -144,13 +174,13 @@ class SystemConfigJobDto {
         backgroundTask: JobSettingsDto.fromJson(json[r'backgroundTask'])!,
         editor: JobSettingsDto.fromJson(json[r'editor'])!,
         faceDetection: JobSettingsDto.fromJson(json[r'faceDetection'])!,
-        imageDescription: JobSettingsDto.fromJson(json[r'imageDescription'])!,
-        imageEnrichment: JobSettingsDto.fromJson(json[r'imageEnrichment'])!,
+        imageDescription: JobSettingsDto.fromJson(json[r'imageDescription']),
+        imageEnrichment: JobSettingsDto.fromJson(json[r'imageEnrichment']),
         library_: JobSettingsDto.fromJson(json[r'library'])!,
         metadataExtraction: JobSettingsDto.fromJson(json[r'metadataExtraction'])!,
         migration: JobSettingsDto.fromJson(json[r'migration'])!,
         notifications: JobSettingsDto.fromJson(json[r'notifications'])!,
-        nsfwDetection: JobSettingsDto.fromJson(json[r'nsfwDetection'])!,
+        nsfwDetection: JobSettingsDto.fromJson(json[r'nsfwDetection']),
         ocr: JobSettingsDto.fromJson(json[r'ocr'])!,
         search: JobSettingsDto.fromJson(json[r'search'])!,
         sidecar: JobSettingsDto.fromJson(json[r'sidecar'])!,
@@ -208,13 +238,10 @@ class SystemConfigJobDto {
     'backgroundTask',
     'editor',
     'faceDetection',
-    'imageDescription',
-    'imageEnrichment',
     'library',
     'metadataExtraction',
     'migration',
     'notifications',
-    'nsfwDetection',
     'ocr',
     'search',
     'sidecar',

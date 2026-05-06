@@ -18,8 +18,8 @@ class SystemConfigMachineLearningDto {
     required this.duplicateDetection,
     required this.enabled,
     required this.facialRecognition,
-    required this.imageDescription,
-    required this.nsfwDetection,
+    this.imageDescription,
+    this.nsfwDetection,
     required this.ocr,
     this.urls = const [],
   });
@@ -35,9 +35,21 @@ class SystemConfigMachineLearningDto {
 
   FacialRecognitionConfig facialRecognition;
 
-  ImageDescriptionConfig imageDescription;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  ImageDescriptionConfig? imageDescription;
 
-  NsfwDetectionConfig nsfwDetection;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  NsfwDetectionConfig? nsfwDetection;
 
   OcrConfig ocr;
 
@@ -64,8 +76,8 @@ class SystemConfigMachineLearningDto {
     (duplicateDetection.hashCode) +
     (enabled.hashCode) +
     (facialRecognition.hashCode) +
-    (imageDescription.hashCode) +
-    (nsfwDetection.hashCode) +
+    (imageDescription == null ? 0 : imageDescription!.hashCode) +
+    (nsfwDetection == null ? 0 : nsfwDetection!.hashCode) +
     (ocr.hashCode) +
     (urls.hashCode);
 
@@ -79,8 +91,16 @@ class SystemConfigMachineLearningDto {
       json[r'duplicateDetection'] = this.duplicateDetection;
       json[r'enabled'] = this.enabled;
       json[r'facialRecognition'] = this.facialRecognition;
+    if (this.imageDescription != null) {
       json[r'imageDescription'] = this.imageDescription;
+    } else {
+    //  json[r'imageDescription'] = null;
+    }
+    if (this.nsfwDetection != null) {
       json[r'nsfwDetection'] = this.nsfwDetection;
+    } else {
+    //  json[r'nsfwDetection'] = null;
+    }
       json[r'ocr'] = this.ocr;
       json[r'urls'] = this.urls;
     return json;
@@ -100,8 +120,8 @@ class SystemConfigMachineLearningDto {
         duplicateDetection: DuplicateDetectionConfig.fromJson(json[r'duplicateDetection'])!,
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         facialRecognition: FacialRecognitionConfig.fromJson(json[r'facialRecognition'])!,
-        imageDescription: ImageDescriptionConfig.fromJson(json[r'imageDescription'])!,
-        nsfwDetection: NsfwDetectionConfig.fromJson(json[r'nsfwDetection'])!,
+        imageDescription: ImageDescriptionConfig.fromJson(json[r'imageDescription']),
+        nsfwDetection: NsfwDetectionConfig.fromJson(json[r'nsfwDetection']),
         ocr: OcrConfig.fromJson(json[r'ocr'])!,
         urls: json[r'urls'] is Iterable
             ? (json[r'urls'] as Iterable).cast<String>().toList(growable: false)
@@ -158,8 +178,6 @@ class SystemConfigMachineLearningDto {
     'duplicateDetection',
     'enabled',
     'facialRecognition',
-    'imageDescription',
-    'nsfwDetection',
     'ocr',
     'urls',
   };

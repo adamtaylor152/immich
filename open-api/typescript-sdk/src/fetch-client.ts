@@ -2473,13 +2473,13 @@ export type SystemConfigJobDto = {
     backgroundTask: JobSettingsDto;
     editor: JobSettingsDto;
     faceDetection: JobSettingsDto;
-    imageDescription: JobSettingsDto;
-    imageEnrichment: JobSettingsDto;
+    imageDescription?: JobSettingsDto;
+    imageEnrichment?: JobSettingsDto;
     library: JobSettingsDto;
     metadataExtraction: JobSettingsDto;
     migration: JobSettingsDto;
     notifications: JobSettingsDto;
-    nsfwDetection: JobSettingsDto;
+    nsfwDetection?: JobSettingsDto;
     ocr: JobSettingsDto;
     search: JobSettingsDto;
     sidecar: JobSettingsDto;
@@ -2578,8 +2578,8 @@ export type SystemConfigMachineLearningDto = {
     /** Enabled */
     enabled: boolean;
     facialRecognition: FacialRecognitionConfig;
-    imageDescription: ImageDescriptionConfig;
-    nsfwDetection: NsfwDetectionConfig;
+    imageDescription?: ImageDescriptionConfig;
+    nsfwDetection?: NsfwDetectionConfig;
     ocr: OcrConfig;
     /** ML service URLs */
     urls: string[];

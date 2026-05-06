@@ -1,5 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
-import { SystemConfig } from 'src/config';
+import { defaults, type SystemConfig } from 'src/config';
 import {
   CLIPConfigSchema,
   DuplicateDetectionConfigSchema,
@@ -102,9 +102,9 @@ const SystemConfigJobSchema = z
     library: JobSettingsSchema,
     notifications: JobSettingsSchema,
     ocr: JobSettingsSchema,
-    imageEnrichment: JobSettingsSchema,
-    imageDescription: JobSettingsSchema,
-    nsfwDetection: JobSettingsSchema,
+    imageEnrichment: JobSettingsSchema.optional().default(defaults.job.imageEnrichment),
+    imageDescription: JobSettingsSchema.optional().default(defaults.job.imageDescription),
+    nsfwDetection: JobSettingsSchema.optional().default(defaults.job.nsfwDetection),
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
   })
@@ -149,8 +149,8 @@ const SystemConfigMachineLearningSchema = z
     duplicateDetection: DuplicateDetectionConfigSchema,
     facialRecognition: FacialRecognitionConfigSchema,
     ocr: OcrConfigSchema,
-    imageDescription: ImageDescriptionConfigSchema,
-    nsfwDetection: NsfwDetectionConfigSchema,
+    imageDescription: ImageDescriptionConfigSchema.optional().default(defaults.machineLearning.imageDescription),
+    nsfwDetection: NsfwDetectionConfigSchema.optional().default(defaults.machineLearning.nsfwDetection),
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });
 

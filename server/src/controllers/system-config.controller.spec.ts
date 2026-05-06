@@ -96,6 +96,17 @@ describe(SystemConfigController.name, () => {
       });
     });
 
+    it('should accept config without newer image enrichment settings', async () => {
+      const config = validConfig() as any;
+      delete config.job.imageEnrichment;
+      delete config.job.imageDescription;
+      delete config.job.nsfwDetection;
+      delete config.machineLearning.imageDescription;
+      delete config.machineLearning.nsfwDetection;
+      const { status } = await request(ctx.getHttpServer()).put('/system-config').send(config);
+      expect(status).toBe(200);
+    });
+
     describe('image', () => {
       it('should accept config without optional progressive property', async () => {
         const config = validConfig();
