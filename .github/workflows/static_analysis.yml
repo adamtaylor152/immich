@@ -44,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      DCM_CI_KEY: ${{ secrets.DCM_CI_KEY }}
+      DCM_EMAIL: ${{ secrets.DCM_EMAIL }}
     defaults:
       run:
         working-directory: ./mobile
@@ -123,4 +126,9 @@ jobs:
 
       # TODO: Use https://github.com/CQLabs/dcm-action
       - name: Run DCM
+        if: ${{ env.DCM_CI_KEY != '' && env.DCM_EMAIL != '' }}
         run: dcm analyze lib --fatal-style --fatal-warnings
+
+      - name: Skip DCM
+        if: ${{ env.DCM_CI_KEY == '' || env.DCM_EMAIL == '' }}
+        run: echo "Skipping DCM because DCM_CI_KEY and DCM_EMAIL are not configured."
