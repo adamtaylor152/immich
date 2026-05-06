@@ -10,7 +10,7 @@ export const load = (async ({ url }) => {
 
   const { isElevated, pinCode } = await getAuthStatus();
   if (!isElevated || !pinCode) {
-    redirect(307, Route.pinPrompt({ continue: url.pathname + url.search }));
+    throw redirect(307, Route.pinPrompt({ continue: url.pathname + url.search }));
   }
 
   const [ownedAlbums, sharedAlbums] = await Promise.all([

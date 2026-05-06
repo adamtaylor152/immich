@@ -91,6 +91,37 @@
 
   const formatPercent = (value?: number) => (value === undefined ? undefined : `${Math.round(value * 100)}%`);
 
+  const safeNsfwLabels = new Set(['normal', 'safe', 'sfw', 'neutral']);
+
+  const labelSummary = (labels?: Record<string, number>, nsfwOnly = false) => {
+    if (!labels) {
+      return;
+    }
+
+    const entries = Object.entries(labels)
+      .filter(([label]) => !nsfwOnly || !safeNsfwLabels.has(label.toLowerCase()))
+      .sort(([, left], [, right]) => right - left)
+      .slice(0, 3);
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    return entries.map(([label, score]) => `${label} ${formatPercent(score)}`).join(', ');
+  };
+
+  const nsfwStatusText = () => {
+    if (!enrichment || enrichment.nsfwDetection.status !== 'success') {
+      return statusText(enrichment?.nsfwDetection.status ?? 'missing');
+    }
+
+    const summary =
+      labelSummary(enrichment.nsfwDetection.labels, enrichment.nsfwDetection.effectiveIsNsfw) ??
+      labelSummary(enrichment.nsfwDetection.labels);
+
+    return summary ?? statusText(enrichment.nsfwDetection.status);
+  };
+
   $effect(() => {
     if (canReview) {
       handlePromiseError(loadEnrichment(asset.id));
@@ -115,9 +146,6 @@
               <p class="font-medium">{$t('image_description')}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400">
                 {statusText(enrichment.description.status)}
-                {#if enrichment.description.modelName}
-                  - {enrichment.description.modelName}
-                {/if}
               </p>
             </div>
           </div>
@@ -166,10 +194,7 @@
           <div>
             <p class="font-medium">{$t('admin.machine_learning_nsfw_detection')}</p>
             <p class="text-xs text-gray-500 dark:text-gray-400">
-              {statusText(enrichment.nsfwDetection.status)}
-              {#if enrichment.nsfwDetection.modelName}
-                - {enrichment.nsfwDetection.modelName}
-              {/if}
+              {nsfwStatusText()}
             </p>
           </div>
 

@@ -9,7 +9,7 @@ export const load = (async ({ params, url, depends }) => {
 
   const { isElevated, pinCode } = await getAuthStatus();
   if (!isElevated || !pinCode) {
-    redirect(307, Route.pinPrompt({ continue: url.pathname + url.search }));
+    throw redirect(307, Route.pinPrompt({ continue: url.pathname + url.search }));
   }
 
   depends('suppressed-album:data');

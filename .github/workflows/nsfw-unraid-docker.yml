@@ -1,0 +1,200 @@
+name: NSFW Unraid Docker Deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - aj/nsfw-sensitive-content-combined
+      - nsfw-sensitive-content-combined
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  BRANCH_TAG: nsfw-sensitive-content-combined
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: adamtaylor152
+
+jobs:
+  build-server:
+    name: Build Server Image
+    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.BRANCH_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            BUILD_ID=${{ github.run_id }}
+            BUILD_IMAGE=unraid-docker
+            BUILD_SOURCE_REF=${{ github.ref_name }}
+            BUILD_SOURCE_COMMIT=${{ github.sha }}
+
+  build-machine-learning-openvino:
+    name: Build OpenVINO ML Image
+    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push OpenVINO machine learning
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: machine-learning
+          file: machine-learning/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.BRANCH_TAG }}-openvino
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ github.sha }}-openvino
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: |
+            DEVICE=openvino
+            BUILD_ID=${{ github.run_id }}
+            BUILD_IMAGE=unraid-docker-openvino
+            BUILD_SOURCE_REF=${{ github.ref_name }}
+            BUILD_SOURCE_COMMIT=${{ github.sha }}
+
+  package-unraid-deployment:
+    name: Package Unraid Compose Deployment
+    needs:
+      - build-server
+      - build-machine-learning-openvino
+    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: unraid-docker
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create deployment bundle
+        run: |
+          mkdir -p dist/unraid-docker
+          cp docker/example.env dist/unraid-docker/example.env
+          cat > dist/unraid-docker/docker-compose.yml <<'COMPOSE'
+          name: immich
+
+          services:
+            immich-server:
+              container_name: immich_server
+              image: ghcr.io/adamtaylor152/immich-server:nsfw-sensitive-content-combined
+              volumes:
+                - ${UPLOAD_LOCATION}:/data
+                - /etc/localtime:/etc/localtime:ro
+              env_file:
+                - .env
+              ports:
+                - '2283:2283'
+              depends_on:
+                - redis
+                - database
+              restart: always
+              healthcheck:
+                disable: false
+
+            immich-machine-learning:
+              container_name: immich_machine_learning
+              image: ghcr.io/adamtaylor152/immich-machine-learning:nsfw-sensitive-content-combined-openvino
+              device_cgroup_rules:
+                - 'c 189:* rmw'
+              devices:
+                - /dev/dri:/dev/dri
+              volumes:
+                - model-cache:/cache
+                - /dev/bus/usb:/dev/bus/usb
+              env_file:
+                - .env
+              restart: always
+              healthcheck:
+                disable: false
+
+            redis:
+              container_name: immich_redis
+              image: docker.io/valkey/valkey:9@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9
+              healthcheck:
+                test: redis-cli ping || exit 1
+              restart: always
+
+            database:
+              container_name: immich_postgres
+              image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+              environment:
+                POSTGRES_PASSWORD: ${DB_PASSWORD}
+                POSTGRES_USER: ${DB_USERNAME}
+                POSTGRES_DB: ${DB_DATABASE_NAME}
+                POSTGRES_INITDB_ARGS: '--data-checksums'
+              volumes:
+                - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+              shm_size: 128mb
+              restart: always
+              healthcheck:
+                disable: false
+
+          volumes:
+            model-cache:
+          COMPOSE
+
+          cat > dist/unraid-docker/README.md <<README
+          # Immich NSFW Unraid Docker Deployment
+
+          Built from \`${GITHUB_REPOSITORY}@${GITHUB_SHA}\`.
+
+          Images:
+
+          - \`ghcr.io/adamtaylor152/immich-server:nsfw-sensitive-content-combined\`
+          - \`ghcr.io/adamtaylor152/immich-machine-learning:nsfw-sensitive-content-combined-openvino\`
+
+          Use the bundled \`docker-compose.yml\` with your existing Immich \`.env\` values. The machine-learning service is pinned to the OpenVINO image and maps \`/dev/dri\` for an Intel iGPU.
+          README
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: immich-unraid-docker-nsfw-sensitive-content-combined
+          path: dist/unraid-docker
