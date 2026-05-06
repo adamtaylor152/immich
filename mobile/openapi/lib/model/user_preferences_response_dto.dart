@@ -20,6 +20,7 @@ class UserPreferencesResponseDto {
     required this.folders,
     required this.memories,
     required this.people,
+    required this.privacy,
     required this.purchase,
     required this.ratings,
     required this.sharedLinks,
@@ -40,6 +41,8 @@ class UserPreferencesResponseDto {
 
   PeopleResponse people;
 
+  PrivacyResponse privacy;
+
   PurchaseResponse purchase;
 
   RatingsResponse ratings;
@@ -57,6 +60,7 @@ class UserPreferencesResponseDto {
     other.folders == folders &&
     other.memories == memories &&
     other.people == people &&
+    other.privacy == privacy &&
     other.purchase == purchase &&
     other.ratings == ratings &&
     other.sharedLinks == sharedLinks &&
@@ -72,13 +76,14 @@ class UserPreferencesResponseDto {
     (folders.hashCode) +
     (memories.hashCode) +
     (people.hashCode) +
+    (privacy.hashCode) +
     (purchase.hashCode) +
     (ratings.hashCode) +
     (sharedLinks.hashCode) +
     (tags.hashCode);
 
   @override
-  String toString() => 'UserPreferencesResponseDto[albums=$albums, cast=$cast, download=$download, emailNotifications=$emailNotifications, folders=$folders, memories=$memories, people=$people, purchase=$purchase, ratings=$ratings, sharedLinks=$sharedLinks, tags=$tags]';
+  String toString() => 'UserPreferencesResponseDto[albums=$albums, cast=$cast, download=$download, emailNotifications=$emailNotifications, folders=$folders, memories=$memories, people=$people, privacy=$privacy, purchase=$purchase, ratings=$ratings, sharedLinks=$sharedLinks, tags=$tags]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -89,6 +94,7 @@ class UserPreferencesResponseDto {
       json[r'folders'] = this.folders;
       json[r'memories'] = this.memories;
       json[r'people'] = this.people;
+      json[r'privacy'] = this.privacy;
       json[r'purchase'] = this.purchase;
       json[r'ratings'] = this.ratings;
       json[r'sharedLinks'] = this.sharedLinks;
@@ -112,6 +118,7 @@ class UserPreferencesResponseDto {
         folders: FoldersResponse.fromJson(json[r'folders'])!,
         memories: MemoriesResponse.fromJson(json[r'memories'])!,
         people: PeopleResponse.fromJson(json[r'people'])!,
+        privacy: PrivacyResponse.fromJson(json[r'privacy'])!,
         purchase: PurchaseResponse.fromJson(json[r'purchase'])!,
         ratings: RatingsResponse.fromJson(json[r'ratings'])!,
         sharedLinks: SharedLinksResponse.fromJson(json[r'sharedLinks'])!,
@@ -170,6 +177,7 @@ class UserPreferencesResponseDto {
     'folders',
     'memories',
     'people',
+    'privacy',
     'purchase',
     'ratings',
     'sharedLinks',

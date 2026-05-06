@@ -68,7 +68,7 @@ interface AssetStatsOptions extends HiddenContentQueryOptions {
   visibility?: AssetVisibility;
 }
 
-interface AssetChecksumOptions extends HiddenContentQueryOptions {}
+type AssetChecksumOptions = HiddenContentQueryOptions;
 
 interface LivePhotoSearchOptions {
   ownerId: string;

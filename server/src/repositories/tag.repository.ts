@@ -10,7 +10,7 @@ import { TagTable } from 'src/schema/tables/tag.table';
 import { getHiddenContentFilter, tagHasVisibleAssetOrNoAssets } from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 
-export interface TagSearchOptions extends HiddenContentQueryOptions {}
+export type TagSearchOptions = HiddenContentQueryOptions;
 
 @Injectable()
 export class TagRepository {

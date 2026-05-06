@@ -64,6 +64,9 @@ String parameterToString(dynamic value) {
   if (value is AssetIdErrorReason) {
     return AssetIdErrorReasonTypeTransformer().encode(value).toString();
   }
+  if (value is AssetImageEnrichmentAction) {
+    return AssetImageEnrichmentActionTypeTransformer().encode(value).toString();
+  }
   if (value is AssetJobName) {
     return AssetJobNameTypeTransformer().encode(value).toString();
   }
@@ -99,6 +102,9 @@ String parameterToString(dynamic value) {
   }
   if (value is Colorspace) {
     return ColorspaceTypeTransformer().encode(value).toString();
+  }
+  if (value is ImageEnrichmentFilter) {
+    return ImageEnrichmentFilterTypeTransformer().encode(value).toString();
   }
   if (value is ImageFormat) {
     return ImageFormatTypeTransformer().encode(value).toString();
@@ -174,6 +180,9 @@ String parameterToString(dynamic value) {
   }
   if (value is StorageFolder) {
     return StorageFolderTypeTransformer().encode(value).toString();
+  }
+  if (value is SuppressionScope) {
+    return SuppressionScopeTypeTransformer().encode(value).toString();
   }
   if (value is SyncEntityType) {
     return SyncEntityTypeTypeTransformer().encode(value).toString();

@@ -264,6 +264,12 @@ class ApiClient {
           return AssetIdsDto.fromJson(value);
         case 'AssetIdsResponseDto':
           return AssetIdsResponseDto.fromJson(value);
+        case 'AssetImageEnrichmentAction':
+          return AssetImageEnrichmentActionTypeTransformer().decode(value);
+        case 'AssetImageEnrichmentActionRequestDto':
+          return AssetImageEnrichmentActionRequestDto.fromJson(value);
+        case 'AssetImageEnrichmentResponseDto':
+          return AssetImageEnrichmentResponseDto.fromJson(value);
         case 'AssetJobName':
           return AssetJobNameTypeTransformer().decode(value);
         case 'AssetJobsDto':
@@ -384,6 +390,16 @@ class ApiClient {
           return FoldersResponse.fromJson(value);
         case 'FoldersUpdate':
           return FoldersUpdate.fromJson(value);
+        case 'ImageDescriptionConfig':
+          return ImageDescriptionConfig.fromJson(value);
+        case 'ImageDescriptionEnrichmentResponseDto':
+          return ImageDescriptionEnrichmentResponseDto.fromJson(value);
+        case 'ImageDescriptionEnrichmentResponseDtoPeopleInner':
+          return ImageDescriptionEnrichmentResponseDtoPeopleInner.fromJson(value);
+        case 'ImageEnrichmentFilter':
+          return ImageEnrichmentFilterTypeTransformer().decode(value);
+        case 'ImageEnrichmentReview':
+          return ImageEnrichmentReview.fromJson(value);
         case 'ImageFormat':
           return ImageFormatTypeTransformer().decode(value);
         case 'JobCreateDto':
@@ -464,6 +480,10 @@ class ApiClient {
           return NotificationUpdateAllDto.fromJson(value);
         case 'NotificationUpdateDto':
           return NotificationUpdateDto.fromJson(value);
+        case 'NsfwDetectionConfig':
+          return NsfwDetectionConfig.fromJson(value);
+        case 'NsfwDetectionEnrichmentResponseDto':
+          return NsfwDetectionEnrichmentResponseDto.fromJson(value);
         case 'OAuthAuthorizeResponseDto':
           return OAuthAuthorizeResponseDto.fromJson(value);
         case 'OAuthCallbackDto':
@@ -538,6 +558,10 @@ class ApiClient {
           return PluginTriggerResponseDto.fromJson(value);
         case 'PluginTriggerType':
           return PluginTriggerTypeTypeTransformer().decode(value);
+        case 'PrivacyResponse':
+          return PrivacyResponse.fromJson(value);
+        case 'PrivacyUpdate':
+          return PrivacyUpdate.fromJson(value);
         case 'PurchaseResponse':
           return PurchaseResponse.fromJson(value);
         case 'PurchaseUpdate':
@@ -660,6 +684,12 @@ class ApiClient {
           return StatisticsSearchDto.fromJson(value);
         case 'StorageFolder':
           return StorageFolderTypeTransformer().decode(value);
+        case 'SuppressionResponse':
+          return SuppressionResponse.fromJson(value);
+        case 'SuppressionScope':
+          return SuppressionScopeTypeTransformer().decode(value);
+        case 'SuppressionUpdate':
+          return SuppressionUpdate.fromJson(value);
         case 'SyncAckDeleteDto':
           return SyncAckDeleteDto.fromJson(value);
         case 'SyncAckDto':

@@ -77,6 +77,10 @@ class JobName {
   static const versionCheck = JobName._(r'VersionCheck');
   static const ocrQueueAll = JobName._(r'OcrQueueAll');
   static const ocr = JobName._(r'Ocr');
+  static const imageDescriptionQueueAll = JobName._(r'ImageDescriptionQueueAll');
+  static const imageDescription = JobName._(r'ImageDescription');
+  static const nsfwDetectionQueueAll = JobName._(r'NsfwDetectionQueueAll');
+  static const nsfwDetection = JobName._(r'NsfwDetection');
   static const workflowRun = JobName._(r'WorkflowRun');
 
   /// List of all possible values in this [enum][JobName].
@@ -135,6 +139,10 @@ class JobName {
     versionCheck,
     ocrQueueAll,
     ocr,
+    imageDescriptionQueueAll,
+    imageDescription,
+    nsfwDetectionQueueAll,
+    nsfwDetection,
     workflowRun,
   ];
 
@@ -228,6 +236,10 @@ class JobNameTypeTransformer {
         case r'VersionCheck': return JobName.versionCheck;
         case r'OcrQueueAll': return JobName.ocrQueueAll;
         case r'Ocr': return JobName.ocr;
+        case r'ImageDescriptionQueueAll': return JobName.imageDescriptionQueueAll;
+        case r'ImageDescription': return JobName.imageDescription;
+        case r'NsfwDetectionQueueAll': return JobName.nsfwDetectionQueueAll;
+        case r'NsfwDetection': return JobName.nsfwDetection;
         case r'WorkflowRun': return JobName.workflowRun;
         default:
           if (!allowNull) {

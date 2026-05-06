@@ -315,7 +315,10 @@ class AlbumsApi {
   /// * [String] key:
   ///
   /// * [String] slug:
-  Future<Response> getAlbumInfoWithHttpInfo(String id, { String? key, String? slug, }) async {
+  ///
+  /// * [bool] suppressedOnly:
+  ///   Return album metadata for suppressed content only
+  Future<Response> getAlbumInfoWithHttpInfo(String id, { String? key, String? slug, bool? suppressedOnly, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/albums/{id}'
       .replaceAll('{id}', id);
@@ -332,6 +335,9 @@ class AlbumsApi {
     }
     if (slug != null) {
       queryParams.addAll(_queryParams('', 'slug', slug));
+    }
+    if (suppressedOnly != null) {
+      queryParams.addAll(_queryParams('', 'suppressedOnly', suppressedOnly));
     }
 
     const contentTypes = <String>[];
@@ -359,8 +365,11 @@ class AlbumsApi {
   /// * [String] key:
   ///
   /// * [String] slug:
-  Future<AlbumResponseDto?> getAlbumInfo(String id, { String? key, String? slug, }) async {
-    final response = await getAlbumInfoWithHttpInfo(id,  key: key, slug: slug, );
+  ///
+  /// * [bool] suppressedOnly:
+  ///   Return album metadata for suppressed content only
+  Future<AlbumResponseDto?> getAlbumInfo(String id, { String? key, String? slug, bool? suppressedOnly, }) async {
+    final response = await getAlbumInfoWithHttpInfo(id,  key: key, slug: slug, suppressedOnly: suppressedOnly, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -510,7 +519,10 @@ class AlbumsApi {
   ///
   /// * [bool] shared:
   ///   Filter by shared status: true = only shared, false = not shared, undefined = all owned albums
-  Future<Response> getAllAlbumsWithHttpInfo({ String? assetId, bool? shared, }) async {
+  ///
+  /// * [bool] suppressedOnly:
+  ///   Return album metadata for suppressed content only
+  Future<Response> getAllAlbumsWithHttpInfo({ String? assetId, bool? shared, bool? suppressedOnly, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/albums';
 
@@ -526,6 +538,9 @@ class AlbumsApi {
     }
     if (shared != null) {
       queryParams.addAll(_queryParams('', 'shared', shared));
+    }
+    if (suppressedOnly != null) {
+      queryParams.addAll(_queryParams('', 'suppressedOnly', suppressedOnly));
     }
 
     const contentTypes = <String>[];
@@ -553,8 +568,11 @@ class AlbumsApi {
   ///
   /// * [bool] shared:
   ///   Filter by shared status: true = only shared, false = not shared, undefined = all owned albums
-  Future<List<AlbumResponseDto>?> getAllAlbums({ String? assetId, bool? shared, }) async {
-    final response = await getAllAlbumsWithHttpInfo( assetId: assetId, shared: shared, );
+  ///
+  /// * [bool] suppressedOnly:
+  ///   Return album metadata for suppressed content only
+  Future<List<AlbumResponseDto>?> getAllAlbums({ String? assetId, bool? shared, bool? suppressedOnly, }) async {
+    final response = await getAllAlbumsWithHttpInfo( assetId: assetId, shared: shared, suppressedOnly: suppressedOnly, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

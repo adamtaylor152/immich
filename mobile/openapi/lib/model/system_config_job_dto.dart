@@ -16,10 +16,13 @@ class SystemConfigJobDto {
     required this.backgroundTask,
     required this.editor,
     required this.faceDetection,
+    required this.imageDescription,
+    required this.imageEnrichment,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
     required this.notifications,
+    required this.nsfwDetection,
     required this.ocr,
     required this.search,
     required this.sidecar,
@@ -35,6 +38,10 @@ class SystemConfigJobDto {
 
   JobSettingsDto faceDetection;
 
+  JobSettingsDto imageDescription;
+
+  JobSettingsDto imageEnrichment;
+
   JobSettingsDto library_;
 
   JobSettingsDto metadataExtraction;
@@ -42,6 +49,8 @@ class SystemConfigJobDto {
   JobSettingsDto migration;
 
   JobSettingsDto notifications;
+
+  JobSettingsDto nsfwDetection;
 
   JobSettingsDto ocr;
 
@@ -62,10 +71,13 @@ class SystemConfigJobDto {
     other.backgroundTask == backgroundTask &&
     other.editor == editor &&
     other.faceDetection == faceDetection &&
+    other.imageDescription == imageDescription &&
+    other.imageEnrichment == imageEnrichment &&
     other.library_ == library_ &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
     other.notifications == notifications &&
+    other.nsfwDetection == nsfwDetection &&
     other.ocr == ocr &&
     other.search == search &&
     other.sidecar == sidecar &&
@@ -80,10 +92,13 @@ class SystemConfigJobDto {
     (backgroundTask.hashCode) +
     (editor.hashCode) +
     (faceDetection.hashCode) +
+    (imageDescription.hashCode) +
+    (imageEnrichment.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
     (notifications.hashCode) +
+    (nsfwDetection.hashCode) +
     (ocr.hashCode) +
     (search.hashCode) +
     (sidecar.hashCode) +
@@ -93,17 +108,20 @@ class SystemConfigJobDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'backgroundTask'] = this.backgroundTask;
       json[r'editor'] = this.editor;
       json[r'faceDetection'] = this.faceDetection;
+      json[r'imageDescription'] = this.imageDescription;
+      json[r'imageEnrichment'] = this.imageEnrichment;
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
       json[r'notifications'] = this.notifications;
+      json[r'nsfwDetection'] = this.nsfwDetection;
       json[r'ocr'] = this.ocr;
       json[r'search'] = this.search;
       json[r'sidecar'] = this.sidecar;
@@ -126,10 +144,13 @@ class SystemConfigJobDto {
         backgroundTask: JobSettingsDto.fromJson(json[r'backgroundTask'])!,
         editor: JobSettingsDto.fromJson(json[r'editor'])!,
         faceDetection: JobSettingsDto.fromJson(json[r'faceDetection'])!,
+        imageDescription: JobSettingsDto.fromJson(json[r'imageDescription'])!,
+        imageEnrichment: JobSettingsDto.fromJson(json[r'imageEnrichment'])!,
         library_: JobSettingsDto.fromJson(json[r'library'])!,
         metadataExtraction: JobSettingsDto.fromJson(json[r'metadataExtraction'])!,
         migration: JobSettingsDto.fromJson(json[r'migration'])!,
         notifications: JobSettingsDto.fromJson(json[r'notifications'])!,
+        nsfwDetection: JobSettingsDto.fromJson(json[r'nsfwDetection'])!,
         ocr: JobSettingsDto.fromJson(json[r'ocr'])!,
         search: JobSettingsDto.fromJson(json[r'search'])!,
         sidecar: JobSettingsDto.fromJson(json[r'sidecar'])!,
@@ -187,10 +208,13 @@ class SystemConfigJobDto {
     'backgroundTask',
     'editor',
     'faceDetection',
+    'imageDescription',
+    'imageEnrichment',
     'library',
     'metadataExtraction',
     'migration',
     'notifications',
+    'nsfwDetection',
     'ocr',
     'search',
     'sidecar',

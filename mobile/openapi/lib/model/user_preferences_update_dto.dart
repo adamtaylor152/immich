@@ -21,6 +21,7 @@ class UserPreferencesUpdateDto {
     this.folders,
     this.memories,
     this.people,
+    this.privacy,
     this.purchase,
     this.ratings,
     this.sharedLinks,
@@ -97,6 +98,14 @@ class UserPreferencesUpdateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
+  PrivacyUpdate? privacy;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   PurchaseUpdate? purchase;
 
   ///
@@ -133,6 +142,7 @@ class UserPreferencesUpdateDto {
     other.folders == folders &&
     other.memories == memories &&
     other.people == people &&
+    other.privacy == privacy &&
     other.purchase == purchase &&
     other.ratings == ratings &&
     other.sharedLinks == sharedLinks &&
@@ -149,13 +159,14 @@ class UserPreferencesUpdateDto {
     (folders == null ? 0 : folders!.hashCode) +
     (memories == null ? 0 : memories!.hashCode) +
     (people == null ? 0 : people!.hashCode) +
+    (privacy == null ? 0 : privacy!.hashCode) +
     (purchase == null ? 0 : purchase!.hashCode) +
     (ratings == null ? 0 : ratings!.hashCode) +
     (sharedLinks == null ? 0 : sharedLinks!.hashCode) +
     (tags == null ? 0 : tags!.hashCode);
 
   @override
-  String toString() => 'UserPreferencesUpdateDto[albums=$albums, avatar=$avatar, cast=$cast, download=$download, emailNotifications=$emailNotifications, folders=$folders, memories=$memories, people=$people, purchase=$purchase, ratings=$ratings, sharedLinks=$sharedLinks, tags=$tags]';
+  String toString() => 'UserPreferencesUpdateDto[albums=$albums, avatar=$avatar, cast=$cast, download=$download, emailNotifications=$emailNotifications, folders=$folders, memories=$memories, people=$people, privacy=$privacy, purchase=$purchase, ratings=$ratings, sharedLinks=$sharedLinks, tags=$tags]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -199,6 +210,11 @@ class UserPreferencesUpdateDto {
     } else {
     //  json[r'people'] = null;
     }
+    if (this.privacy != null) {
+      json[r'privacy'] = this.privacy;
+    } else {
+    //  json[r'privacy'] = null;
+    }
     if (this.purchase != null) {
       json[r'purchase'] = this.purchase;
     } else {
@@ -239,6 +255,7 @@ class UserPreferencesUpdateDto {
         folders: FoldersUpdate.fromJson(json[r'folders']),
         memories: MemoriesUpdate.fromJson(json[r'memories']),
         people: PeopleUpdate.fromJson(json[r'people']),
+        privacy: PrivacyUpdate.fromJson(json[r'privacy']),
         purchase: PurchaseUpdate.fromJson(json[r'purchase']),
         ratings: RatingsUpdate.fromJson(json[r'ratings']),
         sharedLinks: SharedLinksUpdate.fromJson(json[r'sharedLinks']),

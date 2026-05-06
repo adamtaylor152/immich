@@ -19,6 +19,7 @@ class StatisticsSearchDto {
     this.createdAfter,
     this.createdBefore,
     this.description,
+    this.imageEnrichment,
     this.isEncoded,
     this.isFavorite,
     this.isMotion,
@@ -32,6 +33,7 @@ class StatisticsSearchDto {
     this.personIds = const [],
     this.rating,
     this.state,
+    this.suppressedOnly,
     this.tagIds = const [],
     this.takenAfter,
     this.takenBefore,
@@ -78,6 +80,14 @@ class StatisticsSearchDto {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   String? description;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  ImageEnrichmentFilter? imageEnrichment;
 
   /// Filter by encoded status
   ///
@@ -156,6 +166,15 @@ class StatisticsSearchDto {
 
   /// Filter by state/province name
   String? state;
+
+  /// Return only suppressed content. Requires an elevated session.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? suppressedOnly;
 
   /// Filter by tag IDs
   List<String>? tagIds;
@@ -238,6 +257,7 @@ class StatisticsSearchDto {
     other.createdAfter == createdAfter &&
     other.createdBefore == createdBefore &&
     other.description == description &&
+    other.imageEnrichment == imageEnrichment &&
     other.isEncoded == isEncoded &&
     other.isFavorite == isFavorite &&
     other.isMotion == isMotion &&
@@ -251,6 +271,7 @@ class StatisticsSearchDto {
     _deepEquality.equals(other.personIds, personIds) &&
     other.rating == rating &&
     other.state == state &&
+    other.suppressedOnly == suppressedOnly &&
     _deepEquality.equals(other.tagIds, tagIds) &&
     other.takenAfter == takenAfter &&
     other.takenBefore == takenBefore &&
@@ -270,6 +291,7 @@ class StatisticsSearchDto {
     (createdAfter == null ? 0 : createdAfter!.hashCode) +
     (createdBefore == null ? 0 : createdBefore!.hashCode) +
     (description == null ? 0 : description!.hashCode) +
+    (imageEnrichment == null ? 0 : imageEnrichment!.hashCode) +
     (isEncoded == null ? 0 : isEncoded!.hashCode) +
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
     (isMotion == null ? 0 : isMotion!.hashCode) +
@@ -283,6 +305,7 @@ class StatisticsSearchDto {
     (personIds.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
     (state == null ? 0 : state!.hashCode) +
+    (suppressedOnly == null ? 0 : suppressedOnly!.hashCode) +
     (tagIds == null ? 0 : tagIds!.hashCode) +
     (takenAfter == null ? 0 : takenAfter!.hashCode) +
     (takenBefore == null ? 0 : takenBefore!.hashCode) +
@@ -294,7 +317,7 @@ class StatisticsSearchDto {
     (visibility == null ? 0 : visibility!.hashCode);
 
   @override
-  String toString() => 'StatisticsSearchDto[albumIds=$albumIds, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, description=$description, isEncoded=$isEncoded, isFavorite=$isFavorite, isMotion=$isMotion, isNotInAlbum=$isNotInAlbum, isOffline=$isOffline, lensModel=$lensModel, libraryId=$libraryId, make=$make, model=$model, ocr=$ocr, personIds=$personIds, rating=$rating, state=$state, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, trashedAfter=$trashedAfter, trashedBefore=$trashedBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility]';
+  String toString() => 'StatisticsSearchDto[albumIds=$albumIds, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, description=$description, imageEnrichment=$imageEnrichment, isEncoded=$isEncoded, isFavorite=$isFavorite, isMotion=$isMotion, isNotInAlbum=$isNotInAlbum, isOffline=$isOffline, lensModel=$lensModel, libraryId=$libraryId, make=$make, model=$model, ocr=$ocr, personIds=$personIds, rating=$rating, state=$state, suppressedOnly=$suppressedOnly, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, trashedAfter=$trashedAfter, trashedBefore=$trashedBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -327,6 +350,11 @@ class StatisticsSearchDto {
       json[r'description'] = this.description;
     } else {
     //  json[r'description'] = null;
+    }
+    if (this.imageEnrichment != null) {
+      json[r'imageEnrichment'] = this.imageEnrichment;
+    } else {
+    //  json[r'imageEnrichment'] = null;
     }
     if (this.isEncoded != null) {
       json[r'isEncoded'] = this.isEncoded;
@@ -388,6 +416,11 @@ class StatisticsSearchDto {
       json[r'state'] = this.state;
     } else {
     //  json[r'state'] = null;
+    }
+    if (this.suppressedOnly != null) {
+      json[r'suppressedOnly'] = this.suppressedOnly;
+    } else {
+    //  json[r'suppressedOnly'] = null;
     }
     if (this.tagIds != null) {
       json[r'tagIds'] = this.tagIds;
@@ -466,6 +499,7 @@ class StatisticsSearchDto {
         createdAfter: mapDateTime(json, r'createdAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         createdBefore: mapDateTime(json, r'createdBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         description: mapValueOfType<String>(json, r'description'),
+        imageEnrichment: ImageEnrichmentFilter.fromJson(json[r'imageEnrichment']),
         isEncoded: mapValueOfType<bool>(json, r'isEncoded'),
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
         isMotion: mapValueOfType<bool>(json, r'isMotion'),
@@ -481,6 +515,7 @@ class StatisticsSearchDto {
             : const [],
         rating: mapValueOfType<int>(json, r'rating'),
         state: mapValueOfType<String>(json, r'state'),
+        suppressedOnly: mapValueOfType<bool>(json, r'suppressedOnly'),
         tagIds: json[r'tagIds'] is Iterable
             ? (json[r'tagIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],

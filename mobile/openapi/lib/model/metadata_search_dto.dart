@@ -22,6 +22,7 @@ class MetadataSearchDto {
     this.description,
     this.encodedVideoPath,
     this.id,
+    this.imageEnrichment,
     this.isEncoded,
     this.isFavorite,
     this.isMotion,
@@ -41,6 +42,7 @@ class MetadataSearchDto {
     this.rating,
     this.size,
     this.state,
+    this.suppressedOnly,
     this.tagIds = const [],
     this.takenAfter,
     this.takenBefore,
@@ -119,6 +121,14 @@ class MetadataSearchDto {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   String? id;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  ImageEnrichmentFilter? imageEnrichment;
 
   /// Filter by encoded status
   ///
@@ -257,6 +267,15 @@ class MetadataSearchDto {
   /// Filter by state/province name
   String? state;
 
+  /// Return only suppressed content. Requires an elevated session.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? suppressedOnly;
+
   /// Filter by tag IDs
   List<String>? tagIds;
 
@@ -386,6 +405,7 @@ class MetadataSearchDto {
     other.description == description &&
     other.encodedVideoPath == encodedVideoPath &&
     other.id == id &&
+    other.imageEnrichment == imageEnrichment &&
     other.isEncoded == isEncoded &&
     other.isFavorite == isFavorite &&
     other.isMotion == isMotion &&
@@ -405,6 +425,7 @@ class MetadataSearchDto {
     other.rating == rating &&
     other.size == size &&
     other.state == state &&
+    other.suppressedOnly == suppressedOnly &&
     _deepEquality.equals(other.tagIds, tagIds) &&
     other.takenAfter == takenAfter &&
     other.takenBefore == takenBefore &&
@@ -432,6 +453,7 @@ class MetadataSearchDto {
     (description == null ? 0 : description!.hashCode) +
     (encodedVideoPath == null ? 0 : encodedVideoPath!.hashCode) +
     (id == null ? 0 : id!.hashCode) +
+    (imageEnrichment == null ? 0 : imageEnrichment!.hashCode) +
     (isEncoded == null ? 0 : isEncoded!.hashCode) +
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
     (isMotion == null ? 0 : isMotion!.hashCode) +
@@ -451,6 +473,7 @@ class MetadataSearchDto {
     (rating == null ? 0 : rating!.hashCode) +
     (size == null ? 0 : size!.hashCode) +
     (state == null ? 0 : state!.hashCode) +
+    (suppressedOnly == null ? 0 : suppressedOnly!.hashCode) +
     (tagIds == null ? 0 : tagIds!.hashCode) +
     (takenAfter == null ? 0 : takenAfter!.hashCode) +
     (takenBefore == null ? 0 : takenBefore!.hashCode) +
@@ -467,7 +490,7 @@ class MetadataSearchDto {
     (withStacked == null ? 0 : withStacked!.hashCode);
 
   @override
-  String toString() => 'MetadataSearchDto[albumIds=$albumIds, checksum=$checksum, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, description=$description, encodedVideoPath=$encodedVideoPath, id=$id, isEncoded=$isEncoded, isFavorite=$isFavorite, isMotion=$isMotion, isNotInAlbum=$isNotInAlbum, isOffline=$isOffline, lensModel=$lensModel, libraryId=$libraryId, make=$make, model=$model, ocr=$ocr, order=$order, originalFileName=$originalFileName, originalPath=$originalPath, page=$page, personIds=$personIds, previewPath=$previewPath, rating=$rating, size=$size, state=$state, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, thumbnailPath=$thumbnailPath, trashedAfter=$trashedAfter, trashedBefore=$trashedBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withDeleted=$withDeleted, withExif=$withExif, withPeople=$withPeople, withStacked=$withStacked]';
+  String toString() => 'MetadataSearchDto[albumIds=$albumIds, checksum=$checksum, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, description=$description, encodedVideoPath=$encodedVideoPath, id=$id, imageEnrichment=$imageEnrichment, isEncoded=$isEncoded, isFavorite=$isFavorite, isMotion=$isMotion, isNotInAlbum=$isNotInAlbum, isOffline=$isOffline, lensModel=$lensModel, libraryId=$libraryId, make=$make, model=$model, ocr=$ocr, order=$order, originalFileName=$originalFileName, originalPath=$originalPath, page=$page, personIds=$personIds, previewPath=$previewPath, rating=$rating, size=$size, state=$state, suppressedOnly=$suppressedOnly, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, thumbnailPath=$thumbnailPath, trashedAfter=$trashedAfter, trashedBefore=$trashedBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withDeleted=$withDeleted, withExif=$withExif, withPeople=$withPeople, withStacked=$withStacked]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -515,6 +538,11 @@ class MetadataSearchDto {
       json[r'id'] = this.id;
     } else {
     //  json[r'id'] = null;
+    }
+    if (this.imageEnrichment != null) {
+      json[r'imageEnrichment'] = this.imageEnrichment;
+    } else {
+    //  json[r'imageEnrichment'] = null;
     }
     if (this.isEncoded != null) {
       json[r'isEncoded'] = this.isEncoded;
@@ -606,6 +634,11 @@ class MetadataSearchDto {
       json[r'state'] = this.state;
     } else {
     //  json[r'state'] = null;
+    }
+    if (this.suppressedOnly != null) {
+      json[r'suppressedOnly'] = this.suppressedOnly;
+    } else {
+    //  json[r'suppressedOnly'] = null;
     }
     if (this.tagIds != null) {
       json[r'tagIds'] = this.tagIds;
@@ -712,6 +745,7 @@ class MetadataSearchDto {
         description: mapValueOfType<String>(json, r'description'),
         encodedVideoPath: mapValueOfType<String>(json, r'encodedVideoPath'),
         id: mapValueOfType<String>(json, r'id'),
+        imageEnrichment: ImageEnrichmentFilter.fromJson(json[r'imageEnrichment']),
         isEncoded: mapValueOfType<bool>(json, r'isEncoded'),
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
         isMotion: mapValueOfType<bool>(json, r'isMotion'),
@@ -733,6 +767,7 @@ class MetadataSearchDto {
         rating: mapValueOfType<int>(json, r'rating'),
         size: mapValueOfType<int>(json, r'size'),
         state: mapValueOfType<String>(json, r'state'),
+        suppressedOnly: mapValueOfType<bool>(json, r'suppressedOnly'),
         tagIds: json[r'tagIds'] is Iterable
             ? (json[r'tagIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],

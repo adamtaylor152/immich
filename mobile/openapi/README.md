@@ -104,6 +104,7 @@ Class | Method | HTTP request | Description
 *AssetsApi* | [**downloadAsset**](doc//AssetsApi.md#downloadasset) | **GET** /assets/{id}/original | Download original asset
 *AssetsApi* | [**editAsset**](doc//AssetsApi.md#editasset) | **PUT** /assets/{id}/edits | Apply edits to an existing asset
 *AssetsApi* | [**getAssetEdits**](doc//AssetsApi.md#getassetedits) | **GET** /assets/{id}/edits | Retrieve edits for an existing asset
+*AssetsApi* | [**getAssetImageEnrichment**](doc//AssetsApi.md#getassetimageenrichment) | **GET** /assets/{id}/image-enrichment | Get image enrichment metadata
 *AssetsApi* | [**getAssetInfo**](doc//AssetsApi.md#getassetinfo) | **GET** /assets/{id} | Retrieve an asset
 *AssetsApi* | [**getAssetMetadata**](doc//AssetsApi.md#getassetmetadata) | **GET** /assets/{id}/metadata | Get asset metadata
 *AssetsApi* | [**getAssetMetadataByKey**](doc//AssetsApi.md#getassetmetadatabykey) | **GET** /assets/{id}/metadata/{key} | Retrieve asset metadata by key
@@ -113,6 +114,7 @@ Class | Method | HTTP request | Description
 *AssetsApi* | [**removeAssetEdits**](doc//AssetsApi.md#removeassetedits) | **DELETE** /assets/{id}/edits | Remove edits from an existing asset
 *AssetsApi* | [**runAssetJobs**](doc//AssetsApi.md#runassetjobs) | **POST** /assets/jobs | Run an asset job
 *AssetsApi* | [**updateAsset**](doc//AssetsApi.md#updateasset) | **PUT** /assets/{id} | Update an asset
+*AssetsApi* | [**updateAssetImageEnrichment**](doc//AssetsApi.md#updateassetimageenrichment) | **PUT** /assets/{id}/image-enrichment | Update image enrichment metadata
 *AssetsApi* | [**updateAssetMetadata**](doc//AssetsApi.md#updateassetmetadata) | **PUT** /assets/{id}/metadata | Update asset metadata
 *AssetsApi* | [**updateAssets**](doc//AssetsApi.md#updateassets) | **PUT** /assets | Update assets
 *AssetsApi* | [**updateBulkAssetMetadata**](doc//AssetsApi.md#updatebulkassetmetadata) | **PUT** /assets/metadata | Upsert asset metadata
@@ -361,6 +363,9 @@ Class | Method | HTTP request | Description
  - [AssetIdErrorReason](doc//AssetIdErrorReason.md)
  - [AssetIdsDto](doc//AssetIdsDto.md)
  - [AssetIdsResponseDto](doc//AssetIdsResponseDto.md)
+ - [AssetImageEnrichmentAction](doc//AssetImageEnrichmentAction.md)
+ - [AssetImageEnrichmentActionRequestDto](doc//AssetImageEnrichmentActionRequestDto.md)
+ - [AssetImageEnrichmentResponseDto](doc//AssetImageEnrichmentResponseDto.md)
  - [AssetJobName](doc//AssetJobName.md)
  - [AssetJobsDto](doc//AssetJobsDto.md)
  - [AssetMediaResponseDto](doc//AssetMediaResponseDto.md)
@@ -421,6 +426,11 @@ Class | Method | HTTP request | Description
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FoldersResponse](doc//FoldersResponse.md)
  - [FoldersUpdate](doc//FoldersUpdate.md)
+ - [ImageDescriptionConfig](doc//ImageDescriptionConfig.md)
+ - [ImageDescriptionEnrichmentResponseDto](doc//ImageDescriptionEnrichmentResponseDto.md)
+ - [ImageDescriptionEnrichmentResponseDtoPeopleInner](doc//ImageDescriptionEnrichmentResponseDtoPeopleInner.md)
+ - [ImageEnrichmentFilter](doc//ImageEnrichmentFilter.md)
+ - [ImageEnrichmentReview](doc//ImageEnrichmentReview.md)
  - [ImageFormat](doc//ImageFormat.md)
  - [JobCreateDto](doc//JobCreateDto.md)
  - [JobName](doc//JobName.md)
@@ -461,6 +471,8 @@ Class | Method | HTTP request | Description
  - [NotificationType](doc//NotificationType.md)
  - [NotificationUpdateAllDto](doc//NotificationUpdateAllDto.md)
  - [NotificationUpdateDto](doc//NotificationUpdateDto.md)
+ - [NsfwDetectionConfig](doc//NsfwDetectionConfig.md)
+ - [NsfwDetectionEnrichmentResponseDto](doc//NsfwDetectionEnrichmentResponseDto.md)
  - [OAuthAuthorizeResponseDto](doc//OAuthAuthorizeResponseDto.md)
  - [OAuthCallbackDto](doc//OAuthCallbackDto.md)
  - [OAuthConfigDto](doc//OAuthConfigDto.md)
@@ -498,6 +510,8 @@ Class | Method | HTTP request | Description
  - [PluginResponseDto](doc//PluginResponseDto.md)
  - [PluginTriggerResponseDto](doc//PluginTriggerResponseDto.md)
  - [PluginTriggerType](doc//PluginTriggerType.md)
+ - [PrivacyResponse](doc//PrivacyResponse.md)
+ - [PrivacyUpdate](doc//PrivacyUpdate.md)
  - [PurchaseResponse](doc//PurchaseResponse.md)
  - [PurchaseUpdate](doc//PurchaseUpdate.md)
  - [QueueCommand](doc//QueueCommand.md)
@@ -559,6 +573,9 @@ Class | Method | HTTP request | Description
  - [StackUpdateDto](doc//StackUpdateDto.md)
  - [StatisticsSearchDto](doc//StatisticsSearchDto.md)
  - [StorageFolder](doc//StorageFolder.md)
+ - [SuppressionResponse](doc//SuppressionResponse.md)
+ - [SuppressionScope](doc//SuppressionScope.md)
+ - [SuppressionUpdate](doc//SuppressionUpdate.md)
  - [SyncAckDeleteDto](doc//SyncAckDeleteDto.md)
  - [SyncAckDto](doc//SyncAckDto.md)
  - [SyncAckSetDto](doc//SyncAckSetDto.md)

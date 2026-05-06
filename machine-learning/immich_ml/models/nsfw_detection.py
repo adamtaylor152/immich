@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from huggingface_hub import snapshot_download
@@ -72,7 +72,7 @@ class NsfwDetectionModel(InferenceModel):
             return logits
 
         exp = np.exp(logits - np.max(logits))
-        return exp / exp.sum()
+        return cast(NDArray[np.float32], exp / exp.sum())
 
     def _labels(self, scores: NDArray[np.float32]) -> dict[str, float]:
         labels: dict[str, float] = {}
@@ -94,7 +94,9 @@ class NsfwDetectionModel(InferenceModel):
         path = self.cache_dir / "preprocessor_config.json"
         if not path.exists():
             return {}
-        return json.load(path.open())
+        with path.open() as file:
+            config = json.load(file)
+        return cast(dict[str, Any], config) if isinstance(config, dict) else {}
 
     @cached_property
     def id_to_label(self) -> dict[str | int, str | int]:

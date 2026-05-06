@@ -142,7 +142,7 @@ export type OcrSearchOptions = SearchDateOptions & SearchOcrOptions;
 
 export type LargeAssetSearchOptions = AssetSearchOptions & { minFileSize?: number };
 
-interface SearchSuggestionPrivacyOptions extends HiddenContentQueryOptions {}
+type SearchSuggestionPrivacyOptions = HiddenContentQueryOptions;
 
 export interface FaceEmbeddingSearch extends SearchEmbeddingOptions {
   hasPerson?: boolean;

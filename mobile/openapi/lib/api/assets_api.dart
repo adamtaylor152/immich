@@ -473,6 +473,63 @@ class AssetsApi {
     return null;
   }
 
+  /// Get image enrichment metadata
+  ///
+  /// Retrieve private image description, tag, and NSFW detection metadata for a specific asset.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> getAssetImageEnrichmentWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/assets/{id}/image-enrichment'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get image enrichment metadata
+  ///
+  /// Retrieve private image description, tag, and NSFW detection metadata for a specific asset.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<AssetImageEnrichmentResponseDto?> getAssetImageEnrichment(String id,) async {
+    final response = await getAssetImageEnrichmentWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AssetImageEnrichmentResponseDto',) as AssetImageEnrichmentResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve an asset
   ///
   /// Retrieve detailed information about a specific asset.
@@ -1034,6 +1091,67 @@ class AssetsApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AssetResponseDto',) as AssetResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Update image enrichment metadata
+  ///
+  /// Run repair actions for generated image descriptions, tags, and NSFW detection metadata.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AssetImageEnrichmentActionRequestDto] assetImageEnrichmentActionRequestDto (required):
+  Future<Response> updateAssetImageEnrichmentWithHttpInfo(String id, AssetImageEnrichmentActionRequestDto assetImageEnrichmentActionRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/assets/{id}/image-enrichment'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = assetImageEnrichmentActionRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Update image enrichment metadata
+  ///
+  /// Run repair actions for generated image descriptions, tags, and NSFW detection metadata.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AssetImageEnrichmentActionRequestDto] assetImageEnrichmentActionRequestDto (required):
+  Future<AssetImageEnrichmentResponseDto?> updateAssetImageEnrichment(String id, AssetImageEnrichmentActionRequestDto assetImageEnrichmentActionRequestDto,) async {
+    final response = await updateAssetImageEnrichmentWithHttpInfo(id, assetImageEnrichmentActionRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AssetImageEnrichmentResponseDto',) as AssetImageEnrichmentResponseDto;
     
     }
     return null;

@@ -1790,16 +1790,16 @@ order by
 
 -- SyncRepository.person.getUpserts
 select
-  "id",
-  "createdAt",
-  "updatedAt",
-  "ownerId",
-  "name",
-  "birthDate",
-  "isHidden",
-  "isFavorite",
-  "color",
-  "updateId",
+  "person"."id",
+  "person"."createdAt",
+  "person"."updatedAt",
+  "person"."ownerId",
+  "person"."name",
+  "person"."birthDate",
+  "person"."isHidden",
+  "person"."isFavorite",
+  "person"."color",
+  "person"."updateId",
   case
     when exists (
       select
@@ -1841,7 +1841,7 @@ from
 where
   "person"."updateId" < $2
   and "person"."updateId" > $3
-  and "ownerId" = $4
+  and "person"."ownerId" = $4
   and (
     not exists (
       select

@@ -39,6 +39,9 @@ class QueueName {
   static const notifications = QueueName._(r'notifications');
   static const backupDatabase = QueueName._(r'backupDatabase');
   static const ocr = QueueName._(r'ocr');
+  static const imageEnrichment = QueueName._(r'imageEnrichment');
+  static const imageDescription = QueueName._(r'imageDescription');
+  static const nsfwDetection = QueueName._(r'nsfwDetection');
   static const workflow = QueueName._(r'workflow');
   static const editor = QueueName._(r'editor');
 
@@ -60,6 +63,9 @@ class QueueName {
     notifications,
     backupDatabase,
     ocr,
+    imageEnrichment,
+    imageDescription,
+    nsfwDetection,
     workflow,
     editor,
   ];
@@ -116,6 +122,9 @@ class QueueNameTypeTransformer {
         case r'notifications': return QueueName.notifications;
         case r'backupDatabase': return QueueName.backupDatabase;
         case r'ocr': return QueueName.ocr;
+        case r'imageEnrichment': return QueueName.imageEnrichment;
+        case r'imageDescription': return QueueName.imageDescription;
+        case r'nsfwDetection': return QueueName.nsfwDetection;
         case r'workflow': return QueueName.workflow;
         case r'editor': return QueueName.editor;
         default:

@@ -19,10 +19,13 @@ class QueuesResponseLegacyDto {
     required this.editor,
     required this.faceDetection,
     required this.facialRecognition,
+    required this.imageDescription,
+    required this.imageEnrichment,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
     required this.notifications,
+    required this.nsfwDetection,
     required this.ocr,
     required this.search,
     required this.sidecar,
@@ -45,6 +48,10 @@ class QueuesResponseLegacyDto {
 
   QueueResponseLegacyDto facialRecognition;
 
+  QueueResponseLegacyDto imageDescription;
+
+  QueueResponseLegacyDto imageEnrichment;
+
   QueueResponseLegacyDto library_;
 
   QueueResponseLegacyDto metadataExtraction;
@@ -52,6 +59,8 @@ class QueuesResponseLegacyDto {
   QueueResponseLegacyDto migration;
 
   QueueResponseLegacyDto notifications;
+
+  QueueResponseLegacyDto nsfwDetection;
 
   QueueResponseLegacyDto ocr;
 
@@ -77,10 +86,13 @@ class QueuesResponseLegacyDto {
     other.editor == editor &&
     other.faceDetection == faceDetection &&
     other.facialRecognition == facialRecognition &&
+    other.imageDescription == imageDescription &&
+    other.imageEnrichment == imageEnrichment &&
     other.library_ == library_ &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
     other.notifications == notifications &&
+    other.nsfwDetection == nsfwDetection &&
     other.ocr == ocr &&
     other.search == search &&
     other.sidecar == sidecar &&
@@ -99,10 +111,13 @@ class QueuesResponseLegacyDto {
     (editor.hashCode) +
     (faceDetection.hashCode) +
     (facialRecognition.hashCode) +
+    (imageDescription.hashCode) +
+    (imageEnrichment.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
     (notifications.hashCode) +
+    (nsfwDetection.hashCode) +
     (ocr.hashCode) +
     (search.hashCode) +
     (sidecar.hashCode) +
@@ -113,7 +128,7 @@ class QueuesResponseLegacyDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -123,10 +138,13 @@ class QueuesResponseLegacyDto {
       json[r'editor'] = this.editor;
       json[r'faceDetection'] = this.faceDetection;
       json[r'facialRecognition'] = this.facialRecognition;
+      json[r'imageDescription'] = this.imageDescription;
+      json[r'imageEnrichment'] = this.imageEnrichment;
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
       json[r'notifications'] = this.notifications;
+      json[r'nsfwDetection'] = this.nsfwDetection;
       json[r'ocr'] = this.ocr;
       json[r'search'] = this.search;
       json[r'sidecar'] = this.sidecar;
@@ -153,10 +171,13 @@ class QueuesResponseLegacyDto {
         editor: QueueResponseLegacyDto.fromJson(json[r'editor'])!,
         faceDetection: QueueResponseLegacyDto.fromJson(json[r'faceDetection'])!,
         facialRecognition: QueueResponseLegacyDto.fromJson(json[r'facialRecognition'])!,
+        imageDescription: QueueResponseLegacyDto.fromJson(json[r'imageDescription'])!,
+        imageEnrichment: QueueResponseLegacyDto.fromJson(json[r'imageEnrichment'])!,
         library_: QueueResponseLegacyDto.fromJson(json[r'library'])!,
         metadataExtraction: QueueResponseLegacyDto.fromJson(json[r'metadataExtraction'])!,
         migration: QueueResponseLegacyDto.fromJson(json[r'migration'])!,
         notifications: QueueResponseLegacyDto.fromJson(json[r'notifications'])!,
+        nsfwDetection: QueueResponseLegacyDto.fromJson(json[r'nsfwDetection'])!,
         ocr: QueueResponseLegacyDto.fromJson(json[r'ocr'])!,
         search: QueueResponseLegacyDto.fromJson(json[r'search'])!,
         sidecar: QueueResponseLegacyDto.fromJson(json[r'sidecar'])!,
@@ -218,10 +239,13 @@ class QueuesResponseLegacyDto {
     'editor',
     'faceDetection',
     'facialRecognition',
+    'imageDescription',
+    'imageEnrichment',
     'library',
     'metadataExtraction',
     'migration',
     'notifications',
+    'nsfwDetection',
     'ocr',
     'search',
     'sidecar',

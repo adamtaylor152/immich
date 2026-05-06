@@ -17,8 +17,10 @@ class ServerFeaturesDto {
     required this.duplicateDetection,
     required this.email,
     required this.facialRecognition,
+    required this.imageDescription,
     required this.importFaces,
     required this.map,
+    required this.nsfwDetection,
     required this.oauth,
     required this.oauthAutoLaunch,
     required this.ocr,
@@ -42,11 +44,17 @@ class ServerFeaturesDto {
   /// Whether facial recognition is enabled
   bool facialRecognition;
 
+  /// Whether image description and tag generation is enabled
+  bool imageDescription;
+
   /// Whether face import is enabled
   bool importFaces;
 
   /// Whether map feature is enabled
   bool map;
+
+  /// Whether NSFW detection is enabled
+  bool nsfwDetection;
 
   /// Whether OAuth is enabled
   bool oauth;
@@ -81,8 +89,10 @@ class ServerFeaturesDto {
     other.duplicateDetection == duplicateDetection &&
     other.email == email &&
     other.facialRecognition == facialRecognition &&
+    other.imageDescription == imageDescription &&
     other.importFaces == importFaces &&
     other.map == map &&
+    other.nsfwDetection == nsfwDetection &&
     other.oauth == oauth &&
     other.oauthAutoLaunch == oauthAutoLaunch &&
     other.ocr == ocr &&
@@ -100,8 +110,10 @@ class ServerFeaturesDto {
     (duplicateDetection.hashCode) +
     (email.hashCode) +
     (facialRecognition.hashCode) +
+    (imageDescription.hashCode) +
     (importFaces.hashCode) +
     (map.hashCode) +
+    (nsfwDetection.hashCode) +
     (oauth.hashCode) +
     (oauthAutoLaunch.hashCode) +
     (ocr.hashCode) +
@@ -113,7 +125,7 @@ class ServerFeaturesDto {
     (trash.hashCode);
 
   @override
-  String toString() => 'ServerFeaturesDto[configFile=$configFile, duplicateDetection=$duplicateDetection, email=$email, facialRecognition=$facialRecognition, importFaces=$importFaces, map=$map, oauth=$oauth, oauthAutoLaunch=$oauthAutoLaunch, ocr=$ocr, passwordLogin=$passwordLogin, reverseGeocoding=$reverseGeocoding, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, trash=$trash]';
+  String toString() => 'ServerFeaturesDto[configFile=$configFile, duplicateDetection=$duplicateDetection, email=$email, facialRecognition=$facialRecognition, imageDescription=$imageDescription, importFaces=$importFaces, map=$map, nsfwDetection=$nsfwDetection, oauth=$oauth, oauthAutoLaunch=$oauthAutoLaunch, ocr=$ocr, passwordLogin=$passwordLogin, reverseGeocoding=$reverseGeocoding, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, trash=$trash]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -121,8 +133,10 @@ class ServerFeaturesDto {
       json[r'duplicateDetection'] = this.duplicateDetection;
       json[r'email'] = this.email;
       json[r'facialRecognition'] = this.facialRecognition;
+      json[r'imageDescription'] = this.imageDescription;
       json[r'importFaces'] = this.importFaces;
       json[r'map'] = this.map;
+      json[r'nsfwDetection'] = this.nsfwDetection;
       json[r'oauth'] = this.oauth;
       json[r'oauthAutoLaunch'] = this.oauthAutoLaunch;
       json[r'ocr'] = this.ocr;
@@ -148,8 +162,10 @@ class ServerFeaturesDto {
         duplicateDetection: mapValueOfType<bool>(json, r'duplicateDetection')!,
         email: mapValueOfType<bool>(json, r'email')!,
         facialRecognition: mapValueOfType<bool>(json, r'facialRecognition')!,
+        imageDescription: mapValueOfType<bool>(json, r'imageDescription')!,
         importFaces: mapValueOfType<bool>(json, r'importFaces')!,
         map: mapValueOfType<bool>(json, r'map')!,
+        nsfwDetection: mapValueOfType<bool>(json, r'nsfwDetection')!,
         oauth: mapValueOfType<bool>(json, r'oauth')!,
         oauthAutoLaunch: mapValueOfType<bool>(json, r'oauthAutoLaunch')!,
         ocr: mapValueOfType<bool>(json, r'ocr')!,
@@ -210,8 +226,10 @@ class ServerFeaturesDto {
     'duplicateDetection',
     'email',
     'facialRecognition',
+    'imageDescription',
     'importFaces',
     'map',
+    'nsfwDetection',
     'oauth',
     'oauthAutoLaunch',
     'ocr',

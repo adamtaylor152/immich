@@ -114,6 +114,8 @@ describe('/server', () => {
         oauth: false,
         oauthAutoLaunch: false,
         ocr: false,
+        imageDescription: false,
+        nsfwDetection: false,
         passwordLogin: true,
         search: true,
         sidecar: true,

@@ -368,6 +368,8 @@ class SearchApi {
   /// * [DateTime] createdBefore:
   ///   Filter by creation date (before)
   ///
+  /// * [ImageEnrichmentFilter] imageEnrichment:
+  ///
   /// * [bool] isEncoded:
   ///   Filter by encoded status
   ///
@@ -413,6 +415,9 @@ class SearchApi {
   /// * [String] state:
   ///   Filter by state/province name
   ///
+  /// * [bool] suppressedOnly:
+  ///   Return only suppressed content. Requires an elevated session.
+  ///
   /// * [List<String>] tagIds:
   ///   Filter by tag IDs
   ///
@@ -443,7 +448,7 @@ class SearchApi {
   ///
   /// * [bool] withExif:
   ///   Include EXIF data in response
-  Future<Response> searchLargeAssetsWithHttpInfo({ List<String>? albumIds, String? city, String? country, DateTime? createdAfter, DateTime? createdBefore, bool? isEncoded, bool? isFavorite, bool? isMotion, bool? isNotInAlbum, bool? isOffline, String? lensModel, String? libraryId, String? make, int? minFileSize, String? model, String? ocr, List<String>? personIds, int? rating, int? size, String? state, List<String>? tagIds, DateTime? takenAfter, DateTime? takenBefore, DateTime? trashedAfter, DateTime? trashedBefore, AssetTypeEnum? type, DateTime? updatedAfter, DateTime? updatedBefore, AssetVisibility? visibility, bool? withDeleted, bool? withExif, }) async {
+  Future<Response> searchLargeAssetsWithHttpInfo({ List<String>? albumIds, String? city, String? country, DateTime? createdAfter, DateTime? createdBefore, ImageEnrichmentFilter? imageEnrichment, bool? isEncoded, bool? isFavorite, bool? isMotion, bool? isNotInAlbum, bool? isOffline, String? lensModel, String? libraryId, String? make, int? minFileSize, String? model, String? ocr, List<String>? personIds, int? rating, int? size, String? state, bool? suppressedOnly, List<String>? tagIds, DateTime? takenAfter, DateTime? takenBefore, DateTime? trashedAfter, DateTime? trashedBefore, AssetTypeEnum? type, DateTime? updatedAfter, DateTime? updatedBefore, AssetVisibility? visibility, bool? withDeleted, bool? withExif, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/search/large-assets';
 
@@ -468,6 +473,9 @@ class SearchApi {
     }
     if (createdBefore != null) {
       queryParams.addAll(_queryParams('', 'createdBefore', createdBefore));
+    }
+    if (imageEnrichment != null) {
+      queryParams.addAll(_queryParams('', 'imageEnrichment', imageEnrichment));
     }
     if (isEncoded != null) {
       queryParams.addAll(_queryParams('', 'isEncoded', isEncoded));
@@ -513,6 +521,9 @@ class SearchApi {
     }
     if (state != null) {
       queryParams.addAll(_queryParams('', 'state', state));
+    }
+    if (suppressedOnly != null) {
+      queryParams.addAll(_queryParams('', 'suppressedOnly', suppressedOnly));
     }
     if (tagIds != null) {
       queryParams.addAll(_queryParams('multi', 'tagIds', tagIds));
@@ -583,6 +594,8 @@ class SearchApi {
   /// * [DateTime] createdBefore:
   ///   Filter by creation date (before)
   ///
+  /// * [ImageEnrichmentFilter] imageEnrichment:
+  ///
   /// * [bool] isEncoded:
   ///   Filter by encoded status
   ///
@@ -628,6 +641,9 @@ class SearchApi {
   /// * [String] state:
   ///   Filter by state/province name
   ///
+  /// * [bool] suppressedOnly:
+  ///   Return only suppressed content. Requires an elevated session.
+  ///
   /// * [List<String>] tagIds:
   ///   Filter by tag IDs
   ///
@@ -658,8 +674,8 @@ class SearchApi {
   ///
   /// * [bool] withExif:
   ///   Include EXIF data in response
-  Future<List<AssetResponseDto>?> searchLargeAssets({ List<String>? albumIds, String? city, String? country, DateTime? createdAfter, DateTime? createdBefore, bool? isEncoded, bool? isFavorite, bool? isMotion, bool? isNotInAlbum, bool? isOffline, String? lensModel, String? libraryId, String? make, int? minFileSize, String? model, String? ocr, List<String>? personIds, int? rating, int? size, String? state, List<String>? tagIds, DateTime? takenAfter, DateTime? takenBefore, DateTime? trashedAfter, DateTime? trashedBefore, AssetTypeEnum? type, DateTime? updatedAfter, DateTime? updatedBefore, AssetVisibility? visibility, bool? withDeleted, bool? withExif, }) async {
-    final response = await searchLargeAssetsWithHttpInfo( albumIds: albumIds, city: city, country: country, createdAfter: createdAfter, createdBefore: createdBefore, isEncoded: isEncoded, isFavorite: isFavorite, isMotion: isMotion, isNotInAlbum: isNotInAlbum, isOffline: isOffline, lensModel: lensModel, libraryId: libraryId, make: make, minFileSize: minFileSize, model: model, ocr: ocr, personIds: personIds, rating: rating, size: size, state: state, tagIds: tagIds, takenAfter: takenAfter, takenBefore: takenBefore, trashedAfter: trashedAfter, trashedBefore: trashedBefore, type: type, updatedAfter: updatedAfter, updatedBefore: updatedBefore, visibility: visibility, withDeleted: withDeleted, withExif: withExif, );
+  Future<List<AssetResponseDto>?> searchLargeAssets({ List<String>? albumIds, String? city, String? country, DateTime? createdAfter, DateTime? createdBefore, ImageEnrichmentFilter? imageEnrichment, bool? isEncoded, bool? isFavorite, bool? isMotion, bool? isNotInAlbum, bool? isOffline, String? lensModel, String? libraryId, String? make, int? minFileSize, String? model, String? ocr, List<String>? personIds, int? rating, int? size, String? state, bool? suppressedOnly, List<String>? tagIds, DateTime? takenAfter, DateTime? takenBefore, DateTime? trashedAfter, DateTime? trashedBefore, AssetTypeEnum? type, DateTime? updatedAfter, DateTime? updatedBefore, AssetVisibility? visibility, bool? withDeleted, bool? withExif, }) async {
+    final response = await searchLargeAssetsWithHttpInfo( albumIds: albumIds, city: city, country: country, createdAfter: createdAfter, createdBefore: createdBefore, imageEnrichment: imageEnrichment, isEncoded: isEncoded, isFavorite: isFavorite, isMotion: isMotion, isNotInAlbum: isNotInAlbum, isOffline: isOffline, lensModel: lensModel, libraryId: libraryId, make: make, minFileSize: minFileSize, model: model, ocr: ocr, personIds: personIds, rating: rating, size: size, state: state, suppressedOnly: suppressedOnly, tagIds: tagIds, takenAfter: takenAfter, takenBefore: takenBefore, trashedAfter: trashedAfter, trashedBefore: trashedBefore, type: type, updatedAfter: updatedAfter, updatedBefore: updatedBefore, visibility: visibility, withDeleted: withDeleted, withExif: withExif, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

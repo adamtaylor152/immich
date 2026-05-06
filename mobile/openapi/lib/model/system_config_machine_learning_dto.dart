@@ -18,6 +18,8 @@ class SystemConfigMachineLearningDto {
     required this.duplicateDetection,
     required this.enabled,
     required this.facialRecognition,
+    required this.imageDescription,
+    required this.nsfwDetection,
     required this.ocr,
     this.urls = const [],
   });
@@ -33,6 +35,10 @@ class SystemConfigMachineLearningDto {
 
   FacialRecognitionConfig facialRecognition;
 
+  ImageDescriptionConfig imageDescription;
+
+  NsfwDetectionConfig nsfwDetection;
+
   OcrConfig ocr;
 
   /// ML service URLs
@@ -45,6 +51,8 @@ class SystemConfigMachineLearningDto {
     other.duplicateDetection == duplicateDetection &&
     other.enabled == enabled &&
     other.facialRecognition == facialRecognition &&
+    other.imageDescription == imageDescription &&
+    other.nsfwDetection == nsfwDetection &&
     other.ocr == ocr &&
     _deepEquality.equals(other.urls, urls);
 
@@ -56,11 +64,13 @@ class SystemConfigMachineLearningDto {
     (duplicateDetection.hashCode) +
     (enabled.hashCode) +
     (facialRecognition.hashCode) +
+    (imageDescription.hashCode) +
+    (nsfwDetection.hashCode) +
     (ocr.hashCode) +
     (urls.hashCode);
 
   @override
-  String toString() => 'SystemConfigMachineLearningDto[availabilityChecks=$availabilityChecks, clip=$clip, duplicateDetection=$duplicateDetection, enabled=$enabled, facialRecognition=$facialRecognition, ocr=$ocr, urls=$urls]';
+  String toString() => 'SystemConfigMachineLearningDto[availabilityChecks=$availabilityChecks, clip=$clip, duplicateDetection=$duplicateDetection, enabled=$enabled, facialRecognition=$facialRecognition, imageDescription=$imageDescription, nsfwDetection=$nsfwDetection, ocr=$ocr, urls=$urls]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -69,6 +79,8 @@ class SystemConfigMachineLearningDto {
       json[r'duplicateDetection'] = this.duplicateDetection;
       json[r'enabled'] = this.enabled;
       json[r'facialRecognition'] = this.facialRecognition;
+      json[r'imageDescription'] = this.imageDescription;
+      json[r'nsfwDetection'] = this.nsfwDetection;
       json[r'ocr'] = this.ocr;
       json[r'urls'] = this.urls;
     return json;
@@ -88,6 +100,8 @@ class SystemConfigMachineLearningDto {
         duplicateDetection: DuplicateDetectionConfig.fromJson(json[r'duplicateDetection'])!,
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         facialRecognition: FacialRecognitionConfig.fromJson(json[r'facialRecognition'])!,
+        imageDescription: ImageDescriptionConfig.fromJson(json[r'imageDescription'])!,
+        nsfwDetection: NsfwDetectionConfig.fromJson(json[r'nsfwDetection'])!,
         ocr: OcrConfig.fromJson(json[r'ocr'])!,
         urls: json[r'urls'] is Iterable
             ? (json[r'urls'] as Iterable).cast<String>().toList(growable: false)
@@ -144,6 +158,8 @@ class SystemConfigMachineLearningDto {
     'duplicateDetection',
     'enabled',
     'facialRecognition',
+    'imageDescription',
+    'nsfwDetection',
     'ocr',
     'urls',
   };
