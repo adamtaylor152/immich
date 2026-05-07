@@ -130,7 +130,7 @@ jobs:
     if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event_name == 'pull_request' && format('unraid-docker-pr-{0}', github.event.pull_request.number) || 'unraid-docker' }}
+      name: unraid-docker
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
       contents: read
