@@ -2,10 +2,6 @@ name: NSFW Unraid Docker Deployment
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - aj/nsfw-sensitive-content-combined
-      - nsfw-sensitive-content-combined
   pull_request:
     branches:
       - main
