@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, cast
@@ -56,7 +57,7 @@ NSFW content, use conservative tags such as nsfw_review rather than explicit age
 OPENVINO_MODEL_ALIASES = {
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
 }
-OPENVINO_MAX_IMAGE_EDGE = 1024
+DEFAULT_OPENVINO_MAX_IMAGE_EDGE = 512
 QWEN_OPENVINO_IMAGE_TAG = "<|vision_start|><|image_pad|><|vision_end|>"
 
 FLORENCE_MODEL_NAMES = {
@@ -330,10 +331,27 @@ class ImageDescriptionModel(InferenceModel):
         from openvino import Tensor
 
         rgb = image.convert("RGB")
-        if max(rgb.size) > OPENVINO_MAX_IMAGE_EDGE:
-            rgb.thumbnail((OPENVINO_MAX_IMAGE_EDGE, OPENVINO_MAX_IMAGE_EDGE), Image.Resampling.LANCZOS)
+        original_size = rgb.size
+        max_image_edge = self._openvino_max_image_edge()
+        if max(rgb.size) > max_image_edge:
+            rgb.thumbnail((max_image_edge, max_image_edge), Image.Resampling.LANCZOS)
+            log.info(f"Resized OpenVINO image description input from {original_size} to {rgb.size}.")
         image_data = np.asarray(rgb, dtype=np.uint8)[None]
         return Tensor(image_data)
+
+    def _openvino_max_image_edge(self) -> int:
+        value = os.getenv("MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE")
+        if value is None:
+            return DEFAULT_OPENVINO_MAX_IMAGE_EDGE
+
+        try:
+            return max(1, int(value))
+        except ValueError:
+            log.warning(
+                "Invalid MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE "
+                f"value '{value}'. Using {DEFAULT_OPENVINO_MAX_IMAGE_EDGE}."
+            )
+            return DEFAULT_OPENVINO_MAX_IMAGE_EDGE
 
     def _result_text(self, result: Any) -> str:
         texts = getattr(result, "texts", None)

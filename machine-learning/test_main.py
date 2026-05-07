@@ -222,7 +222,22 @@ class TestImageDescriptionModel:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
         model._to_openvino_tensor(Image.new("RGB", (2000, 1000), (1, 2, 3)))
 
-        assert tensors[0].shape == (1, 512, 1024, 3)
+        assert tensors[0].shape == (1, 256, 512, 3)
+
+    def test_uses_openvino_image_edge_env_override(self, monkeypatch: MonkeyPatch) -> None:
+        tensors: list[np.ndarray] = []
+
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                tensors.append(data)
+
+        monkeypatch.setenv("MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE", "256")
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+        model._to_openvino_tensor(Image.new("RGB", (2000, 1000), (1, 2, 3)))
+
+        assert tensors[0].shape == (1, 128, 256, 3)
 
     def test_adds_qwen_image_tag_to_openvino_prompt(self) -> None:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
