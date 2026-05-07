@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from io import BytesIO
 from pathlib import Path
 from random import randint
@@ -193,6 +194,21 @@ class TestImageDescriptionModel:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="auto")
 
         assert model.acceleration == "cuda"
+
+    def test_converts_images_to_openvino_hwc_tensor(self, monkeypatch: MonkeyPatch) -> None:
+        tensors: list[np.ndarray] = []
+
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                tensors.append(data)
+
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+        model._to_openvino_tensor(Image.new("RGB", (3, 2), (1, 2, 3)))
+
+        assert tensors[0].shape == (2, 3, 3)
+        assert tensors[0].dtype == np.uint8
 
 
 @pytest.mark.usefixtures("ort_session")

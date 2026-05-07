@@ -300,7 +300,7 @@ class ImageDescriptionModel(InferenceModel):
         from openvino import Tensor
 
         rgb = image.convert("RGB")
-        image_data = np.array(rgb.getdata()).reshape(1, rgb.size[1], rgb.size[0], 3).astype(np.uint8)
+        image_data = np.asarray(rgb, dtype=np.uint8)
         return Tensor(image_data)
 
     def _result_text(self, result: Any) -> str:
