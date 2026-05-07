@@ -424,6 +424,10 @@ class ApiClient {
           return LogoutResponseDto.fromJson(value);
         case 'MachineLearningAvailabilityChecksDto':
           return MachineLearningAvailabilityChecksDto.fromJson(value);
+        case 'MachineLearningHardwareAcceleration':
+          return MachineLearningHardwareAccelerationTypeTransformer().decode(value);
+        case 'MachineLearningHardwareResponseDto':
+          return MachineLearningHardwareResponseDto.fromJson(value);
         case 'MaintenanceAction':
           return MaintenanceActionTypeTransformer().decode(value);
         case 'MaintenanceAuthDto':

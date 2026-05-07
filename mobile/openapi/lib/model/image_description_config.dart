@@ -13,13 +13,22 @@ part of openapi.api;
 class ImageDescriptionConfig {
   /// Returns a new [ImageDescriptionConfig] instance.
   ImageDescriptionConfig({
+    this.acceleration,
     required this.device,
     required this.enabled,
     required this.fallbackModelName,
     required this.modelName,
   });
 
-  /// OpenVINO device to use
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  MachineLearningHardwareAcceleration? acceleration;
+
+  /// Hardware device to use
   String device;
 
   /// Whether the task is enabled
@@ -33,6 +42,7 @@ class ImageDescriptionConfig {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is ImageDescriptionConfig &&
+    other.acceleration == acceleration &&
     other.device == device &&
     other.enabled == enabled &&
     other.fallbackModelName == fallbackModelName &&
@@ -41,16 +51,22 @@ class ImageDescriptionConfig {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (acceleration == null ? 0 : acceleration!.hashCode) +
     (device.hashCode) +
     (enabled.hashCode) +
     (fallbackModelName.hashCode) +
     (modelName.hashCode);
 
   @override
-  String toString() => 'ImageDescriptionConfig[device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, modelName=$modelName]';
+  String toString() => 'ImageDescriptionConfig[acceleration=$acceleration, device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, modelName=$modelName]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.acceleration != null) {
+      json[r'acceleration'] = this.acceleration;
+    } else {
+    //  json[r'acceleration'] = null;
+    }
       json[r'device'] = this.device;
       json[r'enabled'] = this.enabled;
       json[r'fallbackModelName'] = this.fallbackModelName;
@@ -67,6 +83,7 @@ class ImageDescriptionConfig {
       final json = value.cast<String, dynamic>();
 
       return ImageDescriptionConfig(
+        acceleration: MachineLearningHardwareAcceleration.fromJson(json[r'acceleration']),
         device: mapValueOfType<String>(json, r'device')!,
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         fallbackModelName: mapValueOfType<String>(json, r'fallbackModelName')!,

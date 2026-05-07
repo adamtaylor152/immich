@@ -161,7 +161,8 @@ enum ActionButtonType {
             context.timelineOrigin != TimelineOrigin.trash &&
             !context.isInLockedView && //
             context.isStacked,
-      ActionButtonType.openInBrowser => context.asset.hasRemote && !context.isInLockedView,
+      ActionButtonType.openInBrowser =>
+        context.asset.hasRemote && !context.isInLockedView,
       ActionButtonType.likeActivity =>
         !context.isInLockedView &&
             context.currentAlbum != null &&
@@ -199,13 +200,21 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.share => ShareActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.share => ShareActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.shareLink => ShareLinkActionButton(
         source: context.source,
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.archive => ArchiveActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.archive => ArchiveActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.unarchive => UnArchiveActionButton(
         source: context.source,
         iconOnly: iconOnly,
@@ -221,14 +230,26 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.download => DownloadActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
-      ActionButtonType.trash => TrashActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.download => DownloadActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
+      ActionButtonType.trash => TrashActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.deletePermanent => DeletePermanentActionButton(
         source: context.source,
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.delete => DeleteActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.delete => DeleteActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.moveToLockFolder => MoveToLockFolderActionButton(
         source: context.source,
         iconOnly: iconOnly,
@@ -244,7 +265,11 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.upload => UploadActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.upload => UploadActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.removeFromAlbum => RemoveFromAlbumActionButton(
         albumId: context.currentAlbum!.id,
         source: context.source,
@@ -257,8 +282,15 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.likeActivity => LikeActivityActionButton(iconOnly: iconOnly, menuItem: menuItem),
-      ActionButtonType.unstack => UnStackActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.likeActivity => LikeActivityActionButton(
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
+      ActionButtonType.unstack => UnStackActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.openInBrowser => OpenInBrowserActionButton(
         remoteId: context.asset.remoteId!,
         origin: context.timelineOrigin,
@@ -281,7 +313,8 @@ enum ActionButtonType {
         iconData: Icons.info_outline,
         iconColor: context.originalTheme?.iconTheme.color,
         menuItem: true,
-        onPressed: () => EventStream.shared.emit(const ViewerShowDetailsEvent()),
+        onPressed: () =>
+            EventStream.shared.emit(const ViewerShowDetailsEvent()),
       ),
       ActionButtonType.viewInTimeline => BaseActionButton(
         label: 'view_in_timeline'.tr(),
@@ -292,11 +325,18 @@ enum ActionButtonType {
         onPressed: buildContext == null
             ? null
             : () async {
-                await buildContext.router.navigate(const TabShellRoute(children: [MainTimelineRoute()]));
-                EventStream.shared.emit(ScrollToDateEvent(context.asset.createdAt));
+                await buildContext.router.navigate(
+                  const TabShellRoute(children: [MainTimelineRoute()]),
+                );
+                EventStream.shared.emit(
+                  ScrollToDateEvent(context.asset.createdAt),
+                );
               },
       ),
-      ActionButtonType.cast => CastActionButton(iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.cast => CastActionButton(
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
     };
   }
 
@@ -328,7 +368,8 @@ enum ActionButtonType {
 
 class ActionButtonBuilder {
   static const List<ActionButtonType> _actionTypes = ActionButtonType.values;
-  static const List<ActionButtonType> defaultViewerKebabMenuOrder = _actionTypes;
+  static const List<ActionButtonType> defaultViewerKebabMenuOrder =
+      _actionTypes;
   static const Set<ActionButtonType> defaultViewerBottomBarButtons = {
     ActionButtonType.share,
     ActionButtonType.moveToLockFolder,
@@ -339,12 +380,23 @@ class ActionButtonBuilder {
   };
 
   static List<Widget> build(ActionButtonContext context) {
-    return _actionTypes.where((type) => type.shouldShow(context)).map((type) => type.buildButton(context)).toList();
+    return _actionTypes
+        .where((type) => type.shouldShow(context))
+        .map((type) => type.buildButton(context))
+        .toList();
   }
 
-  static List<Widget> buildViewerKebabMenu(ActionButtonContext context, BuildContext buildContext, WidgetRef ref) {
+  static List<Widget> buildViewerKebabMenu(
+    ActionButtonContext context,
+    BuildContext buildContext,
+    WidgetRef ref,
+  ) {
     final visibleButtons = defaultViewerKebabMenuOrder
-        .where((type) => !defaultViewerBottomBarButtons.contains(type) && type.shouldShow(context))
+        .where(
+          (type) =>
+              !defaultViewerBottomBarButtons.contains(type) &&
+              type.shouldShow(context),
+        )
         .toList();
 
     if (visibleButtons.isEmpty) {
@@ -358,7 +410,11 @@ class ActionButtonBuilder {
       if (lastGroup != null && type.kebabMenuGroup != lastGroup) {
         result.add(const Divider(height: 1));
       }
-      result.add(type.buildButton(context, buildContext, false, true).build(buildContext, ref));
+      result.add(
+        type
+            .buildButton(context, buildContext, false, true)
+            .build(buildContext, ref),
+      );
       lastGroup = type.kebabMenuGroup;
     }
 

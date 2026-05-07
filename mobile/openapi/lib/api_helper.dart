@@ -115,6 +115,9 @@ String parameterToString(dynamic value) {
   if (value is LogLevel) {
     return LogLevelTypeTransformer().encode(value).toString();
   }
+  if (value is MachineLearningHardwareAcceleration) {
+    return MachineLearningHardwareAccelerationTypeTransformer().encode(value).toString();
+  }
   if (value is MaintenanceAction) {
     return MaintenanceActionTypeTransformer().encode(value).toString();
   }

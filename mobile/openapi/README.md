@@ -266,6 +266,7 @@ Class | Method | HTTP request | Description
 *SyncApi* | [**sendSyncAck**](doc//SyncApi.md#sendsyncack) | **POST** /sync/ack | Acknowledge changes
 *SystemConfigApi* | [**getConfig**](doc//SystemConfigApi.md#getconfig) | **GET** /system-config | Get system configuration
 *SystemConfigApi* | [**getConfigDefaults**](doc//SystemConfigApi.md#getconfigdefaults) | **GET** /system-config/defaults | Get system configuration defaults
+*SystemConfigApi* | [**getMachineLearningHardware**](doc//SystemConfigApi.md#getmachinelearninghardware) | **GET** /system-config/machine-learning/hardware | Get machine learning hardware
 *SystemConfigApi* | [**getStorageTemplateOptions**](doc//SystemConfigApi.md#getstoragetemplateoptions) | **GET** /system-config/storage-template-options | Get storage template options
 *SystemConfigApi* | [**updateConfig**](doc//SystemConfigApi.md#updateconfig) | **PUT** /system-config | Update system configuration
 *SystemMetadataApi* | [**getAdminOnboarding**](doc//SystemMetadataApi.md#getadminonboarding) | **GET** /system-metadata/admin-onboarding | Retrieve admin onboarding
@@ -443,6 +444,8 @@ Class | Method | HTTP request | Description
  - [LoginResponseDto](doc//LoginResponseDto.md)
  - [LogoutResponseDto](doc//LogoutResponseDto.md)
  - [MachineLearningAvailabilityChecksDto](doc//MachineLearningAvailabilityChecksDto.md)
+ - [MachineLearningHardwareAcceleration](doc//MachineLearningHardwareAcceleration.md)
+ - [MachineLearningHardwareResponseDto](doc//MachineLearningHardwareResponseDto.md)
  - [MaintenanceAction](doc//MaintenanceAction.md)
  - [MaintenanceAuthDto](doc//MaintenanceAuthDto.md)
  - [MaintenanceDetectInstallResponseDto](doc//MaintenanceDetectInstallResponseDto.md)

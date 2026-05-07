@@ -22,6 +22,8 @@ services:
         - BUILD_IMAGE=e2e
         - BUILD_SOURCE_REF=e2e
         - BUILD_SOURCE_COMMIT=e2eeeeeeeeeeeeeeeeee
+      secrets:
+        - GITHUB_TOKEN
     environment:
       DB_HOSTNAME: database
       DB_USERNAME: postgres
@@ -65,3 +67,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
+
+secrets:
+  GITHUB_TOKEN:
+    environment: GITHUB_TOKEN

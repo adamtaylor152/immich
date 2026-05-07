@@ -186,9 +186,7 @@ class ImageDescriptionModel(InferenceModel):
         inputs = inputs.to(device)
         with torch.inference_mode():
             generated_ids = model.generate(**inputs, max_new_tokens=768, do_sample=False)
-        generated_ids = [
-            output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
-        ]
+        generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)]
         text = processor.batch_decode(
             generated_ids,
             skip_special_tokens=True,
@@ -256,9 +254,7 @@ class ImageDescriptionModel(InferenceModel):
             return acceleration
         return ImageDescriptionAcceleration.CUDA if self._cuda_available() else ImageDescriptionAcceleration.OPENVINO
 
-    def _model_name_for_acceleration(
-        self, model_name: str, acceleration: ImageDescriptionAcceleration
-    ) -> str:
+    def _model_name_for_acceleration(self, model_name: str, acceleration: ImageDescriptionAcceleration) -> str:
         if acceleration == ImageDescriptionAcceleration.OPENVINO:
             return OPENVINO_MODEL_ALIASES.get(model_name, model_name)
         return model_name

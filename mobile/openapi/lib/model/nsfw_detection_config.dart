@@ -20,7 +20,7 @@ class NsfwDetectionConfig {
     required this.threshold,
   });
 
-  /// OpenVINO device to use
+  /// Hardware device to use
   String device;
 
   /// Whether the task is enabled

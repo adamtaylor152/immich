@@ -189,6 +189,8 @@ part 'model/login_credential_dto.dart';
 part 'model/login_response_dto.dart';
 part 'model/logout_response_dto.dart';
 part 'model/machine_learning_availability_checks_dto.dart';
+part 'model/machine_learning_hardware_acceleration.dart';
+part 'model/machine_learning_hardware_response_dto.dart';
 part 'model/maintenance_action.dart';
 part 'model/maintenance_auth_dto.dart';
 part 'model/maintenance_detect_install_response_dto.dart';
