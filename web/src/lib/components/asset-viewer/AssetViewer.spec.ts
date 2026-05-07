@@ -1,4 +1,4 @@
-import { updateAsset } from '@immich/sdk';
+import { AssetTypeEnum, updateAsset } from '@immich/sdk';
 import { fireEvent, waitFor } from '@testing-library/svelte';
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
@@ -54,7 +54,7 @@ describe('AssetViewer', () => {
   it('updates the top bar favorite action after pressing favorite', async () => {
     const ownerId = 'owner-id';
     const user = userAdminFactory.build({ id: ownerId });
-    const asset = assetFactory.build({ ownerId, isFavorite: false, isTrashed: false });
+    const asset = assetFactory.build({ ownerId, isFavorite: false, isTrashed: false, type: AssetTypeEnum.Image });
 
     authManager.setUser(user);
     authManager.setPreferences(preferencesFactory.build({ cast: { gCastEnabled: false } }));
