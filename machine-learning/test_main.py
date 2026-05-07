@@ -183,10 +183,20 @@ class TestImageDescriptionModel:
 
         assert model.hf_model_name == "llmware/qwen2.5-vl-3b-ov"
 
+    def test_uses_phi_openvino_alias_for_openvino(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        assert model.hf_model_name == "OpenVINO/Phi-3.5-vision-instruct-int4-ov"
+
     def test_keeps_huggingface_model_for_cuda(self) -> None:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
 
         assert model.hf_model_name == "Qwen/Qwen2.5-VL-3B-Instruct"
+
+    def test_keeps_phi_huggingface_model_for_cuda(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="cuda")
+
+        assert model.hf_model_name == "microsoft/Phi-3.5-vision-instruct"
 
     def test_auto_uses_cuda_backend_when_available(self, monkeypatch: MonkeyPatch) -> None:
         monkeypatch.setattr(ImageDescriptionModel, "_cuda_available", lambda _: True)
@@ -243,6 +253,32 @@ class TestImageDescriptionModel:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
 
         assert model._make_openvino_prompt().startswith("<|vision_start|><|image_pad|><|vision_end|>\n")
+
+    def test_adds_phi_image_tag_to_openvino_prompt(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        assert model._make_openvino_prompt().startswith("<|image_1|>\n")
+
+    def test_sets_phi_openvino_eos_token_id(self, monkeypatch: MonkeyPatch) -> None:
+        eos_token_ids: list[int] = []
+
+        class GenerationConfig:
+            max_new_tokens: int
+            temperature: float
+
+            def set_eos_token_id(self, eos_token_id: int) -> None:
+                eos_token_ids.append(eos_token_id)
+
+        session = SimpleNamespace(get_tokenizer=lambda: SimpleNamespace(get_eos_token_id=lambda: 32000))
+
+        monkeypatch.setitem(sys.modules, "openvino_genai", SimpleNamespace(GenerationConfig=GenerationConfig))
+
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino", session=session)
+        config = model._generation_config()
+
+        assert config.max_new_tokens == 768
+        assert config.temperature == 0.0
+        assert eos_token_ids == [32000]
 
     def test_retries_openvino_dimension_errors_on_cpu(self, monkeypatch: MonkeyPatch) -> None:
         class Tensor:

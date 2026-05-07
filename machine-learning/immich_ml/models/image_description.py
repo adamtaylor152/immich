@@ -55,9 +55,11 @@ NSFW content, use conservative tags such as nsfw_review rather than explicit age
 """
 
 OPENVINO_MODEL_ALIASES = {
+    "microsoft/Phi-3.5-vision-instruct": "OpenVINO/Phi-3.5-vision-instruct-int4-ov",
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
 }
 DEFAULT_OPENVINO_MAX_IMAGE_EDGE = 512
+PHI_OPENVINO_IMAGE_TAG = "<|image_1|>"
 QWEN_OPENVINO_IMAGE_TAG = "<|vision_start|><|image_pad|><|vision_end|>"
 
 FLORENCE_MODEL_NAMES = {
@@ -122,7 +124,7 @@ class ImageDescriptionModel(InferenceModel):
                 raise
             log.warning(
                 "OpenVINO image description failed on device "
-                f"'{self.device}' with '{error}'. Retrying Qwen image description on CPU."
+                f"'{self.device}' with '{error}'. Retrying image description on CPU."
             )
             self.session = self._load_openvino("CPU")
             self.device = "CPU"
@@ -315,7 +317,9 @@ class ImageDescriptionModel(InferenceModel):
 
     def _make_openvino_prompt(self) -> str:
         prompt = self._make_prompt()
-        if "qwen2.5-vl" in self.hf_model_name.lower():
+        if self._uses_phi_openvino_model():
+            return f"{PHI_OPENVINO_IMAGE_TAG}\n{prompt}"
+        if self._uses_qwen_openvino_model():
             return f"{QWEN_OPENVINO_IMAGE_TAG}\n{prompt}"
         return prompt
 
@@ -325,7 +329,26 @@ class ImageDescriptionModel(InferenceModel):
         config = openvino_genai.GenerationConfig()
         config.max_new_tokens = 768
         config.temperature = 0.0
+        if self._uses_phi_openvino_model():
+            self._set_openvino_eos_token_id(config)
         return config
+
+    def _set_openvino_eos_token_id(self, config: Any) -> None:
+        get_tokenizer = getattr(cast(Any, self.session), "get_tokenizer", None)
+        set_eos_token_id = getattr(config, "set_eos_token_id", None)
+        if not callable(get_tokenizer) or not callable(set_eos_token_id):
+            return
+
+        tokenizer = get_tokenizer()
+        get_eos_token_id = getattr(tokenizer, "get_eos_token_id", None)
+        if callable(get_eos_token_id):
+            set_eos_token_id(get_eos_token_id())
+
+    def _uses_phi_openvino_model(self) -> bool:
+        return "phi-3.5-vision" in self.hf_model_name.lower()
+
+    def _uses_qwen_openvino_model(self) -> bool:
+        return "qwen2.5-vl" in self.hf_model_name.lower()
 
     def _to_openvino_tensor(self, image: Image.Image) -> Any:
         from openvino import Tensor
