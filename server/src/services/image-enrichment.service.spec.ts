@@ -146,6 +146,111 @@ describe(ImageEnrichmentService.name, () => {
     expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
   });
 
+  it('should auto-mark NSFW from high-confidence description safety when classifier is safe', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: { nsfwDetection: { enabled: true }, imageDescription: { enabled: true } },
+    });
+    mocks.machineLearning.detectNsfw.mockResolvedValue({
+      isNsfw: false,
+      score: 0.04,
+      labels: { normal: 0.96 },
+    });
+    mocks.machineLearning.describeImage.mockResolvedValue({
+      description: 'A naked adult man is lying on a bed under a gray blanket.',
+      people: [],
+      environment: 'bedroom',
+      objects: ['bed', 'blanket'],
+      visible_text: [],
+      context: 'indoor bedroom photo',
+      tags: [],
+      safety: {
+        is_nsfw_likely: true,
+        confidence: 'high',
+        indicators: ['nudity', 'naked'],
+        reason: 'Adult nudity is visible.',
+      },
+    });
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nsfw' }));
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nudity' }));
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'naked' }));
+    const lastCall = mocks.asset.upsertMetadata.mock.calls.at(-1)!;
+    const saved = lastCall[1][0].value as { description: Record<string, unknown> };
+    expect(saved.description.result).toEqual(
+      expect.objectContaining({
+        safety: expect.objectContaining({ is_nsfw_likely: true, confidence: 'high' }),
+      }),
+    );
+  });
+
+  it('should not auto-mark NSFW from weak description safety cues', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: { nsfwDetection: { enabled: true }, imageDescription: { enabled: true } },
+    });
+    mocks.machineLearning.detectNsfw.mockResolvedValue({
+      isNsfw: false,
+      score: 0.04,
+      labels: { normal: 0.96 },
+    });
+    mocks.machineLearning.describeImage.mockResolvedValue({
+      description: 'A bare-chested adult is lying on a bed.',
+      people: [],
+      environment: 'bedroom',
+      objects: ['bed'],
+      visible_text: [],
+      context: 'indoor bedroom photo',
+      tags: ['bedroom', 'nsfw', 'nudity'],
+      safety: {
+        is_nsfw_likely: true,
+        confidence: 'high',
+        indicators: ['bare chest', 'bed'],
+        reason: 'A bare chest and bed are visible.',
+      },
+    });
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'bedroom' }));
+    expect(mocks.tag.upsertValue).not.toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nsfw' }));
+    expect(mocks.tag.upsertValue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ userId: ownerId, value: 'nudity' }),
+    );
+  });
+
+  it('should apply medical tags without marking NSFW', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: { nsfwDetection: { enabled: true }, imageDescription: { enabled: true } },
+    });
+    mocks.machineLearning.detectNsfw.mockResolvedValue({
+      isNsfw: false,
+      score: 0.02,
+      labels: { normal: 0.98 },
+    });
+    mocks.machineLearning.describeImage.mockResolvedValue({
+      description: 'A person is lying in a hospital bed with an IV line nearby.',
+      people: [],
+      environment: 'hospital room',
+      objects: ['hospital bed', 'iv line'],
+      visible_text: [],
+      context: 'medical setting',
+      tags: [],
+      medical: {
+        is_medical_likely: true,
+        confidence: 'high',
+        indicators: ['hospital', 'iv line'],
+        reason: 'A hospital bed and IV line are visible.',
+      },
+    });
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'medical' }));
+    expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'iv-line' }));
+    expect(mocks.tag.upsertValue).not.toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nsfw' }));
+  });
+
   it('should store description failures without applying visible metadata', async () => {
     mocks.systemMetadata.get.mockResolvedValue({
       machineLearning: {

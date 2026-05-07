@@ -91,6 +91,18 @@ export type ImageDescriptionResult = {
   visible_text: string[];
   context: string;
   tags: string[];
+  safety?: {
+    is_nsfw_likely: boolean;
+    confidence: string;
+    indicators: string[];
+    reason: string;
+  };
+  medical?: {
+    is_medical_likely: boolean;
+    confidence: string;
+    indicators: string[];
+    reason: string;
+  };
 };
 
 export type ImageDescriptionRequest = {

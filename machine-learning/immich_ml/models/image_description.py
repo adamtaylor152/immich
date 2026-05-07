@@ -35,23 +35,45 @@ Return valid JSON with this schema:
   "objects": ["object1", "object2", "object3"],
   "visible_text": ["text visible in image, if any"],
   "context": "brief inferred context, only if visually supported",
-  "tags": ["tag1", "tag2", "tag3"]
+  "tags": ["tag1", "tag2", "tag3"],
+  "safety": {
+    "is_nsfw_likely": false,
+    "confidence": "low | medium | high",
+    "indicators": ["visible adult nudity, sexual activity, restraint, etc."],
+    "reason": "brief visual evidence for the NSFW assessment"
+  },
+  "medical": {
+    "is_medical_likely": false,
+    "confidence": "low | medium | high",
+    "indicators": ["visible medical setting, device, object, or body state"],
+    "reason": "brief visual evidence for the medical assessment"
+  }
 }
 
 Rules:
-- Keep the description factual and searchable.
+- Return only JSON. Do not wrap the response in markdown or explanatory text.
+- Keep the description factual, searchable, and user-friendly. Never put raw JSON or schema text in the description.
 - Prefer concrete nouns over vague adjectives.
 - Include brands, signage, screens, documents, uniforms, tools, vehicles, animals, food, and landmarks only when
   visible.
 - Use 8 to 20 tags.
 - Tags should be lowercase, short, and useful for search.
+- Preserve uncertainty in people fields when needed, including values like "young adult | adult".
+- If visible evidence supports adult nudity or sexual content, say so factually with terms like naked, nudity,
+  exposed genitals, bare buttocks, sexual activity, restraint, bondage, or sex toy. Do not treat bare chest, bed,
+  swimwear, underwear, or ambiguous partial clothing as explicit by itself.
+- If visible evidence supports a medical context, describe visible items such as hospital room, exam table, IV line,
+  bandage, cast, wound, prescription bottle, pill organizer, syringe, medical monitor, wheelchair, crutches, x-ray,
+  ultrasound, lab result, or medical paperwork. Do not infer diagnoses, procedures, pregnancy, disability,
+  medication names, or medical conditions unless plainly visible as generic text or objects.
 - Avoid moralizing language.
 """
 
 NSFW_PROMPT_SUFFIX = """
-The dedicated NSFW classifier flagged this image. If visible evidence supports it, include specific factual NSFW
-reasons in the description and tags, such as nudity, naked, sex, explicit, or nsfw. If apparent age is uncertain around
-NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.
+The dedicated NSFW classifier flagged this image. Re-check the image visually. If visible evidence supports it,
+include specific factual NSFW reasons in the description, tags, and safety.indicators, such as nudity, naked,
+exposed genitals, bare buttocks, sexual activity, sex toy, restraint, bondage, explicit, or nsfw. If apparent age is
+uncertain around NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.
 """
 
 OPENVINO_MODEL_ALIASES = {
@@ -61,6 +83,40 @@ OPENVINO_MODEL_ALIASES = {
 DEFAULT_OPENVINO_MAX_IMAGE_EDGE = 512
 PHI_OPENVINO_IMAGE_TAG = "<|image_1|>"
 QWEN_OPENVINO_IMAGE_TAG = "<|vision_start|><|image_pad|><|vision_end|>"
+
+NSFW_TAGS = {
+    "adult-nudity",
+    "bare-buttocks",
+    "bondage",
+    "explicit",
+    "exposed-genitals",
+    "naked",
+    "nsfw",
+    "nudity",
+    "restraint",
+    "sex-toy",
+    "sexual-activity",
+}
+MEDICAL_TAGS = {
+    "bandage",
+    "cast",
+    "crutches",
+    "exam-table",
+    "hospital",
+    "iv-line",
+    "lab-result",
+    "medical",
+    "medical-monitor",
+    "medical-paperwork",
+    "mobility-aid",
+    "pill-organizer",
+    "prescription",
+    "syringe",
+    "ultrasound",
+    "wheelchair",
+    "wound",
+    "x-ray",
+}
 
 FLORENCE_MODEL_NAMES = {
     "microsoft/Florence-2-base",
@@ -384,16 +440,41 @@ class ImageDescriptionModel(InferenceModel):
 
     def _normalize_response(self, text: str) -> dict[str, Any]:
         data = self._parse_json(text)
-        description = str(data.get("description") or "").strip()
+        description = self._clean_description(data.get("description"))
+        people = self._list_of_records(data.get("people"))
+        environment = str(data.get("environment") or "").strip()
+        objects = self._list_of_strings(data.get("objects"))
+        visible_text = self._list_of_strings(data.get("visible_text"))
+        context = str(data.get("context") or "").strip()
+        safety = self._normalize_signal(data.get("safety"), "is_nsfw_likely")
+        medical = self._normalize_signal(data.get("medical"), "is_medical_likely")
+        tags = self._list_of_strings(data.get("tags"))
+        if not tags:
+            tags = self._tags_from_text(
+                " ".join(
+                    [
+                        description,
+                        environment,
+                        context,
+                        *objects,
+                        *visible_text,
+                        *self._signal_indicators(safety),
+                        *self._signal_indicators(medical),
+                    ]
+                )
+            )
+        tags = self._augment_tags(tags, safety, medical)
 
         return {
             "description": description,
-            "people": self._list_of_records(data.get("people")),
-            "environment": str(data.get("environment") or "").strip(),
-            "objects": self._list_of_strings(data.get("objects")),
-            "visible_text": self._list_of_strings(data.get("visible_text")),
-            "context": str(data.get("context") or "").strip(),
-            "tags": self._list_of_strings(data.get("tags"))[:20],
+            "people": people,
+            "environment": environment,
+            "objects": objects,
+            "visible_text": visible_text,
+            "context": context,
+            "tags": tags[:20],
+            "safety": safety,
+            "medical": medical,
         }
 
     def _parse_json(self, text: str) -> dict[str, Any]:
@@ -406,8 +487,117 @@ class ImageDescriptionModel(InferenceModel):
             parsed = orjson.loads(text)
             return parsed if isinstance(parsed, dict) else {}
         except orjson.JSONDecodeError:
-            log.warning("Image description model returned invalid JSON; using raw text as description.")
-            return {"description": text, "tags": []}
+            log.warning("Image description model returned invalid JSON; salvaging visible fields.")
+            description = self._extract_string_field(text, "description")
+            return {
+                "description": description if description else self._plain_text_fallback(text),
+                "tags": self._extract_string_array_field(text, "tags"),
+                "objects": self._extract_string_array_field(text, "objects"),
+                "visible_text": self._extract_string_array_field(text, "visible_text"),
+                "safety": self._extract_signal_field(text, "safety", "is_nsfw_likely"),
+                "medical": self._extract_signal_field(text, "medical", "is_medical_likely"),
+            }
+
+    def _plain_text_fallback(self, text: str) -> str:
+        stripped = text.strip()
+        return "" if stripped.startswith("{") else stripped
+
+    def _clean_description(self, value: Any) -> str:
+        description = str(value or "").strip()
+        if description.startswith("{"):
+            return self._extract_string_field(description, "description")
+        return re.sub(r"^AI description:\s*", "", description, flags=re.IGNORECASE).strip()
+
+    def _extract_string_field(self, text: str, field: str) -> str:
+        match = re.search(rf'"{re.escape(field)}"\s*:\s*"((?:\\.|[^"\\])*)"', text, re.DOTALL)
+        if not match:
+            return ""
+        return self._decode_json_string(match.group(1))
+
+    def _extract_string_array_field(self, text: str, field: str) -> list[str]:
+        match = re.search(rf'"{re.escape(field)}"\s*:\s*\[([^\]]*)', text, re.DOTALL)
+        if not match:
+            return []
+        return [self._decode_json_string(item) for item in re.findall(r'"((?:\\.|[^"\\])*)"', match.group(1))]
+
+    def _extract_signal_field(self, text: str, field: str, boolean_key: str) -> dict[str, Any]:
+        match = re.search(rf'"{re.escape(field)}"\s*:\s*\{{(.*?)\}}', text, re.DOTALL)
+        if not match:
+            return {}
+
+        body = match.group(1)
+        boolean_match = re.search(rf'"{re.escape(boolean_key)}"\s*:\s*(true|false|"[^"]+")', body, re.IGNORECASE)
+        boolean_value: Any = False
+        if boolean_match:
+            boolean_value = boolean_match.group(1).strip('"')
+
+        return {
+            boolean_key: boolean_value,
+            "confidence": self._extract_string_field(body, "confidence"),
+            "indicators": self._extract_string_array_field(body, "indicators"),
+            "reason": self._extract_string_field(body, "reason"),
+        }
+
+    def _decode_json_string(self, value: str) -> str:
+        try:
+            decoded = orjson.loads(f'"{value}"')
+            return str(decoded).strip()
+        except orjson.JSONDecodeError:
+            return value.strip()
+
+    def _normalize_signal(self, value: Any, boolean_key: str) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {
+                boolean_key: False,
+                "confidence": "low",
+                "indicators": [],
+                "reason": "",
+            }
+        return {
+            boolean_key: self._bool_value(value.get(boolean_key)),
+            "confidence": str(value.get("confidence") or "low").strip().lower(),
+            "indicators": self._list_of_strings(value.get("indicators")),
+            "reason": str(value.get("reason") or "").strip(),
+        }
+
+    def _bool_value(self, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "yes", "1", "high"}
+        return bool(value)
+
+    def _signal_indicators(self, signal: dict[str, Any]) -> list[str]:
+        indicators = signal.get("indicators")
+        return indicators if isinstance(indicators, list) else []
+
+    def _augment_tags(
+        self,
+        tags: list[str],
+        safety: dict[str, Any],
+        medical: dict[str, Any],
+    ) -> list[str]:
+        normalized = [self._normalize_tag(tag) for tag in tags]
+        tag_set = {tag for tag in normalized if tag}
+
+        has_strong_nsfw_tag = False
+        if safety.get("is_nsfw_likely") and safety.get("confidence") == "high":
+            for indicator in self._signal_indicators(safety):
+                tag = self._normalize_tag(indicator)
+                if tag in NSFW_TAGS:
+                    tag_set.add(tag)
+                    has_strong_nsfw_tag = True
+        if has_strong_nsfw_tag:
+            tag_set.add("nsfw")
+
+        if medical.get("is_medical_likely"):
+            tag_set.add("medical")
+            for indicator in self._signal_indicators(medical):
+                tag = self._normalize_tag(indicator)
+                if tag in MEDICAL_TAGS:
+                    tag_set.add(tag)
+
+        return sorted(tag_set)
 
     def _list_of_strings(self, value: Any) -> list[str]:
         if not isinstance(value, list):
@@ -443,10 +633,13 @@ class ImageDescriptionModel(InferenceModel):
         for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower()):
             if word in stop_words or word in tags:
                 continue
-            tags.append(word)
+            tags.append(self._normalize_tag(word))
             if len(tags) >= 20:
                 break
         return tags
+
+    def _normalize_tag(self, tag: str) -> str:
+        return re.sub(r"-+", "-", re.sub(r"[^a-z0-9_-]+", "-", tag.lower().strip())).strip("-")
 
     @property
     def cached(self) -> bool:

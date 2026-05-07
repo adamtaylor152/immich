@@ -80,6 +80,23 @@ export const removeUndefinedKeys = <T extends object>(update: T, template: unkno
 };
 
 export const ASSET_CHECKSUM_CONSTRAINT = 'UQ_assets_owner_checksum';
+const STRONG_DESCRIPTION_NSFW_TAGS = [
+  'adult-nudity',
+  'bare-buttocks',
+  'bondage',
+  'explicit',
+  'exposed-genitals',
+  'genital',
+  'genitals',
+  'naked',
+  'nude',
+  'nudity',
+  'pornography',
+  'restrained',
+  'restraint',
+  'sex-toy',
+  'sexual-activity',
+];
 
 export const isAssetChecksumConstraint = (error: unknown) => {
   return (error as PostgresError)?.constraint_name === 'UQ_assets_owner_checksum';
@@ -94,12 +111,33 @@ export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`
       from asset_metadata
       where asset_metadata."assetId" = ${assetId}
         and asset_metadata.key = ${AssetMetadataKey.MlEnrichment}
-        and coalesce(
-          (asset_metadata.value #>> '{nsfwDetection,review,isNsfw}')::boolean,
-          (asset_metadata.value #>> '{nsfwDetection,result,isNsfw}')::boolean,
-          (asset_metadata.value #>> '{nsfwDetection,result,nsfw}')::boolean,
-          false
-        ) = true
+        and case
+          when asset_metadata.value #> '{nsfwDetection,review}' is not null then
+            coalesce((asset_metadata.value #>> '{nsfwDetection,review,isNsfw}')::boolean, false)
+          else
+            coalesce(
+              (asset_metadata.value #>> '{nsfwDetection,result,isNsfw}')::boolean,
+              (asset_metadata.value #>> '{nsfwDetection,result,nsfw}')::boolean,
+              false
+            )
+            or (
+              coalesce((asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}')::boolean, false)
+              and lower(coalesce(asset_metadata.value #>> '{description,result,safety,confidence}', '')) = 'high'
+              and (
+                exists (
+                  select 1
+                  from jsonb_array_elements_text(
+                    coalesce(asset_metadata.value #> '{description,result,safety,indicators}', '[]'::jsonb)
+                  ) as indicator(value)
+                  where lower(regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')) = any(
+                    array[${sql.join(STRONG_DESCRIPTION_NSFW_TAGS)}]::text[]
+                  )
+                )
+                or coalesce(asset_metadata.value #>> '{description,result,description}', '') ~*
+                  '\\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\\M'
+              )
+            )
+        end = true
     )`;
 
 const nsfwAssetExists = (assetAlias = 'asset') => nsfwAssetIdExists(sql.ref(`${assetAlias}.id`));

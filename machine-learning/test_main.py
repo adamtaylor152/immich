@@ -280,6 +280,93 @@ class TestImageDescriptionModel:
         assert config.temperature == 0.0
         assert eos_token_ids == [32000]
 
+    def test_salvages_description_from_invalid_json_without_raw_json(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        result = model._normalize_response(
+            """
+            {
+              "description": "A naked adult man is lying on a bed under a gray blanket.",
+              "people": [
+                {
+                  "count": 1,
+                  "apparent_age_group": "young adult | adult",
+                  "activity": "lying down",
+                  "confidence": "high"
+                }
+            """
+        )
+
+        assert result["description"] == "A naked adult man is lying on a bed under a gray blanket."
+        assert not str(result["description"]).startswith("{")
+        assert "naked" in result["tags"]
+
+    def test_preserves_ambiguous_people_values(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        result = model._normalize_response(
+            json.dumps(
+                {
+                    "description": "A person is lying on a bed.",
+                    "people": [
+                        {
+                            "count": 1,
+                            "apparent_age_group": "young adult | adult",
+                            "activity": "lying down",
+                            "confidence": "high",
+                        }
+                    ],
+                    "tags": ["person"],
+                }
+            )
+        )
+
+        assert result["people"][0]["apparent_age_group"] == "young adult | adult"
+
+    def test_backfills_medical_tags_from_medical_indicators(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        result = model._normalize_response(
+            json.dumps(
+                {
+                    "description": "A person is lying in a hospital bed with an IV line nearby.",
+                    "medical": {
+                        "is_medical_likely": True,
+                        "confidence": "high",
+                        "indicators": ["hospital", "iv line"],
+                        "reason": "A hospital bed and IV line are visible.",
+                    },
+                    "tags": [],
+                }
+            )
+        )
+
+        assert "medical" in result["tags"]
+        assert "hospital" in result["tags"]
+        assert "iv-line" in result["tags"]
+
+    def test_adds_nsfw_tags_from_safety_indicators(self) -> None:
+        model = ImageDescriptionModel("microsoft/Phi-3.5-vision-instruct", acceleration="openvino")
+
+        result = model._normalize_response(
+            json.dumps(
+                {
+                    "description": "A naked adult man is lying on a bed.",
+                    "safety": {
+                        "is_nsfw_likely": True,
+                        "confidence": "high",
+                        "indicators": ["nudity", "naked"],
+                        "reason": "Adult nudity is visible.",
+                    },
+                    "tags": [],
+                }
+            )
+        )
+
+        assert "nsfw" in result["tags"]
+        assert "nudity" in result["tags"]
+        assert "naked" in result["tags"]
+
     def test_retries_openvino_dimension_errors_on_cpu(self, monkeypatch: MonkeyPatch) -> None:
         class Tensor:
             def __init__(self, data: np.ndarray) -> None:

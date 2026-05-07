@@ -65,6 +65,26 @@ type EnrichmentMetadata = {
 };
 
 const GENERATED_DESCRIPTION_PREFIX = 'AI description:';
+const HIGH_CONFIDENCE = 'high';
+const STRONG_NSFW_INDICATORS = new Set([
+  'adult-nudity',
+  'bare-buttocks',
+  'bondage',
+  'explicit',
+  'exposed-genitals',
+  'genital',
+  'genitals',
+  'naked',
+  'nude',
+  'nudity',
+  'pornography',
+  'restrained',
+  'restraint',
+  'sex-toy',
+  'sexual-activity',
+]);
+const STRONG_NSFW_TEXT_PATTERN =
+  /\b(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\b/i;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -455,15 +475,21 @@ export class ImageEnrichmentService extends BaseService {
 
   private getEffectiveNsfw(metadata: EnrichmentMetadata) {
     const nsfw = metadata.nsfwDetection;
-    if (!nsfw) {
-      return;
-    }
 
-    if (nsfw.review) {
+    if (nsfw?.review) {
       return nsfw.review.isNsfw;
     }
 
-    return nsfw.status === 'success' ? nsfw.result.isNsfw : undefined;
+    if (nsfw?.status === 'success' && nsfw.result.isNsfw) {
+      return true;
+    }
+
+    const description = metadata.description?.status === 'success' ? metadata.description.result : undefined;
+    if (this.isDescriptionNsfwLikely(description)) {
+      return true;
+    }
+
+    return nsfw?.status === 'success' ? false : undefined;
   }
 
   private async clearGeneratedDescription(id: string, existingDescription: string, metadata: EnrichmentMetadata) {
@@ -642,7 +668,7 @@ export class ImageEnrichmentService extends BaseService {
       metadataChanged = true;
     }
 
-    const tags = this.getTags(result, nsfw);
+    const tags = this.getTags(result, nsfw, metadata);
     const tagHash = hash(tags);
     const descriptionMetadata = metadata.description?.status === 'success' ? metadata.description : undefined;
     const hasStoredTagApplication =
@@ -709,22 +735,69 @@ export class ImageEnrichmentService extends BaseService {
     return changed;
   }
 
-  private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult) {
+  private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult, metadata?: EnrichmentMetadata) {
     const tags = new Set<string>();
+    const effectiveNsfw = metadata ? this.getEffectiveNsfw(metadata) : nsfw?.isNsfw;
+
     for (const tag of result.tags ?? []) {
       const normalized = normalizeTag(tag);
-      if (normalized) {
+      if (normalized && (effectiveNsfw || !this.isNsfwTag(normalized))) {
         tags.add(normalized);
       }
     }
 
-    if (nsfw?.isNsfw) {
-      for (const tag of this.getNsfwTags(nsfw)) {
+    if (effectiveNsfw) {
+      const effectiveNsfwResult = nsfw?.isNsfw ? nsfw : this.getDescriptionNsfwResult(result);
+      for (const tag of this.getNsfwTags(effectiveNsfwResult)) {
         tags.add(tag);
       }
     }
 
+    if (result.medical?.is_medical_likely) {
+      tags.add('medical');
+      for (const indicator of result.medical.indicators) {
+        const normalized = normalizeTag(indicator);
+        if (normalized) {
+          tags.add(normalized);
+        }
+      }
+    }
+
     return [...tags].slice(0, 24);
+  }
+
+  private isNsfwTag(tag: string) {
+    return tag === 'nsfw' || STRONG_NSFW_INDICATORS.has(tag);
+  }
+
+  private isDescriptionNsfwLikely(result?: ImageDescriptionResult) {
+    const safety = result?.safety;
+    if (!result || !safety?.is_nsfw_likely || safety.confidence.toLowerCase() !== HIGH_CONFIDENCE) {
+      return false;
+    }
+
+    for (const indicator of safety.indicators) {
+      if (STRONG_NSFW_INDICATORS.has(normalizeTag(indicator))) {
+        return true;
+      }
+    }
+
+    return STRONG_NSFW_TEXT_PATTERN.test([result.description, safety.reason].join(' '));
+  }
+
+  private getDescriptionNsfwResult(result: ImageDescriptionResult): NsfwDetectionResult {
+    const labels: Record<string, number> = {};
+    for (const indicator of result.safety?.indicators ?? []) {
+      const normalized = normalizeTag(indicator);
+      if (normalized) {
+        labels[normalized] = 1;
+      }
+    }
+    return {
+      isNsfw: true,
+      score: 1,
+      labels,
+    };
   }
 
   private getNsfwTags(nsfw: NsfwDetectionResult) {
