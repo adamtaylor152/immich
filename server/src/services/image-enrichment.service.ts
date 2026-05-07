@@ -46,6 +46,7 @@ type EnrichmentTask<T> =
       result: T;
       appliedDescriptionHash?: string;
       appliedTagHash?: string;
+      appliedTagValues?: string[];
     }
   | {
       status: 'failed';
@@ -71,6 +72,29 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+const getGeneratedDescriptionBlock = (description: string) => {
+  const trimmed = description.trim();
+  return trimmed ? `${GENERATED_DESCRIPTION_PREFIX} ${trimmed}` : undefined;
+};
+
+const withoutGeneratedDescriptionBlocks = (description: string, generatedDescriptions: string[]) => {
+  const blocks = new Set(
+    generatedDescriptions
+      .map((generatedDescription) => getGeneratedDescriptionBlock(generatedDescription))
+      .filter((block): block is string => !!block),
+  );
+
+  if (blocks.size === 0) {
+    return description.trim();
+  }
+
+  return description
+    .split(/\n{2,}/)
+    .filter((part) => !blocks.has(part.trim()))
+    .join('\n\n')
+    .trim();
+};
 
 const normalizeTag = (tag: string) =>
   tag
@@ -122,7 +146,7 @@ export class ImageEnrichmentService extends BaseService {
 
         const changed = nsfw.review.isNsfw
           ? await this.applyNsfwTags(id, asset.ownerId, this.getStoredNsfw(metadata)!, metadata)
-          : await this.clearGeneratedTags(id, asset.ownerId, this.getNsfwTags(this.getStoredNsfw(metadata)!));
+          : await this.clearAppliedNsfwTags(id, asset.ownerId, metadata);
         await this.finalizeRepair(id, changed, metadata);
         break;
       }
@@ -140,11 +164,7 @@ export class ImageEnrichmentService extends BaseService {
         const nsfw = this.ensureManualNsfwMetadata(metadata, false);
         nsfw.review = this.getReview(auth, 'marked-safe', false);
         await this.saveEnrichmentMetadata(id, metadata);
-        const changed = await this.clearGeneratedTags(
-          id,
-          asset.ownerId,
-          this.getNsfwTags(this.getStoredNsfw(metadata)!),
-        );
+        const changed = await this.clearAppliedNsfwTags(id, asset.ownerId, metadata);
         await this.finalizeRepair(id, changed, metadata);
         break;
       }
@@ -159,10 +179,12 @@ export class ImageEnrichmentService extends BaseService {
         const changed = await this.clearGeneratedTags(id, asset.ownerId, this.getStoredGeneratedTags(metadata));
         if (metadata.description?.status === 'success') {
           delete metadata.description.appliedTagHash;
+          delete metadata.description.appliedTagValues;
           changed.metadata = true;
         }
         if (metadata.nsfwDetection?.status === 'success') {
           delete metadata.nsfwDetection.appliedTagHash;
+          delete metadata.nsfwDetection.appliedTagValues;
           changed.metadata = true;
         }
         await this.finalizeRepair(id, changed, metadata);
@@ -283,6 +305,12 @@ export class ImageEnrichmentService extends BaseService {
       const nsfw = isNsfwDetectionEnabled(machineLearning)
         ? await this.ensureNsfw(id, asset.previewFile, metadata)
         : this.getStoredNsfw(metadata);
+      const previousDescription =
+        metadata.description?.status === 'success' && metadata.description.appliedDescriptionHash
+          ? metadata.description.result.description
+          : undefined;
+      const previousTagValues =
+        metadata.description?.status === 'success' ? (metadata.description.appliedTagValues ?? []) : [];
       const result = await this.machineLearningRepository.describeImage(
         asset.previewFile,
         machineLearning.imageDescription,
@@ -304,6 +332,8 @@ export class ImageEnrichmentService extends BaseService {
         result,
         nsfw,
         metadata,
+        previousDescription,
+        previousTagValues,
       });
 
       if (changed.metadata) {
@@ -441,12 +471,9 @@ export class ImageEnrichmentService extends BaseService {
       return { visible: false, metadata: false };
     }
 
-    const block = `${GENERATED_DESCRIPTION_PREFIX} ${metadata.description.result.description.trim()}`;
-    const description = existingDescription
-      .split(/\n{2,}/)
-      .filter((part) => part.trim() !== block)
-      .join('\n\n')
-      .trim();
+    const description = withoutGeneratedDescriptionBlocks(existingDescription, [
+      metadata.description.result.description,
+    ]);
 
     const visible = description !== existingDescription.trim();
     if (visible) {
@@ -463,14 +490,14 @@ export class ImageEnrichmentService extends BaseService {
   private getStoredGeneratedTags(metadata: EnrichmentMetadata) {
     const tags = new Set<string>();
 
-    if (metadata.description?.status === 'success') {
-      for (const tag of this.getTags(metadata.description.result, this.getStoredNsfw(metadata))) {
+    if (metadata.description?.status === 'success' && metadata.description.appliedTagValues) {
+      for (const tag of metadata.description.appliedTagValues) {
         tags.add(tag);
       }
     }
 
-    if (metadata.nsfwDetection?.status === 'success') {
-      for (const tag of this.getNsfwTags(this.getStoredNsfw(metadata)!)) {
+    if (metadata.nsfwDetection?.status === 'success' && metadata.nsfwDetection.appliedTagValues) {
+      for (const tag of metadata.nsfwDetection.appliedTagValues) {
         tags.add(tag);
       }
     }
@@ -515,11 +542,17 @@ export class ImageEnrichmentService extends BaseService {
     metadata: EnrichmentMetadata,
   ) {
     const result = await this.machineLearningRepository.detectNsfw(previewFile, config);
+    const appliedTagHash =
+      metadata.nsfwDetection?.status === 'success' ? metadata.nsfwDetection.appliedTagHash : undefined;
+    const appliedTagValues =
+      metadata.nsfwDetection?.status === 'success' ? metadata.nsfwDetection.appliedTagValues : undefined;
     metadata.nsfwDetection = {
       status: 'success',
       modelName: config.modelName,
       updatedAt: new Date().toISOString(),
       result,
+      appliedTagHash,
+      appliedTagValues,
     };
     await this.saveEnrichmentMetadata(id, metadata);
     return result;
@@ -570,6 +603,8 @@ export class ImageEnrichmentService extends BaseService {
     result,
     nsfw,
     metadata,
+    previousDescription,
+    previousTagValues,
   }: {
     id: string;
     ownerId: string;
@@ -577,6 +612,8 @@ export class ImageEnrichmentService extends BaseService {
     result: ImageDescriptionResult;
     nsfw?: NsfwDetectionResult;
     metadata: EnrichmentMetadata;
+    previousDescription?: string;
+    previousTagValues: string[];
   }) {
     let visible = false;
     let metadataChanged = false;
@@ -587,9 +624,14 @@ export class ImageEnrichmentService extends BaseService {
       metadata.description?.status === 'success' &&
       metadata.description.appliedDescriptionHash !== descriptionHash
     ) {
-      const block = `${GENERATED_DESCRIPTION_PREFIX} ${result.description.trim()}`;
-      if (!existingDescription.includes(block)) {
-        const description = existingDescription.trim() ? `${existingDescription.trimEnd()}\n\n${block}` : block;
+      const block = getGeneratedDescriptionBlock(result.description);
+      const baseDescription = withoutGeneratedDescriptionBlocks(
+        existingDescription,
+        previousDescription ? [previousDescription] : [],
+      );
+
+      if (block && !baseDescription.includes(block)) {
+        const description = baseDescription ? `${baseDescription}\n\n${block}` : block;
         await this.assetRepository.upsertExif({
           exif: updateLockedColumns({ assetId: id, description }),
           lockedPropertiesBehavior: 'append',
@@ -602,15 +644,27 @@ export class ImageEnrichmentService extends BaseService {
 
     const tags = this.getTags(result, nsfw);
     const tagHash = hash(tags);
+    const descriptionMetadata = metadata.description?.status === 'success' ? metadata.description : undefined;
+    const hasStoredTagApplication =
+      !!descriptionMetadata?.appliedTagHash || !!descriptionMetadata?.appliedTagValues?.length;
     if (
-      tags.length > 0 &&
-      metadata.description?.status === 'success' &&
-      metadata.description.appliedTagHash !== tagHash
+      descriptionMetadata &&
+      (tags.length > 0 || hasStoredTagApplication) &&
+      descriptionMetadata.appliedTagHash !== tagHash
     ) {
-      const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
-      visible ||= tagsChanged;
+      const cleared = await this.clearGeneratedTags(id, ownerId, previousTagValues);
+      visible ||= cleared.visible;
 
-      metadata.description.appliedTagHash = tagHash;
+      if (tags.length > 0) {
+        const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
+        visible ||= tagsChanged.visible;
+
+        descriptionMetadata.appliedTagHash = tagHash;
+        descriptionMetadata.appliedTagValues = tagsChanged.appliedTagValues;
+      } else {
+        delete descriptionMetadata.appliedTagHash;
+        delete descriptionMetadata.appliedTagValues;
+      }
       metadataChanged = true;
     }
 
@@ -618,8 +672,12 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async applyNsfwTags(id: string, ownerId: string, nsfw: NsfwDetectionResult, metadata: EnrichmentMetadata) {
-    if (!nsfw.isNsfw || metadata.nsfwDetection?.status !== 'success') {
+    if (metadata.nsfwDetection?.status !== 'success') {
       return { visible: false, metadata: false };
+    }
+
+    if (!nsfw.isNsfw) {
+      return this.clearAppliedNsfwTags(id, ownerId, metadata);
     }
 
     const tags = this.getNsfwTags(nsfw);
@@ -628,9 +686,27 @@ export class ImageEnrichmentService extends BaseService {
       return { visible: false, metadata: false };
     }
 
-    const visible = await this.upsertAssetTags(id, ownerId, tags);
+    const cleared = await this.clearGeneratedTags(id, ownerId, metadata.nsfwDetection.appliedTagValues ?? []);
+    const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
     metadata.nsfwDetection.appliedTagHash = tagHash;
-    return { visible, metadata: true };
+    metadata.nsfwDetection.appliedTagValues = tagsChanged.appliedTagValues;
+    return { visible: cleared.visible || tagsChanged.visible, metadata: true };
+  }
+
+  private async clearAppliedNsfwTags(id: string, ownerId: string, metadata: EnrichmentMetadata) {
+    const changed = await this.clearGeneratedTags(
+      id,
+      ownerId,
+      metadata.nsfwDetection?.status === 'success' ? (metadata.nsfwDetection.appliedTagValues ?? []) : [],
+    );
+
+    if (metadata.nsfwDetection?.status === 'success') {
+      delete metadata.nsfwDetection.appliedTagHash;
+      delete metadata.nsfwDetection.appliedTagValues;
+      changed.metadata = true;
+    }
+
+    return changed;
   }
 
   private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult) {
@@ -666,14 +742,16 @@ export class ImageEnrichmentService extends BaseService {
     const upsertedTags = await upsertTags(this.tagRepository, { userId: ownerId, tags });
     const items: Insertable<TagAssetTable>[] = upsertedTags.map((tag) => ({ tagId: tag.id, assetId: id }));
     const results = await this.tagRepository.upsertAssetIds(items);
+    const insertedTagIds = new Set(results.map(({ tagId }) => tagId));
+    const appliedTagValues = upsertedTags.filter(({ id }) => insertedTagIds.has(id)).map(({ value }) => value);
 
     if (results.length === 0) {
-      return false;
+      return { visible: false, appliedTagValues };
     }
 
     await this.updateExifTags(id);
     await this.eventRepository.emit('AssetTag', { assetId: id });
-    return true;
+    return { visible: true, appliedTagValues };
   }
 
   private async updateExifTags(assetId: string) {

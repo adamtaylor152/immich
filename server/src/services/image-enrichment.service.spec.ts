@@ -226,6 +226,71 @@ describe(ImageEnrichmentService.name, () => {
     );
   });
 
+  it('should replace the previous generated description block on rerun', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: {
+        enabled: true,
+        nsfwDetection: { enabled: false },
+        imageDescription: { enabled: true, modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' },
+      },
+    });
+    mocks.assetJob.getForImageEnrichment.mockResolvedValue({
+      id: assetId,
+      ownerId,
+      type: AssetType.Image,
+      status: AssetStatus.Active,
+      deletedAt: null,
+      visibility: AssetVisibility.Timeline,
+      description: 'User note\n\nAI description: A dim kitchen.',
+      previewFile,
+    });
+    mocks.asset.getMetadataByKey.mockResolvedValue({
+      key: AssetMetadataKey.MlEnrichment,
+      updatedAt: new Date(),
+      value: {
+        description: {
+          status: 'success',
+          modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+          updatedAt: '2026-05-05T00:00:00.000Z',
+          appliedDescriptionHash: 'old-hash',
+          result: {
+            description: 'A dim kitchen.',
+            people: [],
+            environment: 'kitchen',
+            objects: [],
+            visible_text: [],
+            context: '',
+            tags: [],
+          },
+        },
+      },
+    });
+    mocks.machineLearning.describeImage.mockResolvedValue({
+      description: 'A bright kitchen with a wooden table.',
+      people: [],
+      environment: 'kitchen',
+      objects: ['table'],
+      visible_text: [],
+      context: 'indoor home photo',
+      tags: [],
+    });
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.asset.upsertExif).toHaveBeenCalledWith({
+      exif: expect.objectContaining({
+        assetId,
+        description: 'User note\n\nAI description: A bright kitchen with a wooden table.',
+      }),
+      lockedPropertiesBehavior: 'append',
+    });
+    expect(mocks.asset.upsertExif).not.toHaveBeenCalledWith({
+      exif: expect.objectContaining({ description: expect.stringContaining('A dim kitchen.') }),
+      lockedPropertiesBehavior: 'append',
+    });
+    expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
+  });
+
   it.each([
     ['trashed', AssetStatus.Trashed, new Date()] as const,
     ['deleted', AssetStatus.Deleted, new Date()] as const,
@@ -288,6 +353,7 @@ describe(ImageEnrichmentService.name, () => {
           modelName: 'onnx-community/nsfw_image_detection-ONNX',
           updatedAt: '2026-05-05T00:00:00.000Z',
           appliedTagHash: 'hash',
+          appliedTagValues: ['nsfw', 'explicit'],
           result: {
             isNsfw: true,
             score: 0.95,
@@ -341,6 +407,76 @@ describe(ImageEnrichmentService.name, () => {
     expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
   });
 
+  it('should clear previously applied NSFW tags when a rerun detects the asset as safe', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: {
+        enabled: true,
+        nsfwDetection: {
+          enabled: true,
+          modelName: 'onnx-community/nsfw_image_detection-ONNX',
+          threshold: 0.85,
+        },
+        imageDescription: { enabled: false },
+      },
+    });
+    mocks.asset.getMetadataByKey.mockResolvedValue({
+      key: AssetMetadataKey.MlEnrichment,
+      updatedAt: new Date(),
+      value: {
+        nsfwDetection: {
+          status: 'success',
+          modelName: 'onnx-community/nsfw_image_detection-ONNX',
+          updatedAt: '2026-05-05T00:00:00.000Z',
+          appliedTagHash: 'old-hash',
+          appliedTagValues: ['nsfw', 'explicit'],
+          result: {
+            isNsfw: true,
+            score: 0.95,
+            labels: { explicit: 0.95 },
+          },
+        },
+      },
+    });
+    mocks.machineLearning.detectNsfw.mockResolvedValue({
+      isNsfw: false,
+      score: 0.04,
+      labels: { normal: 0.96 },
+    });
+    mocks.asset.getForUpdateTags.mockResolvedValue({ tags: [{ value: 'beach' }] });
+    mocks.tag.getByValue
+      .mockResolvedValueOnce({
+        id: 'nsfw-id',
+        value: 'nsfw',
+        color: null,
+        parentId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .mockResolvedValueOnce({
+        id: 'explicit-id',
+        value: 'explicit',
+        color: null,
+        parentId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    await expect(sut.handleNsfwDetection({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.tag.removeAssetIds).toHaveBeenCalledWith('nsfw-id', [assetId]);
+    expect(mocks.tag.removeAssetIds).toHaveBeenCalledWith('explicit-id', [assetId]);
+    expect(mocks.asset.upsertExif).toHaveBeenCalledWith({
+      exif: expect.objectContaining({ assetId, tags: ['beach'] }),
+      lockedPropertiesBehavior: 'append',
+    });
+    const lastCall = mocks.asset.upsertMetadata.mock.calls[mocks.asset.upsertMetadata.mock.calls.length - 1];
+    const saved = lastCall[1][0].value as { nsfwDetection: Record<string, unknown> };
+    expect(saved.nsfwDetection.result).toEqual(expect.objectContaining({ isNsfw: false }));
+    expect(saved.nsfwDetection).not.toHaveProperty('appliedTagHash');
+    expect(saved.nsfwDetection).not.toHaveProperty('appliedTagValues');
+    expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
+  });
+
   it('should clear generated description without removing user text', async () => {
     mocks.asset.getById.mockResolvedValue({
       id: assetId,
@@ -390,5 +526,49 @@ describe(ImageEnrichmentService.name, () => {
       ]),
     );
     expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
+  });
+
+  it('should not remove manually-authored tags when clearing generated tags without provenance', async () => {
+    mocks.asset.getById.mockResolvedValue({
+      id: assetId,
+      ownerId,
+      exifInfo: { description: '' },
+      tags: [],
+    } as never);
+    mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    mocks.asset.getMetadataByKey.mockResolvedValue({
+      key: AssetMetadataKey.MlEnrichment,
+      updatedAt: new Date(),
+      value: {
+        description: {
+          status: 'success',
+          modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+          updatedAt: '2026-05-05T00:00:00.000Z',
+          appliedTagHash: 'hash',
+          appliedTagValues: [],
+          result: {
+            description: '',
+            people: [],
+            environment: '',
+            objects: [],
+            visible_text: [],
+            context: '',
+            tags: ['Beach'],
+          },
+        },
+      },
+    });
+
+    await sut.updateAssetEnrichment(authStub.admin, assetId, {
+      action: AssetImageEnrichmentAction.ClearGeneratedTags,
+    });
+
+    expect(mocks.tag.getByValue).not.toHaveBeenCalled();
+    expect(mocks.tag.removeAssetIds).not.toHaveBeenCalled();
+    const lastCall = mocks.asset.upsertMetadata.mock.calls[mocks.asset.upsertMetadata.mock.calls.length - 1];
+    const saved = lastCall[1][0].value as { description: Record<string, unknown> };
+    expect(saved.description).not.toHaveProperty('appliedTagHash');
+    expect(saved.description).not.toHaveProperty('appliedTagValues');
+    expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
   });
 });
