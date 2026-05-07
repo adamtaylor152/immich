@@ -26,6 +26,7 @@ from immich_ml.models.clip.textual import MClipTextualEncoder, OpenClipTextualEn
 from immich_ml.models.clip.visual import OpenClipVisualEncoder
 from immich_ml.models.facial_recognition.detection import FaceDetector
 from immich_ml.models.facial_recognition.recognition import FaceRecognizer
+from immich_ml.models.image_description import ImageDescriptionModel
 from immich_ml.models.ocr.detection import TextDetector
 from immich_ml.models.ocr.recognition import TextRecognizer
 from immich_ml.models.ocr.schemas import OcrOptions
@@ -173,6 +174,25 @@ class TestBase:
 
         snapshot_download.assert_called_once()
         ort_session.assert_not_called()
+
+
+class TestImageDescriptionModel:
+    def test_uses_openvino_alias_for_openvino(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+
+        assert model.hf_model_name == "llmware/qwen2.5-vl-3b-ov"
+
+    def test_keeps_huggingface_model_for_cuda(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+
+        assert model.hf_model_name == "Qwen/Qwen2.5-VL-3B-Instruct"
+
+    def test_auto_uses_cuda_backend_when_available(self, monkeypatch: MonkeyPatch) -> None:
+        monkeypatch.setattr(ImageDescriptionModel, "_cuda_available", lambda _: True)
+
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="auto")
+
+        assert model.acceleration == "cuda"
 
 
 @pytest.mark.usefixtures("ort_session")
@@ -1050,6 +1070,26 @@ class TestCache:
         )
         assert len(model_cache.cache._cache) == 2
 
+    async def test_different_image_description_acceleration(self, mock_get_model: mock.Mock) -> None:
+        model_cache = ModelCache()
+        await model_cache.get(
+            "Qwen/Qwen2.5-VL-3B-Instruct",
+            ModelType.VISUAL,
+            ModelTask.IMAGE_DESCRIPTION,
+            acceleration="openvino",
+            device="AUTO",
+        )
+        await model_cache.get(
+            "Qwen/Qwen2.5-VL-3B-Instruct",
+            ModelType.VISUAL,
+            ModelTask.IMAGE_DESCRIPTION,
+            acceleration="cuda",
+            device="AUTO",
+        )
+
+        assert len(model_cache.cache._cache) == 2
+        assert mock_get_model.call_count == 2
+
     @mock.patch("immich_ml.models.cache.OptimisticLock", autospec=True)
     async def test_model_ttl(self, mock_lock_cls: mock.Mock, mock_get_model: mock.Mock) -> None:
         model_cache = ModelCache()
@@ -1288,6 +1328,40 @@ def test_ping_endpoint(deployed_app: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.text == "pong"
+
+
+def test_hardware_endpoint_reports_cuda(deployed_app: TestClient, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "immich_ml.main.ort.get_available_providers",
+        lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    monkeypatch.setattr("immich_ml.main._torch_cuda_info", lambda: (True, 1))
+
+    response = deployed_app.get("http://localhost:3003/hardware")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "openvinoDeviceIds": [],
+        "torchCudaAvailable": True,
+        "cudaDeviceCount": 1,
+        "preferredAcceleration": "cuda",
+    }
+
+
+def test_hardware_endpoint_reports_openvino(deployed_app: TestClient, monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "immich_ml.main.ort.get_available_providers",
+        lambda: ["OpenVINOExecutionProvider", "CPUExecutionProvider"],
+    )
+    monkeypatch.setattr("immich_ml.main._openvino_device_ids", lambda _: ["GPU.0", "CPU"])
+    monkeypatch.setattr("immich_ml.main._torch_cuda_info", lambda: (False, 0))
+
+    response = deployed_app.get("http://localhost:3003/hardware")
+
+    assert response.status_code == 200
+    assert response.json()["preferredAcceleration"] == "openvino"
+    assert response.json()["openvinoDeviceIds"] == ["GPU.0", "CPU"]
 
 
 @pytest.mark.skipif(

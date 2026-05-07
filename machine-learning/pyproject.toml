@@ -48,7 +48,12 @@ dev = ["locust>=2.15.1", { include-group = "test" }, { include-group = "lint" }]
 
 [project.optional-dependencies]
 cpu = ["onnxruntime>=1.23.2,<2"]
-cuda = ["onnxruntime-gpu>=1.23.2,<2"]
+cuda = [
+    "onnxruntime-gpu>=1.23.2,<2",
+    "qwen-vl-utils>=0.0.11,<1",
+    "torch>=2.5,<2.6",
+    "transformers>=5,<6",
+]
 openvino = ["onnxruntime-openvino>=1.24.1,<2", "openvino-genai>=2025.4,<2027"]
 armnn = ["onnxruntime>=1.23.2,<2"]
 rknn = ["onnxruntime>=1.23.2,<2", "rknn-toolkit-lite2>=2.3.0,<3"]

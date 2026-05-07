@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { MachineLearningHardwareAcceleration, MachineLearningHardwareAccelerationSchema } from 'src/enum';
 import z from 'zod';
 
 const TaskConfigSchema = z
@@ -55,8 +56,11 @@ export const OcrConfigSchema = ModelConfigSchema.extend({
 }).meta({ id: 'OcrConfig' });
 
 export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
+  acceleration: MachineLearningHardwareAccelerationSchema.default(MachineLearningHardwareAcceleration.Auto).describe(
+    'Hardware acceleration backend to use',
+  ),
   fallbackModelName: z.string().describe('Name of the fallback model to use'),
-  device: z.string().describe('OpenVINO device to use'),
+  device: z.string().describe('Hardware device to use'),
 }).meta({ id: 'ImageDescriptionConfig' });
 
 export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({
@@ -66,7 +70,7 @@ export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({
     .min(0.01)
     .max(1)
     .describe('Minimum score required to mark an image as NSFW'),
-  device: z.string().describe('OpenVINO device to use'),
+  device: z.string().describe('Hardware device to use'),
   hideFromLibrary: z
     .boolean()
     .describe('Hide NSFW assets from library views unless the session has PIN-elevated access'),

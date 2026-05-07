@@ -54,6 +54,13 @@ describe(SystemConfigController.name, () => {
     });
   });
 
+  describe('GET /system-config/machine-learning/hardware', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/system-config/machine-learning/hardware');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
+
   describe('PUT /system-config', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).put('/system-config');

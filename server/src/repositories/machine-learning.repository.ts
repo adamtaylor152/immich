@@ -3,6 +3,7 @@ import { Duration } from 'luxon';
 import { readFile } from 'node:fs/promises';
 import { MachineLearningConfig } from 'src/config';
 import { CLIPConfig } from 'src/dtos/model-config.dto';
+import { MachineLearningHardwareAcceleration } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 
 export interface BoundingBox {
@@ -41,6 +42,7 @@ export type OcrOptions = ModelOptions & {
   maxResolution: number;
 };
 export type ImageDescriptionOptions = ModelOptions & {
+  acceleration: MachineLearningHardwareAcceleration;
   fallbackModelName: string;
   device: string;
 };
@@ -95,6 +97,7 @@ export type ImageDescriptionRequest = {
   [ModelTask.IMAGE_DESCRIPTION]: {
     [ModelType.VISUAL]: ModelOptions & {
       options: {
+        acceleration: MachineLearningHardwareAcceleration;
         device: string;
         nsfw?: NsfwDetectionResult;
       };
@@ -133,6 +136,22 @@ export type MachineLearningRequest =
   | ImageDescriptionRequest
   | NsfwDetectionRequest;
 export type TextEncodingOptions = ModelOptions & { language?: string };
+
+export type MachineLearningHardwareResponse = {
+  providers: string[];
+  openvinoDeviceIds: string[];
+  torchCudaAvailable: boolean;
+  cudaDeviceCount: number;
+  preferredAcceleration: MachineLearningHardwareAcceleration;
+};
+
+const defaultMachineLearningHardware: MachineLearningHardwareResponse = {
+  providers: [],
+  openvinoDeviceIds: [],
+  torchCudaAvailable: false,
+  cudaDeviceCount: 0,
+  preferredAcceleration: MachineLearningHardwareAcceleration.Auto,
+};
 
 @Injectable()
 export class MachineLearningRepository {
@@ -288,12 +307,12 @@ export class MachineLearningRepository {
 
   async describeImage(
     imagePath: string,
-    { modelName, fallbackModelName, device }: ImageDescriptionOptions,
+    { modelName, acceleration, fallbackModelName, device }: ImageDescriptionOptions,
     nsfw?: NsfwDetectionResult,
   ) {
     const request = {
       [ModelTask.IMAGE_DESCRIPTION]: {
-        [ModelType.VISUAL]: { modelName, options: { device, nsfw } },
+        [ModelType.VISUAL]: { modelName, options: { acceleration, device, nsfw } },
       },
     };
 
@@ -310,7 +329,7 @@ export class MachineLearningRepository {
       );
       const fallbackRequest = {
         [ModelTask.IMAGE_DESCRIPTION]: {
-          [ModelType.VISUAL]: { modelName: fallbackModelName, options: { device, nsfw } },
+          [ModelType.VISUAL]: { modelName: fallbackModelName, options: { acceleration, device, nsfw } },
         },
       };
       const response = await this.predict<ImageDescriptionResponse>({ imagePath }, fallbackRequest);
@@ -326,6 +345,35 @@ export class MachineLearningRepository {
     };
     const response = await this.predict<NsfwDetectionResponse>({ imagePath }, request);
     return response[ModelTask.NSFW_DETECTION];
+  }
+
+  async getHardware(): Promise<MachineLearningHardwareResponse> {
+    for (const url of [
+      ...this.config.urls.filter((url) => this.isHealthy(url)),
+      ...this.config.urls.filter((url) => !this.isHealthy(url)),
+    ]) {
+      try {
+        const response = await fetch(new URL('/hardware', url), {
+          signal: AbortSignal.timeout(this.config.availabilityChecks.timeout),
+        });
+        if (response.ok) {
+          this.setHealthy(url, true);
+          return response.json();
+        }
+
+        this.logger.warn(
+          `Machine learning hardware request to "${url}" failed with status ${response.status}: ${response.statusText}`,
+        );
+      } catch (error: Error | unknown) {
+        this.logger.warn(
+          `Machine learning hardware request to "${url}" failed: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+
+      this.setHealthy(url, false);
+    }
+
+    return defaultMachineLearningHardware;
   }
 
   private async getFormData(payload: ModelPayload, config: MachineLearningRequest): Promise<FormData> {

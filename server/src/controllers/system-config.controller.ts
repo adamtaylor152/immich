@@ -1,7 +1,11 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
-import { SystemConfigDto, SystemConfigTemplateStorageOptionDto } from 'src/dtos/system-config.dto';
+import {
+  MachineLearningHardwareResponseDto,
+  SystemConfigDto,
+  SystemConfigTemplateStorageOptionDto,
+} from 'src/dtos/system-config.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Authenticated } from 'src/middleware/auth.guard';
 import { StorageTemplateService } from 'src/services/storage-template.service';
@@ -35,6 +39,17 @@ export class SystemConfigController {
   })
   getConfigDefaults(): SystemConfigDto {
     return this.service.getDefaults();
+  }
+
+  @Get('machine-learning/hardware')
+  @Authenticated({ permission: Permission.SystemConfigRead, admin: true })
+  @Endpoint({
+    summary: 'Get machine learning hardware',
+    description: 'Retrieve available hardware acceleration providers from the machine learning service.',
+    history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
+  })
+  getMachineLearningHardware(): Promise<MachineLearningHardwareResponseDto> {
+    return this.service.getMachineLearningHardware();
   }
 
   @Put()

@@ -68,9 +68,9 @@
               {disabled}
               label={$t('admin.job_concurrency', { values: { job: queueTitles[queueName] } })}
               description=""
-              bind:value={configToEdit.job[queueName].concurrency}
+              bind:value={configToEdit.job[queueName]!.concurrency}
               required={true}
-              isEdited={!(configToEdit.job[queueName].concurrency == config.job[queueName].concurrency)}
+              isEdited={!(configToEdit.job[queueName]!.concurrency == config.job[queueName]!.concurrency)}
             />
           {:else}
             <SettingInputField

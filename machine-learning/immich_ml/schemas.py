@@ -54,6 +54,12 @@ class ModelPrecision(StrEnum):
     FP32 = "FP32"
 
 
+class ImageDescriptionAcceleration(StrEnum):
+    AUTO = "auto"
+    OPENVINO = "openvino"
+    CUDA = "cuda"
+
+
 ModelIdentity = tuple[ModelType, ModelTask]
 
 

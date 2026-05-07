@@ -90,6 +90,17 @@ export const ImageEnrichmentFilterSchema = z
   .describe('Filter by private image enrichment state')
   .meta({ id: 'ImageEnrichmentFilter' });
 
+export enum MachineLearningHardwareAcceleration {
+  Auto = 'auto',
+  OpenVino = 'openvino',
+  Cuda = 'cuda',
+}
+
+export const MachineLearningHardwareAccelerationSchema = z
+  .enum(MachineLearningHardwareAcceleration)
+  .describe('Machine learning hardware acceleration backend')
+  .meta({ id: 'MachineLearningHardwareAcceleration' });
+
 export enum MemoryType {
   /** pictures taken on this day X years ago */
   OnThisDay = 'on_this_day',

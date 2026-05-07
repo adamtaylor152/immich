@@ -105,7 +105,10 @@ Descriptions and tags are applied after the private model result is stored:
 
 NSFW detection is an ONNX Runtime task. It can use CUDA in the CUDA machine-learning image and OpenVINO in the OpenVINO machine-learning image.
 
-Description and tag generation currently uses OpenVINO GenAI. For CUDA deployments, changing the description model setting alone is not enough; a CUDA-capable VLM backend must be added first. Good model names to expose after adding such a backend are:
+Description and tag generation has two hardware profiles in the admin machine-learning settings:
+
+- `Intel iGPU (OpenVINO)` uses OpenVINO GenAI and maps the admin-facing `Qwen/Qwen2.5-VL-3B-Instruct` setting to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model.
+- `NVIDIA GPU (CUDA)` uses Transformers/PyTorch with the CUDA machine-learning image.
 
 | Use case                             | Model name                     |
 | ------------------------------------ | ------------------------------ |
@@ -114,4 +117,4 @@ Description and tag generation currently uses OpenVINO GenAI. For CUDA deploymen
 
 For Intel iGPU deployments, use the OpenVINO machine-learning image/extra and keep the description device at `AUTO` unless you need to pin it. `AUTO` lets OpenVINO choose the best available device and fall back when the GPU is unavailable.
 
-For NVIDIA deployments, CUDA continues to accelerate existing ONNX tasks such as Smart Search, facial recognition, OCR, duplicate detection, and NSFW detection. Description/tag generation needs a CUDA-capable VLM backend before it can run on NVIDIA GPUs.
+For NVIDIA deployments, use the CUDA machine-learning image/extra and select the NVIDIA hardware profile. `AUTO` uses the first available CUDA device for description/tag generation, while ONNX Runtime continues to use `CUDAExecutionProvider` for Smart Search, facial recognition, OCR, duplicate detection, and NSFW detection.

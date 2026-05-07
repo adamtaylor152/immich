@@ -2538,7 +2538,9 @@ export type FacialRecognitionConfig = {
     modelName: string;
 };
 export type ImageDescriptionConfig = {
-    /** OpenVINO device to use */
+    /** Hardware acceleration backend to use */
+    acceleration?: MachineLearningHardwareAcceleration;
+    /** Hardware device to use */
     device: string;
     /** Whether the task is enabled */
     enabled: boolean;
@@ -2548,7 +2550,7 @@ export type ImageDescriptionConfig = {
     modelName: string;
 };
 export type NsfwDetectionConfig = {
-    /** OpenVINO device to use */
+    /** Hardware device to use */
     device: string;
     /** Whether the task is enabled */
     enabled: boolean;
@@ -2734,6 +2736,18 @@ export type SystemConfigDto = {
     theme: SystemConfigThemeDto;
     trash: SystemConfigTrashDto;
     user: SystemConfigUserDto;
+};
+export type MachineLearningHardwareResponseDto = {
+    /** Available PyTorch CUDA device count */
+    cudaDeviceCount: number;
+    /** Available OpenVINO device IDs */
+    openvinoDeviceIds: string[];
+    /** Detected preferred hardware acceleration */
+    preferredAcceleration: MachineLearningHardwareAcceleration;
+    /** Available ONNX Runtime providers */
+    providers: string[];
+    /** Whether PyTorch CUDA is available */
+    torchCudaAvailable: boolean;
 };
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
@@ -6296,6 +6310,17 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Get machine learning hardware
+ */
+export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MachineLearningHardwareResponseDto;
+    }>("/system-config/machine-learning/hardware", {
+        ...opts
+    }));
+}
+/**
  * Get storage template options
  */
 export function getStorageTemplateOptions(opts?: Oazapfts.RequestOpts) {
@@ -7490,6 +7515,11 @@ export enum LogLevel {
     Warn = "warn",
     Error = "error",
     Fatal = "fatal"
+}
+export enum MachineLearningHardwareAcceleration {
+    Auto = "auto",
+    Openvino = "openvino",
+    Cuda = "cuda"
 }
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
