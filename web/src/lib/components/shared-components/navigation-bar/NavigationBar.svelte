@@ -5,6 +5,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { clickOutside } from '$lib/actions/click-outside';
+  import ElevatedSessionToggle from '$lib/components/shared-components/navigation-bar/ElevatedSessionToggle.svelte';
   import NotificationPanel from '$lib/components/shared-components/navigation-bar/NotificationPanel.svelte';
   import SearchBar from '$lib/components/shared-components/search-bar/SearchBar.svelte';
   import SkipLink from '$lib/elements/SkipLink.svelte';
@@ -103,6 +104,7 @@
         {/if}
 
         {#if !page.url.pathname.includes('/admin') && onUploadClick}
+          <ElevatedSessionToggle />
           <Button
             leadingIcon={mdiTrayArrowUp}
             onclick={onUploadClick}
