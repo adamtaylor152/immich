@@ -91,18 +91,76 @@ where
                 where
                   asset_metadata."assetId" = "hidden_content_asset"."id"
                   and asset_metadata.key = $2
-                  and coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                    )::boolean,
-                    false
-                  ) = true
+                  and case
+                    when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
+                      (
+                        asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
+                      )::boolean,
+                      false
+                    )
+                    else coalesce(
+                      (
+                        asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
+                      )::boolean,
+                      (
+                        asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
+                      )::boolean,
+                      false
+                    )
+                    or (
+                      coalesce(
+                        (
+                          asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
+                        )::boolean,
+                        false
+                      )
+                      and lower(
+                        coalesce(
+                          asset_metadata.value #>> '{description,result,safety,confidence}',
+                          ''
+                        )
+                      ) = 'high'
+                      and (
+                        exists (
+                          select
+                            1
+                          from
+                            jsonb_array_elements_text(
+                              coalesce(
+                                asset_metadata.value #> '{description,result,safety,indicators}',
+                                '[]'::jsonb
+                              )
+                            ) as indicator (value)
+                          where
+                            lower(
+                              regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
+                            ) = any (
+                              array[
+                                $3,
+                                $4,
+                                $5,
+                                $6,
+                                $7,
+                                $8,
+                                $9,
+                                $10,
+                                $11,
+                                $12,
+                                $13,
+                                $14,
+                                $15,
+                                $16,
+                                $17
+                              ]::text[]
+                            )
+                        )
+                        or coalesce(
+                          asset_metadata.value #>> '{description,result,description}',
+                          ''
+                        ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
+                      )
+                    )
+                  end = true
               )
             )
         )
