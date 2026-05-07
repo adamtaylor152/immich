@@ -114,6 +114,7 @@ export class TimelineManager extends VirtualScrollManager {
     this.#unsubscribes.push(
       eventManager.on({
         AssetUpdate: (asset: AssetResponseDto) => this.#updateAssets([toTimelineAsset(asset)]),
+        SessionAccessChanged: () => void this.refresh(),
       }),
     );
   }
@@ -270,6 +271,22 @@ export class TimelineManager extends VirtualScrollManager {
     try {
       await this.initTask.reset();
       await this.#init(options);
+      this.updateViewportGeometry(false);
+      this.#createScrubberMonths();
+    } finally {
+      this.suspendTransitions = false;
+    }
+  }
+
+  async refresh() {
+    if (this.#options === TimelineManager.#INIT_OPTIONS || this.#options.deferInit) {
+      return;
+    }
+
+    this.suspendTransitions = true;
+    try {
+      await this.initTask.reset();
+      await this.#init(this.#options);
       this.updateViewportGeometry(false);
       this.#createScrubberMonths();
     } finally {
