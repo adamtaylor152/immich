@@ -56,6 +56,7 @@ NSFW content, use conservative tags such as nsfw_review rather than explicit age
 OPENVINO_MODEL_ALIASES = {
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
 }
+OPENVINO_MAX_IMAGE_EDGE = 1024
 QWEN_OPENVINO_IMAGE_TAG = "<|vision_start|><|image_pad|><|vision_end|>"
 
 FLORENCE_MODEL_NAMES = {
@@ -329,6 +330,8 @@ class ImageDescriptionModel(InferenceModel):
         from openvino import Tensor
 
         rgb = image.convert("RGB")
+        if max(rgb.size) > OPENVINO_MAX_IMAGE_EDGE:
+            rgb.thumbnail((OPENVINO_MAX_IMAGE_EDGE, OPENVINO_MAX_IMAGE_EDGE), Image.Resampling.LANCZOS)
         image_data = np.asarray(rgb, dtype=np.uint8)[None]
         return Tensor(image_data)
 

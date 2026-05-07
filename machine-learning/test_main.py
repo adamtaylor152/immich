@@ -210,6 +210,20 @@ class TestImageDescriptionModel:
         assert tensors[0].shape == (1, 2, 3, 3)
         assert tensors[0].dtype == np.uint8
 
+    def test_resizes_large_openvino_images(self, monkeypatch: MonkeyPatch) -> None:
+        tensors: list[np.ndarray] = []
+
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                tensors.append(data)
+
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+        model._to_openvino_tensor(Image.new("RGB", (2000, 1000), (1, 2, 3)))
+
+        assert tensors[0].shape == (1, 512, 1024, 3)
+
     def test_adds_qwen_image_tag_to_openvino_prompt(self) -> None:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
 
