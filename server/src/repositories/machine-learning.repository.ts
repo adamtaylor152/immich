@@ -153,6 +153,8 @@ const defaultMachineLearningHardware: MachineLearningHardwareResponse = {
   preferredAcceleration: MachineLearningHardwareAcceleration.Auto,
 };
 
+const isFlorenceImageDescriptionModel = (modelName: string) => modelName.startsWith('microsoft/Florence-2-');
+
 @Injectable()
 export class MachineLearningRepository {
   private healthyMap: Record<string, boolean> = {};
@@ -321,6 +323,16 @@ export class MachineLearningRepository {
       return response[ModelTask.IMAGE_DESCRIPTION];
     } catch (error) {
       if (!fallbackModelName || fallbackModelName === modelName) {
+        throw error;
+      }
+
+      if (
+        acceleration !== MachineLearningHardwareAcceleration.Cuda &&
+        isFlorenceImageDescriptionModel(fallbackModelName)
+      ) {
+        this.logger.warn(
+          `Image description model '${modelName}' failed; not retrying with fallback model '${fallbackModelName}' because Florence models require CUDA acceleration.`,
+        );
         throw error;
       }
 
