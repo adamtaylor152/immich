@@ -189,9 +189,57 @@ jobs:
       build-args: |
         DEVICE=cpu
 
+  latest-server:
+    name: Tag Server Latest
+    needs: [server, retag_server]
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main') && (needs.server.result == 'success' || needs.retag_server.result == 'success') }}
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag latest image
+        env:
+          REGISTRY_NAME: 'ghcr.io'
+          REPOSITORY: ${{ github.repository_owner }}/immich-server
+          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || 'main' }}
+        run: |
+          docker buildx imagetools create -t "${REGISTRY_NAME}/${REPOSITORY}:latest" "${REGISTRY_NAME}/${REPOSITORY}:${SOURCE_TAG}"
+
+  latest-ml:
+    name: Tag ML Latest
+    needs: [machine-learning, machine-learning-rocm, retag_ml]
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main') && (needs.machine-learning.result == 'success' || needs.retag_ml.result == 'success') }}
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag latest image
+        env:
+          REGISTRY_NAME: 'ghcr.io'
+          REPOSITORY: ${{ github.repository_owner }}/immich-machine-learning
+          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || 'main' }}
+        run: |
+          docker buildx imagetools create -t "${REGISTRY_NAME}/${REPOSITORY}:latest" "${REGISTRY_NAME}/${REPOSITORY}:${SOURCE_TAG}"
+
   success-check-server:
     name: Docker Build & Push Server Success
-    needs: [server, retag_server]
+    needs: [server, retag_server, latest-server]
     permissions: {}
     runs-on: ubuntu-latest
     if: always()
@@ -202,7 +250,7 @@ jobs:
 
   success-check-ml:
     name: Docker Build & Push ML Success
-    needs: [machine-learning, machine-learning-rocm, retag_ml]
+    needs: [machine-learning, machine-learning-rocm, retag_ml, latest-ml]
     permissions: {}
     runs-on: ubuntu-latest
     if: always()

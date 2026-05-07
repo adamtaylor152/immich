@@ -61,6 +61,7 @@ jobs:
           provenance: false
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ env.SOURCE_SHA }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -107,6 +108,7 @@ jobs:
           provenance: false
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.ML_IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ env.SOURCE_SHA }}-openvino
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
