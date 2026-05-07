@@ -38,7 +38,10 @@ class ModelCache:
     async def get(
         self, model_name: str, model_type: ModelType, model_task: ModelTask, **model_kwargs: Any
     ) -> InferenceModel:
-        key = f"{model_name}{model_type}{model_task}{model_kwargs.get('device', '')}"
+        key = (
+            f"{model_name}{model_type}{model_task}{model_kwargs.get('device', '')}"
+            f"{model_kwargs.get('acceleration', '')}"
+        )
 
         async with OptimisticLock(self.cache, key) as lock:
             model: InferenceModel | None = await self.cache.get(key)

@@ -15,6 +15,7 @@ import {
   CQModeSchema,
   ImageFormatSchema,
   LogLevelSchema,
+  MachineLearningHardwareAccelerationSchema,
   OAuthTokenEndpointAuthMethodSchema,
   ToneMappingSchema,
   TranscodeHardwareAccelerationSchema,
@@ -102,9 +103,9 @@ const SystemConfigJobSchema = z
     library: JobSettingsSchema,
     notifications: JobSettingsSchema,
     ocr: JobSettingsSchema,
-    imageEnrichment: JobSettingsSchema.optional().default(defaults.job.imageEnrichment),
-    imageDescription: JobSettingsSchema.optional().default(defaults.job.imageDescription),
-    nsfwDetection: JobSettingsSchema.optional().default(defaults.job.nsfwDetection),
+    imageEnrichment: JobSettingsSchema.default(defaults.job.imageEnrichment),
+    imageDescription: JobSettingsSchema.default(defaults.job.imageDescription),
+    nsfwDetection: JobSettingsSchema.default(defaults.job.nsfwDetection),
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
   })
@@ -140,6 +141,18 @@ const MachineLearningAvailabilityChecksSchema = z
   })
   .meta({ id: 'MachineLearningAvailabilityChecksDto' });
 
+const MachineLearningHardwareResponseSchema = z
+  .object({
+    providers: z.array(z.string()).describe('Available ONNX Runtime providers'),
+    openvinoDeviceIds: z.array(z.string()).describe('Available OpenVINO device IDs'),
+    torchCudaAvailable: z.boolean().describe('Whether PyTorch CUDA is available'),
+    cudaDeviceCount: z.int().min(0).describe('Available PyTorch CUDA device count'),
+    preferredAcceleration: MachineLearningHardwareAccelerationSchema.describe(
+      'Detected preferred hardware acceleration',
+    ),
+  })
+  .meta({ id: 'MachineLearningHardwareResponseDto' });
+
 const SystemConfigMachineLearningSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
@@ -149,8 +162,8 @@ const SystemConfigMachineLearningSchema = z
     duplicateDetection: DuplicateDetectionConfigSchema,
     facialRecognition: FacialRecognitionConfigSchema,
     ocr: OcrConfigSchema,
-    imageDescription: ImageDescriptionConfigSchema.optional().default(defaults.machineLearning.imageDescription),
-    nsfwDetection: NsfwDetectionConfigSchema.optional().default(defaults.machineLearning.nsfwDetection),
+    imageDescription: ImageDescriptionConfigSchema.default(defaults.machineLearning.imageDescription),
+    nsfwDetection: NsfwDetectionConfigSchema.default(defaults.machineLearning.nsfwDetection),
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });
 
@@ -386,6 +399,7 @@ export const SystemConfigSchema = z
   .meta({ id: 'SystemConfigDto' });
 
 export class SystemConfigFFmpegDto extends createZodDto(SystemConfigFFmpegSchema) {}
+export class MachineLearningHardwareResponseDto extends createZodDto(MachineLearningHardwareResponseSchema) {}
 export class SystemConfigSmtpDto extends createZodDto(SystemConfigSmtpSchema) {}
 export class SystemConfigTemplateStorageOptionDto extends createZodDto(SystemConfigTemplateStorageOptionSchema) {}
 export class SystemConfigDto extends createZodDto(SystemConfigSchema) {}

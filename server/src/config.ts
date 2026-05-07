@@ -5,6 +5,7 @@ import {
   CQMode,
   ImageFormat,
   LogLevel,
+  MachineLearningHardwareAcceleration,
   OAuthTokenEndpointAuthMethod,
   QueueName,
   ToneMapping,
@@ -83,6 +84,7 @@ export type SystemConfig = {
     };
     imageDescription: {
       enabled: boolean;
+      acceleration: MachineLearningHardwareAcceleration;
       modelName: string;
       fallbackModelName: string;
       device: string;
@@ -293,6 +295,7 @@ export const defaults = Object.freeze<SystemConfig>({
     },
     imageDescription: {
       enabled: false,
+      acceleration: MachineLearningHardwareAcceleration.Auto,
       modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
       fallbackModelName: 'microsoft/Florence-2-base-ft',
       device: 'AUTO',

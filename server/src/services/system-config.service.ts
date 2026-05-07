@@ -5,6 +5,7 @@ import { OnEvent } from 'src/decorators';
 import { mapConfig, SystemConfigDto } from 'src/dtos/system-config.dto';
 import { BootstrapEventPriority } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
+import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
 import { BaseService } from 'src/services/base.service';
 import { clearConfigCache } from 'src/utils/config';
 import { toPlainObject } from 'src/utils/object';
@@ -29,6 +30,10 @@ export class SystemConfigService extends BaseService {
 
   getDefaults(): SystemConfigDto {
     return mapConfig(defaults);
+  }
+
+  getMachineLearningHardware(): Promise<MachineLearningHardwareResponse> {
+    return this.machineLearningRepository.getHardware();
   }
 
   @OnEvent({ name: 'ConfigInit', priority: -100 })

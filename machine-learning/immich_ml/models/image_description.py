@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,7 +11,7 @@ from PIL import Image
 
 from immich_ml.config import log
 from immich_ml.models.base import InferenceModel
-from immich_ml.schemas import ModelTask, ModelType
+from immich_ml.schemas import ImageDescriptionAcceleration, ModelTask, ModelType
 
 IMAGE_DESCRIPTION_PROMPT = """You are generating a concise searchable image record from computer vision outputs.
 
@@ -52,8 +53,15 @@ reasons in the description and tags, such as nudity, naked, sex, explicit, or ns
 NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.
 """
 
-MODEL_ALIASES = {
+OPENVINO_MODEL_ALIASES = {
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
+}
+
+FLORENCE_MODEL_NAMES = {
+    "microsoft/Florence-2-base",
+    "microsoft/Florence-2-base-ft",
+    "microsoft/Florence-2-large",
+    "microsoft/Florence-2-large-ft",
 }
 
 
@@ -62,12 +70,18 @@ class ImageDescriptionModel(InferenceModel):
     identity = (ModelType.VISUAL, ModelTask.IMAGE_DESCRIPTION)
 
     def __init__(self, model_name: str, **model_kwargs: Any) -> None:
-        self.hf_model_name = MODEL_ALIASES.get(model_name, model_name)
+        self.requested_acceleration = self._acceleration(model_kwargs.get("acceleration"))
+        self.acceleration = self._resolve_acceleration(self.requested_acceleration)
+        self.hf_model_name = self._model_name_for_acceleration(model_name, self.acceleration)
         self.device = str(model_kwargs.get("device", "AUTO") or "AUTO")
         self.nsfw = model_kwargs.get("nsfw")
         super().__init__(model_name, **model_kwargs)
 
     def configure(self, **kwargs: Any) -> None:
+        if "acceleration" in kwargs:
+            acceleration = self._resolve_acceleration(self._acceleration(kwargs["acceleration"]))
+            if acceleration != self.acceleration:
+                log.warning("Ignoring image description acceleration change until the model is reloaded.")
         if "device" in kwargs:
             device = str(kwargs["device"] or "AUTO")
             if device != self.device:
@@ -79,6 +93,9 @@ class ImageDescriptionModel(InferenceModel):
         snapshot_download(self.hf_model_name, cache_dir=self.cache_dir, local_dir=self.cache_dir)
 
     def _load(self) -> Any:
+        if self.acceleration == ImageDescriptionAcceleration.CUDA:
+            return self._load_cuda()
+
         try:
             import openvino_genai
         except ImportError as error:
@@ -87,6 +104,9 @@ class ImageDescriptionModel(InferenceModel):
         return openvino_genai.VLMPipeline(str(self.cache_dir), self.device)
 
     def _predict(self, image: Image.Image, **model_kwargs: Any) -> dict[str, Any]:
+        if self.acceleration == ImageDescriptionAcceleration.CUDA:
+            return self._predict_cuda(image)
+
         prompt = self._make_prompt()
         session = cast(Any, self.session)
         result = session.generate(
@@ -96,6 +116,175 @@ class ImageDescriptionModel(InferenceModel):
         )
         text = self._result_text(result)
         return self._normalize_response(text)
+
+    def _load_cuda(self) -> dict[str, Any]:
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
+        except ImportError as error:
+            raise ImportError(
+                "torch and transformers are required for CUDA image description models. "
+                "Use the CUDA machine-learning image/extra."
+            ) from error
+
+        device = self._torch_device(torch)
+        torch_dtype = torch.float16 if str(device).startswith("cuda") else torch.float32
+        processor = AutoProcessor.from_pretrained(str(self.cache_dir), trust_remote_code=True)
+
+        if self.hf_model_name in FLORENCE_MODEL_NAMES:
+            model = AutoModelForCausalLM.from_pretrained(
+                str(self.cache_dir),
+                torch_dtype=torch_dtype,
+                trust_remote_code=True,
+            ).to(device)
+        else:
+            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                str(self.cache_dir),
+                torch_dtype="auto",
+            ).to(device)
+
+        model.eval()
+        return {"model": model, "processor": processor, "device": device, "torch": torch, "torch_dtype": torch_dtype}
+
+    def _predict_cuda(self, image: Image.Image) -> dict[str, Any]:
+        if self.hf_model_name in FLORENCE_MODEL_NAMES:
+            return self._predict_florence(image)
+        return self._predict_qwen(image)
+
+    def _predict_qwen(self, image: Image.Image) -> dict[str, Any]:
+        prompt = self._make_prompt()
+        session = cast(dict[str, Any], self.session)
+        model = session["model"]
+        processor = session["processor"]
+        device = session["device"]
+        torch = session["torch"]
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+        try:
+            from qwen_vl_utils import process_vision_info
+
+            image_inputs, video_inputs = process_vision_info(messages)
+            inputs = processor(
+                text=[text],
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                return_tensors="pt",
+            )
+        except ImportError:
+            inputs = processor(text=[text], images=[image], padding=True, return_tensors="pt")
+
+        inputs = inputs.to(device)
+        with torch.inference_mode():
+            generated_ids = model.generate(**inputs, max_new_tokens=768, do_sample=False)
+        generated_ids = [
+            output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        text = processor.batch_decode(
+            generated_ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )[0]
+        return self._normalize_response(text)
+
+    def _predict_florence(self, image: Image.Image) -> dict[str, Any]:
+        caption = self._run_florence_task("<MORE_DETAILED_CAPTION>", image)
+        ocr = self._run_florence_task("<OCR>", image)
+        detection = self._run_florence_task("<OD>", image)
+
+        description = str(caption.get("<MORE_DETAILED_CAPTION>") or caption.get("<DETAILED_CAPTION>") or "").strip()
+        visible_text = self._list_of_strings([ocr.get("<OCR>")])
+        labels = detection.get("<OD>", {}).get("labels") if isinstance(detection.get("<OD>"), dict) else []
+        objects = self._list_of_strings(labels)
+
+        return {
+            "description": description,
+            "people": [],
+            "environment": "",
+            "objects": objects,
+            "visible_text": visible_text,
+            "context": "",
+            "tags": self._tags_from_text(" ".join([description, *objects, *visible_text])),
+        }
+
+    def _run_florence_task(self, task_prompt: str, image: Image.Image) -> dict[str, Any]:
+        session = cast(dict[str, Any], self.session)
+        model = session["model"]
+        processor = session["processor"]
+        device = session["device"]
+        torch = session["torch"]
+        torch_dtype = session["torch_dtype"]
+        inputs = processor(text=task_prompt, images=image.convert("RGB"), return_tensors="pt")
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+        if "pixel_values" in inputs:
+            inputs["pixel_values"] = inputs["pixel_values"].to(dtype=torch_dtype)
+
+        with torch.inference_mode():
+            generated_ids = model.generate(
+                input_ids=inputs["input_ids"],
+                pixel_values=inputs["pixel_values"],
+                max_new_tokens=1024,
+                num_beams=3,
+                do_sample=False,
+            )
+
+        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+        parsed = processor.post_process_generation(generated_text, task=task_prompt, image_size=image.size)
+        return parsed if isinstance(parsed, dict) else {}
+
+    def _acceleration(self, value: Any) -> ImageDescriptionAcceleration:
+        acceleration = str(value or ImageDescriptionAcceleration.AUTO).lower()
+        match acceleration:
+            case ImageDescriptionAcceleration.CUDA:
+                return ImageDescriptionAcceleration.CUDA
+            case ImageDescriptionAcceleration.OPENVINO:
+                return ImageDescriptionAcceleration.OPENVINO
+            case _:
+                return ImageDescriptionAcceleration.AUTO
+
+    def _resolve_acceleration(self, acceleration: ImageDescriptionAcceleration) -> ImageDescriptionAcceleration:
+        if acceleration != ImageDescriptionAcceleration.AUTO:
+            return acceleration
+        return ImageDescriptionAcceleration.CUDA if self._cuda_available() else ImageDescriptionAcceleration.OPENVINO
+
+    def _model_name_for_acceleration(
+        self, model_name: str, acceleration: ImageDescriptionAcceleration
+    ) -> str:
+        if acceleration == ImageDescriptionAcceleration.OPENVINO:
+            return OPENVINO_MODEL_ALIASES.get(model_name, model_name)
+        return model_name
+
+    def _cuda_available(self) -> bool:
+        try:
+            import torch
+            import transformers
+        except ImportError:
+            return False
+        _ = torch, transformers
+        return True
+
+    def _torch_device(self, torch: Any) -> str:
+        requested = self.device.strip()
+        if requested.upper() in {"", "AUTO", "GPU"}:
+            if not torch.cuda.is_available():
+                log.warning("CUDA image description was requested, but CUDA is unavailable. Falling back to CPU.")
+                return "cpu"
+            return "cuda:0"
+
+        if requested.isdigit():
+            return f"cuda:{requested}"
+        if requested.lower().startswith("cuda") or requested.lower() == "cpu":
+            return requested.lower()
+        return requested
 
     def _make_prompt(self) -> str:
         prompt = IMAGE_DESCRIPTION_PROMPT
@@ -160,6 +349,35 @@ class ImageDescriptionModel(InferenceModel):
         if not isinstance(value, list):
             return []
         return [item for item in value if isinstance(item, dict)]
+
+    def _tags_from_text(self, text: str) -> list[str]:
+        stop_words = {
+            "about",
+            "after",
+            "also",
+            "and",
+            "are",
+            "around",
+            "from",
+            "has",
+            "have",
+            "into",
+            "near",
+            "that",
+            "the",
+            "their",
+            "there",
+            "this",
+            "with",
+        }
+        tags: list[str] = []
+        for word in re.findall(r"[a-zA-Z][a-zA-Z0-9_-]{2,}", text.lower()):
+            if word in stop_words or word in tags:
+                continue
+            tags.append(word)
+            if len(tags) >= 20:
+                break
+        return tags
 
     @property
     def cached(self) -> bool:

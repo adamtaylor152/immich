@@ -10,13 +10,131 @@
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { Button, IconButton } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
+  import {
+    getMachineLearningHardware,
+    MachineLearningHardwareAcceleration,
+    type SystemConfigMachineLearningDto,
+  } from '@immich/sdk';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
+  import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  let detectedAcceleration = $state<MachineLearningHardwareAcceleration>();
+  const imageDescription = $derived(configToEdit.machineLearning.imageDescription!);
+  const savedImageDescription = $derived(config.machineLearning.imageDescription!);
+  const nsfwDetection = $derived(configToEdit.machineLearning.nsfwDetection!);
+  const savedNsfwDetection = $derived(config.machineLearning.nsfwDetection!);
+
+  const hardwareAcceleration = {
+    Auto: MachineLearningHardwareAcceleration.Auto,
+    OpenVino: MachineLearningHardwareAcceleration.Openvino,
+    Cuda: MachineLearningHardwareAcceleration.Cuda,
+  } as const;
+
+  type ImageEnrichmentHardwareAcceleration =
+    | MachineLearningHardwareAcceleration.Openvino
+    | MachineLearningHardwareAcceleration.Cuda;
+
+  const isImageEnrichmentHardwareAcceleration = (
+    acceleration: MachineLearningHardwareAcceleration,
+  ): acceleration is ImageEnrichmentHardwareAcceleration =>
+    acceleration === hardwareAcceleration.OpenVino || acceleration === hardwareAcceleration.Cuda;
+
+  const hardwareAccelerationText = (acceleration: MachineLearningHardwareAcceleration) =>
+    acceleration === hardwareAcceleration.Cuda
+      ? $t('admin.machine_learning_image_enrichment_hardware_cuda')
+      : $t('admin.machine_learning_image_enrichment_hardware_openvino');
+
+  const imageEnrichmentHardwarePresets: Record<
+    ImageEnrichmentHardwareAcceleration,
+    {
+      imageDescriptionModelName: string;
+      imageDescriptionFallbackModelName: string;
+      imageDescriptionDevice: string;
+      nsfwDetectionModelName: string;
+      nsfwDetectionDevice: string;
+    }
+  > = {
+    [hardwareAcceleration.OpenVino]: {
+      imageDescriptionModelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      imageDescriptionFallbackModelName: 'microsoft/Florence-2-base-ft',
+      imageDescriptionDevice: 'AUTO',
+      nsfwDetectionModelName: 'onnx-community/nsfw_image_detection-ONNX',
+      nsfwDetectionDevice: 'AUTO',
+    },
+    [hardwareAcceleration.Cuda]: {
+      imageDescriptionModelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      imageDescriptionFallbackModelName: 'microsoft/Florence-2-base-ft',
+      imageDescriptionDevice: 'AUTO',
+      nsfwDetectionModelName: 'onnx-community/nsfw_image_detection-ONNX',
+      nsfwDetectionDevice: 'AUTO',
+    },
+  };
+
+  const hardwareAccelerationOptions = $derived([
+    {
+      value: hardwareAcceleration.Auto,
+      text: detectedAcceleration
+        ? `${$t('admin.machine_learning_image_enrichment_hardware_auto')} (${hardwareAccelerationText(detectedAcceleration)})`
+        : $t('admin.machine_learning_image_enrichment_hardware_auto'),
+    },
+    {
+      value: hardwareAcceleration.OpenVino,
+      text: $t('admin.machine_learning_image_enrichment_hardware_openvino'),
+    },
+    {
+      value: hardwareAcceleration.Cuda,
+      text: $t('admin.machine_learning_image_enrichment_hardware_cuda'),
+    },
+  ]);
+
+  onMount(() => {
+    void detectMachineLearningHardware();
+  });
+
+  const detectMachineLearningHardware = async () => {
+    try {
+      const hardware = await getMachineLearningHardware();
+      const preferredAcceleration = hardware.preferredAcceleration;
+
+      if (isImageEnrichmentHardwareAcceleration(preferredAcceleration)) {
+        detectedAcceleration = preferredAcceleration;
+        if (imageDescription.acceleration === hardwareAcceleration.Auto) {
+          applyImageEnrichmentHardware(preferredAcceleration);
+        }
+      }
+    } catch {
+      detectedAcceleration = undefined;
+    }
+  };
+
+  const applyImageEnrichmentHardware = (acceleration: MachineLearningHardwareAcceleration | string | number) => {
+    const selectedAcceleration = acceleration as MachineLearningHardwareAcceleration;
+    const presetAcceleration =
+      selectedAcceleration === hardwareAcceleration.Auto && detectedAcceleration
+        ? detectedAcceleration
+        : selectedAcceleration;
+
+    imageDescription.acceleration = selectedAcceleration;
+
+    if (!isImageEnrichmentHardwareAcceleration(presetAcceleration)) {
+      return;
+    }
+
+    const preset = imageEnrichmentHardwarePresets[presetAcceleration];
+    imageDescription.modelName = preset.imageDescriptionModelName;
+    imageDescription.fallbackModelName = preset.imageDescriptionFallbackModelName;
+    imageDescription.device = preset.imageDescriptionDevice;
+    nsfwDetection.modelName = preset.nsfwDetectionModelName;
+    nsfwDetection.device = preset.nsfwDetectionDevice;
+  };
+
+  const isMachineLearningConfigEdited = (machineLearning: SystemConfigMachineLearningDto) =>
+    !isEqual(machineLearning, config.machineLearning);
 </script>
 
 <div class="mt-2">
@@ -332,10 +450,21 @@
         subtitle={$t('admin.machine_learning_image_description_description')}
       >
         <div class="mt-4 ml-4 flex flex-col gap-4">
+          <SettingSelect
+            label={$t('admin.machine_learning_image_enrichment_hardware')}
+            desc={$t('admin.machine_learning_image_enrichment_hardware_description')}
+            name="image-enrichment-hardware"
+            bind:value={imageDescription.acceleration}
+            options={hardwareAccelerationOptions}
+            disabled={disabled || !configToEdit.machineLearning.enabled}
+            isEdited={isMachineLearningConfigEdited(configToEdit.machineLearning)}
+            onSelect={applyImageEnrichmentHardware}
+          />
+
           <SettingSwitch
             title={$t('admin.machine_learning_image_description_enabled')}
             subtitle={$t('admin.machine_learning_image_description_enabled_description')}
-            bind:checked={configToEdit.machineLearning.imageDescription.enabled}
+            bind:checked={imageDescription.enabled}
             disabled={disabled || !configToEdit.machineLearning.enabled}
           />
 
@@ -344,37 +473,28 @@
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label={$t('admin.machine_learning_image_description_model')}
-            bind:value={configToEdit.machineLearning.imageDescription.modelName}
+            bind:value={imageDescription.modelName}
             required={true}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.imageDescription.enabled}
-            isEdited={configToEdit.machineLearning.imageDescription.modelName !==
-              config.machineLearning.imageDescription.modelName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+            isEdited={imageDescription.modelName !== savedImageDescription.modelName}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label={$t('admin.machine_learning_image_description_fallback_model')}
-            bind:value={configToEdit.machineLearning.imageDescription.fallbackModelName}
+            bind:value={imageDescription.fallbackModelName}
             required={true}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.imageDescription.enabled}
-            isEdited={configToEdit.machineLearning.imageDescription.fallbackModelName !==
-              config.machineLearning.imageDescription.fallbackModelName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+            isEdited={imageDescription.fallbackModelName !== savedImageDescription.fallbackModelName}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
-            label={$t('admin.machine_learning_openvino_device')}
-            bind:value={configToEdit.machineLearning.imageDescription.device}
+            label={$t('admin.machine_learning_hardware_device')}
+            bind:value={imageDescription.device}
             required={true}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.imageDescription.enabled}
-            isEdited={configToEdit.machineLearning.imageDescription.device !==
-              config.machineLearning.imageDescription.device}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+            isEdited={imageDescription.device !== savedImageDescription.device}
           />
         </div>
       </SettingAccordion>
@@ -388,17 +508,16 @@
           <SettingSwitch
             title={$t('admin.machine_learning_nsfw_detection_enabled')}
             subtitle={$t('admin.machine_learning_nsfw_detection_enabled_description')}
-            bind:checked={configToEdit.machineLearning.nsfwDetection.enabled}
+            bind:checked={nsfwDetection.enabled}
             disabled={disabled || !configToEdit.machineLearning.enabled}
           />
 
           <SettingSwitch
             title={$t('admin.machine_learning_nsfw_detection_hide_from_library')}
             subtitle={$t('admin.machine_learning_nsfw_detection_hide_from_library_description')}
-            bind:checked={configToEdit.machineLearning.nsfwDetection.hideFromLibrary}
+            bind:checked={nsfwDetection.hideFromLibrary}
             disabled={disabled || !configToEdit.machineLearning.enabled}
-            isEdited={configToEdit.machineLearning.nsfwDetection.hideFromLibrary !==
-              config.machineLearning.nsfwDetection.hideFromLibrary}
+            isEdited={nsfwDetection.hideFromLibrary !== savedNsfwDetection.hideFromLibrary}
           />
 
           <hr />
@@ -406,39 +525,31 @@
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label={$t('admin.machine_learning_nsfw_detection_model')}
-            bind:value={configToEdit.machineLearning.nsfwDetection.modelName}
+            bind:value={nsfwDetection.modelName}
             required={true}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.nsfwDetection.enabled}
-            isEdited={configToEdit.machineLearning.nsfwDetection.modelName !==
-              config.machineLearning.nsfwDetection.modelName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !nsfwDetection.enabled}
+            isEdited={nsfwDetection.modelName !== savedNsfwDetection.modelName}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label={$t('admin.machine_learning_nsfw_detection_threshold')}
             description={$t('admin.machine_learning_nsfw_detection_threshold_description')}
-            bind:value={configToEdit.machineLearning.nsfwDetection.threshold}
+            bind:value={nsfwDetection.threshold}
             step="0.01"
             min={0.01}
             max={1}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.nsfwDetection.enabled}
-            isEdited={configToEdit.machineLearning.nsfwDetection.threshold !==
-              config.machineLearning.nsfwDetection.threshold}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !nsfwDetection.enabled}
+            isEdited={nsfwDetection.threshold !== savedNsfwDetection.threshold}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
-            label={$t('admin.machine_learning_openvino_device')}
-            bind:value={configToEdit.machineLearning.nsfwDetection.device}
+            label={$t('admin.machine_learning_hardware_device')}
+            bind:value={nsfwDetection.device}
             required={true}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.nsfwDetection.enabled}
-            isEdited={configToEdit.machineLearning.nsfwDetection.device !== config.machineLearning.nsfwDetection.device}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !nsfwDetection.enabled}
+            isEdited={nsfwDetection.device !== savedNsfwDetection.device}
           />
         </div>
       </SettingAccordion>

@@ -10,6 +10,7 @@ from functools import partial
 from typing import Any, AsyncGenerator, Callable, Iterator
 from zipfile import BadZipFile
 
+import onnxruntime as ort
 import orjson
 from fastapi import Depends, FastAPI, File, Form, HTTPException
 from fastapi.responses import ORJSONResponse, PlainTextResponse
@@ -25,6 +26,7 @@ from immich_ml.models.transforms import decode_pil
 from .config import PreloadModelData, log, settings
 from .models.cache import ModelCache
 from .schemas import (
+    ImageDescriptionAcceleration,
     InferenceEntries,
     InferenceEntry,
     InferenceResponse,
@@ -174,6 +176,53 @@ async def root() -> ORJSONResponse:
 @app.get("/ping")
 def ping() -> PlainTextResponse:
     return PlainTextResponse("pong")
+
+
+@app.get("/hardware")
+def hardware() -> ORJSONResponse:
+    providers = ort.get_available_providers()
+    openvino_device_ids = _openvino_device_ids(providers)
+    torch_cuda_available, cuda_device_count = _torch_cuda_info()
+    preferred_acceleration = ImageDescriptionAcceleration.AUTO
+
+    if torch_cuda_available or "CUDAExecutionProvider" in providers:
+        preferred_acceleration = ImageDescriptionAcceleration.CUDA
+    elif "OpenVINOExecutionProvider" in providers and openvino_device_ids:
+        preferred_acceleration = ImageDescriptionAcceleration.OPENVINO
+
+    return ORJSONResponse(
+        {
+            "providers": providers,
+            "openvinoDeviceIds": openvino_device_ids,
+            "torchCudaAvailable": torch_cuda_available,
+            "cudaDeviceCount": cuda_device_count,
+            "preferredAcceleration": preferred_acceleration,
+        }
+    )
+
+
+def _openvino_device_ids(providers: list[str]) -> list[str]:
+    if "OpenVINOExecutionProvider" not in providers:
+        return []
+
+    try:
+        device_ids: list[str] = ort.capi._pybind_state.get_available_openvino_device_ids()
+        return device_ids
+    except Exception as error:
+        log.warning(f"Unable to read OpenVINO device IDs: {error}")
+        return []
+
+
+def _torch_cuda_info() -> tuple[bool, int]:
+    try:
+        import torch
+    except ImportError:
+        return False, 0
+
+    if not torch.cuda.is_available():
+        return False, 0
+
+    return True, torch.cuda.device_count()
 
 
 @app.post("/predict", dependencies=[Depends(update_state)])

@@ -12593,6 +12593,57 @@
         "x-immich-state": "Stable"
       }
     },
+    "/system-config/machine-learning/hardware": {
+      "get": {
+        "description": "Retrieve available hardware acceleration providers from the machine learning service.",
+        "operationId": "getMachineLearningHardware",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineLearningHardwareResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get machine learning hardware",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Stable"
+      }
+    },
     "/system-config/storage-template-options": {
       "get": {
         "description": "Retrieve exemplary storage template options.",
@@ -18067,8 +18118,13 @@
       },
       "ImageDescriptionConfig": {
         "properties": {
+          "acceleration": {
+            "$ref": "#/components/schemas/MachineLearningHardwareAcceleration",
+            "default": "auto",
+            "description": "Hardware acceleration backend to use"
+          },
           "device": {
-            "description": "OpenVINO device to use",
+            "description": "Hardware device to use",
             "type": "string"
           },
           "enabled": {
@@ -18566,6 +18622,55 @@
           "enabled",
           "interval",
           "timeout"
+        ],
+        "type": "object"
+      },
+      "MachineLearningHardwareAcceleration": {
+        "description": "Machine learning hardware acceleration backend",
+        "enum": [
+          "auto",
+          "openvino",
+          "cuda"
+        ],
+        "type": "string"
+      },
+      "MachineLearningHardwareResponseDto": {
+        "properties": {
+          "cudaDeviceCount": {
+            "description": "Available PyTorch CUDA device count",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "openvinoDeviceIds": {
+            "description": "Available OpenVINO device IDs",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "preferredAcceleration": {
+            "$ref": "#/components/schemas/MachineLearningHardwareAcceleration",
+            "description": "Detected preferred hardware acceleration"
+          },
+          "providers": {
+            "description": "Available ONNX Runtime providers",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "torchCudaAvailable": {
+            "description": "Whether PyTorch CUDA is available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cudaDeviceCount",
+          "openvinoDeviceIds",
+          "preferredAcceleration",
+          "providers",
+          "torchCudaAvailable"
         ],
         "type": "object"
       },
@@ -19465,7 +19570,7 @@
       "NsfwDetectionConfig": {
         "properties": {
           "device": {
-            "description": "OpenVINO device to use",
+            "description": "Hardware device to use",
             "type": "string"
           },
           "enabled": {
@@ -25015,6 +25120,7 @@
           "imageDescription": {
             "$ref": "#/components/schemas/ImageDescriptionConfig",
             "default": {
+              "acceleration": "auto",
               "device": "AUTO",
               "enabled": false,
               "fallbackModelName": "microsoft/Florence-2-base-ft",
