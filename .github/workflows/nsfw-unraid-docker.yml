@@ -6,6 +6,14 @@ on:
     branches:
       - aj/nsfw-sensitive-content-combined
       - nsfw-sensitive-content-combined
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,14 +23,17 @@ permissions:
   contents: read
 
 env:
-  BRANCH_TAG: nsfw-sensitive-content-combined
+  IMAGE_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'nsfw-sensitive-content-combined' }}
+  ML_IMAGE_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}-openvino', github.event.pull_request.number) || 'nsfw-sensitive-content-combined-openvino' }}
   REGISTRY: ghcr.io
   IMAGE_OWNER: adamtaylor152
+  SOURCE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+  SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   build-server:
     name: Build Server Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,6 +43,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -52,20 +64,20 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.BRANCH_TAG }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ env.SOURCE_SHA }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
           build-args: |
             BUILD_ID=${{ github.run_id }}
             BUILD_IMAGE=unraid-docker
-            BUILD_SOURCE_REF=${{ github.ref_name }}
-            BUILD_SOURCE_COMMIT=${{ github.sha }}
+            BUILD_SOURCE_REF=${{ env.SOURCE_REF }}
+            BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
 
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,6 +87,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -95,27 +108,28 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.BRANCH_TAG }}-openvino
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ github.sha }}-openvino
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.ML_IMAGE_TAG }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ env.SOURCE_SHA }}-openvino
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
           build-args: |
             DEVICE=openvino
             BUILD_ID=${{ github.run_id }}
             BUILD_IMAGE=unraid-docker-openvino
-            BUILD_SOURCE_REF=${{ github.ref_name }}
-            BUILD_SOURCE_COMMIT=${{ github.sha }}
+            BUILD_SOURCE_REF=${{ env.SOURCE_REF }}
+            BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
 
   package-unraid-deployment:
     name: Package Unraid Compose Deployment
     needs:
       - build-server
       - build-machine-learning-openvino
-    if: ${{ github.repository == 'adamtaylor152/immich' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined') }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
     runs-on: ubuntu-latest
     environment:
-      name: unraid-docker
+      name: ${{ github.event_name == 'pull_request' && format('unraid-docker-pr-{0}', github.event.pull_request.number) || 'unraid-docker' }}
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     permissions:
       contents: read
     steps:
@@ -123,18 +137,26 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Create deployment bundle
         run: |
           mkdir -p dist/unraid-docker
           cp docker/example.env dist/unraid-docker/example.env
+          server_image="${REGISTRY}/${IMAGE_OWNER}/immich-server:${IMAGE_TAG}"
+          ml_image="${REGISTRY}/${IMAGE_OWNER}/immich-machine-learning:${ML_IMAGE_TAG}"
+          source_label="${SOURCE_REF}@${SOURCE_SHA}"
+          if [ -n "${PR_NUMBER:-}" ]; then
+            source_label="PR #${PR_NUMBER} (${source_label})"
+          fi
+
           cat > dist/unraid-docker/docker-compose.yml <<'COMPOSE'
           name: immich
 
           services:
             immich-server:
               container_name: immich_server
-              image: ghcr.io/adamtaylor152/immich-server:nsfw-sensitive-content-combined
+              image: __SERVER_IMAGE__
               volumes:
                 - ${UPLOAD_LOCATION}:/data
                 - /etc/localtime:/etc/localtime:ro
@@ -151,7 +173,7 @@ jobs:
 
             immich-machine-learning:
               container_name: immich_machine_learning
-              image: ghcr.io/adamtaylor152/immich-machine-learning:nsfw-sensitive-content-combined-openvino
+              image: __ML_IMAGE__
               device_cgroup_rules:
                 - 'c 189:* rmw'
               devices:
@@ -191,21 +213,28 @@ jobs:
             model-cache:
           COMPOSE
 
+          sed -i \
+            -e "s#__SERVER_IMAGE__#${server_image}#g" \
+            -e "s#__ML_IMAGE__#${ml_image}#g" \
+            dist/unraid-docker/docker-compose.yml
+
           cat > dist/unraid-docker/README.md <<README
           # Immich NSFW Unraid Docker Deployment
 
-          Built from \`${GITHUB_REPOSITORY}@${GITHUB_SHA}\`.
+          Built from \`${source_label}\`.
 
           Images:
 
-          - \`ghcr.io/adamtaylor152/immich-server:nsfw-sensitive-content-combined\`
-          - \`ghcr.io/adamtaylor152/immich-machine-learning:nsfw-sensitive-content-combined-openvino\`
+          - \`${server_image}\`
+          - \`${ml_image}\`
 
           Use the bundled \`docker-compose.yml\` with your existing Immich \`.env\` values. The machine-learning service is pinned to the OpenVINO image and maps \`/dev/dri\` for an Intel iGPU.
           README
+        env:
+          PR_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
 
       - name: Upload deployment bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: immich-unraid-docker-nsfw-sensitive-content-combined
+          name: immich-unraid-docker-${{ env.IMAGE_TAG }}
           path: dist/unraid-docker
