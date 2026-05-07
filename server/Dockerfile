@@ -62,6 +62,8 @@ COPY ./plugins/mise.toml ./plugins/
 ENV MISE_TRUSTED_CONFIG_PATHS=/usr/src/app/plugins/mise.toml
 ENV MISE_DATA_DIR=/buildcache/mise
 RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
+  --mount=type=secret,id=GITHUB_TOKEN,target=/run/secrets/GITHUB_TOKEN \
+  export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN 2>/dev/null || true)" && \
   mise install --cd plugins
 
 COPY ./plugins ./plugins/
@@ -72,6 +74,8 @@ RUN --mount=type=cache,id=pnpm-plugins,target=/buildcache/pnpm-store \
   --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
   --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
   --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
+  --mount=type=secret,id=GITHUB_TOKEN,target=/run/secrets/GITHUB_TOKEN \
+  export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN 2>/dev/null || true)" && \
   cd plugins && mise run build
 
 FROM ghcr.io/immich-app/base-server-prod:202604141125@sha256:3b05219afcda09cebfb8513743fc92cec1a3ae262249bfe0de6f90da21326991

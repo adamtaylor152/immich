@@ -8,6 +8,34 @@ beforeAll(async () => {
   });
 });
 
+if (!('part' in HTMLElement.prototype)) {
+  Object.defineProperty(HTMLElement.prototype, 'part', {
+    configurable: true,
+    get(this: HTMLElement) {
+      const getParts = () => new Set((this.getAttribute('part') ?? '').split(/\s+/).filter(Boolean));
+      const setParts = (parts: Set<string>) => this.setAttribute('part', [...parts].join(' '));
+
+      return {
+        add: (...tokens: string[]) => {
+          const parts = getParts();
+          for (const token of tokens) {
+            parts.add(token);
+          }
+          setParts(parts);
+        },
+        remove: (...tokens: string[]) => {
+          const parts = getParts();
+          for (const token of tokens) {
+            parts.delete(token);
+          }
+          setParts(parts);
+        },
+        contains: (token: string) => getParts().has(token),
+      };
+    },
+  });
+}
+
 Object.defineProperty(globalThis, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation(function (query) {

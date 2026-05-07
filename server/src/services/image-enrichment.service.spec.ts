@@ -469,7 +469,7 @@ describe(ImageEnrichmentService.name, () => {
       exif: expect.objectContaining({ assetId, tags: ['beach'] }),
       lockedPropertiesBehavior: 'append',
     });
-    const lastCall = mocks.asset.upsertMetadata.mock.calls[mocks.asset.upsertMetadata.mock.calls.length - 1];
+    const lastCall = mocks.asset.upsertMetadata.mock.calls.at(-1)!;
     const saved = lastCall[1][0].value as { nsfwDetection: Record<string, unknown> };
     expect(saved.nsfwDetection.result).toEqual(expect.objectContaining({ isNsfw: false }));
     expect(saved.nsfwDetection).not.toHaveProperty('appliedTagHash');
@@ -565,7 +565,7 @@ describe(ImageEnrichmentService.name, () => {
 
     expect(mocks.tag.getByValue).not.toHaveBeenCalled();
     expect(mocks.tag.removeAssetIds).not.toHaveBeenCalled();
-    const lastCall = mocks.asset.upsertMetadata.mock.calls[mocks.asset.upsertMetadata.mock.calls.length - 1];
+    const lastCall = mocks.asset.upsertMetadata.mock.calls.at(-1)!;
     const saved = lastCall[1][0].value as { description: Record<string, unknown> };
     expect(saved.description).not.toHaveProperty('appliedTagHash');
     expect(saved.description).not.toHaveProperty('appliedTagValues');

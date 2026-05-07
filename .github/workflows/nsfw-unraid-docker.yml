@@ -74,6 +74,8 @@ jobs:
             BUILD_IMAGE=unraid-docker
             BUILD_SOURCE_REF=${{ env.SOURCE_REF }}
             BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
+          secrets: |
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
