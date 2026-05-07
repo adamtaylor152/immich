@@ -6,6 +6,7 @@
     AssetTypeEnum,
     getAssetImageEnrichment,
     getAssetInfo,
+    isHttpError,
     updateAssetImageEnrichment,
     type AssetImageEnrichmentResponseDto,
     type AssetResponseDto,
@@ -19,9 +20,10 @@
     isOwner: boolean;
     isAdmin: boolean;
     onAssetRefresh?: (asset: AssetResponseDto) => void;
+    onAssetSuppressed?: (asset: AssetResponseDto) => void | Promise<void>;
   }
 
-  let { asset, isOwner, isAdmin, onAssetRefresh }: Props = $props();
+  let { asset, isOwner, isAdmin, onAssetRefresh, onAssetSuppressed }: Props = $props();
 
   let enrichment = $state<AssetImageEnrichmentResponseDto>();
   let isLoading = $state(false);
@@ -49,6 +51,42 @@
     onAssetRefresh?.(updatedAsset);
   };
 
+  const getHttpStatus = (error: unknown) => (isHttpError(error) ? (error.status ?? error.data?.statusCode) : undefined);
+
+  const handleExpectedSuppressedAsset = async (action: AssetImageEnrichmentAction, error: unknown) => {
+    if (!onAssetSuppressed || !enrichment?.nsfwDetection.effectiveIsNsfw) {
+      return false;
+    }
+
+    if (
+      action !== AssetImageEnrichmentAction.MarkNsfw &&
+      action !== AssetImageEnrichmentAction.AcceptNsfwResult &&
+      action !== AssetImageEnrichmentAction.RerunNsfwDetection
+    ) {
+      return false;
+    }
+
+    const status = getHttpStatus(error);
+    if (status !== 400 && status !== 403 && status !== 404) {
+      return false;
+    }
+
+    await onAssetSuppressed(asset);
+    return true;
+  };
+
+  const refreshVisibleAsset = async (action: AssetImageEnrichmentAction) => {
+    try {
+      await refreshAsset();
+    } catch (error) {
+      if (await handleExpectedSuppressedAsset(action, error)) {
+        return;
+      }
+
+      throw error;
+    }
+  };
+
   const runAction = async (action: AssetImageEnrichmentAction) => {
     activeAction = action;
     try {
@@ -60,11 +98,12 @@
       if (
         action === AssetImageEnrichmentAction.ClearGeneratedDescription ||
         action === AssetImageEnrichmentAction.ClearGeneratedTags ||
+        action === AssetImageEnrichmentAction.RerunNsfwDetection ||
         action === AssetImageEnrichmentAction.MarkSafe ||
         action === AssetImageEnrichmentAction.MarkNsfw ||
         action === AssetImageEnrichmentAction.AcceptNsfwResult
       ) {
-        await refreshAsset();
+        await refreshVisibleAsset(action);
       }
 
       toastManager.primary($t('image_enrichment_updated'));

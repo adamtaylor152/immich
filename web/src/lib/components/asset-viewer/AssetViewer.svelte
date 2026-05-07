@@ -69,6 +69,7 @@
     onUndoDelete?: OnUndoDelete;
     onClose?: (assetId: string) => void;
     onRemoveFromAlbum?: (assetIds: string[]) => void;
+    onAssetSuppressed?: (asset: AssetResponseDto) => void | Promise<void>;
     onRandom?: () => Promise<{ id: string } | undefined>;
   }
 
@@ -85,6 +86,7 @@
     onUndoDelete,
     onClose,
     onRemoveFromAlbum,
+    onAssetSuppressed,
     onRandom,
   }: Props = $props();
 
@@ -586,7 +588,7 @@
       translate="yes"
     >
       {#if showDetailPanel}
-        <DetailPanel {asset} currentAlbum={album} />
+        <DetailPanel {asset} currentAlbum={album} {onAssetSuppressed} />
       {:else if assetViewerManager.isShowEditor}
         <EditorPanel {asset} onClose={closeEditor} />
       {/if}

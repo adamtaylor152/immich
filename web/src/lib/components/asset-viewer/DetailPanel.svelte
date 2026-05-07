@@ -38,9 +38,10 @@
   interface Props {
     asset: AssetResponseDto;
     currentAlbum?: AlbumResponseDto | null;
+    onAssetSuppressed?: (asset: AssetResponseDto) => void | Promise<void>;
   }
 
-  let { asset, currentAlbum = null }: Props = $props();
+  let { asset, currentAlbum = null, onAssetSuppressed }: Props = $props();
 
   let isOwner = $derived(authManager.authenticated && authManager.user.id === asset.ownerId);
   let latlng = $derived(
@@ -154,6 +155,7 @@
       {isOwner}
       isAdmin={authManager.user.isAdmin}
       onAssetRefresh={(updatedAsset) => (asset = updatedAsset)}
+      {onAssetSuppressed}
     />
     <DetailPanelRating {asset} {isOwner} />
     <DetailPanelPeople {asset} {isOwner} {previousRoute} />

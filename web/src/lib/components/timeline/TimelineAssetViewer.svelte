@@ -120,6 +120,19 @@
       (await handleClose(assetCursor.current.id));
   };
 
+  const handleAssetSuppressed = async (asset: AssetResponseDto) => {
+    timelineManager.removeAssets([asset.id]);
+
+    if (asset.id !== assetCursor.current.id) {
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    (await navigateToAsset(assetCursor?.nextAsset)) ||
+      (await navigateToAsset(assetCursor?.previousAsset)) ||
+      (await handleClose(asset.id));
+  };
+
   const handlePreAction = async (action: Action) => {
     switch (action.type) {
       case removeAction:
@@ -250,6 +263,7 @@
     onUndoDelete={handleUndoDelete}
     onRandom={handleRandom}
     onRemoveFromAlbum={handleRemoveFromAlbum}
+    onAssetSuppressed={handleAssetSuppressed}
     onClose={handleClose}
   />
 {/await}
