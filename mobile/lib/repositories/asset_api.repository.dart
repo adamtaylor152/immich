@@ -1,8 +1,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:http/http.dart';
 import 'package:immich_mobile/constants/enums.dart';
-import 'package:immich_mobile/domain/models/asset_edit.model.dart'
-    hide AssetEditAction;
+import 'package:immich_mobile/domain/models/asset_edit.model.dart' hide AssetEditAction;
 import 'package:immich_mobile/domain/models/stack.model.dart';
 import 'package:immich_mobile/providers/api.provider.dart';
 import 'package:immich_mobile/repositories/api.repository.dart';
@@ -32,62 +31,34 @@ class AssetApiRepository extends ApiRepository {
     await _trashApi.restoreAssets(BulkIdsDto(ids: ids));
   }
 
-  Future<void> updateVisibility(
-    List<String> ids,
-    AssetVisibilityEnum visibility,
-  ) async {
-    return _api.updateAssets(
-      AssetBulkUpdateDto(ids: ids, visibility: _mapVisibility(visibility)),
-    );
+  Future<void> updateVisibility(List<String> ids, AssetVisibilityEnum visibility) async {
+    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, visibility: _mapVisibility(visibility)));
   }
 
   Future<void> updateFavorite(List<String> ids, bool isFavorite) async {
-    return _api.updateAssets(
-      AssetBulkUpdateDto(ids: ids, isFavorite: isFavorite),
-    );
+    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: isFavorite));
   }
 
   Future<void> markNsfw(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(
-      action: AssetImageEnrichmentAction.markNsfw,
-    );
-    await Future.wait(
-      ids.map((id) => _api.updateAssetImageEnrichment(id, dto)),
-    );
+    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markNsfw);
+    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
   }
 
   Future<void> markSafe(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(
-      action: AssetImageEnrichmentAction.markSafe,
-    );
-    await Future.wait(
-      ids.map((id) => _api.updateAssetImageEnrichment(id, dto)),
-    );
+    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markSafe);
+    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
   }
 
   Future<void> updateLocation(List<String> ids, LatLng location) async {
-    return _api.updateAssets(
-      AssetBulkUpdateDto(
-        ids: ids,
-        latitude: location.latitude,
-        longitude: location.longitude,
-      ),
-    );
+    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, latitude: location.latitude, longitude: location.longitude));
   }
 
   Future<void> updateDateTime(List<String> ids, DateTime dateTime) async {
-    return _api.updateAssets(
-      AssetBulkUpdateDto(
-        ids: ids,
-        dateTimeOriginal: dateTime.toIso8601String(),
-      ),
-    );
+    return _api.updateAssets(AssetBulkUpdateDto(ids: ids, dateTimeOriginal: dateTime.toIso8601String()));
   }
 
   Future<StackResponse> stack(List<String> ids) async {
-    final responseDto = await checkNull(
-      _stacksApi.createStack(StackCreateDto(assetIds: ids)),
-    );
+    final responseDto = await checkNull(_stacksApi.createStack(StackCreateDto(assetIds: ids)));
 
     return responseDto.toStack();
   }
@@ -122,14 +93,8 @@ class AssetApiRepository extends ApiRepository {
     return _api.updateAsset(assetId, UpdateAssetDto(rating: rating));
   }
 
-  Future<AssetEditsResponseDto?> editAsset(
-    String assetId,
-    List<AssetEdit> edits,
-  ) {
-    return _api.editAsset(
-      assetId,
-      AssetEditsCreateDto(edits: edits.map((e) => e.toApi()).toList()),
-    );
+  Future<AssetEditsResponseDto?> editAsset(String assetId, List<AssetEdit> edits) {
+    return _api.editAsset(assetId, AssetEditsCreateDto(edits: edits.map((e) => e.toApi()).toList()));
   }
 
   Future<void> removeEdits(String assetId) async {
@@ -139,11 +104,7 @@ class AssetApiRepository extends ApiRepository {
 
 extension on StackResponseDto {
   StackResponse toStack() {
-    return StackResponse(
-      id: id,
-      primaryAssetId: primaryAssetId,
-      assetIds: assets.map((asset) => asset.id).toList(),
-    );
+    return StackResponse(id: id, primaryAssetId: primaryAssetId, assetIds: assets.map((asset) => asset.id).toList());
   }
 }
 
