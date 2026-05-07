@@ -153,7 +153,10 @@ const defaultMachineLearningHardware: MachineLearningHardwareResponse = {
   preferredAcceleration: MachineLearningHardwareAcceleration.Auto,
 };
 
-const isFlorenceImageDescriptionModel = (modelName: string) => modelName.startsWith('microsoft/Florence-2-');
+const isFlorenceImageDescriptionModel = (modelName: string) => {
+  const cleanModelName = modelName.trim().toLowerCase().split('/').at(-1) ?? '';
+  return cleanModelName.startsWith('florence-2-');
+};
 
 @Injectable()
 export class MachineLearningRepository {

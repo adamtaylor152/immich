@@ -56,6 +56,7 @@ NSFW content, use conservative tags such as nsfw_review rather than explicit age
 OPENVINO_MODEL_ALIASES = {
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
 }
+QWEN_OPENVINO_IMAGE_TAG = "<|vision_start|><|image_pad|><|vision_end|>"
 
 FLORENCE_MODEL_NAMES = {
     "microsoft/Florence-2-base",
@@ -107,7 +108,7 @@ class ImageDescriptionModel(InferenceModel):
         if self.acceleration == ImageDescriptionAcceleration.CUDA:
             return self._predict_cuda(image)
 
-        prompt = self._make_prompt()
+        prompt = self._make_openvino_prompt()
         session = cast(Any, self.session)
         result = session.generate(
             prompt,
@@ -288,6 +289,12 @@ class ImageDescriptionModel(InferenceModel):
             prompt += NSFW_PROMPT_SUFFIX
         return prompt
 
+    def _make_openvino_prompt(self) -> str:
+        prompt = self._make_prompt()
+        if "qwen2.5-vl" in self.hf_model_name.lower():
+            return f"{QWEN_OPENVINO_IMAGE_TAG}\n{prompt}"
+        return prompt
+
     def _generation_config(self) -> Any:
         import openvino_genai
 
@@ -300,7 +307,7 @@ class ImageDescriptionModel(InferenceModel):
         from openvino import Tensor
 
         rgb = image.convert("RGB")
-        image_data = np.asarray(rgb, dtype=np.uint8)
+        image_data = np.asarray(rgb, dtype=np.uint8)[None]
         return Tensor(image_data)
 
     def _result_text(self, result: Any) -> str:

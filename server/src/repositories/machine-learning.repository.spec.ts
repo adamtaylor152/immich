@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const qwenModelName = 'Qwen/Qwen2.5-VL-3B-Instruct';
 const florenceModelName = 'microsoft/Florence-2-base-ft';
+const cleanFlorenceModelName = 'Florence-2-base-ft';
 
 describe(MachineLearningRepository.name, () => {
   let sut: MachineLearningRepository;
@@ -49,6 +50,22 @@ describe(MachineLearningRepository.name, () => {
     const formData = fetch.mock.calls[0][1].body as FormData;
     const entries = JSON.parse(String(formData.get('entries')));
     expect(entries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(qwenModelName);
+  });
+
+  it('should not retry clean Florence fallback model names unless CUDA acceleration is selected', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('error', { status: 500, statusText: 'Internal Error' }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      sut.describeImage(imagePath, {
+        modelName: qwenModelName,
+        fallbackModelName: cleanFlorenceModelName,
+        acceleration: MachineLearningHardwareAcceleration.OpenVino,
+        device: 'AUTO',
+      }),
+    ).rejects.toThrow('Machine learning request');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('should retry Florence fallback models with CUDA acceleration', async () => {

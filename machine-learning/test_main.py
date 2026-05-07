@@ -195,7 +195,7 @@ class TestImageDescriptionModel:
 
         assert model.acceleration == "cuda"
 
-    def test_converts_images_to_openvino_hwc_tensor(self, monkeypatch: MonkeyPatch) -> None:
+    def test_converts_images_to_openvino_nhwc_tensor(self, monkeypatch: MonkeyPatch) -> None:
         tensors: list[np.ndarray] = []
 
         class Tensor:
@@ -207,8 +207,13 @@ class TestImageDescriptionModel:
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
         model._to_openvino_tensor(Image.new("RGB", (3, 2), (1, 2, 3)))
 
-        assert tensors[0].shape == (2, 3, 3)
+        assert tensors[0].shape == (1, 2, 3, 3)
         assert tensors[0].dtype == np.uint8
+
+    def test_adds_qwen_image_tag_to_openvino_prompt(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+
+        assert model._make_openvino_prompt().startswith("<|vision_start|><|image_pad|><|vision_end|>\n")
 
 
 @pytest.mark.usefixtures("ort_session")
