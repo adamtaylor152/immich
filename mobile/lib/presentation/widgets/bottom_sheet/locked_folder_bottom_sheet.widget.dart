@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/delete_permanent_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/download_action_button.widget.dart';
+import 'package:immich_mobile/presentation/widgets/action_buttons/mark_nsfw_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/remove_from_lock_folder_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/share_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_sheet.widget.dart';
@@ -21,6 +22,7 @@ class LockedFolderBottomSheet extends ConsumerWidget {
         DownloadActionButton(source: ActionSource.timeline),
         DeletePermanentActionButton(source: ActionSource.timeline),
         RemoveFromLockFolderActionButton(source: ActionSource.timeline),
+        MarkSafeActionButton(source: ActionSource.timeline),
       ],
     );
   }

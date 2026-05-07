@@ -17,6 +17,7 @@ import 'package:immich_mobile/presentation/widgets/action_buttons/delete_local_a
 import 'package:immich_mobile/presentation/widgets/action_buttons/delete_permanent_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/download_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/like_activity_action_button.widget.dart';
+import 'package:immich_mobile/presentation/widgets/action_buttons/mark_nsfw_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/move_to_lock_folder_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/open_in_browser_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/remove_from_album_action_button.widget.dart';
@@ -80,6 +81,8 @@ enum ActionButtonType {
   unstack,
   archive,
   unarchive,
+  markNsfw,
+  markSafe,
   moveToLockFolder,
   removeFromLockFolder,
   removeFromAlbum,
@@ -106,6 +109,13 @@ enum ActionButtonType {
             !context.isInLockedView && //
             context.asset.hasRemote && //
             context.isArchived,
+      ActionButtonType.markNsfw =>
+        context.isOwner && //
+            !context.isInLockedView && //
+            context.asset.hasRemote,
+      ActionButtonType.markSafe =>
+        context.isOwner && //
+            context.asset.hasRemote,
       ActionButtonType.download =>
         !context.isInLockedView && //
             context.asset.hasRemote && //
@@ -197,6 +207,16 @@ enum ActionButtonType {
       ),
       ActionButtonType.archive => ArchiveActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
       ActionButtonType.unarchive => UnArchiveActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
+      ActionButtonType.markNsfw => MarkNsfwActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
+      ActionButtonType.markSafe => MarkSafeActionButton(
         source: context.source,
         iconOnly: iconOnly,
         menuItem: menuItem,
@@ -294,6 +314,8 @@ enum ActionButtonType {
     ActionButtonType.unstack => 10,
     ActionButtonType.archive => 10,
     ActionButtonType.unarchive => 10,
+    ActionButtonType.markNsfw => 10,
+    ActionButtonType.markSafe => 10,
     ActionButtonType.moveToLockFolder => 10,
     ActionButtonType.deleteLocal => 10,
     ActionButtonType.delete => 10,

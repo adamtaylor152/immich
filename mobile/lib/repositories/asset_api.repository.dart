@@ -39,6 +39,20 @@ class AssetApiRepository extends ApiRepository {
     return _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: isFavorite));
   }
 
+  Future<void> markNsfw(List<String> ids) async {
+    final dto = AssetImageEnrichmentActionRequestDto(
+      action: AssetImageEnrichmentAction.markNsfw,
+    );
+    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
+  }
+
+  Future<void> markSafe(List<String> ids) async {
+    final dto = AssetImageEnrichmentActionRequestDto(
+      action: AssetImageEnrichmentAction.markSafe,
+    );
+    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
+  }
+
   Future<void> updateLocation(List<String> ids, LatLng location) async {
     return _api.updateAssets(AssetBulkUpdateDto(ids: ids, latitude: location.latitude, longitude: location.longitude));
   }
