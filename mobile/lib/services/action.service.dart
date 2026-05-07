@@ -83,6 +83,14 @@ class ActionService {
     await _remoteAssetRepository.updateVisibility(remoteIds, AssetVisibility.timeline);
   }
 
+  Future<void> markNsfw(List<String> remoteIds) async {
+    await _assetApiRepository.markNsfw(remoteIds);
+  }
+
+  Future<void> markSafe(List<String> remoteIds) async {
+    await _assetApiRepository.markSafe(remoteIds);
+  }
+
   Future<void> moveToLockFolder(List<String> remoteIds, List<String> localIds) async {
     await _assetApiRepository.updateVisibility(remoteIds, AssetVisibilityEnum.locked);
     await _remoteAssetRepository.updateVisibility(remoteIds, AssetVisibility.locked);

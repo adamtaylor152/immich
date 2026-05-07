@@ -115,4 +115,30 @@ void main() {
       verifyNever(() => localAssetRepository.delete(any()));
     });
   });
+
+  group('ActionService.markNsfw', () {
+    test('marks remote assets as NSFW through the API repository', () async {
+      const ids = ['remote-1', 'remote-2'];
+
+      when(() => assetApiRepository.markNsfw(ids)).thenAnswer((_) async {});
+
+      await sut.markNsfw(ids);
+
+      verify(() => assetApiRepository.markNsfw(ids)).called(1);
+      verifyNoMoreInteractions(remoteAssetRepository);
+    });
+  });
+
+  group('ActionService.markSafe', () {
+    test('marks remote assets as safe through the API repository', () async {
+      const ids = ['remote-1', 'remote-2'];
+
+      when(() => assetApiRepository.markSafe(ids)).thenAnswer((_) async {});
+
+      await sut.markSafe(ids);
+
+      verify(() => assetApiRepository.markSafe(ids)).called(1);
+      verifyNoMoreInteractions(remoteAssetRepository);
+    });
+  });
 }

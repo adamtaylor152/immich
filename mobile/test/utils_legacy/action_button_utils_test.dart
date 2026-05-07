@@ -532,6 +532,44 @@ void main() {
       });
     });
 
+    group('markNsfw button', () {
+      test('should show when owner, not locked, and has remote', () {
+        final remoteAsset = createRemoteAsset();
+        final context = ActionButtonContext(
+          asset: remoteAsset,
+          isOwner: true,
+          isArchived: false,
+          isTrashEnabled: true,
+          isInLockedView: false,
+          currentAlbum: null,
+          advancedTroubleshooting: false,
+          isStacked: false,
+          source: ActionSource.timeline,
+        );
+
+        expect(ActionButtonType.markNsfw.shouldShow(context), isTrue);
+      });
+    });
+
+    group('markSafe button', () {
+      test('should show when owner and has remote', () {
+        final remoteAsset = createRemoteAsset();
+        final context = ActionButtonContext(
+          asset: remoteAsset,
+          isOwner: true,
+          isArchived: false,
+          isTrashEnabled: true,
+          isInLockedView: true,
+          currentAlbum: null,
+          advancedTroubleshooting: false,
+          isStacked: false,
+          source: ActionSource.timeline,
+        );
+
+        expect(ActionButtonType.markSafe.shouldShow(context), isTrue);
+      });
+    });
+
     group('deleteLocal button', () {
       test('should show when not locked and asset is local only', () {
         final localAsset = createLocalAsset();

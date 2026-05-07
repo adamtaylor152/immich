@@ -193,6 +193,28 @@ class ActionNotifier extends Notifier<void> {
     }
   }
 
+  Future<ActionResult> markNsfw(ActionSource source) async {
+    final ids = _getOwnedRemoteIdsForSource(source);
+    try {
+      await _service.markNsfw(ids);
+      return ActionResult(count: ids.length, success: true);
+    } catch (error, stack) {
+      _logger.severe('Failed to mark assets as NSFW', error, stack);
+      return ActionResult(count: ids.length, success: false, error: error.toString());
+    }
+  }
+
+  Future<ActionResult> markSafe(ActionSource source) async {
+    final ids = _getOwnedRemoteIdsForSource(source);
+    try {
+      await _service.markSafe(ids);
+      return ActionResult(count: ids.length, success: true);
+    } catch (error, stack) {
+      _logger.severe('Failed to mark assets as safe', error, stack);
+      return ActionResult(count: ids.length, success: false, error: error.toString());
+    }
+  }
+
   Future<ActionResult> moveToLockFolder(ActionSource source) async {
     final ids = _getOwnedRemoteIdsForSource(source);
     final localIds = _getLocalIdsForSource(source, ignoreLocalOnly: true);
