@@ -215,6 +215,52 @@ class TestImageDescriptionModel:
 
         assert model._make_openvino_prompt().startswith("<|vision_start|><|image_pad|><|vision_end|>\n")
 
+    def test_retries_openvino_dimension_errors_on_cpu(self, monkeypatch: MonkeyPatch) -> None:
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                self.data = data
+
+        class Session:
+            def __init__(self, result: Any = None) -> None:
+                self.calls = 0
+                self.result = result
+
+            def generate(self, *args: Any, **kwargs: Any) -> Any:
+                self.calls += 1
+                if self.result is None:
+                    raise RuntimeError("Accessing out-of-range dimension")
+                return self.result
+
+        gpu_session = Session()
+        cpu_session = Session(
+            SimpleNamespace(
+                texts=[
+                    json.dumps(
+                        {
+                            "description": "A room.",
+                            "people": [],
+                            "environment": "indoor",
+                            "objects": [],
+                            "visible_text": [],
+                            "context": "",
+                            "tags": ["room"],
+                        }
+                    )
+                ]
+            )
+        )
+
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+        monkeypatch.setattr(ImageDescriptionModel, "_load_openvino", lambda self, device: cpu_session)
+        monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=gpu_session)
+
+        assert model.predict(Image.new("RGB", (3, 2), (1, 2, 3)))["description"] == "A room."
+        assert gpu_session.calls == 1
+        assert cpu_session.calls == 1
+        assert model.device == "CPU"
+
 
 @pytest.mark.usefixtures("ort_session")
 class TestOrtSession:

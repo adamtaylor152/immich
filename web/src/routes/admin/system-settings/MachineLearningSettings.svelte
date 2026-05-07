@@ -62,7 +62,7 @@
     [hardwareAcceleration.OpenVino]: {
       imageDescriptionModelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
       imageDescriptionFallbackModelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
-      imageDescriptionDevice: 'AUTO',
+      imageDescriptionDevice: 'CPU',
       nsfwDetectionModelName: 'onnx-community/nsfw_image_detection-ONNX',
       nsfwDetectionDevice: 'AUTO',
     },

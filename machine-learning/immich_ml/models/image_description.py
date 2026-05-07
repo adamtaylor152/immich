@@ -97,26 +97,48 @@ class ImageDescriptionModel(InferenceModel):
         if self.acceleration == ImageDescriptionAcceleration.CUDA:
             return self._load_cuda()
 
+        return self._load_openvino(self.device)
+
+    def _load_openvino(self, device: str) -> Any:
         try:
             import openvino_genai
         except ImportError as error:
             raise ImportError("openvino-genai is required for image description models") from error
 
-        return openvino_genai.VLMPipeline(str(self.cache_dir), self.device)
+        return openvino_genai.VLMPipeline(str(self.cache_dir), device)
 
     def _predict(self, image: Image.Image, **model_kwargs: Any) -> dict[str, Any]:
         if self.acceleration == ImageDescriptionAcceleration.CUDA:
             return self._predict_cuda(image)
 
         prompt = self._make_openvino_prompt()
-        session = cast(Any, self.session)
-        result = session.generate(
-            prompt,
-            images=[self._to_openvino_tensor(image)],
-            generation_config=self._generation_config(),
-        )
+        images = [self._to_openvino_tensor(image)]
+        try:
+            result = self._generate_openvino(prompt, images)
+        except RuntimeError as error:
+            if not self._should_retry_openvino_on_cpu(error):
+                raise
+            log.warning(
+                "OpenVINO image description failed on device "
+                f"'{self.device}' with '{error}'. Retrying Qwen image description on CPU."
+            )
+            self.session = self._load_openvino("CPU")
+            self.device = "CPU"
+            result = self._generate_openvino(prompt, images)
+
         text = self._result_text(result)
         return self._normalize_response(text)
+
+    def _generate_openvino(self, prompt: str, images: list[Any]) -> Any:
+        session = cast(Any, self.session)
+        return session.generate(
+            prompt,
+            images=images,
+            generation_config=self._generation_config(),
+        )
+
+    def _should_retry_openvino_on_cpu(self, error: RuntimeError) -> bool:
+        return self.device.upper() != "CPU" and "accessing out-of-range dimension" in str(error).lower()
 
     def _load_cuda(self) -> dict[str, Any]:
         try:
