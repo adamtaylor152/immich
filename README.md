@@ -15,7 +15,7 @@
 
 ## AJ Taylor's maintained privacy fork
 
-This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment and stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups.
+This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment and stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups (we know you don't want to see photos of your EX).
 
 Upstream Immich did not accept this local feature set, so it is maintained here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
 
@@ -28,6 +28,8 @@ Upstream Immich did not accept this local feature set, so it is maintained here 
 - Mobile multi-select actions for marking owned remote assets as NSFW or safe again.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for plain-language setup notes, recommended rollout steps, and the differences from upstream Immich.
+
+Many thanks to the hard working people a FUTO and all contributors to Immich.
 
 <br/>
 <a href="https://immich.app">
