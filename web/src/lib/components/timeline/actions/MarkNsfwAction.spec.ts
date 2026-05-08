@@ -3,7 +3,6 @@ import { toastManager } from '@immich/ui';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import { timelineAssetFactory } from '@test-data/factories/asset-factory';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import MarkNsfwAction from './MarkNsfwAction.svelte';
@@ -17,9 +16,12 @@ vi.mock('@immich/sdk', async () => {
 });
 
 vi.mock('@immich/ui', async () => {
-  const ui = await vi.importActual<typeof import('@immich/ui')>('@immich/ui');
+  const { default: Icon } = await import('@test-data/components/MockIcon.svelte');
+  const { default: IconButton } = await import('@test-data/components/MockIconButton.svelte');
+
   return {
-    ...ui,
+    Icon,
+    IconButton,
     toastManager: {
       primary: vi.fn(),
     },
@@ -27,6 +29,8 @@ vi.mock('@immich/ui', async () => {
 });
 
 describe('MarkNsfwAction', () => {
+  const timelineAsset = (id: string, ownerId: string) => ({ id, ownerId }) as never;
+
   beforeEach(() => {
     const user = userAdminFactory.build();
     authManager.setUser(user);
@@ -42,7 +46,7 @@ describe('MarkNsfwAction', () => {
   });
 
   it('marks selected owned assets as NSFW', async () => {
-    const assets = timelineAssetFactory.buildList(2, { ownerId: authManager.user.id });
+    const assets = [timelineAsset('asset-1', authManager.user.id), timelineAsset('asset-2', authManager.user.id)];
     const onMark = vi.fn();
     assetMultiSelectManager.selectAssets(assets);
 
@@ -68,7 +72,7 @@ describe('MarkNsfwAction', () => {
   });
 
   it('marks selected owned assets as safe', async () => {
-    const assets = timelineAssetFactory.buildList(2, { ownerId: authManager.user.id });
+    const assets = [timelineAsset('asset-1', authManager.user.id), timelineAsset('asset-2', authManager.user.id)];
     assetMultiSelectManager.selectAssets(assets);
 
     render(MarkNsfwAction, { menuItem: true, markSafe: true });
