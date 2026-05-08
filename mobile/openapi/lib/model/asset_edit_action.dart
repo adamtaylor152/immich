@@ -26,12 +26,32 @@ class AssetEditAction {
   static const crop = AssetEditAction._(r'crop');
   static const rotate = AssetEditAction._(r'rotate');
   static const mirror = AssetEditAction._(r'mirror');
+  static const trim = AssetEditAction._(r'trim');
+  static const straighten = AssetEditAction._(r'straighten');
+  static const adjust = AssetEditAction._(r'adjust');
+  static const filter = AssetEditAction._(r'filter');
+  static const effect = AssetEditAction._(r'effect');
+  static const autoEnhance = AssetEditAction._(r'autoEnhance');
+  static const stabilize = AssetEditAction._(r'stabilize');
+  static const textOverlay = AssetEditAction._(r'textOverlay');
+  static const audio = AssetEditAction._(r'audio');
+  static const speed = AssetEditAction._(r'speed');
 
   /// List of all possible values in this [enum][AssetEditAction].
   static const values = <AssetEditAction>[
     crop,
     rotate,
     mirror,
+    trim,
+    straighten,
+    adjust,
+    filter,
+    effect,
+    autoEnhance,
+    stabilize,
+    textOverlay,
+    audio,
+    speed,
   ];
 
   static AssetEditAction? fromJson(dynamic value) => AssetEditActionTypeTransformer().decode(value);
@@ -73,6 +93,16 @@ class AssetEditActionTypeTransformer {
         case r'crop': return AssetEditAction.crop;
         case r'rotate': return AssetEditAction.rotate;
         case r'mirror': return AssetEditAction.mirror;
+        case r'trim': return AssetEditAction.trim;
+        case r'straighten': return AssetEditAction.straighten;
+        case r'adjust': return AssetEditAction.adjust;
+        case r'filter': return AssetEditAction.filter;
+        case r'effect': return AssetEditAction.effect;
+        case r'autoEnhance': return AssetEditAction.autoEnhance;
+        case r'stabilize': return AssetEditAction.stabilize;
+        case r'textOverlay': return AssetEditAction.textOverlay;
+        case r'audio': return AssetEditAction.audio;
+        case r'speed': return AssetEditAction.speed;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

@@ -15509,6 +15509,76 @@
         ],
         "type": "object"
       },
+      "AdjustParameters": {
+        "properties": {
+          "blackPoint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "blueTone": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "brightness": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "contrast": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "hdr": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "highlights": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "saturation": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "shadows": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "skinTone": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "tint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "vignette": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "warmth": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "whitePoint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "AdminOnboardingUpdateDto": {
         "properties": {
           "isOnboarded": {
@@ -16089,7 +16159,17 @@
         "enum": [
           "crop",
           "rotate",
-          "mirror"
+          "mirror",
+          "trim",
+          "straighten",
+          "adjust",
+          "filter",
+          "effect",
+          "autoEnhance",
+          "stabilize",
+          "textOverlay",
+          "audio",
+          "speed"
         ],
         "type": "string"
       },
@@ -16108,9 +16188,33 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/StraightenParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
+              },
+              {
+                "$ref": "#/components/schemas/LookParameters"
+              },
+              {
+                "$ref": "#/components/schemas/ToggleParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TextOverlayParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AudioParameters"
+              },
+              {
+                "$ref": "#/components/schemas/SpeedParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply"
           }
         },
         "required": [
@@ -16140,9 +16244,33 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/StraightenParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
+              },
+              {
+                "$ref": "#/components/schemas/LookParameters"
+              },
+              {
+                "$ref": "#/components/schemas/ToggleParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TextOverlayParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AudioParameters"
+              },
+              {
+                "$ref": "#/components/schemas/SpeedParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply"
           }
         },
         "required": [
@@ -16155,7 +16283,7 @@
       "AssetEditsCreateDto": {
         "properties": {
           "edits": {
-            "description": "List of edit actions to apply (crop, rotate, or mirror)",
+            "description": "List of edit actions to apply",
             "items": {
               "$ref": "#/components/schemas/AssetEditActionItemDto"
             },
@@ -17222,6 +17350,20 @@
           "pcm_s16le"
         ],
         "type": "string"
+      },
+      "AudioParameters": {
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          },
+          "volume": {
+            "description": "Audio volume multiplier",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
       },
       "AuthStatusResponseDto": {
         "properties": {
@@ -18334,6 +18476,7 @@
           "AssetDetectDuplicatesQueueAll",
           "AssetDetectDuplicates",
           "AssetEditThumbnailGeneration",
+          "AssetVideoEditGeneration",
           "AssetEncodeVideoQueueAll",
           "AssetEncodeVideo",
           "AssetEmptyTrash",
@@ -18627,6 +18770,27 @@
         "required": [
           "redirectUri",
           "successful"
+        ],
+        "type": "object"
+      },
+      "LookParameters": {
+        "properties": {
+          "intensity": {
+            "default": 100,
+            "description": "Filter or effect intensity",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "description": "Filter or effect name",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -22790,6 +22954,32 @@
         ],
         "type": "string"
       },
+      "SpeedParameters": {
+        "properties": {
+          "endMs": {
+            "description": "Speed segment end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rate": {
+            "description": "Playback speed multiplier",
+            "maximum": 4,
+            "minimum": 0.25,
+            "type": "number"
+          },
+          "startMs": {
+            "description": "Speed segment start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rate"
+        ],
+        "type": "object"
+      },
       "StackCreateDto": {
         "properties": {
           "assetIds": {
@@ -23045,6 +23235,20 @@
           "backups"
         ],
         "type": "string"
+      },
+      "StraightenParameters": {
+        "properties": {
+          "angle": {
+            "description": "Straighten angle in degrees",
+            "maximum": 45,
+            "minimum": -45,
+            "type": "number"
+          }
+        },
+        "required": [
+          "angle"
+        ],
+        "type": "object"
       },
       "SuppressionResponse": {
         "properties": {
@@ -25918,6 +26122,58 @@
         ],
         "type": "object"
       },
+      "TextOverlayParameters": {
+        "properties": {
+          "color": {
+            "default": "#ffffff",
+            "description": "Text color in hex format",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$",
+            "type": "string"
+          },
+          "endMs": {
+            "description": "Overlay end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "size": {
+            "default": 0.06,
+            "description": "Font size as a percentage of video height",
+            "maximum": 0.2,
+            "minimum": 0.02,
+            "type": "number"
+          },
+          "startMs": {
+            "description": "Overlay start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "x": {
+            "description": "Horizontal position as a percentage of video width",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "y": {
+            "description": "Vertical position as a percentage of video height",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "text",
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
       "TimeBucketAssetResponseDto": {
         "properties": {
           "city": {
@@ -26111,6 +26367,15 @@
         ],
         "type": "object"
       },
+      "ToggleParameters": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "ToneMapping": {
         "description": "Tone mapping",
         "enum": [
@@ -26154,6 +26419,27 @@
         },
         "required": [
           "count"
+        ],
+        "type": "object"
+      },
+      "TrimParameters": {
+        "properties": {
+          "endMs": {
+            "description": "Trim end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "startMs": {
+            "description": "Trim start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "endMs",
+          "startMs"
         ],
         "type": "object"
       },

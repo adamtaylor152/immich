@@ -49,6 +49,31 @@ import { extractTimeZone } from 'src/utils/date';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { transformOcrBoundingBox } from 'src/utils/transform';
 
+const imageEditActions = new Set<AssetEditAction>([
+  AssetEditAction.Crop,
+  AssetEditAction.Rotate,
+  AssetEditAction.Mirror,
+]);
+
+const videoEditActions = new Set<AssetEditAction>([
+  ...imageEditActions,
+  AssetEditAction.Trim,
+  AssetEditAction.Straighten,
+  AssetEditAction.Adjust,
+  AssetEditAction.Filter,
+  AssetEditAction.Effect,
+  AssetEditAction.AutoEnhance,
+  AssetEditAction.Stabilize,
+  AssetEditAction.TextOverlay,
+  AssetEditAction.Audio,
+  AssetEditAction.Speed,
+]);
+
+const getDurationMs = (duration: number | null | undefined) => {
+  const value = Number(duration);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
 @Injectable()
 export class AssetService extends BaseService {
   async getStatistics(auth: AuthDto, dto: AssetStatsDto) {
@@ -560,8 +585,17 @@ export class AssetService extends BaseService {
       throw new BadRequestException('Asset not found');
     }
 
-    if (asset.type !== AssetType.Image) {
-      throw new BadRequestException('Only images can be edited');
+    const edits = dto.edits as AssetEditActionItem[];
+    const supportedActions = asset.type === AssetType.Video ? videoEditActions : imageEditActions;
+    const unsupportedAction = edits.find((edit) => !supportedActions.has(edit.action));
+    if (unsupportedAction) {
+      throw new BadRequestException(
+        `Edit action '${unsupportedAction.action}' is not supported for ${asset.type} assets`,
+      );
+    }
+
+    if (![AssetType.Image, AssetType.Video].includes(asset.type)) {
+      throw new BadRequestException('Only images and videos can be edited');
     }
 
     if (asset.livePhotoVideoId) {
@@ -569,36 +603,30 @@ export class AssetService extends BaseService {
     }
 
     if (isPanorama(asset)) {
-      throw new BadRequestException('Editing panorama images is not supported');
+      throw new BadRequestException('Editing panorama media is not supported');
     }
 
-    if (asset.originalPath?.toLowerCase().endsWith('.gif')) {
+    if (asset.type === AssetType.Image && asset.originalPath?.toLowerCase().endsWith('.gif')) {
       throw new BadRequestException('Editing GIF images is not supported');
     }
 
-    if (asset.originalPath?.toLowerCase().endsWith('.svg')) {
+    if (asset.type === AssetType.Image && asset.originalPath?.toLowerCase().endsWith('.svg')) {
       throw new BadRequestException('Editing SVG images is not supported');
     }
 
-    // check that crop parameters will not go out of bounds
     const { width: assetWidth, height: assetHeight } = getDimensions(asset);
-
     if (!assetWidth || !assetHeight) {
       throw new BadRequestException('Asset dimensions are not available for editing');
     }
 
-    const edits = dto.edits as AssetEditActionItem[];
+    if (asset.type === AssetType.Video && !getDurationMs(asset.duration)) {
+      throw new BadRequestException('Video duration is not available for editing');
+    }
+
     const crop = edits.find((e) => e.action === AssetEditAction.Crop);
     if (crop) {
       if (edits[0].action !== AssetEditAction.Crop) {
         throw new BadRequestException('Crop action must be the first edit action');
-      }
-
-      // check that crop parameters will not go out of bounds
-      const { width: assetWidth, height: assetHeight } = getDimensions(asset);
-
-      if (!assetWidth || !assetHeight) {
-        throw new BadRequestException('Asset dimensions are not available for editing');
       }
 
       const { x, y, width, height } = crop.parameters;
@@ -607,8 +635,58 @@ export class AssetService extends BaseService {
       }
     }
 
+    if (asset.type === AssetType.Video) {
+      const durationMs = getDurationMs(asset.duration)!;
+      const trimEdit = edits.find(
+        (edit): edit is Extract<AssetEditActionItem, { action: AssetEditAction.Trim }> =>
+          edit.action === AssetEditAction.Trim,
+      );
+      const trimStartMs = trimEdit?.parameters.startMs ?? 0;
+      const trimEndMs = trimEdit?.parameters.endMs ?? durationMs;
+      const speedEdits = edits.filter((edit) => edit.action === AssetEditAction.Speed);
+      const globalSpeedEdit = speedEdits.find(
+        (edit) => edit.parameters.startMs === undefined && edit.parameters.endMs === undefined,
+      );
+      const speedSegments = speedEdits
+        .filter((edit) => edit.parameters.startMs !== undefined && edit.parameters.endMs !== undefined)
+        .sort((a, b) => a.parameters.startMs! - b.parameters.startMs!);
+
+      if (globalSpeedEdit && speedSegments.length > 0) {
+        throw new BadRequestException('Global and segment speed edits cannot be combined');
+      }
+
+      for (let index = 1; index < speedSegments.length; index++) {
+        if (speedSegments[index].parameters.startMs! < speedSegments[index - 1].parameters.endMs!) {
+          throw new BadRequestException('Speed segments cannot overlap');
+        }
+      }
+
+      for (const edit of edits) {
+        if (edit.action === AssetEditAction.Trim && edit.parameters.endMs > durationMs) {
+          throw new BadRequestException('Trim parameters are out of bounds');
+        }
+
+        if (edit.action === AssetEditAction.Speed || edit.action === AssetEditAction.TextOverlay) {
+          const { startMs, endMs } = edit.parameters;
+          if ((startMs !== undefined && startMs > durationMs) || (endMs !== undefined && endMs > durationMs)) {
+            throw new BadRequestException(`${edit.action} parameters are out of bounds`);
+          }
+
+          if (
+            trimEdit &&
+            ((startMs !== undefined && startMs < trimStartMs) || (endMs !== undefined && endMs > trimEndMs))
+          ) {
+            throw new BadRequestException(`${edit.action} parameters must be within the trimmed video range`);
+          }
+        }
+      }
+    }
+
     const newEdits = await this.assetEditRepository.replaceAll(id, edits);
-    await this.jobRepository.queue({ name: JobName.AssetEditThumbnailGeneration, data: { id } });
+    await this.jobRepository.queue({
+      name: asset.type === AssetType.Video ? JobName.AssetVideoEditGeneration : JobName.AssetEditThumbnailGeneration,
+      data: { id },
+    });
 
     // Return the asset and its applied edits
     return {
@@ -620,12 +698,27 @@ export class AssetService extends BaseService {
   async removeAssetEdits(auth: AuthDto, id: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.AssetEditDelete, ids: [id] });
 
-    const asset = await this.assetRepository.getById(id);
+    const asset = await this.assetRepository.getById(id, { files: true });
     if (!asset) {
       throw new BadRequestException('Asset not found');
     }
 
     await this.assetEditRepository.replaceAll(id, []);
-    await this.jobRepository.queue({ name: JobName.AssetEditThumbnailGeneration, data: { id } });
+
+    if (asset.type === AssetType.Video) {
+      const editedFiles = asset.files?.filter((file) => file.isEdited) ?? [];
+      if (editedFiles.length > 0) {
+        await this.jobRepository.queue({
+          name: JobName.FileDelete,
+          data: { files: editedFiles.map((file) => file.path) },
+        });
+        await this.assetRepository.deleteFiles(editedFiles);
+      }
+    }
+
+    await this.jobRepository.queue({
+      name: asset.type === AssetType.Video ? JobName.AssetVideoEditGeneration : JobName.AssetEditThumbnailGeneration,
+      data: { id },
+    });
   }
 }

@@ -217,18 +217,25 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     shortcuts: { key: 'p' },
   };
 
+  const isUnsupportedEditorMedia =
+    asset.livePhotoVideoId ||
+    asset.exifInfo?.projectionType === ProjectionType.EQUIRECTANGULAR ||
+    asset.originalPath.toLowerCase().endsWith('.insp') ||
+    asset.originalPath.toLowerCase().endsWith('.gif') ||
+    asset.originalPath.toLowerCase().endsWith('.svg');
+
+  const isEditableImage = asset.type === AssetTypeEnum.Image && !isUnsupportedEditorMedia;
+  const isEditableVideo =
+    asset.type === AssetTypeEnum.Video &&
+    !isUnsupportedEditorMedia &&
+    !!asset.width &&
+    !!asset.height &&
+    !!asset.duration;
+
   const Edit: ActionItem = {
     title: $t('editor'),
     icon: mdiTune,
-    $if: () =>
-      !sharedLink &&
-      isOwner &&
-      asset.type === AssetTypeEnum.Image &&
-      !asset.livePhotoVideoId &&
-      asset.exifInfo?.projectionType !== ProjectionType.EQUIRECTANGULAR &&
-      !asset.originalPath.toLowerCase().endsWith('.insp') &&
-      !asset.originalPath.toLowerCase().endsWith('.gif') &&
-      !asset.originalPath.toLowerCase().endsWith('.svg'),
+    $if: () => !sharedLink && isOwner && !asset.isTrashed && (isEditableImage || isEditableVideo),
     onAction: () => assetViewerManager.openEditor(),
     shortcuts: [{ key: 'e' }],
   };
