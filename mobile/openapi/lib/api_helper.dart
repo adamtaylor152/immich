@@ -193,6 +193,9 @@ String parameterToString(dynamic value) {
   if (value is SyncRequestType) {
     return SyncRequestTypeTypeTransformer().encode(value).toString();
   }
+  if (value is TimeBucketDateType) {
+    return TimeBucketDateTypeTypeTransformer().encode(value).toString();
+  }
   if (value is ToneMapping) {
     return ToneMappingTypeTransformer().encode(value).toString();
   }

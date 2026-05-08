@@ -45,6 +45,9 @@ interface ClaimOptions<T> {
   isValid: (value: unknown) => boolean;
 }
 
+const ELEVATED_SESSION_DURATION_MINUTES = 60;
+const ELEVATED_SESSION_REFRESH_THRESHOLD_MINUTES = 5;
+
 export type ValidateRequest = {
   headers: IncomingHttpHeaders;
   queryParams: Record<string, string>;
@@ -586,9 +589,9 @@ export class AuthService extends BaseService {
         const pinExpiresAt = DateTime.fromJSDate(session.pinExpiresAt);
         hasElevatedPermission = pinExpiresAt > now;
 
-        if (hasElevatedPermission && now.plus({ minutes: 5 }) > pinExpiresAt) {
+        if (hasElevatedPermission && now.plus({ minutes: ELEVATED_SESSION_REFRESH_THRESHOLD_MINUTES }) > pinExpiresAt) {
           await this.sessionRepository.update(session.id, {
-            pinExpiresAt: DateTime.now().plus({ minutes: 5 }).toJSDate(),
+            pinExpiresAt: DateTime.now().plus({ minutes: ELEVATED_SESSION_DURATION_MINUTES }).toJSDate(),
           });
         }
       }
@@ -614,7 +617,7 @@ export class AuthService extends BaseService {
     this.validatePinCode(user, { pinCode: dto.pinCode });
 
     await this.sessionRepository.update(auth.session.id, {
-      pinExpiresAt: DateTime.now().plus({ minutes: 15 }).toJSDate(),
+      pinExpiresAt: DateTime.now().plus({ minutes: ELEVATED_SESSION_DURATION_MINUTES }).toJSDate(),
     });
   }
 
