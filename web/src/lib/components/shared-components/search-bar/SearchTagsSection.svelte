@@ -40,7 +40,7 @@
   };
 </script>
 
-{#if authManager.authenticated && authManager.preferences.tags.enabled}
+{#if authManager.authenticated && authManager.preferences.tags?.enabled}
   <div id="location-selection">
     <form autocomplete="off" id="create-tag-form">
       <div class="mb-4 flex flex-col">
