@@ -422,6 +422,22 @@ class AssetSync extends BaseSync {
       .stream();
   }
 
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getHiddenDeletes(options: SyncQueryOptions) {
+    const hiddenContent = getHiddenContentFilter(options);
+    let query = this.upsertQuery('asset_metadata', options)
+      .innerJoin('asset', 'asset.id', 'asset_metadata.assetId')
+      .select(['asset_metadata.updateId as id', 'asset.id as assetId'])
+      .where('asset.ownerId', '=', options.userId)
+      .where('asset.deletedAt', 'is', null);
+
+    query = hiddenContent
+      ? query.where(hiddenContentAssetIdExists(sql.ref('asset.id'), hiddenContent))
+      : query.where(sql<boolean>`false`);
+
+    return query.stream();
+  }
+
   cleanupAuditTable(daysAgo: number) {
     return this.auditCleanup('asset_audit', daysAgo);
   }

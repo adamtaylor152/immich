@@ -56,7 +56,6 @@ jobs:
           provenance: false
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.IMAGE_TAG }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ env.SOURCE_SHA }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -66,9 +65,6 @@ jobs:
             BUILD_IMAGE=unraid-docker
             BUILD_SOURCE_REF=${{ env.SOURCE_REF }}
             BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
-          secrets: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
-
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
     if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
@@ -103,7 +99,6 @@ jobs:
           provenance: false
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.ML_IMAGE_TAG }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ env.SOURCE_SHA }}-openvino
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}

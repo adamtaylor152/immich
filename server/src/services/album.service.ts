@@ -98,7 +98,9 @@ export class AlbumService extends BaseService {
       endDate: asDateString(albumMetadataForIds?.endDate ?? undefined),
       assetCount: albumMetadataForIds?.assetCount ?? 0,
       lastModifiedAssetTimestamp: asDateString(albumMetadataForIds?.lastModifiedAssetTimestamp ?? undefined),
-      contributorCounts: isShared ? await this.albumRepository.getContributorCounts(album.id) : undefined,
+      contributorCounts: isShared
+        ? await this.albumRepository.getContributorCounts(album.id, privacyOptions)
+        : undefined,
     };
   }
 

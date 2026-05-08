@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { randomBytes } from 'node:crypto';
 import { Stats } from 'node:fs';
 import { defaults } from 'src/config';
+import { StorageCore } from 'src/cores/storage.core';
 import {
   AssetFileType,
   AssetType,
@@ -13,6 +14,7 @@ import {
   JobName,
   JobStatus,
   SourceType,
+  StorageFolder,
 } from 'src/enum';
 import { ImmichTags } from 'src/repositories/metadata.repository';
 import { firstDateTime, MetadataService } from 'src/services/metadata.service';
@@ -27,7 +29,9 @@ import { makeStream, newTestService, ServiceMocks } from 'test/utils';
 const forSidecarJob = (
   asset: {
     id?: string;
+    ownerId?: string;
     originalPath?: string;
+    physicalOriginalFileId?: string | null;
     files?: { id: string; type: AssetFileType; path: string; physicalFileId?: string | null; isEdited: boolean }[];
   } = {},
 ) => {
@@ -35,7 +39,9 @@ const forSidecarJob = (
 
   return {
     id: factory.uuid(),
+    ownerId: factory.uuid(),
     originalPath: '/path/to/IMG_123.jpg',
+    physicalOriginalFileId: null,
     ...asset,
     files,
   };
@@ -1949,6 +1955,35 @@ describe(MetadataService.name, () => {
       expect(mocks.asset.upsertFile).not.toHaveBeenCalled();
       expect(mocks.asset.deleteFile).not.toHaveBeenCalled();
     });
+
+    it('should not attach the shared original sidecar for a non-canonical physical asset', async () => {
+      const asset = forSidecarJob({
+        id: 'duplicate-asset',
+        ownerId: 'duplicate-owner',
+        originalPath: '/path/to/master/IMG_123.jpg',
+        physicalOriginalFileId: 'physical-file',
+        files: [
+          { id: 'sidecar', path: '/path/to/master/IMG_123.jpg.xmp', type: AssetFileType.Sidecar, isEdited: false },
+        ],
+      });
+      const sidecarPath = StorageCore.getNestedPath(StorageFolder.Upload, asset.ownerId, `${asset.id}.xmp`);
+
+      mocks.assetJob.getForSidecarCheckJob.mockResolvedValue(asset);
+      mocks.physicalFile.isOriginalCanonical.mockResolvedValue(false);
+      mocks.storage.checkFileExists.mockImplementation((path) => Promise.resolve(path === sidecarPath));
+
+      await expect(sut.handleSidecarCheck({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.asset.upsertFile).toHaveBeenCalledWith({
+        assetId: asset.id,
+        type: AssetFileType.Sidecar,
+        path: sidecarPath,
+      });
+      expect(mocks.storage.checkFileExists).not.toHaveBeenCalledWith(
+        '/path/to/master/IMG_123.jpg.xmp',
+        expect.anything(),
+      );
+    });
   });
 
   describe('handleSidecarWrite', () => {
@@ -2025,6 +2060,32 @@ describe(MetadataService.name, () => {
       await expect(sut.handleSidecarWrite({ id: asset.id })).resolves.toBe(JobStatus.Success);
       expect(mocks.metadata.writeTags).toHaveBeenCalledWith(asset.files[0].path, { Rating: 0 });
       expect(mocks.asset.unlockProperties).toHaveBeenCalledWith(asset.id, ['rating']);
+    });
+
+    it('should write non-canonical physical asset sidecars to an owner-scoped path', async () => {
+      const asset = AssetFactory.from({
+        id: 'duplicate-asset',
+        ownerId: 'duplicate-owner',
+        originalPath: '/path/to/master/IMG_123.jpg',
+        physicalOriginalFileId: 'physical-file',
+      })
+        .file({ type: AssetFileType.Sidecar, path: '/path/to/master/IMG_123.jpg.xmp' })
+        .exif({ rating: 4 })
+        .build();
+      const sidecarPath = StorageCore.getNestedPath(StorageFolder.Upload, asset.ownerId, `${asset.id}.xmp`);
+
+      mocks.assetJob.getLockedPropertiesForMetadataExtraction.mockResolvedValue(['rating']);
+      mocks.assetJob.getForSidecarWriteJob.mockResolvedValue(getForSidecarWrite(asset));
+      mocks.physicalFile.isOriginalCanonical.mockResolvedValue(false);
+
+      await expect(sut.handleSidecarWrite({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.metadata.writeTags).toHaveBeenCalledWith(sidecarPath, { Rating: 4 });
+      expect(mocks.asset.upsertFile).toHaveBeenCalledWith({
+        assetId: asset.id,
+        type: AssetFileType.Sidecar,
+        path: sidecarPath,
+      });
     });
   });
 
