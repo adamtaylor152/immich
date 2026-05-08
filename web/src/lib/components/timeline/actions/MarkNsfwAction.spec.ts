@@ -3,6 +3,7 @@ import { toastManager } from '@immich/ui';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import MarkNsfwAction from './MarkNsfwAction.svelte';
@@ -29,7 +30,7 @@ vi.mock('@immich/ui', async () => {
 });
 
 describe('MarkNsfwAction', () => {
-  const timelineAsset = (id: string, ownerId: string) => ({ id, ownerId }) as never;
+  const timelineAsset = (id: string, ownerId: string) => ({ id, ownerId }) as TimelineAsset;
 
   beforeEach(() => {
     const user = userAdminFactory.build();
