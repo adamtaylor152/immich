@@ -80,6 +80,12 @@
           <Icon icon={mdiClose} size="20" />
         </button>
       </div>
+    {:else if uploadAsset.state === UploadState.DUPLICATED}
+      <div class="flex items-center justify-between gap-1">
+        <button type="button" onclick={() => handleDismiss(uploadAsset)} class="" aria-hidden="true" tabindex={-1}>
+          <Icon icon={mdiClose} size="20" />
+        </button>
+      </div>
     {:else if uploadAsset.state === UploadState.ERROR}
       <div class="flex items-center justify-between gap-1">
         <button type="button" onclick={() => handleRetry(uploadAsset)} class="" aria-hidden="true" tabindex={-1}>

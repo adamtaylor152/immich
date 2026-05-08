@@ -485,7 +485,7 @@ describe(AssetMediaService.name, () => {
       expect(mocks.user.updateUsage).not.toHaveBeenCalled();
     });
 
-    it('should not disclose a hidden NSFW duplicate id if upload hits the checksum constraint', async () => {
+    it('should mark hidden NSFW duplicates without disclosing the duplicate id if upload hits the checksum constraint', async () => {
       const file = {
         uuid: 'random-uuid',
         originalPath: 'fake_path/asset_1.jpeg',
@@ -499,9 +499,10 @@ describe(AssetMediaService.name, () => {
 
       mocks.asset.create.mockRejectedValue(error);
 
-      await expect(
-        sut.uploadAsset({ ...authStub.user1, hideNsfwAssets: true }, createDto, file),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(sut.uploadAsset({ ...authStub.user1, hideNsfwAssets: true }, createDto, file)).resolves.toEqual({
+        id: '',
+        status: AssetMediaStatus.DUPLICATE,
+      });
 
       expect(mocks.asset.getUploadAssetIdByChecksum).toHaveBeenCalledWith(authStub.user1.user.id, file.checksum, {
         excludeNsfw: true,

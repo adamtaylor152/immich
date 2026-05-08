@@ -313,7 +313,7 @@ export class AssetMediaService extends BaseService {
       if (!duplicateId) {
         if (auth.hideNsfwAssets) {
           this.logger.debug('Duplicate asset upload rejected while existing asset is hidden by NSFW privacy mode');
-          throw new BadRequestException('Asset upload failed');
+          return { status: AssetMediaStatus.DUPLICATE, id: '' };
         }
 
         this.logger.error(`Error locating duplicate for checksum constraint`);

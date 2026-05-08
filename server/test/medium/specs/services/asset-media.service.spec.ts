@@ -360,7 +360,7 @@ describe(AssetService.name, () => {
       });
     });
 
-    it('should not return hidden duplicate ids when upload hits the checksum constraint', async () => {
+    it('should mark hidden NSFW duplicates without returning duplicate ids when upload hits the checksum constraint', async () => {
       const { sut, ctx } = setup(await getKyselyDB());
 
       ctx.getMock(StorageRepository).utimes.mockResolvedValue();
@@ -384,7 +384,7 @@ describe(AssetService.name, () => {
 
       await expect(
         sut.uploadAsset(hiddenAuth, uploadDto, mediumFactory.uploadFile({ checksum: unreviewedNsfw.checksum })),
-      ).rejects.toThrow('Asset upload failed');
+      ).resolves.toEqual({ id: '', status: AssetMediaStatus.DUPLICATE });
     });
   });
 
