@@ -25,6 +25,7 @@ Upstream Immich did not accept this local feature set *because it was "slop,"* s
 - A `/suppressed` private view for organizing hidden/sensitive content without losing album context.
 - Admin review and repair tools for generated descriptions, generated tags, and NSFW decisions.
 - Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
+- Enhanced video duplicate detection that samples multiple internal-only video frames and compares CLIP embeddings, reducing false duplicate groups caused by black frames, title cards, or intro screens while still matching different-resolution copies.
 - OpenVINO and CUDA machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups.
 - Mobile multi-select actions for marking owned remote assets as NSFW or safe again.
 - Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.

@@ -403,6 +403,96 @@ where
   and "asset"."visibility" in ('archive', 'timeline')
   and "job_status"."duplicatesDetectedAt" is null
 
+-- AssetJobRepository.streamForVideoDuplicateFrames
+select
+  "asset"."id"
+from
+  "asset"
+where
+  "asset"."type" = 'VIDEO'
+  and "asset"."deletedAt" is null
+  and "asset"."visibility" != 'hidden'
+  and "asset"."visibility" != 'locked'
+  and (
+    select
+      count(*)
+    from
+      "asset_video_duplicate_frame"
+    where
+      "assetId" = "asset"."id"
+  ) < $1
+
+-- AssetJobRepository.getForVideoDuplicateFrameJob
+select
+  "asset"."id",
+  "asset"."ownerId",
+  "asset"."originalPath",
+  "asset"."visibility",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_video"."index",
+          "asset_video"."codecName",
+          "asset_video"."profile",
+          "asset_video"."level",
+          "asset_video"."bitrate",
+          "asset_exif"."exifImageWidth" as "width",
+          "asset_exif"."exifImageHeight" as "height",
+          "asset_video"."pixelFormat",
+          "asset_video"."frameCount",
+          "asset_exif"."fps" as "frameRate",
+          "asset_video"."timeBase",
+          case
+            when "asset_exif"."orientation" = '6' then -90
+            when "asset_exif"."orientation" = '8' then 90
+            when "asset_exif"."orientation" = '3' then 180
+            else 0
+          end as "rotation",
+          "asset_video"."colorPrimaries",
+          "asset_video"."colorMatrix",
+          "asset_video"."colorTransfer",
+          "asset_video"."dvProfile",
+          "asset_video"."dvLevel",
+          "asset_video"."dvBlSignalCompatibilityId"
+        from
+          (
+            select
+              1
+          ) as "dummy"
+        where
+          "asset_video"."assetId" is not null
+      ) as obj
+  ) as "videoStream",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_video"."formatName",
+          "asset_video"."formatLongName",
+          "asset"."duration",
+          "asset_video"."bitrate"
+        from
+          (
+            select
+              1
+          ) as "dummy"
+        where
+          "asset_video"."assetId" is not null
+      ) as obj
+  ) as "format"
+from
+  "asset"
+  inner join "asset_video" on "asset_video"."assetId" = "asset"."id"
+  inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+where
+  "asset"."id" = $1
+  and "asset"."type" = 'VIDEO'
+
 -- AssetJobRepository.streamForEncodeClip
 select
   "asset"."id"

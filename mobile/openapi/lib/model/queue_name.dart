@@ -30,6 +30,7 @@ class QueueName {
   static const facialRecognition = QueueName._(r'facialRecognition');
   static const smartSearch = QueueName._(r'smartSearch');
   static const duplicateDetection = QueueName._(r'duplicateDetection');
+  static const videoDuplicateDetection = QueueName._(r'videoDuplicateDetection');
   static const backgroundTask = QueueName._(r'backgroundTask');
   static const storageTemplateMigration = QueueName._(r'storageTemplateMigration');
   static const migration = QueueName._(r'migration');
@@ -54,6 +55,7 @@ class QueueName {
     facialRecognition,
     smartSearch,
     duplicateDetection,
+    videoDuplicateDetection,
     backgroundTask,
     storageTemplateMigration,
     migration,
@@ -113,6 +115,7 @@ class QueueNameTypeTransformer {
         case r'facialRecognition': return QueueName.facialRecognition;
         case r'smartSearch': return QueueName.smartSearch;
         case r'duplicateDetection': return QueueName.duplicateDetection;
+        case r'videoDuplicateDetection': return QueueName.videoDuplicateDetection;
         case r'backgroundTask': return QueueName.backgroundTask;
         case r'storageTemplateMigration': return QueueName.storageTemplateMigration;
         case r'migration': return QueueName.migration;

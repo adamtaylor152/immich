@@ -234,8 +234,20 @@ export class JobService extends BaseService {
 
       case JobName.SmartSearch: {
         if (item.data.source === 'upload') {
-          await this.jobRepository.queue({ name: JobName.AssetDetectDuplicates, data: item.data });
+          const asset = await this.assetRepository.getById(item.data.id);
+          await this.jobRepository.queue({
+            name:
+              asset?.type === AssetType.Video
+                ? JobName.AssetGenerateVideoDuplicateFrames
+                : JobName.AssetDetectDuplicates,
+            data: item.data,
+          });
         }
+        break;
+      }
+
+      case JobName.AssetGenerateVideoDuplicateFrames: {
+        await this.jobRepository.queue({ name: JobName.AssetDetectDuplicates, data: item.data });
         break;
       }
     }

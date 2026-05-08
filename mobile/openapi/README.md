@@ -419,6 +419,7 @@ Class | Method | HTTP request | Description
  - [DownloadResponseDto](doc//DownloadResponseDto.md)
  - [DownloadUpdate](doc//DownloadUpdate.md)
  - [DuplicateDetectionConfig](doc//DuplicateDetectionConfig.md)
+ - [DuplicateDetectionConfigEnhancedVideo](doc//DuplicateDetectionConfigEnhancedVideo.md)
  - [DuplicateResolveDto](doc//DuplicateResolveDto.md)
  - [DuplicateResolveGroupDto](doc//DuplicateResolveGroupDto.md)
  - [DuplicateResponseDto](doc//DuplicateResponseDto.md)

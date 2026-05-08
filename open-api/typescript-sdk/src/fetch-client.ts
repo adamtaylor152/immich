@@ -1380,6 +1380,7 @@ export type QueuesResponseLegacyDto = {
     storageTemplateMigration: QueueResponseLegacyDto;
     thumbnailGeneration: QueueResponseLegacyDto;
     videoConversion: QueueResponseLegacyDto;
+    videoDuplicateDetection: QueueResponseLegacyDto;
     workflow: QueueResponseLegacyDto;
 };
 export type JobCreateDto = {
@@ -2550,6 +2551,7 @@ export type SystemConfigJobDto = {
     smartSearch: JobSettingsDto;
     thumbnailGeneration: JobSettingsDto;
     videoConversion: JobSettingsDto;
+    videoDuplicateDetection: JobSettingsDto;
     workflow: JobSettingsDto;
 };
 export type SystemConfigLibraryScanDto = {
@@ -2586,6 +2588,16 @@ export type ClipConfig = {
 export type DuplicateDetectionConfig = {
     /** Whether the task is enabled */
     enabled: boolean;
+    enhancedVideo: {
+        /** Whether enhanced video duplicate detection is enabled */
+        enabled: boolean;
+        /** Number of video frames to sample for duplicate confirmation */
+        frameCount: number;
+        /** Maximum distance threshold for enhanced video duplicate frame matching */
+        maxDistance: number;
+        /** Minimum matching sampled frames required to confirm a video duplicate */
+        minMatchingFrames: number;
+    };
     /** Maximum distance threshold for duplicate detection */
     maxDistance: number;
 };
@@ -7310,6 +7322,7 @@ export enum QueueName {
     FacialRecognition = "facialRecognition",
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
+    VideoDuplicateDetection = "videoDuplicateDetection",
     BackgroundTask = "backgroundTask",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
@@ -7377,6 +7390,8 @@ export enum JobName {
     AssetDetectFaces = "AssetDetectFaces",
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
+    AssetGenerateVideoDuplicateFramesQueueAll = "AssetGenerateVideoDuplicateFramesQueueAll",
+    AssetGenerateVideoDuplicateFrames = "AssetGenerateVideoDuplicateFrames",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
     AssetVideoEditGeneration = "AssetVideoEditGeneration",
     AssetEncodeVideoQueueAll = "AssetEncodeVideoQueueAll",

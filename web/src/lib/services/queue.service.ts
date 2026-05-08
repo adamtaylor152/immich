@@ -194,6 +194,11 @@ export const asQueueItem = ($t: MessageFormatter, queue: { name: QueueName }): Q
       title: $t('admin.machine_learning_duplicate_detection'),
       subtitle: $t('admin.duplicate_detection_job_description'),
     },
+    [QueueName.VideoDuplicateDetection]: {
+      icon: mdiVideo,
+      title: $t('admin.enhanced_video_duplicate_detection'),
+      subtitle: $t('admin.enhanced_video_duplicate_detection_job_description'),
+    },
     [QueueName.FaceDetection]: {
       icon: mdiFaceRecognition,
       title: $t('admin.face_detection'),

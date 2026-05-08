@@ -96,6 +96,7 @@ const SystemConfigJobSchema = z
     videoConversion: JobSettingsSchema,
     faceDetection: JobSettingsSchema,
     smartSearch: JobSettingsSchema,
+    videoDuplicateDetection: JobSettingsSchema,
     backgroundTask: JobSettingsSchema,
     migration: JobSettingsSchema,
     search: JobSettingsSchema,

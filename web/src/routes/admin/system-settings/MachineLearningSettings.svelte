@@ -290,6 +290,54 @@
             isEdited={configToEdit.machineLearning.duplicateDetection.maxDistance !==
               config.machineLearning.duplicateDetection.maxDistance}
           />
+
+          <hr />
+
+          <SettingSwitch
+            title={$t('admin.enhanced_video_duplicate_detection_enabled')}
+            subtitle={$t('admin.enhanced_video_duplicate_detection_enabled_description')}
+            bind:checked={configToEdit.machineLearning.duplicateDetection.enhancedVideo.enabled}
+            disabled={disabled || !featureFlagsManager.value.duplicateDetection}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.enhanced_video_duplicate_detection_frame_count')}
+            bind:value={configToEdit.machineLearning.duplicateDetection.enhancedVideo.frameCount}
+            step="1"
+            min={2}
+            max={8}
+            description={$t('admin.enhanced_video_duplicate_detection_frame_count_description')}
+            disabled={disabled || !featureFlagsManager.value.duplicateDetection}
+            isEdited={configToEdit.machineLearning.duplicateDetection.enhancedVideo.frameCount !==
+              config.machineLearning.duplicateDetection.enhancedVideo.frameCount}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.enhanced_video_duplicate_detection_min_matching_frames')}
+            bind:value={configToEdit.machineLearning.duplicateDetection.enhancedVideo.minMatchingFrames}
+            step="1"
+            min={1}
+            max={8}
+            description={$t('admin.enhanced_video_duplicate_detection_min_matching_frames_description')}
+            disabled={disabled || !featureFlagsManager.value.duplicateDetection}
+            isEdited={configToEdit.machineLearning.duplicateDetection.enhancedVideo.minMatchingFrames !==
+              config.machineLearning.duplicateDetection.enhancedVideo.minMatchingFrames}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.enhanced_video_duplicate_detection_max_distance')}
+            bind:value={configToEdit.machineLearning.duplicateDetection.enhancedVideo.maxDistance}
+            step="0.0005"
+            min={0.001}
+            max={0.1}
+            description={$t('admin.enhanced_video_duplicate_detection_max_distance_description')}
+            disabled={disabled || !featureFlagsManager.value.duplicateDetection}
+            isEdited={configToEdit.machineLearning.duplicateDetection.enhancedVideo.maxDistance !==
+              config.machineLearning.duplicateDetection.enhancedVideo.maxDistance}
+          />
         </div>
       </SettingAccordion>
 

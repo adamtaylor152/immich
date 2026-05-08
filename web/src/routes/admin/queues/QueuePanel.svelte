@@ -59,6 +59,11 @@
       missingText: $t('missing'),
       disabled: !featureFlags.duplicateDetection,
     },
+    [QueueName.VideoDuplicateDetection]: {
+      allText: $t('all'),
+      missingText: $t('missing'),
+      disabled: !featureFlags.duplicateDetection,
+    },
     [QueueName.FaceDetection]: {
       allText: $t('reset'),
       refreshText: $t('refresh'),

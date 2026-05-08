@@ -1,15 +1,28 @@
 import { Injectable } from '@nestjs/common';
+import { SystemConfig } from 'src/config';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
+import { StorageCore } from 'src/cores/storage.core';
 import { OnJob } from 'src/decorators';
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { MapAsset, mapAsset } from 'src/dtos/asset-response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { DuplicateResolveDto, DuplicateResolveGroupDto, DuplicateResponseDto } from 'src/dtos/duplicate.dto';
-import { AssetStatus, AssetVisibility, JobName, JobStatus, Permission, QueueName } from 'src/enum';
+import {
+  AssetStatus,
+  AssetType,
+  AssetVisibility,
+  JobName,
+  JobStatus,
+  Permission,
+  QueueName,
+  StorageFolder,
+  TranscodeTarget,
+} from 'src/enum';
 import { AssetDuplicateResult } from 'src/repositories/search.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
+import { ThumbnailConfig } from 'src/utils/media';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { isDuplicateDetectionEnabled } from 'src/utils/misc';
 
@@ -31,6 +44,27 @@ type ResolveRequest = {
   mergedTagIds: string[];
 
   mergedTagValues: string[];
+};
+
+const VIDEO_DUPLICATE_FRAME_MIN_COUNT = 2;
+const VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS = 1;
+const VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS = 1;
+
+const getEnhancedVideoDuplicateConfig = (machineLearning: SystemConfig['machineLearning']) => {
+  const { duplicateDetection } = machineLearning;
+  const enhancedVideo = duplicateDetection.enhancedVideo ?? {
+    enabled: true,
+    frameCount: 4,
+    minMatchingFrames: 2,
+    maxDistance: duplicateDetection.maxDistance,
+  };
+
+  return {
+    enabled: enhancedVideo.enabled,
+    frameCount: enhancedVideo.frameCount,
+    minMatchingFrames: enhancedVideo.minMatchingFrames,
+    maxDistance: enhancedVideo.maxDistance ?? duplicateDetection.maxDistance,
+  };
 };
 
 const uniqueNonEmptyLines = (values: Array<string | null | undefined>): string[] => {
@@ -329,6 +363,114 @@ export class DuplicateService extends BaseService {
     return JobStatus.Success;
   }
 
+  @OnJob({ name: JobName.AssetGenerateVideoDuplicateFramesQueueAll, queue: QueueName.VideoDuplicateDetection })
+  async handleQueueGenerateVideoDuplicateFrames({
+    force,
+  }: JobOf<JobName.AssetGenerateVideoDuplicateFramesQueueAll>): Promise<JobStatus> {
+    const { machineLearning } = await this.getConfig({ withCache: false });
+    if (!isDuplicateDetectionEnabled(machineLearning)) {
+      return JobStatus.Skipped;
+    }
+
+    const enhancedVideo = getEnhancedVideoDuplicateConfig(machineLearning);
+    if (!enhancedVideo.enabled) {
+      return JobStatus.Skipped;
+    }
+
+    let jobs: JobItem[] = [];
+    const queueAll = async () => {
+      await this.jobRepository.queueAll(jobs);
+      jobs = [];
+    };
+
+    const assets = this.assetJobRepository.streamForVideoDuplicateFrames({
+      force,
+      frameCount: enhancedVideo.frameCount,
+    });
+    for await (const asset of assets) {
+      jobs.push({ name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: asset.id } });
+      if (jobs.length >= JOBS_ASSET_PAGINATION_SIZE) {
+        await queueAll();
+      }
+    }
+
+    await queueAll();
+
+    return JobStatus.Success;
+  }
+
+  @OnJob({ name: JobName.AssetGenerateVideoDuplicateFrames, queue: QueueName.VideoDuplicateDetection })
+  async handleGenerateVideoDuplicateFrames({ id }: JobOf<JobName.AssetGenerateVideoDuplicateFrames>): Promise<JobStatus> {
+    const config = await this.getConfig({ withCache: true });
+    const { machineLearning } = config;
+    if (!isDuplicateDetectionEnabled(machineLearning)) {
+      return JobStatus.Skipped;
+    }
+
+    const enhancedVideo = getEnhancedVideoDuplicateConfig(machineLearning);
+    if (!enhancedVideo.enabled) {
+      return JobStatus.Skipped;
+    }
+
+    const asset = await this.assetJobRepository.getForVideoDuplicateFrameJob(id);
+    if (!asset) {
+      this.logger.error(`Asset ${id} not found`);
+      return JobStatus.Failed;
+    }
+
+    if (asset.visibility === AssetVisibility.Hidden || asset.visibility === AssetVisibility.Locked) {
+      this.logger.debug(`Asset ${id} is not visible, skipping`);
+      return JobStatus.Skipped;
+    }
+
+    const timestamps = this.getVideoDuplicateFrameTimestamps(enhancedVideo.frameCount, asset.format);
+    if (timestamps.length < VIDEO_DUPLICATE_FRAME_MIN_COUNT) {
+      this.logger.debug(`Asset ${id} is too short for enhanced video duplicate detection`);
+      return JobStatus.Skipped;
+    }
+
+    const frames = [];
+    for (const [frameIndex, timestamp] of timestamps.entries()) {
+      const path = StorageCore.getNestedPath(
+        StorageFolder.Thumbnails,
+        asset.ownerId,
+        `${asset.id}_video_duplicate_${frameIndex}.jpeg`,
+      );
+      this.storageCore.ensureFolders(path);
+
+      const command = ThumbnailConfig.create(
+        { ...config.ffmpeg, targetResolution: config.image.preview.size.toString() },
+        timestamp,
+      ).getCommand(TranscodeTarget.Video, asset.videoStream, undefined, asset.format);
+
+      await this.mediaRepository.transcode(asset.originalPath, path, command);
+      const embedding = await this.machineLearningRepository.encodeImage(path, machineLearning.clip);
+
+      frames.push({
+        assetId: asset.id,
+        frameIndex,
+        timestampMs: Math.round(timestamp * 1000),
+        path,
+        embedding,
+      });
+    }
+
+    const newConfig = await this.getConfig({ withCache: false });
+    if (machineLearning.clip.modelName !== newConfig.machineLearning.clip.modelName) {
+      if (frames.length > 0) {
+        await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: frames.map(({ path }) => path) } });
+      }
+      return JobStatus.Skipped;
+    }
+
+    const stalePaths = await this.duplicateRepository.replaceVideoDuplicateFrames(asset.id, frames);
+    if (stalePaths.length > 0) {
+      await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: stalePaths } });
+    }
+
+    return JobStatus.Success;
+  }
+
   @OnJob({ name: JobName.AssetDetectDuplicates, queue: QueueName.DuplicateDetection })
   async handleSearchDuplicates({ id }: JobOf<JobName.AssetDetectDuplicates>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
@@ -362,13 +504,25 @@ export class DuplicateService extends BaseService {
       return JobStatus.Failed;
     }
 
-    const duplicateAssets = await this.duplicateRepository.search({
+    let duplicateAssets = await this.duplicateRepository.search({
       assetId: asset.id,
       embedding: asset.embedding,
       maxDistance: machineLearning.duplicateDetection.maxDistance,
       type: asset.type,
       userIds: [asset.ownerId],
     });
+
+    if (asset.type === AssetType.Video && duplicateAssets.length > 0) {
+      const confirmedAssets = await this.filterConfirmedVideoDuplicates(
+        asset,
+        duplicateAssets,
+        machineLearning.duplicateDetection,
+      );
+      if (!confirmedAssets) {
+        return JobStatus.Skipped;
+      }
+      duplicateAssets = confirmedAssets;
+    }
 
     let assetIds = [asset.id];
     if (duplicateAssets.length > 0) {
@@ -385,6 +539,69 @@ export class DuplicateService extends BaseService {
     await this.assetRepository.upsertJobStatus(...assetIds.map((assetId) => ({ assetId, duplicatesDetectedAt })));
 
     return JobStatus.Success;
+  }
+
+  private getVideoDuplicateFrameTimestamps(frameCount: number, format: { duration: number }): number[] {
+    const duration = format.duration / 1000;
+    if (!Number.isFinite(duration) || duration <= VIDEO_DUPLICATE_FRAME_MIN_COUNT) {
+      return [];
+    }
+
+    const latest = duration - VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS;
+    if (latest <= VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS) {
+      return [];
+    }
+
+    return [
+      ...new Set(
+        Array.from({ length: frameCount }, (_, index) => {
+          const timestamp = (duration * (index + 1)) / (frameCount + 1);
+          return Number(
+            Math.min(Math.max(timestamp, VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS), latest).toFixed(3),
+          );
+        }),
+      ),
+    ].filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
+  }
+
+  private async filterConfirmedVideoDuplicates(
+    asset: { id: string },
+    duplicateAssets: AssetDuplicateResult[],
+    duplicateDetection: SystemConfig['machineLearning']['duplicateDetection'],
+  ): Promise<AssetDuplicateResult[] | null> {
+    const enhancedVideo = getEnhancedVideoDuplicateConfig({ duplicateDetection } as SystemConfig['machineLearning']);
+    if (!enhancedVideo.enabled) {
+      return duplicateAssets;
+    }
+
+    const assetIds = [asset.id, ...duplicateAssets.map(({ assetId }) => assetId)];
+    const frames = await this.duplicateRepository.getVideoDuplicateFrames(assetIds);
+    const frameCounts = new Map<string, number>();
+    for (const frame of frames) {
+      frameCounts.set(frame.assetId, (frameCounts.get(frame.assetId) ?? 0) + 1);
+    }
+
+    const missingFrameAssetIds = assetIds.filter((assetId) => (frameCounts.get(assetId) ?? 0) < enhancedVideo.frameCount);
+    if (missingFrameAssetIds.length > 0) {
+      await this.jobRepository.queueAll(
+        [...new Set(missingFrameAssetIds)].map((id) => ({
+          name: JobName.AssetGenerateVideoDuplicateFrames,
+          data: { id },
+        })),
+      );
+      return null;
+    }
+
+    const matchingAssetIds = new Set(
+      await this.duplicateRepository.getVideoDuplicateFrameMatches({
+        assetId: asset.id,
+        candidateAssetIds: duplicateAssets.map(({ assetId }) => assetId),
+        maxDistance: enhancedVideo.maxDistance,
+        minMatchingFrames: enhancedVideo.minMatchingFrames,
+      }),
+    );
+
+    return duplicateAssets.filter(({ assetId }) => matchingAssetIds.has(assetId));
   }
 
   private async updateDuplicates(

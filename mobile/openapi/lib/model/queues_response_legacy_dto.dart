@@ -33,6 +33,7 @@ class QueuesResponseLegacyDto {
     required this.storageTemplateMigration,
     required this.thumbnailGeneration,
     required this.videoConversion,
+    required this.videoDuplicateDetection,
     required this.workflow,
   });
 
@@ -76,6 +77,8 @@ class QueuesResponseLegacyDto {
 
   QueueResponseLegacyDto videoConversion;
 
+  QueueResponseLegacyDto videoDuplicateDetection;
+
   QueueResponseLegacyDto workflow;
 
   @override
@@ -100,6 +103,7 @@ class QueuesResponseLegacyDto {
     other.storageTemplateMigration == storageTemplateMigration &&
     other.thumbnailGeneration == thumbnailGeneration &&
     other.videoConversion == videoConversion &&
+    other.videoDuplicateDetection == videoDuplicateDetection &&
     other.workflow == workflow;
 
   @override
@@ -125,10 +129,11 @@ class QueuesResponseLegacyDto {
     (storageTemplateMigration.hashCode) +
     (thumbnailGeneration.hashCode) +
     (videoConversion.hashCode) +
+    (videoDuplicateDetection.hashCode) +
     (workflow.hashCode);
 
   @override
-  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -152,6 +157,7 @@ class QueuesResponseLegacyDto {
       json[r'storageTemplateMigration'] = this.storageTemplateMigration;
       json[r'thumbnailGeneration'] = this.thumbnailGeneration;
       json[r'videoConversion'] = this.videoConversion;
+      json[r'videoDuplicateDetection'] = this.videoDuplicateDetection;
       json[r'workflow'] = this.workflow;
     return json;
   }
@@ -185,6 +191,7 @@ class QueuesResponseLegacyDto {
         storageTemplateMigration: QueueResponseLegacyDto.fromJson(json[r'storageTemplateMigration'])!,
         thumbnailGeneration: QueueResponseLegacyDto.fromJson(json[r'thumbnailGeneration'])!,
         videoConversion: QueueResponseLegacyDto.fromJson(json[r'videoConversion'])!,
+        videoDuplicateDetection: QueueResponseLegacyDto.fromJson(json[r'videoDuplicateDetection'])!,
         workflow: QueueResponseLegacyDto.fromJson(json[r'workflow'])!,
       );
     }
@@ -253,6 +260,7 @@ class QueuesResponseLegacyDto {
     'storageTemplateMigration',
     'thumbnailGeneration',
     'videoConversion',
+    'videoDuplicateDetection',
     'workflow',
   };
 }

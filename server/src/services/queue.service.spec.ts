@@ -23,11 +23,12 @@ describe(QueueService.name, () => {
     it('should update concurrency', () => {
       sut.onConfigUpdate({ newConfig: defaults, oldConfig: {} as SystemConfig });
 
-      expect(mocks.job.setConcurrency).toHaveBeenCalledTimes(21);
+      expect(mocks.job.setConcurrency).toHaveBeenCalledTimes(22);
       expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(5, QueueName.FacialRecognition, 1);
       expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(7, QueueName.DuplicateDetection, 1);
-      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(8, QueueName.BackgroundTask, 5);
-      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(9, QueueName.StorageTemplateMigration, 1);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(8, QueueName.VideoDuplicateDetection, 1);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(9, QueueName.BackgroundTask, 5);
+      expect(mocks.job.setConcurrency).toHaveBeenNthCalledWith(10, QueueName.StorageTemplateMigration, 1);
     });
   });
 
@@ -61,6 +62,7 @@ describe(QueueService.name, () => {
       await expect(sut.getAllLegacy(factory.auth())).resolves.toEqual({
         [QueueName.BackgroundTask]: expected,
         [QueueName.DuplicateDetection]: expected,
+        [QueueName.VideoDuplicateDetection]: expected,
         [QueueName.SmartSearch]: expected,
         [QueueName.MetadataExtraction]: expected,
         [QueueName.Search]: expected,
@@ -145,6 +147,18 @@ describe(QueueService.name, () => {
       await sut.runCommandLegacy(QueueName.SmartSearch, { command: QueueCommand.Start, force: false });
 
       expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SmartSearchQueueAll, data: { force: false } });
+    });
+
+    it('should handle a start enhanced video duplicate detection command', async () => {
+      mocks.job.isActive.mockResolvedValue(false);
+      mocks.job.getJobCounts.mockResolvedValue(factory.queueStatistics());
+
+      await sut.runCommandLegacy(QueueName.VideoDuplicateDetection, { command: QueueCommand.Start, force: true });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.AssetGenerateVideoDuplicateFramesQueueAll,
+        data: { force: true },
+      });
     });
 
     it('should handle a start metadata extraction command', async () => {
