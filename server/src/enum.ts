@@ -74,6 +74,16 @@ export enum AssetOrder {
 
 export const AssetOrderSchema = z.enum(AssetOrder).describe('Asset sort order').meta({ id: 'AssetOrder' });
 
+export enum TimeBucketDateType {
+  Added = 'added',
+  Taken = 'taken',
+}
+
+export const TimeBucketDateTypeSchema = z
+  .enum(TimeBucketDateType)
+  .describe('Date source for timeline bucket grouping')
+  .meta({ id: 'TimeBucketDateType' });
+
 export enum ImageEnrichmentFilter {
   Nsfw = 'nsfw',
   NsfwReview = 'nsfw-review',

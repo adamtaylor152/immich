@@ -38,6 +38,29 @@ describe(TimelineController.name, () => {
       );
     });
 
+    it('should parse recently added date type', async () => {
+      const { status } = await request(ctx.getHttpServer()).get('/timeline/buckets').query({ dateType: 'added' });
+
+      expect(status).toBe(200);
+      expect(service.getTimeBuckets).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          dateType: 'added',
+        }),
+      );
+    });
+
+    it('should reject invalid date type', async () => {
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/timeline/buckets')
+        .query({ dateType: 'modified' });
+
+      expect(status).toBe(400);
+      expect(body).toEqual(
+        errorDto.validationError([{ path: ['dateType'], message: 'Invalid option: expected one of "added"|"taken"' }]),
+      );
+    });
+
     it('should reject incomplete bbox query string', async () => {
       const { status, body } = await request(ctx.getHttpServer()).get('/timeline/buckets').query({ bbox: '1,2,3' });
       expect(status).toBe(400);

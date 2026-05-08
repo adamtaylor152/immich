@@ -14,6 +14,8 @@
     mdiAccountOutline,
     mdiArchiveArrowDown,
     mdiArchiveArrowDownOutline,
+    mdiClockPlus,
+    mdiClockPlusOutline,
     mdiFolderOutline,
     mdiHeart,
     mdiHeartOutline,
@@ -40,6 +42,13 @@
 
 <Sidebar ariaLabel={$t('primary')}>
   <NavbarItem title={$t('photos')} href={Route.photos()} icon={mdiImageMultipleOutline} activeIcon={mdiImageMultiple} />
+
+  <NavbarItem
+    title={$t('recently_added')}
+    href={Route.recentlyAdded()}
+    icon={mdiClockPlusOutline}
+    activeIcon={mdiClockPlus}
+  />
 
   {#if featureFlagsManager.value.search}
     <NavbarItem title={$t('explore')} href={Route.explore()} icon={mdiMagnify} />

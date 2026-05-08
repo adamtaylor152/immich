@@ -12,6 +12,7 @@ export const isExternalUrl = (url: string): boolean => {
 };
 
 export const isPhotosRoute = (route?: string | null) => !!route?.startsWith('/(user)/photos/[[assetId=id]]');
+const isRecentlyAddedRoute = (route?: string | null) => !!route?.startsWith('/(user)/recently-added/[[assetId=id]]');
 const isSharedLinkSlugRoute = (route?: string | null) => !!route?.startsWith('/(user)/s/[slug]');
 export const isSharedLinkRoute = (route?: string | null) =>
   !!route?.startsWith('/(user)/share/[key]') || isSharedLinkSlugRoute(route);
@@ -33,6 +34,8 @@ function currentUrlWithoutAsset() {
   // off / instead of a subpath, unlike every other asset-containing route.
   if (isPhotosRoute(page.route.id)) {
     return Route.photos() + page.url.search;
+  } else if (isRecentlyAddedRoute(page.route.id)) {
+    return Route.recentlyAdded() + page.url.search;
   } else if (isSharedLinkSlugRoute(page.route.id)) {
     return Route.viewSharedLink({ slug: page.data.slug, key: page.data.key }) + page.url.search;
   } else {
@@ -48,9 +51,15 @@ export function currentUrlReplaceAssetId(assetId: string) {
   const searchparams = paramsString == '' ? '' : '?' + params.toString();
   // this contains special casing for the /photos/:assetId photos route, which hangs directly
   // off / instead of a subpath, unlike every other asset-containing route.
-  return isPhotosRoute(page.route.id)
-    ? `${Route.viewAsset({ id: assetId })}${searchparams}`
-    : `${page.url.pathname.replace(/\/photos\/[^/]+$/, '')}/photos/${assetId}${searchparams}`;
+  if (isPhotosRoute(page.route.id)) {
+    return `${Route.viewAsset({ id: assetId })}${searchparams}`;
+  }
+
+  if (isRecentlyAddedRoute(page.route.id)) {
+    return `${Route.viewRecentlyAddedAsset({ id: assetId })}${searchparams}`;
+  }
+
+  return `${page.url.pathname.replace(/\/photos\/[^/]+$/, '')}/photos/${assetId}${searchparams}`;
 }
 
 function replaceScrollTarget(url: string, searchParams?: AssetGridRouteSearchParams | null) {

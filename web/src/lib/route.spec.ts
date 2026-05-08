@@ -38,6 +38,17 @@ describe('Route', () => {
     });
   });
 
+  describe(Route.recentlyAdded.name, () => {
+    it('returns the recently added route', () => {
+      expect(Route.recentlyAdded()).toBe('/recently-added');
+      expect(Route.recentlyAdded({ at: 'asset-1' })).toBe('/recently-added?at=asset-1');
+    });
+
+    it('returns the recently added asset route', () => {
+      expect(Route.viewRecentlyAddedAsset({ id: 'asset-1' })).toBe('/recently-added/asset-1');
+    });
+  });
+
   describe(Route.systemSettings.name, () => {
     it('should work', () => {
       expect(Route.systemSettings()).toBe('/admin/system-settings');

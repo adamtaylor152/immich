@@ -661,6 +661,7 @@ Class | Method | HTTP request | Description
  - [TemplateResponseDto](doc//TemplateResponseDto.md)
  - [TestEmailResponseDto](doc//TestEmailResponseDto.md)
  - [TimeBucketAssetResponseDto](doc//TimeBucketAssetResponseDto.md)
+ - [TimeBucketDateType](doc//TimeBucketDateType.md)
  - [TimeBucketsResponseDto](doc//TimeBucketsResponseDto.md)
  - [ToneMapping](doc//ToneMapping.md)
  - [TranscodeHWAccel](doc//TranscodeHWAccel.md)
