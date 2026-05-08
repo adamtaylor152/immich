@@ -2,14 +2,9 @@ name: NSFW Unraid Docker Deployment
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
     branches:
-      - main
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
+      - fork/main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,17 +14,17 @@ permissions:
   contents: read
 
 env:
-  IMAGE_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'nsfw-sensitive-content-combined' }}
-  ML_IMAGE_TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}-openvino', github.event.pull_request.number) || 'nsfw-sensitive-content-combined-openvino' }}
+  IMAGE_TAG: fork-main
+  ML_IMAGE_TAG: fork-main-openvino
   REGISTRY: ghcr.io
   IMAGE_OWNER: adamtaylor152
-  SOURCE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-  SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+  SOURCE_REF: ${{ github.ref_name }}
+  SOURCE_SHA: ${{ github.sha }}
 
 jobs:
   build-server:
     name: Build Server Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,7 +71,7 @@ jobs:
 
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -125,7 +120,7 @@ jobs:
     needs:
       - build-server
       - build-machine-learning-openvino
-    if: ${{ github.repository == 'adamtaylor152/immich' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 23 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'aj/nsfw-sensitive-content-combined') || (github.event_name != 'pull_request' && (github.ref_name == 'aj/nsfw-sensitive-content-combined' || github.ref_name == 'nsfw-sensitive-content-combined'))) }}
+    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
     runs-on: ubuntu-latest
     environment:
       name: unraid-docker
@@ -146,9 +141,6 @@ jobs:
           server_image="${REGISTRY}/${IMAGE_OWNER}/immich-server:${IMAGE_TAG}"
           ml_image="${REGISTRY}/${IMAGE_OWNER}/immich-machine-learning:${ML_IMAGE_TAG}"
           source_label="${SOURCE_REF}@${SOURCE_SHA}"
-          if [ -n "${PR_NUMBER:-}" ]; then
-            source_label="PR #${PR_NUMBER} (${source_label})"
-          fi
 
           cat > dist/unraid-docker/docker-compose.yml <<'COMPOSE'
           name: immich
@@ -230,8 +222,6 @@ jobs:
 
           Use the bundled \`docker-compose.yml\` with your existing Immich \`.env\` values. The machine-learning service is pinned to the OpenVINO image and maps \`/dev/dri\` for an Intel iGPU.
           README
-        env:
-          PR_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
 
       - name: Upload deployment bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

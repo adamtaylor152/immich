@@ -42,6 +42,10 @@ describe(AuthService.name, () => {
     mocks.oauth.getLogoutEndpoint.mockResolvedValue('http://end-session-endpoint');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should be defined', () => {
     expect(sut).toBeDefined();
   });
@@ -600,6 +604,79 @@ describe(AuthService.name, () => {
         suppressedContent,
       });
       expect(result.hideNsfwAssets).toBeUndefined();
+    });
+
+    it('should extend a near-expiry elevated PIN session to sixty minutes', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-08T12:00:00.000Z'));
+      const session = SessionFactory.create({ updatedAt: new Date('2026-05-08T12:00:00.000Z') });
+      const sessionWithToken = {
+        id: session.id,
+        updatedAt: session.updatedAt,
+        user: UserFactory.create(),
+        isPendingSyncReset: false,
+        pinExpiresAt: DateTime.now().plus({ minutes: 1 }).toJSDate(),
+        appVersion: null,
+        oauthSid: null,
+      };
+
+      mocks.session.getByToken.mockResolvedValue(sessionWithToken);
+      mocks.session.update.mockResolvedValue(session);
+
+      await expect(
+        sut.authenticate({
+          headers: { cookie: 'immich_access_token=auth_token' },
+          queryParams: {},
+          metadata: { adminRoute: false, sharedLinkRoute: false, uri: 'test' },
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          session: {
+            id: session.id,
+            hasElevatedPermission: true,
+          },
+        }),
+      );
+
+      expect(mocks.session.update).toHaveBeenCalledWith(session.id, {
+        pinExpiresAt: new Date('2026-05-08T13:00:00.000Z'),
+      });
+      vi.useRealTimers();
+    });
+
+    it('should return normal permissions for an expired elevated PIN session', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-08T12:00:00.000Z'));
+      const session = SessionFactory.create({ updatedAt: new Date('2026-05-08T12:00:00.000Z') });
+      const sessionWithToken = {
+        id: session.id,
+        updatedAt: session.updatedAt,
+        user: UserFactory.create(),
+        isPendingSyncReset: false,
+        pinExpiresAt: DateTime.now().minus({ minutes: 1 }).toJSDate(),
+        appVersion: null,
+        oauthSid: null,
+      };
+
+      mocks.session.getByToken.mockResolvedValue(sessionWithToken);
+
+      await expect(
+        sut.authenticate({
+          headers: { cookie: 'immich_access_token=auth_token' },
+          queryParams: {},
+          metadata: { adminRoute: false, sharedLinkRoute: false, uri: 'test' },
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          session: {
+            id: session.id,
+            hasElevatedPermission: false,
+          },
+        }),
+      );
+
+      expect(mocks.session.update).not.toHaveBeenCalled();
+      vi.useRealTimers();
     });
 
     it('should throw if admin route and not an admin', async () => {
@@ -1289,6 +1366,46 @@ describe(AuthService.name, () => {
       mocks.user.getForPinCode.mockResolvedValue({ pinCode: '123456 (hashed)', password: '' });
 
       await expect(sut.setupPinCode(auth, { pinCode: '123456' })).rejects.toThrow('User already has a PIN code');
+    });
+  });
+
+  describe('unlockSession', () => {
+    it('should unlock the session for sixty minutes', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-08T12:00:00.000Z'));
+      const user = UserFactory.create();
+      const auth = AuthFactory.from(user).session().build();
+
+      mocks.user.getForPinCode.mockResolvedValue({ pinCode: '123456 (hashed)', password: '' });
+      mocks.crypto.compareBcrypt.mockImplementation((a, b) => `${a} (hashed)` === b);
+      mocks.session.update.mockResolvedValue(SessionFactory.create());
+
+      await sut.unlockSession(auth, { pinCode: '123456' });
+
+      expect(mocks.session.update).toHaveBeenCalledWith(auth.session!.id, {
+        pinExpiresAt: new Date('2026-05-08T13:00:00.000Z'),
+      });
+      vi.useRealTimers();
+    });
+
+    it('should reject unlock without a session token', async () => {
+      const user = UserFactory.create();
+
+      await expect(sut.unlockSession(AuthFactory.create(user), { pinCode: '123456' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('lockSession', () => {
+    it('should clear elevated access immediately', async () => {
+      const user = UserFactory.create();
+      const auth = AuthFactory.from(user).session({ hasElevatedPermission: true }).build();
+      mocks.session.update.mockResolvedValue(SessionFactory.create());
+
+      await sut.lockSession(auth);
+
+      expect(mocks.session.update).toHaveBeenCalledWith(auth.session!.id, { pinExpiresAt: null });
     });
   });
 

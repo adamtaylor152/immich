@@ -13496,6 +13496,15 @@
             }
           },
           {
+            "name": "dateType",
+            "required": false,
+            "in": "query",
+            "description": "Date source for timeline bucket grouping. Defaults to taken date.",
+            "schema": {
+              "$ref": "#/components/schemas/TimeBucketDateType"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -13692,6 +13701,15 @@
             "schema": {
               "example": "11.075683,49.416711,11.117589,49.454875",
               "type": "string"
+            }
+          },
+          {
+            "name": "dateType",
+            "required": false,
+            "in": "query",
+            "description": "Date source for timeline bucket grouping. Defaults to taken date.",
+            "schema": {
+              "$ref": "#/components/schemas/TimeBucketDateType"
             }
           },
           {
@@ -26031,6 +26049,14 @@
           "visibility"
         ],
         "type": "object"
+      },
+      "TimeBucketDateType": {
+        "description": "Date source for timeline bucket grouping",
+        "enum": [
+          "added",
+          "taken"
+        ],
+        "type": "string"
       },
       "TimeBucketsResponseDto": {
         "properties": {

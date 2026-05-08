@@ -17,7 +17,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { LockableProperty, Stack } from 'src/database';
 import { Chunked, ChunkedArray, DummyValue, GenerateSql } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetFileType, AssetOrder, AssetStatus, AssetType, AssetVisibility } from 'src/enum';
+import { AssetFileType, AssetOrder, AssetStatus, AssetType, AssetVisibility, TimeBucketDateType } from 'src/enum';
 import { DB } from 'src/schema';
 import { AssetAudioTable, AssetKeyframeTable, AssetVideoTable } from 'src/schema/tables/asset-av.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -96,6 +96,7 @@ interface AssetBuilderOptions extends HiddenContentQueryOptions {
 }
 
 export interface TimeBucketOptions extends AssetBuilderOptions {
+  dateType?: TimeBucketDateType;
   order?: AssetOrder;
 }
 
@@ -723,11 +724,16 @@ export class AssetRepository {
 
   @GenerateSql({ params: [{}] })
   async getTimeBuckets(options: TimeBucketOptions): Promise<TimeBucketItem[]> {
+    const timeBucketDate =
+      options.dateType === TimeBucketDateType.Added
+        ? sql<Date>`date_trunc(${sql.lit('MONTH')}, asset."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`
+        : truncatedDate<Date>();
+
     return this.db
       .with('asset', (qb) =>
         qb
           .selectFrom('asset')
-          .select(truncatedDate<Date>().as('timeBucket'))
+          .select(timeBucketDate.as('timeBucket'))
           .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
           .where('asset.deletedAt', options.isTrashed ? 'is not' : 'is', null)
           .$if(!!options.bbox, (qb) => {
@@ -781,6 +787,20 @@ export class AssetRepository {
   })
   getTimeBucket(timeBucket: string, options: TimeBucketOptions, auth: AuthDto) {
     const order = options.order ?? 'desc';
+    const useAddedDate = options.dateType === TimeBucketDateType.Added;
+    const timeBucketDate = useAddedDate
+      ? sql`date_trunc(${sql.lit('MONTH')}, asset."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`
+      : truncatedDate();
+    const timelineDate = useAddedDate
+      ? sql`asset."createdAt" at time zone 'utc'`
+      : sql`asset."fileCreatedAt" at time zone 'utc'`;
+    const localOffsetHours = useAddedDate
+      ? sql`0::real`
+      : sql`extract(epoch from (asset."localDateTime" AT TIME ZONE 'UTC' - asset."fileCreatedAt" at time zone 'UTC'))::real / 3600`;
+    const orderDate = useAddedDate
+      ? sql`(asset."createdAt" AT TIME ZONE 'UTC')::date`
+      : sql`(asset."localDateTime" AT TIME ZONE 'UTC')::date`;
+    const orderTimestamp = useAddedDate ? sql`asset."createdAt"` : sql`asset."fileCreatedAt"`;
     const hiddenContent = getHiddenContentFilter(options);
     const livePhotoVideoId = hiddenContent
       ? sql`case when ${hiddenContentAssetIdExists(sql.ref('asset.livePhotoVideoId'), hiddenContent)} then null else asset."livePhotoVideoId" end`.as(
@@ -800,12 +820,10 @@ export class AssetRepository {
             sql`asset.type = 'IMAGE'`.as('isImage'),
             sql`asset."deletedAt" is not null`.as('isTrashed'),
             livePhotoVideoId,
-            sql`extract(epoch from (asset."localDateTime" AT TIME ZONE 'UTC' - asset."fileCreatedAt" at time zone 'UTC'))::real / 3600`.as(
-              'localOffsetHours',
-            ),
+            localOffsetHours.as('localOffsetHours'),
             'asset.ownerId',
             'asset.status',
-            sql`asset."fileCreatedAt" at time zone 'utc'`.as('fileCreatedAt'),
+            timelineDate.as('fileCreatedAt'),
             eb.fn('encode', ['asset.thumbhash', sql.lit('base64')]).as('thumbhash'),
             'asset_exif.city',
             'asset_exif.country',
@@ -839,7 +857,7 @@ export class AssetRepository {
 
             return withBoundingBox(withBoundingCircle, bbox);
           })
-          .where(truncatedDate(), '=', timeBucket.replace(/^[+-]/, ''))
+          .where(timeBucketDate, '=', timeBucket.replace(/^[+-]/, ''))
           .$if(!!options.albumId, (qb) =>
             qb.where((eb) =>
               eb.exists(
@@ -886,8 +904,8 @@ export class AssetRepository {
           )
           .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
           .$if(!!options.tagId, (qb) => withTagId(qb, options.tagId!))
-          .orderBy(sql`(asset."localDateTime" AT TIME ZONE 'UTC')::date`, order)
-          .orderBy('asset.fileCreatedAt', order),
+          .orderBy(orderDate, order)
+          .orderBy(orderTimestamp, order),
       )
       .with('agg', (qb) =>
         qb

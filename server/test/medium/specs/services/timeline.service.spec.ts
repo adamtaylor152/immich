@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Kysely } from 'kysely';
-import { AssetMetadataKey, AssetType, AssetVisibility } from 'src/enum';
+import { AssetMetadataKey, AssetType, AssetVisibility, TimeBucketDateType } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -53,6 +53,47 @@ describe(TimelineService.name, () => {
         { count: 3, timeBucket: '1970-02-01' },
         { count: 1, timeBucket: '1970-01-01' },
       ]);
+    });
+
+    it('should get recently added time buckets by asset creation date', async () => {
+      const { sut, ctx } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const localDateTime = new Date('1970-01-15T12:00:00.000Z');
+
+      const { asset: olderAdded } = await ctx.newAsset({
+        ownerId: user.id,
+        localDateTime,
+        fileCreatedAt: localDateTime,
+        createdAt: new Date('2026-04-05T12:00:00.000Z'),
+      });
+      const { asset: newerAdded } = await ctx.newAsset({
+        ownerId: user.id,
+        localDateTime,
+        fileCreatedAt: localDateTime,
+        createdAt: new Date('2026-05-01T12:00:00.000Z'),
+      });
+      const { asset: newestAdded } = await ctx.newAsset({
+        ownerId: user.id,
+        localDateTime,
+        fileCreatedAt: localDateTime,
+        createdAt: new Date('2026-05-20T12:00:00.000Z'),
+      });
+
+      for (const assetId of [olderAdded.id, newerAdded.id, newestAdded.id]) {
+        await ctx.newExif({ assetId, make: 'Canon' });
+      }
+
+      await expect(sut.getTimeBuckets(auth, { dateType: TimeBucketDateType.Added })).resolves.toEqual([
+        { count: 2, timeBucket: '2026-05-01' },
+        { count: 1, timeBucket: '2026-04-01' },
+      ]);
+
+      const addedBucket = JSON.parse(
+        await sut.getTimeBucket(auth, { dateType: TimeBucketDateType.Added, timeBucket: '2026-05-01' }),
+      );
+      expect(addedBucket.id).toEqual([newestAdded.id, newerAdded.id]);
+      expect(addedBucket.localOffsetHours).toEqual([0, 0]);
     });
 
     it('should hide NSFW assets using private review state', async () => {
