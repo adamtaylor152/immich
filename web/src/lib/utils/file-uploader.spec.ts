@@ -69,4 +69,20 @@ describe('fileUploader error handling', () => {
     expect(items.length).toBe(1);
     expect(items[0].state).toBe(UploadState.STARTED);
   });
+
+  it('should mark duplicate uploads without an asset id as duplicated', async () => {
+    vi.spyOn(utils, 'uploadRequest').mockResolvedValue({
+      status: 201,
+      data: { id: '', status: AssetMediaStatus.Duplicate } as AssetMediaResponseDto,
+    });
+
+    await fileUploadHandler({ files: [mockFile] });
+
+    const items = get(uploadAssetsStore);
+    expect(items.length).toBe(1);
+    expect(items[0].state).toBe(UploadState.DUPLICATED);
+    expect(items[0].assetId).toBeUndefined();
+    expect(get(uploadAssetsStore.stats).duplicates).toBe(1);
+    expect(get(uploadAssetsStore.stats).errors).toBe(0);
+  });
 });

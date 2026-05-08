@@ -233,7 +233,7 @@ async function fileUploader({
       uploadAssetsStore.track('success');
     }
 
-    if (albumId && !authManager.isSharedLink) {
+    if (albumId && !authManager.isSharedLink && responseData.id) {
       uploadAssetsStore.updateItem(deviceAssetId, { message: $t('asset_adding_to_album') });
       await addAssetsToAlbums([albumId], [responseData.id], { notify: false });
       uploadAssetsStore.updateItem(deviceAssetId, { message: $t('asset_added_to_album') });
@@ -241,7 +241,7 @@ async function fileUploader({
 
     uploadAssetsStore.updateItem(deviceAssetId, {
       state: responseData.status === AssetMediaStatus.Duplicate ? UploadState.DUPLICATED : UploadState.DONE,
-      assetId: responseData.id,
+      assetId: responseData.id || undefined,
       isTrashed: responseData.isTrashed,
     });
 
