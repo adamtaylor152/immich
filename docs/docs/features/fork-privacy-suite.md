@@ -69,22 +69,22 @@ Mobile multi-select surfaces include actions to mark selected owned remote asset
 
 Start slowly. Do not enable automatic hiding until you have reviewed classifier behavior on your own library.
 
-1. Make a backup and confirm your normal Immich backup plan works.
+1. Make a backup and confirm your normal Immich backup plan works. DO NOT SKIP THIS. 
 2. Deploy the fork using the fork's server, web, and machine-learning images or build outputs. Do not mix upstream Immich containers with fork-only server or web code.
-3. Open `Administration > Settings > Machine Learning Settings`.
-4. Choose the image-enrichment hardware profile that matches your server:
+3. Open `Administration > Settings > Machine Learning Settings`. I have tested this fork on v3.0 and above and did not identify any issues using my existing Immich deployment.
+5. Choose the image-enrichment hardware profile that matches your server:
    - `Auto-detect` for most users;
    - `Intel iGPU (OpenVINO)` for Intel integrated graphics;
    - `NVIDIA GPU (CUDA)` for NVIDIA GPU hosts.
-5. Enable `Detect NSFW images`.
-6. Run `Administration > Jobs > NSFW Detection > All`.
-7. Review results in the asset detail panel and tune the threshold if needed.
-8. Enable `Hide detected NSFW assets` only after results look acceptable.
-9. Enable `Generate image descriptions and tags` if you want AI descriptions and searchable generated tags.
-10. Run `Administration > Jobs > Image descriptions and tags > All`.
-11. Create or confirm your locked-folder PIN.
-12. Use `Account settings > Suppressed content` to add tags or people you want hidden from normal browsing.
-13. Use `/suppressed` after PIN unlock to review and organize hidden/suppressed content.
+6. Enable `Detect NSFW images`.
+8. Run `Administration > Jobs > NSFW Detection > All`.
+9. Review results in the asset detail panel and tune the threshold if needed.
+10. Enable `Hide detected NSFW assets` only after results look acceptable.
+11. Enable `Generate image descriptions and tags` if you want AI descriptions and searchable generated tags.
+12. Run `Administration > Jobs > Image descriptions and tags > All`.
+13. Create or confirm your locked-folder PIN.
+14. Use `Account settings > Suppressed content` to add tags or people you want hidden from normal browsing.
+15. Use `/suppressed` after PIN unlock to review and organize hidden/suppressed content.
 
 ## Suggested Model Settings
 
