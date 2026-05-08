@@ -21,6 +21,7 @@
   import DeleteAssets from '$lib/components/timeline/actions/DeleteAssetsAction.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
   import FavoriteAction from '$lib/components/timeline/actions/FavoriteAction.svelte';
+  import MarkNsfwAction from '$lib/components/timeline/actions/MarkNsfwAction.svelte';
   import RemoveFromAlbum from '$lib/components/timeline/actions/RemoveFromAlbumAction.svelte';
   import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
   import SetVisibilityAction from '$lib/components/timeline/actions/SetVisibilityAction.svelte';
@@ -475,6 +476,8 @@
               unarchive={assetMultiSelectManager.isAllArchived}
               onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
             />
+            <MarkNsfwAction menuItem onMark={() => timelineManager.refresh()} />
+            <MarkNsfwAction menuItem markSafe onMark={() => timelineManager.refresh()} />
             <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
           {/if}
           {#if assetMultiSelectManager.assets.length === 1}
