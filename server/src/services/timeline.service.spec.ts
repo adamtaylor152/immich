@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { AssetVisibility } from 'src/enum';
+import { AssetVisibility, TimeBucketDateType } from 'src/enum';
 import { TimelineService } from 'src/services/timeline.service';
 import { authStub } from 'test/fixtures/auth.stub';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -51,6 +51,17 @@ describe(TimelineService.name, () => {
       expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
         userIds: [authStub.admin.user.id],
         bbox: { west: -70, south: -30, east: 120, north: 55 },
+      });
+    });
+
+    it('should pass the bucket date type to the repository', async () => {
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: 'bucket', count: 1 }]);
+
+      await sut.getTimeBuckets(authStub.admin, { dateType: TimeBucketDateType.Added });
+
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith({
+        dateType: TimeBucketDateType.Added,
+        userIds: [authStub.admin.user.id],
       });
     });
   });

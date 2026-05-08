@@ -858,6 +858,8 @@ class ApiClient {
           return TestEmailResponseDto.fromJson(value);
         case 'TimeBucketAssetResponseDto':
           return TimeBucketAssetResponseDto.fromJson(value);
+        case 'TimeBucketDateType':
+          return TimeBucketDateTypeTypeTransformer().decode(value);
         case 'TimeBucketsResponseDto':
           return TimeBucketsResponseDto.fromJson(value);
         case 'ToneMapping':
