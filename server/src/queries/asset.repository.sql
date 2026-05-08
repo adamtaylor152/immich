@@ -820,7 +820,17 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'encoded_video'
       and "asset_file"."isEdited" = false
-  ) as "encodedVideoPath"
+  ) as "encodedVideoPath",
+  (
+    select
+      "asset_file"."path"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = 'encoded_video'
+      and "asset_file"."isEdited" = true
+  ) as "editedVideoPath"
 from
   "asset"
 where
@@ -855,6 +865,7 @@ where
 -- AssetRepository.getForEdit
 select
   "asset"."type",
+  "asset"."duration",
   "asset"."livePhotoVideoId",
   "asset"."originalPath",
   "asset"."originalFileName",
