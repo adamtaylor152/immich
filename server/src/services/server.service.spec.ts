@@ -145,6 +145,7 @@ describe(ServerService.name, () => {
         imageDescription: false,
         nsfwDetection: false,
         passwordLogin: true,
+        physicalDeduplication: false,
         search: true,
         sidecar: true,
         configFile: false,

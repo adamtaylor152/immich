@@ -7,12 +7,12 @@ import {
 import { AssetFile } from 'src/database';
 import { AssetMediaStatus, AssetRejectReason, AssetUploadAction } from 'src/dtos/asset-media-response.dto';
 import { AssetMediaCreateDto, AssetMediaSize, UploadFieldName } from 'src/dtos/asset-media.dto';
-import { MapAsset } from 'src/dtos/asset-response.dto';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import { AssetFileType, AssetType, AssetVisibility, CacheControl, JobName } from 'src/enum';
 import { AuthRequest } from 'src/middleware/auth.guard';
 import { AssetMediaService } from 'src/services/asset-media.service';
 import { UploadBody } from 'src/types';
+import { clearConfigCache } from 'src/utils/config';
 import { ASSET_CHECKSUM_CONSTRAINT } from 'src/utils/database';
 import { ImmichFileResponse } from 'src/utils/file';
 import { AssetFileFactory } from 'test/factories/asset-file.factory';
@@ -151,11 +151,12 @@ const createDto = Object.freeze({
   isFavorite: false,
 }) as AssetMediaCreateDto;
 
-const assetEntity = Object.freeze({
+const assetEntity: any = Object.freeze({
   id: 'id_1',
   ownerId: 'user_id_1',
   type: AssetType.Video,
   originalPath: 'fake_path/asset_1.jpeg',
+  physicalOriginalFileId: null,
   fileModifiedAt: new Date('2022-06-19T23:41:36.910Z'),
   fileCreatedAt: new Date('2022-06-19T23:41:36.910Z'),
   updatedAt: new Date('2022-06-19T23:41:36.910Z'),
@@ -167,13 +168,14 @@ const assetEntity = Object.freeze({
     longitude: 10.703_075,
   },
   livePhotoVideoId: null,
-} as MapAsset);
+});
 
 describe(AssetMediaService.name, () => {
   let sut: AssetMediaService;
   let mocks: ServiceMocks;
 
   beforeEach(() => {
+    clearConfigCache();
     ({ sut, mocks } = newTestService(AssetMediaService));
   });
 
@@ -353,6 +355,82 @@ describe(AssetMediaService.name, () => {
         expect.any(Date),
         new Date(createDto.fileModifiedAt),
       );
+    });
+
+    it('should reuse a master physical original for a cross-user duplicate when enabled', async () => {
+      const file = {
+        uuid: 'random-uuid',
+        originalPath: 'fake_path/duplicate.jpeg',
+        mimeType: 'image/jpeg',
+        checksum: Buffer.from('file hash', 'utf8'),
+        originalName: 'duplicate.jpeg',
+        size: 42,
+      };
+      const asset = {
+        ...assetEntity,
+        id: 'new-asset',
+        ownerId: authStub.user1.user.id,
+        originalPath: file.originalPath,
+      };
+      const physicalFile = { id: 'physical-file-id', path: '/data/library/master.jpeg' };
+
+      mocks.systemMetadata.get.mockResolvedValue({
+        physicalDeduplication: { enabled: true, masterUserId: 'master-user-id' },
+      });
+      mocks.asset.create.mockResolvedValue(asset);
+      mocks.physicalFile.getMasterOriginalCandidate.mockResolvedValue({
+        id: 'master-asset-id',
+        checksum: file.checksum,
+        originalPath: '/data/library/master.jpeg',
+        physicalOriginalFileId: null,
+        sizeInBytes: file.size,
+      });
+      mocks.physicalFile.ensureOriginalPhysicalFile.mockResolvedValue(physicalFile as never);
+
+      await expect(sut.uploadAsset(authStub.user1, createDto, file)).resolves.toEqual({
+        id: 'new-asset',
+        status: AssetMediaStatus.CREATED,
+      });
+
+      expect(mocks.asset.create).toHaveBeenCalled();
+      expect(mocks.physicalFile.getMasterOriginalCandidate).toHaveBeenCalledWith(
+        'master-user-id',
+        file.checksum,
+        file.size,
+      );
+      expect(mocks.physicalFile.linkAssetToOriginalPhysicalFile).toHaveBeenCalledWith('new-asset', physicalFile);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FileDelete,
+        data: { files: [file.originalPath] },
+      });
+    });
+
+    it('should keep normal storage when no master physical original exists', async () => {
+      const file = {
+        uuid: 'random-uuid',
+        originalPath: 'fake_path/asset_1.jpeg',
+        mimeType: 'image/jpeg',
+        checksum: Buffer.from('file hash', 'utf8'),
+        originalName: 'asset_1.jpeg',
+        size: 42,
+      };
+
+      mocks.systemMetadata.get.mockResolvedValue({
+        physicalDeduplication: { enabled: true, masterUserId: 'master-user-id' },
+      });
+      mocks.asset.create.mockResolvedValue(assetEntity);
+      mocks.physicalFile.getMasterOriginalCandidate.mockResolvedValue(null as never);
+
+      await expect(sut.uploadAsset(authStub.user1, createDto, file)).resolves.toEqual({
+        id: 'id_1',
+        status: AssetMediaStatus.CREATED,
+      });
+
+      expect(mocks.physicalFile.linkAssetToOriginalPhysicalFile).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.FileDelete,
+        data: { files: [file.originalPath] },
+      });
     });
 
     it('should handle a duplicate', async () => {

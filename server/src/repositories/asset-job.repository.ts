@@ -42,7 +42,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .where('asset.id', '=', asUuid(id))
-      .select(['id', 'originalPath'])
+      .select(['id', 'ownerId', 'originalPath', 'physicalOriginalFileId'])
       .select((eb) => withFiles(eb, AssetFileType.Sidecar))
       .$call(withExifInner)
       .limit(1)
@@ -397,6 +397,7 @@ export class AssetJobRepository {
         'asset.type',
         'asset.checksum',
         'asset.originalPath',
+        'asset.physicalOriginalFileId',
         'asset.isExternal',
         'asset.visibility',
         'asset.originalFileName',

@@ -74,6 +74,9 @@ export class AssetTable {
   @Column()
   originalPath!: string;
 
+  @Column({ type: 'uuid', nullable: true, index: true })
+  physicalOriginalFileId!: string | null;
+
   @Column({ type: 'timestamp with time zone', index: true })
   fileCreatedAt!: Timestamp;
 

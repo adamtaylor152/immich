@@ -139,6 +139,7 @@ const ServerFeaturesSchema = z
     ocr: z.boolean().describe('Whether OCR is enabled'),
     imageDescription: z.boolean().describe('Whether image description and tag generation is enabled'),
     nsfwDetection: z.boolean().describe('Whether NSFW detection is enabled'),
+    physicalDeduplication: z.boolean().describe('Whether physical file deduplication is enabled'),
   })
   .meta({ id: 'ServerFeaturesDto' });
 

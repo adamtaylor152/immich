@@ -41,6 +41,7 @@ export type AssetFile = {
   id: string;
   type: AssetFileType;
   path: string;
+  physicalFileId?: string | null;
   isEdited: boolean;
 };
 
@@ -123,6 +124,7 @@ export type Asset = {
   localDateTime: Date;
   originalFileName: string;
   originalPath: string;
+  physicalOriginalFileId?: string | null;
   ownerId: string;
   type: AssetType;
 };
@@ -337,17 +339,25 @@ export const columns = {
     'asset.localDateTime',
     'asset.originalFileName',
     'asset.originalPath',
+    'asset.physicalOriginalFileId',
     'asset.ownerId',
     'asset.type',
     'asset.width',
     'asset.height',
     'asset.isEdited',
   ],
-  assetFiles: ['asset_file.id', 'asset_file.path', 'asset_file.type', 'asset_file.isEdited'],
+  assetFiles: [
+    'asset_file.id',
+    'asset_file.path',
+    'asset_file.type',
+    'asset_file.physicalFileId',
+    'asset_file.isEdited',
+  ],
   assetFilesForThumbnail: [
     'asset_file.id',
     'asset_file.path',
     'asset_file.type',
+    'asset_file.physicalFileId',
     'asset_file.isEdited',
     'asset_file.isProgressive',
     'asset_file.isTransparent',

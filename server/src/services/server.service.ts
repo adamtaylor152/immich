@@ -88,8 +88,17 @@ export class ServerService extends BaseService {
   }
 
   async getFeatures(): Promise<ServerFeaturesDto> {
-    const { reverseGeocoding, metadata, map, machineLearning, trash, oauth, passwordLogin, notifications } =
-      await this.getConfig({ withCache: false });
+    const {
+      reverseGeocoding,
+      metadata,
+      map,
+      machineLearning,
+      trash,
+      oauth,
+      passwordLogin,
+      notifications,
+      physicalDeduplication,
+    } = await this.getConfig({ withCache: false });
     const { configFile } = this.configRepository.getEnv();
 
     return {
@@ -110,6 +119,7 @@ export class ServerService extends BaseService {
       email: notifications.smtp.enabled,
       imageDescription: isImageDescriptionEnabled(machineLearning),
       nsfwDetection: isNsfwDetectionEnabled(machineLearning),
+      physicalDeduplication: physicalDeduplication.enabled,
     };
   }
 

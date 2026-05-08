@@ -35,6 +35,14 @@ const asJobItem = (dto: JobCreateDto): JobItem => {
       return { name: JobName.DatabaseBackup };
     }
 
+    case ManualJobName.PhysicalDeduplicationDryRun: {
+      return { name: JobName.PhysicalDeduplicationMigrationDryRun };
+    }
+
+    case ManualJobName.PhysicalDeduplicationApply: {
+      return { name: JobName.PhysicalDeduplicationMigrationApply };
+    }
+
     default: {
       throw new BadRequestException('Invalid job name');
     }

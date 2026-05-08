@@ -75,7 +75,7 @@ describe(AlbumService.name, () => {
       const { user: owner } = album.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
       const auth = { ...AuthFactory.create(owner), hideNsfwAssets: true };
 
-      mocks.album.getOwned.mockResolvedValue([getForAlbum(album)]);
+      mocks.album.getAll.mockResolvedValue([getForAlbum(album)]);
       mocks.asset.getHiddenContentAssetIds.mockResolvedValue(new Set([thumbnailAssetId]));
       mocks.album.getMetadataForIds.mockResolvedValue([
         {
@@ -111,7 +111,7 @@ describe(AlbumService.name, () => {
         suppressedContent,
       };
 
-      mocks.album.getOwned.mockResolvedValue([getForAlbum(album)]);
+      mocks.album.getAll.mockResolvedValue([getForAlbum(album)]);
       mocks.album.getMetadataForIds.mockResolvedValue([
         {
           albumId: album.id,

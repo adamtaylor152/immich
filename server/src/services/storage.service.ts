@@ -143,7 +143,19 @@ export class StorageService extends BaseService {
       }
 
       try {
+        const physicalFile = await this.physicalFileRepository.getPhysicalFileByPath(file);
+        if (physicalFile) {
+          const references = await this.physicalFileRepository.countReferences(physicalFile.id);
+          if (references > 0) {
+            this.logger.debug(`Skipping shared physical file delete for ${file}; ${references} reference(s) remain`);
+            continue;
+          }
+        }
+
         await this.storageRepository.unlink(file);
+        if (physicalFile) {
+          await this.physicalFileRepository.deletePhysicalFile(physicalFile.id);
+        }
       } catch (error: any) {
         this.logger.warn('Unable to remove file from disk', error);
       }

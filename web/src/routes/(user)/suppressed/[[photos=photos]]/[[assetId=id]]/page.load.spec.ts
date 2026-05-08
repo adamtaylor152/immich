@@ -81,6 +81,6 @@ describe('suppressed content page load', () => {
     });
 
     expect(getAllAlbums).toHaveBeenNthCalledWith(1, { suppressedOnly: true });
-    expect(getAllAlbums).toHaveBeenNthCalledWith(2, { shared: true, suppressedOnly: true });
+    expect(getAllAlbums).toHaveBeenNthCalledWith(2, { isShared: true, suppressedOnly: true });
   });
 });

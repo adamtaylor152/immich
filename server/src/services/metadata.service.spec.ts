@@ -28,14 +28,16 @@ const forSidecarJob = (
   asset: {
     id?: string;
     originalPath?: string;
-    files?: { id: string; type: AssetFileType; path: string; isEdited: boolean }[];
+    files?: { id: string; type: AssetFileType; path: string; physicalFileId?: string | null; isEdited: boolean }[];
   } = {},
 ) => {
+  const files = asset.files?.map((file) => ({ ...file, physicalFileId: file.physicalFileId ?? null })) ?? [];
+
   return {
     id: factory.uuid(),
     originalPath: '/path/to/IMG_123.jpg',
-    files: [],
     ...asset,
+    files,
   };
 };
 

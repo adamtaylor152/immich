@@ -24,6 +24,7 @@ export class AssetFileFactory {
       updatedAt: newDate(),
       type: AssetFileType.Thumbnail,
       path: `/data/12/34/thumbs/${id.slice(0, 2)}/${id.slice(2, 4)}/${id}${isEdited ? '_edited' : ''}.jpg`,
+      physicalFileId: null,
       updateId: newUuidV7(),
       isProgressive: false,
       isTransparent: false,

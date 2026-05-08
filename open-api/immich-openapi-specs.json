@@ -18377,6 +18377,8 @@
           "SmartSearch",
           "StorageTemplateMigration",
           "StorageTemplateMigrationSingle",
+          "PhysicalDeduplicationMigrationDryRun",
+          "PhysicalDeduplicationMigrationApply",
           "TagCleanup",
           "VersionCheck",
           "OcrQueueAll",
@@ -18808,7 +18810,9 @@
           "user-cleanup",
           "memory-cleanup",
           "memory-create",
-          "backup-database"
+          "backup-database",
+          "physical-deduplication-dry-run",
+          "physical-deduplication-apply"
         ],
         "type": "string"
       },
@@ -21874,6 +21878,10 @@
             "description": "Whether password login is enabled",
             "type": "boolean"
           },
+          "physicalDeduplication": {
+            "description": "Whether physical file deduplication is enabled",
+            "type": "boolean"
+          },
           "reverseGeocoding": {
             "description": "Whether reverse geocoding is enabled",
             "type": "boolean"
@@ -21908,6 +21916,7 @@
           "oauthAutoLaunch",
           "ocr",
           "passwordLogin",
+          "physicalDeduplication",
           "reverseGeocoding",
           "search",
           "sidecar",
@@ -24716,6 +24725,9 @@
           "passwordLogin": {
             "$ref": "#/components/schemas/SystemConfigPasswordLoginDto"
           },
+          "physicalDeduplication": {
+            "$ref": "#/components/schemas/SystemConfigPhysicalDeduplicationDto"
+          },
           "reverseGeocoding": {
             "$ref": "#/components/schemas/SystemConfigReverseGeocodingDto"
           },
@@ -25408,6 +25420,26 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "SystemConfigPhysicalDeduplicationDto": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled",
+            "type": "boolean"
+          },
+          "masterUserId": {
+            "description": "Master user ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "masterUserId"
         ],
         "type": "object"
       },

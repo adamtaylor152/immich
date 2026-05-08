@@ -338,6 +338,8 @@ export type JobItem =
   // Storage Template
   | { name: JobName.StorageTemplateMigration; data?: IBaseJob }
   | { name: JobName.StorageTemplateMigrationSingle; data: IEntityJob }
+  | { name: JobName.PhysicalDeduplicationMigrationDryRun; data?: IBaseJob }
+  | { name: JobName.PhysicalDeduplicationMigrationApply; data?: IBaseJob }
 
   // Migration
   | { name: JobName.FileMigrationQueueAll; data?: IBaseJob }
@@ -486,6 +488,7 @@ export type StorageAsset = {
   timeZone: string | null;
   fileCreatedAt: Date;
   originalPath: string;
+  physicalOriginalFileId?: string | null;
   originalFileName: string;
   fileSizeInByte: number | null;
   files: AssetFile[];
@@ -502,6 +505,17 @@ export interface MemoryData {
 
 export type VersionCheckMetadata = { checkedAt: string; releaseVersion: string };
 export type SystemFlags = { mountChecks: Record<StorageFolder, boolean> };
+export type PhysicalDeduplicationMigrationState = {
+  mode: 'dry-run' | 'apply';
+  ranAt: string;
+  eligibleAssets: number;
+  linkedAssets: number;
+  skippedExternal: number;
+  skippedMissingMaster: number;
+  reclaimableBytes: number;
+  deletedBytes: number;
+  samples: string[];
+};
 export type MaintenanceModeState =
   | { isMaintenanceMode: true; secret: string; action?: SetMaintenanceModeDto }
   | { isMaintenanceMode: false };
@@ -517,6 +531,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.License]: { licenseKey: string; activationKey: string; activatedAt: Date };
   [SystemMetadataKey.MaintenanceMode]: MaintenanceModeState;
   [SystemMetadataKey.MediaLocation]: MediaLocation;
+  [SystemMetadataKey.PhysicalDeduplicationMigration]: PhysicalDeduplicationMigrationState;
   [SystemMetadataKey.ReverseGeocodingState]: { lastUpdate?: string; lastImportFileName?: string };
   [SystemMetadataKey.SystemConfig]: DeepPartial<SystemConfig>;
   [SystemMetadataKey.SystemFlags]: DeepPartial<SystemFlags>;

@@ -638,6 +638,7 @@ Class | Method | HTTP request | Description
  - [SystemConfigNotificationsDto](doc//SystemConfigNotificationsDto.md)
  - [SystemConfigOAuthDto](doc//SystemConfigOAuthDto.md)
  - [SystemConfigPasswordLoginDto](doc//SystemConfigPasswordLoginDto.md)
+ - [SystemConfigPhysicalDeduplicationDto](doc//SystemConfigPhysicalDeduplicationDto.md)
  - [SystemConfigReverseGeocodingDto](doc//SystemConfigReverseGeocodingDto.md)
  - [SystemConfigServerDto](doc//SystemConfigServerDto.md)
  - [SystemConfigSmtpDto](doc//SystemConfigSmtpDto.md)
