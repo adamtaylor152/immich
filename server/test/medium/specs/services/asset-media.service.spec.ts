@@ -6,11 +6,13 @@ import { AlbumUserRole, AssetFileType, AssetMetadataKey, AssetType, SharedLinkTy
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { TagRepository } from 'src/repositories/tag.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
@@ -27,7 +29,16 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(AssetMediaService, {
     database: db || defaultDatabase,
-    real: [AccessRepository, AlbumRepository, AssetRepository, SharedLinkRepository, TagRepository, UserRepository],
+    real: [
+      AccessRepository,
+      AlbumRepository,
+      AssetRepository,
+      ConfigRepository,
+      SharedLinkRepository,
+      SystemMetadataRepository,
+      TagRepository,
+      UserRepository,
+    ],
     mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
   });
 };

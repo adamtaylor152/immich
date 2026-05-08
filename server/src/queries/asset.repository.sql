@@ -274,6 +274,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -589,7 +590,7 @@ with
       )
     order by
       (asset."localDateTime" AT TIME ZONE 'UTC')::date desc,
-      "asset"."fileCreatedAt" desc
+      asset."fileCreatedAt" desc
   ),
   "agg" as (
     select
