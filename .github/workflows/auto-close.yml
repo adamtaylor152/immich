@@ -9,7 +9,13 @@ permissions: {}
 jobs:
   parse_template:
     runs-on: ubuntu-latest
-    if: ${{ github.event.action != 'labeled' && github.event.pull_request.head.repo.fork == true }}
+    # This upstream contribution workflow should stay inactive in downstream forks.
+    if: >-
+      ${{
+        github.repository == 'immich-app/immich'
+        && github.event.action != 'labeled'
+        && github.event.pull_request.head.repo.fork == true
+      }}
     permissions:
       contents: read
     outputs:
@@ -37,7 +43,8 @@ jobs:
     needs: parse_template
     if: >-
       ${{
-        needs.parse_template.outputs.uses_template == 'false'
+        github.repository == 'immich-app/immich'
+        && needs.parse_template.outputs.uses_template == 'false'
         && github.event.pull_request.state != 'closed'
         && !contains(github.event.pull_request.labels.*.name, 'auto-closed:template')
       }}
@@ -75,7 +82,12 @@ jobs:
 
   close_llm:
     runs-on: ubuntu-latest
-    if: ${{ github.event.action == 'labeled' && github.event.label.name == 'auto-closed:llm' }}
+    if: >-
+      ${{
+        github.repository == 'immich-app/immich'
+        && github.event.action == 'labeled'
+        && github.event.label.name == 'auto-closed:llm'
+      }}
     permissions:
       pull-requests: write
     steps:
@@ -107,7 +119,8 @@ jobs:
     needs: parse_template
     if: >-
       ${{
-        needs.parse_template.outputs.uses_template == 'true'
+        github.repository == 'immich-app/immich'
+        && needs.parse_template.outputs.uses_template == 'true'
         && github.event.pull_request.state == 'closed'
         && contains(github.event.pull_request.labels.*.name, 'auto-closed:template')
       }}

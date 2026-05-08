@@ -19,15 +19,27 @@ This repository is a maintained downstream fork of Immich for home-lab users who
 
 Upstream Immich did not accept this local feature set *because it was "slop,"* so be cautious about using this or other forks not suitable for inclusion in the main codebase. I have maintained the fork here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
 
-- AI-generated image descriptions and searchable tags.
+I use the term NSFW generatelly to describe sensitive or private images that you want to keep in Albums without moving them to the locked folder. Yes, you can use it to manage your 🍆 collection, but it's purpose is really to catch the 5 photos from your wife that you don't want your in-laws to see, gross medical photos, perscription information, and other media that you want to keep private.
+
+## AI and Privacy Features
+- OpenVINO (Intel iGPU) and CUDA (Nvidia GPU) machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups. The ML features do fall back to CPU, but are not recommended.
+- Multi-select actions for marking owned remote assets as NSFW or safe again.
+- AI-generated image descriptions and searchable tags (alpha right now, improving later).
 - Optional NSFW detection with private review state and visible tags.
-- PIN-gated hiding for detected NSFW assets and user-selected sensitive tags or people.
+- PIN-gated hiding for detected NSFW/sensitive assets and user-selected sensitive tags or people. Uses the same PIN as the locked folder.
 - A `/suppressed` private view for organizing hidden/sensitive content without losing album context.
 - Admin review and repair tools for generated descriptions, generated tags, and NSFW decisions.
+
+## Deduplicate Content in Multiple Accounts
 - Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
 - Enhanced video duplicate detection that samples multiple internal-only video frames and compares CLIP embeddings, reducing false duplicate groups caused by black frames, title cards, or intro screens while still matching different-resolution copies.
-- OpenVINO and CUDA machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups.
-- Mobile multi-select actions for marking owned remote assets as NSFW or safe again.
+
+## Advanced GPU (and non-GPU) Video Editing
+- Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.
+- A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
+- GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
+
+## Recently Added Media
 - Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for plain-language setup notes, recommended rollout steps, physical deduplication guidance, and the differences from upstream Immich.
