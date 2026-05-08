@@ -25,6 +25,9 @@ Upstream Immich did not accept this local feature set *because it was "slop,"* s
 - A `/suppressed` private view for organizing hidden/sensitive content without losing album context.
 - Admin review and repair tools for generated descriptions, generated tags, and NSFW decisions.
 - Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
+- Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.
+- A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
+- GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
 - OpenVINO and CUDA machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups.
 - Mobile multi-select actions for marking owned remote assets as NSFW or safe again.
 - Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.
