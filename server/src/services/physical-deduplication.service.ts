@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { join, parse } from 'node:path';
+import { StorageCore } from 'src/cores/storage.core';
 import { OnJob } from 'src/decorators';
 import {
   AssetFileType,
@@ -7,6 +9,7 @@ import {
   JobStatus,
   PhysicalFileType,
   QueueName,
+  StorageFolder,
   SystemMetadataKey,
 } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
@@ -48,7 +51,7 @@ export class PhysicalDeduplicationService extends BaseService {
     }
 
     const lastRun = await this.systemMetadataRepository.get(SystemMetadataKey.PhysicalDeduplicationMigration);
-    if (lastRun?.mode !== 'dry-run') {
+    if (lastRun?.mode !== 'dry-run' || lastRun.masterUserId !== physicalDeduplication.masterUserId) {
       this.logger.warn('Physical deduplication apply requires a successful dry run first');
       return JobStatus.Failed;
     }
@@ -65,6 +68,7 @@ export class PhysicalDeduplicationService extends BaseService {
     const summary: MigrationSummary = {
       mode,
       ranAt: new Date().toISOString(),
+      masterUserId,
       eligibleAssets: 0,
       linkedAssets: 0,
       skippedExternal: 0,
@@ -108,6 +112,7 @@ export class PhysicalDeduplicationService extends BaseService {
 
         if (candidate.physicalOriginalFileId !== physicalFile.id) {
           const pathToDelete = candidate.originalPath === physicalFile.path ? undefined : candidate.originalPath;
+          await this.migrateSidecarFile(candidate.id, candidate.ownerId, candidate.originalPath);
           await this.physicalFileRepository.linkAssetToOriginalPhysicalFile(candidate.id, physicalFile);
           summary.linkedAssets++;
           await this.queueDelete(pathToDelete);
@@ -177,6 +182,35 @@ export class PhysicalDeduplicationService extends BaseService {
       await this.queueDelete(duplicateFile.path);
       summary.deletedBytes += duplicateSize;
     }
+  }
+
+  private async migrateSidecarFile(assetId: string, ownerId: string, originalPath: string) {
+    const sidecarPath = await this.findExistingSidecarPath(originalPath);
+    if (!sidecarPath) {
+      return;
+    }
+
+    const targetPath = StorageCore.getNestedPath(StorageFolder.Upload, ownerId, `${assetId}.xmp`);
+    if (sidecarPath !== targetPath && !(await this.storageRepository.checkFileExists(targetPath))) {
+      this.storageCore.ensureFolders(targetPath);
+      await this.storageRepository.copyFile(sidecarPath, targetPath);
+      await this.queueDelete(sidecarPath);
+    }
+
+    await this.assetRepository.upsertFile({ assetId, type: AssetFileType.Sidecar, path: targetPath });
+  }
+
+  private async findExistingSidecarPath(originalPath: string) {
+    for (const candidate of this.getSidecarCandidates(originalPath)) {
+      if (await this.storageRepository.checkFileExists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  private getSidecarCandidates(originalPath: string) {
+    const assetPath = parse(originalPath);
+    return [`${originalPath}.xmp`, `${join(assetPath.dir, assetPath.name)}.xmp`];
   }
 
   private async ensureGeneratedPhysicalFile(assetId: string, type: AssetFileType, path: string) {

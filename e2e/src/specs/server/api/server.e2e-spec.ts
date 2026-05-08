@@ -117,6 +117,7 @@ describe('/server', () => {
         imageDescription: false,
         nsfwDetection: false,
         passwordLogin: true,
+        physicalDeduplication: false,
         search: true,
         sidecar: true,
         trash: true,

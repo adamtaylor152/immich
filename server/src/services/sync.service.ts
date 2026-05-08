@@ -279,6 +279,11 @@ export class SyncService extends BaseService {
       send(response, { type: deleteType, ids: [id], data });
     }
 
+    const hiddenDeletes = this.syncRepository.asset.getHiddenDeletes({ ...options, ack: checkpointMap[deleteType] });
+    for await (const { id, ...data } of hiddenDeletes) {
+      send(response, { type: deleteType, ids: [id], data });
+    }
+
     const upsertType = SyncEntityType.AssetV2;
     const upserts = this.syncRepository.asset.getUpserts({ ...options, ack: checkpointMap[upsertType] });
     for await (const { updateId, ...data } of upserts) {

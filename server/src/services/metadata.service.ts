@@ -445,7 +445,7 @@ export class MetadataService extends BaseService {
     }
 
     let sidecarPath = null;
-    for (const candidate of this.getSidecarCandidates(asset)) {
+    for (const candidate of await this.getSidecarCandidates(asset)) {
       const exists = await this.storageRepository.checkFileExists(candidate, constants.R_OK);
       if (!exists) {
         continue;
@@ -499,7 +499,10 @@ export class MetadataService extends BaseService {
     const lockedProperties = await this.assetJobRepository.getLockedPropertiesForMetadataExtraction(id);
 
     const { sidecarFile } = getAssetFiles(asset.files);
-    const sidecarPath = sidecarFile?.path || (await this.getSidecarWritePath(asset));
+    const sidecarPath =
+      sidecarFile?.path && (await this.canUseExistingSidecarPath(asset, sidecarFile.path))
+        ? sidecarFile.path
+        : await this.getSidecarWritePath(asset);
 
     const { description, dateTimeOriginal, latitude, longitude, rating, tags, timeZone } = _.pick(
       {
@@ -534,7 +537,7 @@ export class MetadataService extends BaseService {
     this.storageCore.ensureFolders(sidecarPath);
     await this.metadataRepository.writeTags(sidecarPath, exif);
 
-    if (asset.files.length === 0) {
+    if (!sidecarFile || sidecarFile.path !== sidecarPath) {
       await this.assetRepository.upsertFile({ assetId: id, type: AssetFileType.Sidecar, path: sidecarPath });
     }
 
@@ -561,24 +564,65 @@ export class MetadataService extends BaseService {
     return StorageCore.getNestedPath(StorageFolder.Upload, asset.ownerId, `${asset.id}.xmp`);
   }
 
-  private getSidecarCandidates({ files, originalPath }: { files: AssetFile[]; originalPath: string }) {
+  private async canUseExistingSidecarPath(
+    asset: { id: string; originalPath: string; physicalOriginalFileId?: string | null },
+    path: string,
+  ) {
+    if (!asset.physicalOriginalFileId) {
+      return true;
+    }
+
+    if (await this.physicalFileRepository.isOriginalCanonical(asset.id, asset.physicalOriginalFileId)) {
+      return true;
+    }
+
+    return !this.getOriginalPathSidecarCandidates(asset.originalPath).includes(path);
+  }
+
+  private async getSidecarCandidates({
+    files,
+    id,
+    ownerId,
+    originalPath,
+    physicalOriginalFileId,
+  }: {
+    files: AssetFile[];
+    id: string;
+    ownerId: string;
+    originalPath: string;
+    physicalOriginalFileId?: string | null;
+  }) {
     const candidates: string[] = [];
 
     const { sidecarFile } = getAssetFiles(files);
-    if (sidecarFile?.path) {
+    if (
+      sidecarFile?.path &&
+      (await this.canUseExistingSidecarPath({ id, originalPath, physicalOriginalFileId }, sidecarFile.path))
+    ) {
       candidates.push(sidecarFile.path);
     }
 
+    if (physicalOriginalFileId) {
+      const isCanonical = await this.physicalFileRepository.isOriginalCanonical(id, physicalOriginalFileId);
+      if (!isCanonical) {
+        candidates.push(StorageCore.getNestedPath(StorageFolder.Upload, ownerId, `${id}.xmp`));
+        return candidates;
+      }
+    }
+
+    candidates.push(...this.getOriginalPathSidecarCandidates(originalPath));
+    return candidates;
+  }
+
+  private getOriginalPathSidecarCandidates(originalPath: string) {
     const assetPath = parse(originalPath);
 
-    candidates.push(
+    return [
       // IMG_123.jpg.xmp
       `${originalPath}.xmp`,
       // IMG_123.xmp
       `${join(assetPath.dir, assetPath.name)}.xmp`,
-    );
-
-    return candidates;
+    ];
   }
 
   private getImageDimensions(exifTags: ImmichTags): { width?: number; height?: number } {

@@ -40,6 +40,10 @@
   let configToEdit = $state(systemConfigManager.cloneValue());
   let physicalDeduplication = $state(configToEdit.physicalDeduplication ?? { enabled: false, masterUserId: null });
   const savedPhysicalDeduplication = $derived(config.physicalDeduplication ?? { enabled: false, masterUserId: null });
+  const hasUnsavedPhysicalDeduplication = $derived(
+    physicalDeduplication.enabled !== savedPhysicalDeduplication.enabled ||
+      physicalDeduplication.masterUserId !== savedPhysicalDeduplication.masterUserId,
+  );
 
   $effect(() => {
     configToEdit.physicalDeduplication = physicalDeduplication;
@@ -235,7 +239,10 @@
               shape="round"
               size="small"
               color="secondary"
-              disabled={disabled || !physicalDeduplication.enabled || !physicalDeduplication.masterUserId}
+              disabled={disabled ||
+                !physicalDeduplication.enabled ||
+                !physicalDeduplication.masterUserId ||
+                hasUnsavedPhysicalDeduplication}
               onclick={handlePhysicalDeduplicationDryRun}
             >
               {$t('admin.physical_deduplication_dry_run')}
@@ -243,7 +250,7 @@
             <Button
               shape="round"
               size="small"
-              disabled={disabled || !physicalDeduplicationDryRunQueued}
+              disabled={disabled || !physicalDeduplicationDryRunQueued || hasUnsavedPhysicalDeduplication}
               onclick={handlePhysicalDeduplicationApply}
             >
               {$t('admin.physical_deduplication_apply')}

@@ -60,8 +60,8 @@
     }
   > = {
     [hardwareAcceleration.OpenVino]: {
-      imageDescriptionModelName: 'microsoft/Phi-3.5-vision-instruct',
-      imageDescriptionFallbackModelName: 'microsoft/Phi-3.5-vision-instruct',
+      imageDescriptionModelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      imageDescriptionFallbackModelName: 'microsoft/Florence-2-base-ft',
       imageDescriptionDevice: 'AUTO',
       nsfwDetectionModelName: 'onnx-community/nsfw_image_detection-ONNX',
       nsfwDetectionDevice: 'AUTO',

@@ -19,7 +19,7 @@ export interface PersonSearchOptions extends HiddenContentQueryOptions {
   closestFaceAssetId?: string;
 }
 
-export interface PersonNameSearchOptions {
+export interface PersonNameSearchOptions extends HiddenContentQueryOptions {
   withHidden?: boolean;
 }
 
@@ -311,8 +311,8 @@ export class PersonRepository {
       .executeTakeFirst();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING, { withHidden: true }] })
-  getByName(userId: string, personName: string, { withHidden }: PersonNameSearchOptions) {
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING, { withHidden: true, excludeNsfw: true }] })
+  getByName(userId: string, personName: string, options: PersonNameSearchOptions) {
     return this.db
       .with('similarity_threshold', (db) =>
         db.selectNoFrom(sql`set_config('pg_trgm.word_similarity_threshold', '0.5', true)`.as('thresh')),
@@ -323,7 +323,23 @@ export class PersonRepository {
       .where(() => sql`f_unaccent("person"."name") %> f_unaccent(${personName})`)
       .orderBy(sql`f_unaccent("person"."name") <->>> f_unaccent(${personName})`)
       .limit(100)
-      .$if(!withHidden, (qb) => qb.where('person.isHidden', '=', false))
+      .$if(!options.withHidden, (qb) => qb.where('person.isHidden', '=', false))
+      .where((eb) =>
+        eb.exists((eb) =>
+          eb
+            .selectFrom('asset_face')
+            .innerJoin('asset', (join) =>
+              join
+                .onRef('asset.id', '=', 'asset_face.assetId')
+                .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
+                .on('asset.deletedAt', 'is', null),
+            )
+            .whereRef('asset_face.personId', '=', 'person.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .$call((qb) => withHiddenContentFilter(qb, options)),
+        ),
+      )
       .execute();
   }
 

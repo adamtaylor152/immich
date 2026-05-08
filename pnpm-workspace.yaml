@@ -32,6 +32,21 @@ onlyBuiltDependencies:
 overrides:
   canvas: 2.11.2
   sharp: ^0.34.5
+  brace-expansion: ^1.1.13
+  dompurify: ^3.4.2
+  esbuild: ^0.28.0
+  follow-redirects: ^1.16.0
+  ip-address: ^10.2.0
+  lodash-es: ^4.18.1
+  node-forge: ^1.4.0
+  qs: ^6.14.2
+  serialize-javascript: ^7.0.5
+  socket.io-parser: ^4.2.6
+  svgo: ^3.3.3
+  tar: ^7.5.15
+  '@sveltejs/kit>cookie': ^0.7.2
+  bullmq>uuid: ^11.1.1
+  mermaid>uuid: ^11.1.1
   # pending docusaurus 3.10.1
   webpackbar: ^7.0.0
 packageExtensions:

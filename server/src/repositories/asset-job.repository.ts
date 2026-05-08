@@ -54,7 +54,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .where('asset.id', '=', asUuid(id))
-      .select(['id', 'originalPath'])
+      .select(['id', 'ownerId', 'originalPath', 'physicalOriginalFileId'])
       .select((eb) => withFiles(eb, AssetFileType.Sidecar))
       .limit(1)
       .executeTakeFirst();

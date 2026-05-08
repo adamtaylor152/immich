@@ -212,13 +212,14 @@ class ImageDescriptionModel(InferenceModel):
 
         device = self._torch_device(torch)
         torch_dtype = torch.float16 if str(device).startswith("cuda") else torch.float32
-        processor = AutoProcessor.from_pretrained(str(self.cache_dir), trust_remote_code=True)
+        trust_remote_code = self.hf_model_name in FLORENCE_MODEL_NAMES
+        processor = AutoProcessor.from_pretrained(str(self.cache_dir), trust_remote_code=trust_remote_code)
 
         if self.hf_model_name in FLORENCE_MODEL_NAMES:
             model = AutoModelForCausalLM.from_pretrained(
                 str(self.cache_dir),
                 torch_dtype=torch_dtype,
-                trust_remote_code=True,
+                trust_remote_code=trust_remote_code,
             ).to(device)
         else:
             model = Qwen2_5_VLForConditionalGeneration.from_pretrained(

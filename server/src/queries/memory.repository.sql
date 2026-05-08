@@ -327,6 +327,16 @@ select
                 end = true
             )
           )
+          and not exists (
+            select
+              $17 as "one"
+            from
+              "asset_face"
+              inner join "person" on "person"."id" = "asset_face"."personId"
+            where
+              "asset_face"."assetId" = "asset"."id"
+              and "person"."isHidden" = $18
+          )
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -336,7 +346,7 @@ from
   "memory"
 where
   "deletedAt" is null
-  and "ownerId" = $17
+  and "ownerId" = $19
   and (
     not exists (
       select
@@ -364,7 +374,7 @@ where
               asset_metadata
             where
               asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $18
+              and asset_metadata.key = $20
               and case
                 when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
                   (
@@ -410,8 +420,6 @@ where
                           regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
                         ) = any (
                           array[
-                            $19,
-                            $20,
                             $21,
                             $22,
                             $23,
@@ -424,7 +432,9 @@ where
                             $30,
                             $31,
                             $32,
-                            $33
+                            $33,
+                            $34,
+                            $35
                           ]::text[]
                         )
                     )
@@ -539,6 +549,16 @@ select
                 end = true
             )
           )
+          and not exists (
+            select
+              $17 as "one"
+            from
+              "asset_face"
+              inner join "person" on "person"."id" = "asset_face"."personId"
+            where
+              "asset_face"."assetId" = "asset"."id"
+              and "person"."isHidden" = $18
+          )
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -549,14 +569,14 @@ from
 where
   (
     "showAt" is null
-    or "showAt" <= $17
+    or "showAt" <= $19
   )
   and (
     "hideAt" is null
-    or "hideAt" >= $18
+    or "hideAt" >= $20
   )
   and "deletedAt" is null
-  and "ownerId" = $19
+  and "ownerId" = $21
   and (
     not exists (
       select
@@ -584,7 +604,7 @@ where
               asset_metadata
             where
               asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $20
+              and asset_metadata.key = $22
               and case
                 when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
                   (
@@ -630,8 +650,6 @@ where
                           regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
                         ) = any (
                           array[
-                            $21,
-                            $22,
                             $23,
                             $24,
                             $25,
@@ -644,7 +662,9 @@ where
                             $32,
                             $33,
                             $34,
-                            $35
+                            $35,
+                            $36,
+                            $37
                           ]::text[]
                         )
                     )

@@ -509,6 +509,7 @@ export type SystemFlags = { mountChecks: Record<StorageFolder, boolean> };
 export type PhysicalDeduplicationMigrationState = {
   mode: 'dry-run' | 'apply';
   ranAt: string;
+  masterUserId: string;
   eligibleAssets: number;
   linkedAssets: number;
   skippedExternal: number;

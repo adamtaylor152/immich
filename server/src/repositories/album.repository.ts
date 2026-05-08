@@ -446,13 +446,14 @@ export class AlbumRepository {
    * Get per-user asset contribution counts for a single album.
    * Excludes deleted assets, orders by count desc.
    */
-  @GenerateSql({ params: [DummyValue.UUID] })
-  getContributorCounts(id: string) {
+  @GenerateSql({ params: [DummyValue.UUID, { excludeNsfw: true }] })
+  getContributorCounts(id: string, options: HiddenContentQueryOptions = {}) {
     return this.db
       .selectFrom('album_asset')
       .innerJoin('asset', 'asset.id', 'assetId')
       .where('asset.deletedAt', 'is', sql.lit(null))
       .where('album_asset.albumId', '=', id)
+      .$call((qb) => withHiddenContentFilter(qb, options))
       .select('asset.ownerId as userId')
       .select((eb) => eb.fn.countAll<number>().as('assetCount'))
       .groupBy('asset.ownerId')

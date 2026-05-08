@@ -202,7 +202,7 @@
         <SearchDateSection bind:filters={filter.date} />
 
         <!-- RATING -->
-        {#if authManager.authenticated && authManager.preferences.ratings.enabled}
+        {#if authManager.authenticated && authManager.preferences.ratings?.enabled}
           <SearchRatingsSection bind:rating={filter.rating} />
         {/if}
 

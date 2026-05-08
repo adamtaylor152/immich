@@ -1015,7 +1015,7 @@ export class AssetRepository {
       .onConflict((oc) =>
         oc.columns(['assetId', 'type', 'isEdited']).doUpdateSet((eb) => ({
           path: eb.ref('excluded.path'),
-          physicalFileId: eb.ref('excluded.physicalFileId'),
+          physicalFileId: sql`coalesce(${eb.ref('excluded.physicalFileId')}, ${eb.ref('asset_file.physicalFileId')})`,
         })),
       )
       .execute();
@@ -1032,7 +1032,7 @@ export class AssetRepository {
       .onConflict((oc) =>
         oc.columns(['assetId', 'type', 'isEdited']).doUpdateSet((eb) => ({
           path: eb.ref('excluded.path'),
-          physicalFileId: eb.ref('excluded.physicalFileId'),
+          physicalFileId: sql`coalesce(${eb.ref('excluded.physicalFileId')}, ${eb.ref('asset_file.physicalFileId')})`,
           isProgressive: eb.ref('excluded.isProgressive'),
           isTransparent: eb.ref('excluded.isTransparent'),
         })),

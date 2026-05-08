@@ -20,7 +20,9 @@ limit
 -- AssetJobRepository.getForSidecarWriteJob
 select
   "id",
+  "ownerId",
   "originalPath",
+  "physicalOriginalFileId",
   (
     select
       coalesce(json_agg(agg), '[]')
@@ -30,6 +32,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -50,7 +53,9 @@ limit
 -- AssetJobRepository.getForSidecarCheckJob
 select
   "id",
+  "ownerId",
   "originalPath",
+  "physicalOriginalFileId",
   (
     select
       coalesce(json_agg(agg), '[]')
@@ -60,6 +65,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -185,6 +191,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -215,6 +222,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited",
           "asset_file"."isProgressive",
           "asset_file"."isTransparent"
@@ -318,6 +326,7 @@ select
   "asset"."localDateTime",
   "asset"."originalFileName",
   "asset"."originalPath",
+  "asset"."physicalOriginalFileId",
   "asset"."ownerId",
   "asset"."type",
   "asset"."width",
@@ -347,6 +356,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -373,6 +383,7 @@ select
   "asset_file"."id",
   "asset_file"."path",
   "asset_file"."type",
+  "asset_file"."physicalFileId",
   "asset_file"."isEdited"
 from
   "asset_file"
@@ -430,6 +441,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -470,6 +482,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -559,6 +572,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -631,6 +645,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -743,6 +758,7 @@ select
   "asset"."type",
   "asset"."checksum",
   "asset"."originalPath",
+  "asset"."physicalOriginalFileId",
   "asset"."isExternal",
   "asset"."visibility",
   "asset"."originalFileName",
@@ -762,6 +778,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"
@@ -785,6 +802,7 @@ select
   "asset"."type",
   "asset"."checksum",
   "asset"."originalPath",
+  "asset"."physicalOriginalFileId",
   "asset"."isExternal",
   "asset"."visibility",
   "asset"."originalFileName",
@@ -804,6 +822,7 @@ select
           "asset_file"."id",
           "asset_file"."path",
           "asset_file"."type",
+          "asset_file"."physicalFileId",
           "asset_file"."isEdited"
         from
           "asset_file"

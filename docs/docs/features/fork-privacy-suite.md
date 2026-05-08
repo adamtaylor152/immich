@@ -95,9 +95,9 @@ The original asset rows remain separate. Each user still has their own asset id,
 
 Start slowly. Do not enable automatic hiding until you have reviewed classifier behavior on your own library.
 
-1. Make a backup and confirm your normal Immich backup plan works.
+1. Make a backup and confirm your normal Immich backup plan works. DO NOT SKIP THIS.
 2. Deploy the fork using the fork's server, web, and machine-learning images or build outputs. Do not mix upstream Immich containers with fork-only server or web code.
-3. Open `Administration > Settings > Machine Learning Settings`.
+3. Open `Administration > Settings > Machine Learning Settings`. I have tested this fork on v3.0 and above and did not identify any issues using my existing Immich deployment.
 4. Choose the image-enrichment hardware profile that matches your server:
    - `Auto-detect` for most users;
    - `Intel iGPU (OpenVINO)` for Intel integrated graphics;
