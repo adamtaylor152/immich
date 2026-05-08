@@ -1,4 +1,4 @@
-import { getAssetInfo } from '@immich/sdk';
+import { AssetTypeEnum, getAssetInfo } from '@immich/sdk';
 import { toastManager } from '@immich/ui';
 import { vitest } from 'vitest';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -34,8 +34,28 @@ vitest.mock('$lib/utils', async () => {
 describe('AssetService', () => {
   describe('getAssetActions', () => {
     beforeEach(() => {
+      authManager.reset();
       authManager.setPreferences(preferencesFactory.build());
+      setSharedLink(undefined);
     });
+
+    const ownerId = 'owner';
+
+    const setOwnerUser = () => {
+      authManager.setUser(userAdminFactory.build({ id: ownerId }));
+    };
+
+    const buildEditableVideo = (overrides = {}) =>
+      assetFactory.build({
+        ownerId,
+        type: AssetTypeEnum.Video,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 10_000,
+        ...overrides,
+      });
 
     it('should allow shared link downloads if the user owns the asset and shared link downloads are disabled', () => {
       const ownerId = 'owner';
@@ -62,6 +82,45 @@ describe('AssetService', () => {
       setSharedLink(sharedLinkFactory.build({ allowDownload: true }));
       const assetActions = getAssetActions(() => '', asset);
       expect(assetActions.SharedLinkDownload.$if?.()).toStrictEqual(true);
+    });
+
+    it('should allow editing owned videos with dimensions and duration', () => {
+      setOwnerUser();
+      const asset = buildEditableVideo();
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Edit.$if?.()).toStrictEqual(true);
+    });
+
+    it.each([{ width: null }, { height: null }, { duration: null }, { width: 0 }, { height: 0 }, { duration: 0 }])(
+      'should not allow editing videos with missing metadata: %o',
+      (overrides) => {
+        setOwnerUser();
+        const asset = buildEditableVideo(overrides);
+        const assetActions = getAssetActions(() => '', asset);
+        expect(assetActions.Edit.$if?.()).toStrictEqual(false);
+      },
+    );
+
+    it('should not allow editing videos from shared links', () => {
+      setOwnerUser();
+      setSharedLink(sharedLinkFactory.build({ allowDownload: true }));
+      const asset = buildEditableVideo();
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Edit.$if?.()).toStrictEqual(false);
+    });
+
+    it('should not allow editing trashed videos', () => {
+      setOwnerUser();
+      const asset = buildEditableVideo({ isTrashed: true });
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Edit.$if?.()).toStrictEqual(false);
+    });
+
+    it('should not allow editing live-photo companion videos', () => {
+      setOwnerUser();
+      const asset = buildEditableVideo({ livePhotoVideoId: 'live-photo-video-id' });
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Edit.$if?.()).toStrictEqual(false);
     });
   });
 

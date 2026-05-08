@@ -772,5 +772,152 @@ describe(AssetService.name, () => {
 
       expect(mocks.assetEdit.replaceAll).not.toHaveBeenCalled();
     });
+
+    it('should allow video edits and queue video edit generation', async () => {
+      const edit = {
+        action: AssetEditAction.Trim,
+        parameters: { startMs: 1000, endMs: 5000 },
+      };
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        duration: 10_000,
+        livePhotoVideoId: null,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      });
+      mocks.assetEdit.replaceAll.mockResolvedValue([{ id: 'edit-1', ...edit }]);
+
+      await expect(sut.editAsset(authStub.admin, 'asset-1', { edits: [edit] })).resolves.toEqual({
+        assetId: 'asset-1',
+        edits: [{ id: 'edit-1', ...edit }],
+      });
+
+      expect(mocks.assetEdit.replaceAll).toHaveBeenCalledWith('asset-1', [edit]);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.AssetVideoEditGeneration,
+        data: { id: 'asset-1' },
+      });
+    });
+
+    it('should reject video trim parameters outside the duration', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        duration: 10_000,
+        livePhotoVideoId: null,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      });
+
+      await expect(
+        sut.editAsset(authStub.admin, 'asset-1', {
+          edits: [{ action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 11_000 } }],
+        }),
+      ).rejects.toThrow('Trim parameters are out of bounds');
+
+      expect(mocks.assetEdit.replaceAll).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'speed',
+        { action: AssetEditAction.Speed, parameters: { rate: 0.5, startMs: 500, endMs: 900 } },
+        'speed parameters must be within the trimmed video range',
+      ],
+      [
+        'text overlay',
+        {
+          action: AssetEditAction.TextOverlay,
+          parameters: { text: 'Hello', x: 0.5, y: 0.5, startMs: 9000, endMs: 9500, size: 0.06, color: '#ffffff' },
+        },
+        'textOverlay parameters must be within the trimmed video range',
+      ],
+    ])('should reject video %s parameters outside the trimmed range', async (_name, timedEdit, message) => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        duration: 10_000,
+        livePhotoVideoId: null,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      });
+
+      await expect(
+        sut.editAsset(authStub.admin, 'asset-1', {
+          edits: [{ action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 8000 } }, timedEdit],
+        }),
+      ).rejects.toThrow(message);
+
+      expect(mocks.assetEdit.replaceAll).not.toHaveBeenCalled();
+    });
+
+    it('should allow non-overlapping video speed segments', async () => {
+      const edit = {
+        action: AssetEditAction.Speed,
+        parameters: { rate: 0.5, startMs: 1000, endMs: 3000 },
+      };
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        duration: 10_000,
+        livePhotoVideoId: null,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      });
+      mocks.assetEdit.replaceAll.mockResolvedValue([{ id: 'edit-1', ...edit }]);
+
+      await expect(sut.editAsset(authStub.admin, 'asset-1', { edits: [edit] })).resolves.toEqual({
+        assetId: 'asset-1',
+        edits: [{ id: 'edit-1', ...edit }],
+      });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.AssetVideoEditGeneration,
+        data: { id: 'asset-1' },
+      });
+    });
+
+    it('should reject overlapping video speed segments', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        duration: 10_000,
+        livePhotoVideoId: null,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      });
+
+      await expect(
+        sut.editAsset(authStub.admin, 'asset-1', {
+          edits: [
+            { action: AssetEditAction.Speed, parameters: { rate: 0.5, startMs: 1000, endMs: 4000 } },
+            { action: AssetEditAction.Speed, parameters: { rate: 2, startMs: 3000, endMs: 5000 } },
+          ],
+        }),
+      ).rejects.toThrow('Speed segments cannot overlap');
+
+      expect(mocks.assetEdit.replaceAll).not.toHaveBeenCalled();
+    });
   });
 });

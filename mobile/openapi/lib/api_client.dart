@@ -190,6 +190,8 @@ class ApiClient {
           return ActivityStatisticsResponseDto.fromJson(value);
         case 'AddUsersDto':
           return AddUsersDto.fromJson(value);
+        case 'AdjustParameters':
+          return AdjustParameters.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
         case 'AlbumResponseDto':
@@ -316,6 +318,8 @@ class ApiClient {
           return AssetVisibilityTypeTransformer().decode(value);
         case 'AudioCodec':
           return AudioCodecTypeTransformer().decode(value);
+        case 'AudioParameters':
+          return AudioParameters.fromJson(value);
         case 'AuthStatusResponseDto':
           return AuthStatusResponseDto.fromJson(value);
         case 'AvatarUpdate':
@@ -422,6 +426,8 @@ class ApiClient {
           return LoginResponseDto.fromJson(value);
         case 'LogoutResponseDto':
           return LogoutResponseDto.fromJson(value);
+        case 'LookParameters':
+          return LookParameters.fromJson(value);
         case 'MachineLearningAvailabilityChecksDto':
           return MachineLearningAvailabilityChecksDto.fromJson(value);
         case 'MachineLearningHardwareAcceleration':
@@ -678,6 +684,8 @@ class ApiClient {
           return SmartSearchDto.fromJson(value);
         case 'SourceType':
           return SourceTypeTypeTransformer().decode(value);
+        case 'SpeedParameters':
+          return SpeedParameters.fromJson(value);
         case 'StackCreateDto':
           return StackCreateDto.fromJson(value);
         case 'StackResponseDto':
@@ -688,6 +696,8 @@ class ApiClient {
           return StatisticsSearchDto.fromJson(value);
         case 'StorageFolder':
           return StorageFolderTypeTransformer().decode(value);
+        case 'StraightenParameters':
+          return StraightenParameters.fromJson(value);
         case 'SuppressionResponse':
           return SuppressionResponse.fromJson(value);
         case 'SuppressionScope':
@@ -858,12 +868,16 @@ class ApiClient {
           return TemplateResponseDto.fromJson(value);
         case 'TestEmailResponseDto':
           return TestEmailResponseDto.fromJson(value);
+        case 'TextOverlayParameters':
+          return TextOverlayParameters.fromJson(value);
         case 'TimeBucketAssetResponseDto':
           return TimeBucketAssetResponseDto.fromJson(value);
         case 'TimeBucketDateType':
           return TimeBucketDateTypeTypeTransformer().decode(value);
         case 'TimeBucketsResponseDto':
           return TimeBucketsResponseDto.fromJson(value);
+        case 'ToggleParameters':
+          return ToggleParameters.fromJson(value);
         case 'ToneMapping':
           return ToneMappingTypeTransformer().decode(value);
         case 'TranscodeHWAccel':
@@ -872,6 +886,8 @@ class ApiClient {
           return TranscodePolicyTypeTransformer().decode(value);
         case 'TrashResponseDto':
           return TrashResponseDto.fromJson(value);
+        case 'TrimParameters':
+          return TrimParameters.fromJson(value);
         case 'UpdateAlbumDto':
           return UpdateAlbumDto.fromJson(value);
         case 'UpdateAlbumUserDto':

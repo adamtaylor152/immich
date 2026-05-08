@@ -6,7 +6,7 @@ import { FACE_THUMBNAIL_SIZE, JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { ImagePathOptions, StorageCore, ThumbnailPathEntity } from 'src/cores/storage.core';
 import { AssetFile } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
-import { AssetEditAction, CropParameters } from 'src/dtos/editing.dto';
+import { AssetEditAction, AssetEditActionItem, CropParameters } from 'src/dtos/editing.dto';
 import { SystemConfigFFmpegDto } from 'src/dtos/system-config.dto';
 import {
   AssetFileType,
@@ -67,6 +67,58 @@ type ExistingAssetFile = Omit<AssetFile, 'physicalFileId'> & {
 };
 
 type ThumbnailAsset = NonNullable<Awaited<ReturnType<AssetJobRepository['getForGenerateThumbnailJob']>>>;
+
+type VideoThumbnailAsset = ThumbnailPathEntity & {
+  originalPath: string;
+  videoStream: VideoStreamInfo;
+  format: VideoFormat;
+};
+
+type SpeedInterval = {
+  startMs: number;
+  endMs: number;
+  rate: number;
+};
+
+type VideoEditTimeline = {
+  startMs: number;
+  endMs: number;
+  intervals: SpeedInterval[];
+};
+
+enum VideoEditAccelerationMode {
+  Software = 'Software',
+  HardwareNative = 'HardwareNative',
+  HybridHardwareEncode = 'HybridHardwareEncode',
+  SoftwareFallback = 'SoftwareFallback',
+}
+
+type VideoEditCommandPlan = {
+  command: TranscodeCommand;
+  config: SystemConfigFFmpegDto;
+  hasCpuVideoFilters: boolean;
+  mode: VideoEditAccelerationMode;
+  fallbackReason?: string;
+};
+
+const cpuVideoEditActions = new Set<AssetEditAction>([
+  AssetEditAction.Crop,
+  AssetEditAction.Rotate,
+  AssetEditAction.Straighten,
+  AssetEditAction.Mirror,
+  AssetEditAction.Stabilize,
+  AssetEditAction.AutoEnhance,
+  AssetEditAction.Adjust,
+  AssetEditAction.Filter,
+  AssetEditAction.Effect,
+  AssetEditAction.TextOverlay,
+  AssetEditAction.Speed,
+]);
+
+const isEditAction =
+  <T extends AssetEditAction>(action: T) =>
+  (edit: AssetEditActionItem): edit is Extract<AssetEditActionItem, { action: T }> =>
+    edit.action === action;
 
 @Injectable()
 export class MediaService extends BaseService {
@@ -235,7 +287,19 @@ export class MediaService extends BaseService {
     let generated: Awaited<ReturnType<MediaService['generateImageThumbnails']>>;
     if (asset.type === AssetType.Video || asset.originalFileName.toLowerCase().endsWith('.gif')) {
       this.logger.verbose(`Thumbnail generation for video ${id} ${asset.originalPath}`);
-      generated = await this.generateVideoThumbnails(asset, config);
+      if (!asset.videoStream || !asset.format) {
+        throw new Error(`Missing video metadata for asset ${asset.id}`);
+      }
+      generated = await this.generateVideoThumbnails(
+        {
+          id: asset.id,
+          ownerId: asset.ownerId,
+          originalPath: asset.originalPath,
+          videoStream: asset.videoStream,
+          format: asset.format,
+        },
+        config,
+      );
     } else if (asset.type === AssetType.Image) {
       this.logger.verbose(`Thumbnail generation for image ${id} ${asset.originalPath}`);
       generated = await this.generateImageThumbnails(asset, config);
@@ -580,18 +644,24 @@ export class MediaService extends BaseService {
     return Number.isFinite(bestScore) ? selected : 0;
   }
 
-  private async generateVideoThumbnails(asset: ThumbnailAsset, { ffmpeg, image }: SystemConfig) {
+  private async generateVideoThumbnails(
+    asset: VideoThumbnailAsset,
+    { ffmpeg, image }: SystemConfig,
+    options: { sourcePath?: string; isEdited?: boolean; fullsizeDimensions?: ImageDimensions } = {},
+  ) {
+    const sourcePath = options.sourcePath ?? asset.originalPath;
+    const isEdited = options.isEdited ?? false;
     const previewFile = this.getImageFile(asset, {
       fileType: AssetFileType.Preview,
       format: image.preview.format,
-      isEdited: false,
+      isEdited,
       isProgressive: false,
       isTransparent: false,
     });
     const thumbnailFile = this.getImageFile(asset, {
       fileType: AssetFileType.Thumbnail,
       format: image.thumbnail.format,
-      isEdited: false,
+      isEdited,
       isProgressive: false,
       isTransparent: false,
     });
@@ -604,17 +674,13 @@ export class MediaService extends BaseService {
 
     const previewConfig = { ...ffmpeg, targetResolution: image.preview.size.toString() };
     const thumbConfig = { ...ffmpeg, targetResolution: image.thumbnail.size.toString() };
-    const startTime = await this.pickVideoThumbnailStartTime(
-      asset.originalPath,
-      previewFile.path,
-      format,
-      (timestamp) =>
-        ThumbnailConfig.create(previewConfig, timestamp).getCommand(
-          TranscodeTarget.Video,
-          videoStream,
-          undefined,
-          format,
-        ),
+    const startTime = await this.pickVideoThumbnailStartTime(sourcePath, previewFile.path, format, (timestamp) =>
+      ThumbnailConfig.create(previewConfig, timestamp).getCommand(
+        TranscodeTarget.Video,
+        videoStream,
+        undefined,
+        format,
+      ),
     );
     const previewOptions = ThumbnailConfig.create(previewConfig, startTime).getCommand(
       TranscodeTarget.Video,
@@ -629,8 +695,8 @@ export class MediaService extends BaseService {
       format,
     );
 
-    await this.mediaRepository.transcode(asset.originalPath, previewFile.path, previewOptions);
-    await this.mediaRepository.transcode(asset.originalPath, thumbnailFile.path, thumbnailOptions);
+    await this.mediaRepository.transcode(sourcePath, previewFile.path, previewOptions);
+    await this.mediaRepository.transcode(sourcePath, thumbnailFile.path, thumbnailOptions);
 
     const thumbhash = await this.mediaRepository.generateThumbhash(previewFile.path, {
       colorspace: image.colorspace,
@@ -640,7 +706,7 @@ export class MediaService extends BaseService {
     return {
       files: [previewFile, thumbnailFile],
       thumbhash,
-      fullsizeDimensions: { width: videoStream.width, height: videoStream.height },
+      fullsizeDimensions: options.fullsizeDimensions ?? { width: videoStream.width, height: videoStream.height },
     };
   }
 
@@ -754,6 +820,632 @@ export class MediaService extends BaseService {
     }
 
     return JobStatus.Success;
+  }
+
+  @OnJob({ name: JobName.AssetVideoEditGeneration, queue: QueueName.VideoConversion })
+  async handleAssetVideoEditGeneration({ id }: JobOf<JobName.AssetVideoEditGeneration>): Promise<JobStatus> {
+    const asset = await this.assetJobRepository.getForVideoConversion(id);
+    if (!asset) {
+      return JobStatus.Failed;
+    }
+
+    const { videoStream, format } = asset;
+    const audioStream = asset.audioStream ?? undefined;
+    if (!videoStream || !format) {
+      this.logger.warn(`Skipped video edit generation for asset ${asset.id}: missing metadata`);
+      return JobStatus.Failed;
+    }
+
+    const thumbnailAsset = {
+      id: asset.id,
+      ownerId: asset.ownerId,
+      originalPath: asset.originalPath,
+      videoStream,
+      format,
+    };
+    const config = await this.getConfig({ withCache: true });
+    const edits = (await this.assetEditRepository.getAll(id)) as AssetEditActionItem[];
+    const editedFiles = this.toExistingAssetFiles(asset.files.filter((file) => file.isEdited));
+
+    if (edits.length === 0) {
+      await this.syncFiles(editedFiles, []);
+      const generated = await this.generateVideoThumbnails(thumbnailAsset, config);
+      await this.syncFiles(
+        this.toExistingAssetFiles(asset.files.filter((file) => !file.isEdited && this.isVideoThumbnailFile(file.type))),
+        generated.files,
+      );
+      await this.assetRepository.update({
+        id: asset.id,
+        thumbhash: generated.thumbhash,
+        duration: Math.round(format.duration * 1000),
+        ...generated.fullsizeDimensions,
+      });
+      return JobStatus.Success;
+    }
+
+    const output = this.getEditedEncodedVideoPath(thumbnailAsset);
+    this.storageCore.ensureFolders(output);
+
+    const plan = this.getVideoEditCommandPlan(config.ffmpeg, edits, videoStream, audioStream, format);
+    this.logVideoEditCommandPlan(asset.id, plan);
+
+    try {
+      await this.mediaRepository.transcode(asset.originalPath, output, plan.command);
+    } catch (error: any) {
+      const message = error?.message ?? error;
+      this.logger.error(`Error occurred during video edit generation: ${message}`);
+
+      if (plan.config.accel === TranscodeHardwareAcceleration.Disabled) {
+        return JobStatus.Failed;
+      }
+
+      const fallbackPlan = this.getVideoEditSoftwareFallbackCommandPlan(
+        config.ffmpeg,
+        edits,
+        videoStream,
+        audioStream,
+        format,
+        String(message),
+      );
+      this.logVideoEditCommandPlan(asset.id, fallbackPlan);
+
+      try {
+        await this.mediaRepository.transcode(asset.originalPath, output, fallbackPlan.command);
+      } catch (error: any) {
+        this.logger.error(`Error occurred during software video edit generation fallback: ${error?.message ?? error}`);
+        return JobStatus.Failed;
+      }
+    }
+
+    await this.assetRepository.upsertFile({
+      assetId: asset.id,
+      type: AssetFileType.EncodedVideo,
+      path: output,
+      isEdited: true,
+      isProgressive: false,
+      isTransparent: false,
+    });
+
+    const fullsizeDimensions = this.getVideoEditDimensions(edits, videoStream);
+    const generated = await this.generateVideoThumbnails(thumbnailAsset, config, {
+      sourcePath: output,
+      isEdited: true,
+      fullsizeDimensions,
+    });
+    await this.syncFiles(
+      editedFiles.filter((file) => file.type !== AssetFileType.EncodedVideo),
+      generated.files,
+    );
+
+    await this.assetRepository.update({
+      id: asset.id,
+      thumbhash: generated.thumbhash,
+      duration: this.getVideoEditDurationMs(edits, format),
+      ...fullsizeDimensions,
+    });
+
+    return JobStatus.Success;
+  }
+
+  private isVideoThumbnailFile(type: AssetFileType) {
+    return [AssetFileType.Preview, AssetFileType.Thumbnail].includes(type);
+  }
+
+  private toExistingAssetFiles(
+    files: Array<
+      Pick<ExistingAssetFile, 'id' | 'path' | 'type' | 'isEdited'> &
+        Partial<Pick<ExistingAssetFile, 'physicalFileId' | 'isProgressive' | 'isTransparent'>>
+    >,
+  ): ExistingAssetFile[] {
+    return files.map(
+      (file) =>
+        ({
+          ...file,
+          isProgressive: file.isProgressive ?? false,
+          isTransparent: file.isTransparent ?? false,
+        }) as ExistingAssetFile,
+    );
+  }
+
+  private getEditedEncodedVideoPath(asset: ThumbnailPathEntity) {
+    const { dir, ext, name } = path.parse(StorageCore.getEncodedVideoPath(asset));
+    return path.join(dir, `${name}_edited${ext}`);
+  }
+
+  private getVideoEditCommandPlan(
+    config: SystemConfigFFmpegDto,
+    edits: AssetEditActionItem[],
+    videoStream: VideoStreamInfo,
+    audioStream: AudioStreamInfo | undefined,
+    format: VideoFormat,
+  ): VideoEditCommandPlan {
+    const hasCpuVideoFilters = this.hasCpuVideoEditFilters(edits);
+    const planConfig =
+      config.accel === TranscodeHardwareAcceleration.Disabled || !hasCpuVideoFilters
+        ? config
+        : { ...config, accelDecode: false };
+    const mode =
+      config.accel === TranscodeHardwareAcceleration.Disabled
+        ? VideoEditAccelerationMode.Software
+        : hasCpuVideoFilters
+          ? VideoEditAccelerationMode.HybridHardwareEncode
+          : VideoEditAccelerationMode.HardwareNative;
+
+    return {
+      command: this.getVideoEditCommand(planConfig, edits, videoStream, audioStream, format),
+      config: planConfig,
+      hasCpuVideoFilters,
+      mode,
+    };
+  }
+
+  private getVideoEditSoftwareFallbackCommandPlan(
+    config: SystemConfigFFmpegDto,
+    edits: AssetEditActionItem[],
+    videoStream: VideoStreamInfo,
+    audioStream: AudioStreamInfo | undefined,
+    format: VideoFormat,
+    fallbackReason: string,
+  ): VideoEditCommandPlan {
+    const fallbackConfig = {
+      ...config,
+      accel: TranscodeHardwareAcceleration.Disabled,
+      accelDecode: false,
+    };
+
+    return {
+      command: this.getVideoEditCommand(fallbackConfig, edits, videoStream, audioStream, format),
+      config: fallbackConfig,
+      hasCpuVideoFilters: this.hasCpuVideoEditFilters(edits),
+      mode: VideoEditAccelerationMode.SoftwareFallback,
+      fallbackReason,
+    };
+  }
+
+  private logVideoEditCommandPlan(assetId: string, plan: VideoEditCommandPlan) {
+    this.logger.debug(
+      `Video edit acceleration plan: ${JSON.stringify({
+        assetId,
+        mode: plan.mode,
+        accel: plan.config.accel,
+        accelDecode: plan.config.accelDecode,
+        hasCpuVideoFilters: plan.hasCpuVideoFilters,
+        fallbackReason: plan.fallbackReason,
+      })}`,
+    );
+  }
+
+  private hasCpuVideoEditFilters(edits: AssetEditActionItem[]) {
+    return edits.some((edit) => cpuVideoEditActions.has(edit.action));
+  }
+
+  private getVideoEditTimeline(edits: AssetEditActionItem[], format: VideoFormat): VideoEditTimeline {
+    const trim = edits.find(isEditAction(AssetEditAction.Trim));
+    const knownDurationMs = Math.round(format.duration * 1000);
+    const lastSegmentEndMs = Math.max(
+      0,
+      ...edits.filter(isEditAction(AssetEditAction.Speed)).map((edit) => edit.parameters.endMs ?? 0),
+    );
+    const startMs = trim?.parameters.startMs ?? 0;
+    const endMs = trim?.parameters.endMs ?? Math.max(knownDurationMs, lastSegmentEndMs);
+    const globalSpeed = edits
+      .filter(isEditAction(AssetEditAction.Speed))
+      .find((edit) => edit.parameters.startMs === undefined && edit.parameters.endMs === undefined);
+    const intervals =
+      globalSpeed === undefined
+        ? this.getSpeedIntervals(edits, startMs, endMs)
+        : [{ startMs, endMs, rate: globalSpeed.parameters.rate }];
+
+    return { startMs, endMs, intervals };
+  }
+
+  private getRenderedTimelineMs(timeMs: number, timeline: VideoEditTimeline) {
+    let elapsedMs = 0;
+    for (const interval of timeline.intervals) {
+      if (timeMs <= interval.startMs) {
+        return Math.round(elapsedMs);
+      }
+
+      if (timeMs <= interval.endMs) {
+        return Math.round(elapsedMs + (timeMs - interval.startMs) / interval.rate);
+      }
+
+      elapsedMs += (interval.endMs - interval.startMs) / interval.rate;
+    }
+
+    return Math.round(elapsedMs);
+  }
+
+  private getVideoEditCommand(
+    config: SystemConfigFFmpegDto,
+    edits: AssetEditActionItem[],
+    videoStream: VideoStreamInfo,
+    audioStream: AudioStreamInfo | undefined,
+    format: VideoFormat,
+  ): TranscodeCommand {
+    const videoFilters: string[] = [];
+    const audioFilters: string[] = [];
+    const transcodeConfig = BaseConfig.create(config, this.videoInterfaces) as BaseConfig;
+    const inputOptions = [...transcodeConfig.getBaseInputOptions(videoStream, format)];
+    const transcodeFilters = transcodeConfig.getFilterOptions(videoStream);
+
+    const trim = edits.find((edit) => edit.action === AssetEditAction.Trim);
+    const speedEdits = edits.filter(isEditAction(AssetEditAction.Speed));
+    const speedSegments = speedEdits.filter(
+      (edit) => edit.parameters.startMs !== undefined && edit.parameters.endMs !== undefined,
+    );
+    const timeline = this.getVideoEditTimeline(edits, format);
+    if (trim && speedSegments.length === 0) {
+      inputOptions.push('-ss', this.msToSeconds(trim.parameters.startMs));
+    }
+
+    const globalSpeed = speedEdits.find(
+      (edit) =>
+        edit.parameters.startMs === undefined && edit.parameters.endMs === undefined && edit.parameters.rate !== 1,
+    );
+    if (globalSpeed) {
+      videoFilters.push(`setpts=${this.roundFilterNumber(1 / globalSpeed.parameters.rate)}*PTS`);
+      audioFilters.push(...this.getAudioTempoFilters(globalSpeed.parameters.rate));
+    }
+
+    const crop = edits.find((edit) => edit.action === AssetEditAction.Crop);
+    if (crop) {
+      const { x, y, width, height } = crop.parameters;
+      videoFilters.push(`crop=${this.toEvenDimension(width)}:${this.toEvenDimension(height)}:${x}:${y}`);
+    }
+
+    const rotate = edits.find((edit) => edit.action === AssetEditAction.Rotate);
+    if (rotate) {
+      switch (rotate.parameters.angle) {
+        case 90: {
+          videoFilters.push('transpose=1');
+          break;
+        }
+        case 180: {
+          videoFilters.push('transpose=1', 'transpose=1');
+          break;
+        }
+        case 270: {
+          videoFilters.push('transpose=2');
+          break;
+        }
+      }
+    }
+
+    const straighten = edits.find((edit) => edit.action === AssetEditAction.Straighten);
+    if (straighten && straighten.parameters.angle !== 0) {
+      videoFilters.push(`rotate=${this.roundFilterNumber(straighten.parameters.angle)}*PI/180:fillcolor=black`);
+    }
+
+    for (const mirror of edits.filter((edit) => edit.action === AssetEditAction.Mirror)) {
+      videoFilters.push(mirror.parameters.axis === 'horizontal' ? 'hflip' : 'vflip');
+    }
+
+    if (edits.some((edit) => edit.action === AssetEditAction.Stabilize && edit.parameters.enabled)) {
+      videoFilters.push('deshake');
+    }
+
+    if (edits.some((edit) => edit.action === AssetEditAction.AutoEnhance && edit.parameters.enabled)) {
+      videoFilters.push('eq=contrast=1.08:saturation=1.08:gamma=1.02');
+    }
+
+    const adjust = edits.find((edit) => edit.action === AssetEditAction.Adjust);
+    if (adjust) {
+      videoFilters.push(...this.getAdjustmentFilters(adjust.parameters));
+    }
+
+    for (const look of edits.filter(
+      (edit) => edit.action === AssetEditAction.Filter || edit.action === AssetEditAction.Effect,
+    )) {
+      const filter = this.getLookFilter(look.parameters.name, look.parameters.intensity);
+      if (filter) {
+        videoFilters.push(filter);
+      }
+    }
+
+    for (const overlay of edits.filter((edit) => edit.action === AssetEditAction.TextOverlay)) {
+      videoFilters.push(this.getTextOverlayFilter(overlay.parameters, timeline));
+    }
+
+    videoFilters.push(...transcodeFilters);
+
+    const audioEdit = edits.find((edit) => edit.action === AssetEditAction.Audio);
+    const muted = !!audioEdit?.parameters.muted;
+    if (audioEdit?.parameters.volume !== undefined && !muted) {
+      audioFilters.push(`volume=${this.roundFilterNumber(audioEdit.parameters.volume)}`);
+    }
+
+    let outputOptions = [
+      ...transcodeConfig.getBaseOutputOptions(TranscodeTarget.All, videoStream, muted ? undefined : audioStream),
+    ];
+
+    if (speedSegments.length > 0) {
+      const { filters, maps } = this.getSegmentedSpeedFilterGraph(
+        timeline.intervals,
+        videoStream,
+        audioStream,
+        muted,
+        videoFilters,
+        audioFilters,
+      );
+      outputOptions.push('-filter_complex', filters);
+      outputOptions = this.replaceOutputMaps(outputOptions, maps);
+    } else if (trim) {
+      outputOptions.unshift('-t', this.msToSeconds(trim.parameters.endMs - trim.parameters.startMs));
+    }
+
+    if (speedSegments.length === 0 && videoFilters.length > 0) {
+      outputOptions.push('-vf', videoFilters.join(','));
+    }
+
+    if (muted) {
+      outputOptions.push('-an');
+    } else if (speedSegments.length === 0 && audioFilters.length > 0) {
+      outputOptions.push('-filter:a', audioFilters.join(','));
+    }
+
+    outputOptions.push(
+      ...transcodeConfig.getPresetOptions(),
+      ...transcodeConfig.getOutputThreadOptions(),
+      ...transcodeConfig.getBitrateOptions(),
+    );
+
+    return {
+      inputOptions,
+      outputOptions,
+      twoPass: false,
+      progress: { frameCount: videoStream.frameCount, percentInterval: 10 },
+    };
+  }
+
+  private getSegmentedSpeedFilterGraph(
+    intervals: SpeedInterval[],
+    videoStream: VideoStreamInfo,
+    audioStream: AudioStreamInfo | undefined,
+    muted: boolean,
+    videoFilters: string[],
+    audioFilters: string[],
+  ) {
+    const filters: string[] = [];
+    const hasAudio = !!audioStream && !muted;
+
+    for (const [index, interval] of intervals.entries()) {
+      const start = this.msToSeconds(interval.startMs);
+      const end = this.msToSeconds(interval.endMs);
+      filters.push(
+        `[0:${videoStream.index}]trim=start=${start}:end=${end},setpts=${this.roundFilterNumber(1 / interval.rate)}*(PTS-STARTPTS)[v${index}]`,
+      );
+
+      if (hasAudio) {
+        const tempoFilters = interval.rate === 1 ? [] : this.getAudioTempoFilters(interval.rate);
+        filters.push(
+          `[0:${audioStream.index}]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS${tempoFilters.length > 0 ? `,${tempoFilters.join(',')}` : ''}[a${index}]`,
+        );
+      }
+    }
+
+    if (hasAudio) {
+      const concatInput = intervals.map((_, index) => `[v${index}][a${index}]`).join('');
+      const concatVideoLabel = videoFilters.length > 0 ? 'vconcat' : 'vout';
+      const concatAudioLabel = audioFilters.length > 0 ? 'aconcat' : 'aout';
+      filters.push(`${concatInput}concat=n=${intervals.length}:v=1:a=1[${concatVideoLabel}][${concatAudioLabel}]`);
+
+      if (videoFilters.length > 0) {
+        filters.push(`[${concatVideoLabel}]${videoFilters.join(',')}[vout]`);
+      }
+      if (audioFilters.length > 0) {
+        filters.push(`[${concatAudioLabel}]${audioFilters.join(',')}[aout]`);
+      }
+
+      return { filters: filters.join(';'), maps: ['[vout]', '[aout]'] };
+    }
+
+    const concatInput = intervals.map((_, index) => `[v${index}]`).join('');
+    const concatVideoLabel = videoFilters.length > 0 ? 'vconcat' : 'vout';
+    filters.push(`${concatInput}concat=n=${intervals.length}:v=1:a=0[${concatVideoLabel}]`);
+    if (videoFilters.length > 0) {
+      filters.push(`[${concatVideoLabel}]${videoFilters.join(',')}[vout]`);
+    }
+
+    return { filters: filters.join(';'), maps: ['[vout]'] };
+  }
+
+  private getSpeedIntervals(edits: AssetEditActionItem[], startMs: number, endMs: number): SpeedInterval[] {
+    const speedSegments = edits
+      .filter(isEditAction(AssetEditAction.Speed))
+      .filter((edit) => edit.parameters.startMs !== undefined && edit.parameters.endMs !== undefined)
+      .sort((a, b) => a.parameters.startMs! - b.parameters.startMs!);
+
+    const intervals: SpeedInterval[] = [];
+    let cursorMs = startMs;
+    for (const segment of speedSegments) {
+      const segmentStartMs = clamp(segment.parameters.startMs!, startMs, endMs);
+      const segmentEndMs = clamp(segment.parameters.endMs!, startMs, endMs);
+      if (segmentEndMs <= segmentStartMs) {
+        continue;
+      }
+
+      if (segmentStartMs > cursorMs) {
+        intervals.push({ startMs: cursorMs, endMs: segmentStartMs, rate: 1 });
+      }
+
+      intervals.push({ startMs: segmentStartMs, endMs: segmentEndMs, rate: segment.parameters.rate });
+      cursorMs = segmentEndMs;
+    }
+
+    if (cursorMs < endMs) {
+      intervals.push({ startMs: cursorMs, endMs, rate: 1 });
+    }
+
+    return intervals;
+  }
+
+  private replaceOutputMaps(outputOptions: string[], maps: string[]) {
+    const filteredOptions: string[] = [];
+    for (let index = 0; index < outputOptions.length; index++) {
+      if (outputOptions[index] === '-map') {
+        index++;
+        continue;
+      }
+
+      filteredOptions.push(outputOptions[index]);
+    }
+
+    return [...filteredOptions, ...maps.flatMap((map) => ['-map', map])];
+  }
+
+  private getAdjustmentFilters(adjust: Extract<AssetEditActionItem, { action: AssetEditAction.Adjust }>['parameters']) {
+    const filters: string[] = [];
+    const eqOptions: string[] = [];
+
+    if (adjust.brightness) {
+      eqOptions.push(`brightness=${this.roundFilterNumber(adjust.brightness / 100)}`);
+    }
+    if (adjust.contrast) {
+      eqOptions.push(`contrast=${this.roundFilterNumber(1 + adjust.contrast / 100)}`);
+    }
+    if (adjust.saturation) {
+      eqOptions.push(`saturation=${this.roundFilterNumber(1 + adjust.saturation / 100)}`);
+    }
+    if (adjust.highlights || adjust.shadows || adjust.whitePoint || adjust.blackPoint || adjust.hdr) {
+      const gamma =
+        1 +
+        ((adjust.shadows ?? 0) -
+          (adjust.highlights ?? 0) +
+          (adjust.hdr ?? 0) +
+          (adjust.blackPoint ?? 0) -
+          (adjust.whitePoint ?? 0)) /
+          500;
+      eqOptions.push(`gamma=${this.roundFilterNumber(gamma)}`);
+    }
+    if (eqOptions.length > 0) {
+      filters.push(`eq=${eqOptions.join(':')}`);
+    }
+
+    const warmth = adjust.warmth ?? 0;
+    const tint = adjust.tint ?? 0;
+    const skinTone = adjust.skinTone ?? 0;
+    const blueTone = adjust.blueTone ?? 0;
+    if (warmth || tint || skinTone || blueTone) {
+      filters.push(
+        `colorbalance=rm=${this.roundFilterNumber((warmth + skinTone) / 350)}:gm=${this.roundFilterNumber(tint / 350)}:bm=${this.roundFilterNumber((blueTone - warmth) / 350)}`,
+      );
+    }
+
+    if (adjust.vignette) {
+      filters.push(`vignette=angle=${this.roundFilterNumber((Math.PI / 4) * (Math.abs(adjust.vignette) / 100))}`);
+    }
+
+    return filters;
+  }
+
+  private getLookFilter(name: string, intensity = 100) {
+    const amount = clamp(intensity / 100, 0, 1);
+    switch (name.trim().toLowerCase()) {
+      case 'vivid': {
+        return `eq=saturation=${this.roundFilterNumber(1 + 0.3 * amount)}:contrast=${this.roundFilterNumber(1 + 0.12 * amount)}`;
+      }
+      case 'warm': {
+        return `colorbalance=rm=${this.roundFilterNumber(0.12 * amount)}:bm=${this.roundFilterNumber(-0.1 * amount)}`;
+      }
+      case 'cool': {
+        return `colorbalance=rm=${this.roundFilterNumber(-0.08 * amount)}:bm=${this.roundFilterNumber(0.12 * amount)}`;
+      }
+      case 'black_white':
+      case 'black-and-white':
+      case 'black and white':
+      case 'bw': {
+        return 'hue=s=0';
+      }
+      case 'fade': {
+        return `eq=contrast=${this.roundFilterNumber(1 - 0.18 * amount)}:saturation=${this.roundFilterNumber(1 - 0.25 * amount)}`;
+      }
+      case 'vignette': {
+        return `vignette=angle=${this.roundFilterNumber((Math.PI / 4) * amount)}`;
+      }
+      default: {
+        return null;
+      }
+    }
+  }
+
+  private getTextOverlayFilter(
+    parameters: Extract<AssetEditActionItem, { action: AssetEditAction.TextOverlay }>['parameters'],
+    timeline: VideoEditTimeline,
+  ) {
+    const color = parameters.color.replace('#', '0x');
+    const escapedComma = `${String.fromCodePoint(92)},`;
+    const startMs =
+      parameters.startMs === undefined ? undefined : this.getRenderedTimelineMs(parameters.startMs, timeline);
+    const endMs = parameters.endMs === undefined ? undefined : this.getRenderedTimelineMs(parameters.endMs, timeline);
+    const enable =
+      startMs !== undefined && endMs !== undefined
+        ? `:enable='between(t${escapedComma}${this.msToSeconds(startMs)}${escapedComma}${this.msToSeconds(endMs)})'`
+        : '';
+    return `drawtext=text='${this.escapeFfmpegText(parameters.text)}':x=w*${this.roundFilterNumber(parameters.x)}:y=h*${this.roundFilterNumber(parameters.y)}:fontsize=h*${this.roundFilterNumber(parameters.size)}:fontcolor=${color}${enable}`;
+  }
+
+  private getVideoEditDimensions(edits: AssetEditActionItem[], videoStream: VideoStreamInfo): ImageDimensions {
+    let width = videoStream.width;
+    let height = videoStream.height;
+
+    const crop = edits.find((edit) => edit.action === AssetEditAction.Crop);
+    if (crop) {
+      width = crop.parameters.width;
+      height = crop.parameters.height;
+    }
+
+    const rotate = edits.find((edit) => edit.action === AssetEditAction.Rotate);
+    if (rotate && [90, 270].includes(rotate.parameters.angle)) {
+      [width, height] = [height, width];
+    }
+
+    return { width, height };
+  }
+
+  private getVideoEditDurationMs(edits: AssetEditActionItem[], format: VideoFormat) {
+    const timeline = this.getVideoEditTimeline(edits, format);
+    return Math.round(
+      timeline.intervals.reduce((durationMs, interval) => {
+        return durationMs + (interval.endMs - interval.startMs) / interval.rate;
+      }, 0),
+    );
+  }
+
+  private getAudioTempoFilters(rate: number) {
+    const filters: string[] = [];
+    let remaining = rate;
+    while (remaining < 0.5) {
+      filters.push('atempo=0.5');
+      remaining /= 0.5;
+    }
+    while (remaining > 2) {
+      filters.push('atempo=2');
+      remaining /= 2;
+    }
+    filters.push(`atempo=${this.roundFilterNumber(remaining)}`);
+    return filters;
+  }
+
+  private escapeFfmpegText(value: string) {
+    const escape = String.fromCodePoint(92);
+    return value
+      .replaceAll(escape, escape + escape)
+      .replaceAll(':', `${escape}:`)
+      .replaceAll("'", `${escape}'`)
+      .replaceAll(',', `${escape},`);
+  }
+
+  private msToSeconds(milliseconds: number) {
+    return this.roundFilterNumber(milliseconds / 1000);
+  }
+
+  private roundFilterNumber(value: number) {
+    return Number(value.toFixed(4)).toString();
+  }
+
+  private toEvenDimension(value: number) {
+    return Math.max(2, value - (value % 2));
   }
 
   private getTranscodeTarget(

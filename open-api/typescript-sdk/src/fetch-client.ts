@@ -965,12 +965,74 @@ export type RotateParameters = {
 export type MirrorParameters = {
     axis: MirrorAxis;
 };
+export type TrimParameters = {
+    /** Trim end time in milliseconds */
+    endMs: number;
+    /** Trim start time in milliseconds */
+    startMs: number;
+};
+export type StraightenParameters = {
+    /** Straighten angle in degrees */
+    angle: number;
+};
+export type AdjustParameters = {
+    blackPoint?: number;
+    blueTone?: number;
+    brightness?: number;
+    contrast?: number;
+    hdr?: number;
+    highlights?: number;
+    saturation?: number;
+    shadows?: number;
+    skinTone?: number;
+    tint?: number;
+    vignette?: number;
+    warmth?: number;
+    whitePoint?: number;
+};
+export type LookParameters = {
+    /** Filter or effect intensity */
+    intensity?: number;
+    /** Filter or effect name */
+    name: string;
+};
+export type ToggleParameters = {
+    enabled?: boolean;
+};
+export type TextOverlayParameters = {
+    /** Text color in hex format */
+    color?: string;
+    /** Overlay end time in milliseconds */
+    endMs?: number;
+    /** Font size as a percentage of video height */
+    size?: number;
+    /** Overlay start time in milliseconds */
+    startMs?: number;
+    text: string;
+    /** Horizontal position as a percentage of video width */
+    x: number;
+    /** Vertical position as a percentage of video height */
+    y: number;
+};
+export type AudioParameters = {
+    muted?: boolean;
+    /** Audio volume multiplier */
+    volume?: number;
+};
+export type SpeedParameters = {
+    /** Speed segment end time in milliseconds */
+    endMs?: number;
+    /** Playback speed multiplier */
+    rate: number;
+    /** Speed segment start time in milliseconds */
+    startMs?: number;
+};
 export type AssetEditActionItemResponseDto = {
     action: AssetEditAction;
     /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsResponseDto = {
     /** Asset ID these edits belong to */
@@ -980,11 +1042,11 @@ export type AssetEditsResponseDto = {
 };
 export type AssetEditActionItemDto = {
     action: AssetEditAction;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsCreateDto = {
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply */
     edits: AssetEditActionItemDto[];
 };
 export type ImageDescriptionEnrichmentResponseDto = {
@@ -7189,7 +7251,17 @@ export enum AssetTypeEnum {
 export enum AssetEditAction {
     Crop = "crop",
     Rotate = "rotate",
-    Mirror = "mirror"
+    Mirror = "mirror",
+    Trim = "trim",
+    Straighten = "straighten",
+    Adjust = "adjust",
+    Filter = "filter",
+    Effect = "effect",
+    AutoEnhance = "autoEnhance",
+    Stabilize = "stabilize",
+    TextOverlay = "textOverlay",
+    Audio = "audio",
+    Speed = "speed"
 }
 export enum MirrorAxis {
     Horizontal = "horizontal",
@@ -7306,6 +7378,7 @@ export enum JobName {
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
+    AssetVideoEditGeneration = "AssetVideoEditGeneration",
     AssetEncodeVideoQueueAll = "AssetEncodeVideoQueueAll",
     AssetEncodeVideo = "AssetEncodeVideo",
     AssetEmptyTrash = "AssetEmptyTrash",

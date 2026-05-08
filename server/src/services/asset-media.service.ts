@@ -244,7 +244,7 @@ export class AssetMediaService extends BaseService {
       throw new NotFoundException('Asset not found or asset is not a video');
     }
 
-    const filepath = asset.encodedVideoPath || asset.originalPath;
+    const filepath = asset.editedVideoPath || asset.encodedVideoPath || asset.originalPath;
 
     return new ImmichFileResponse({
       path: filepath,

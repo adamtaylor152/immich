@@ -1,6 +1,6 @@
 import { ShallowDehydrateObject } from 'kysely';
 import { OutputInfo } from 'sharp';
-import { SystemConfig } from 'src/config';
+import { defaults, type SystemConfig } from 'src/config';
 import { Exif } from 'src/database';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import {
@@ -35,6 +35,7 @@ import { makeStream, newTestService, ServiceMocks } from 'test/utils';
 const fullsizeBuffer = Buffer.from('embedded image data');
 const rawBuffer = Buffer.from('raw image data');
 const extractedBuffer = Buffer.from('embedded image file');
+const getFilterOption = (outputOptions: string[], option = '-vf') => outputOptions[outputOptions.indexOf(option) + 1];
 
 describe(MediaService.name, () => {
   let sut: MediaService;
@@ -2061,6 +2062,210 @@ describe(MediaService.name, () => {
           data: { id: asset.id },
         },
       ]);
+    });
+  });
+
+  describe('getVideoEditCommand', () => {
+    const videoStream = probeStub.audioStreamAac.videoStream;
+    const audioStream = probeStub.audioStreamAac.audioStream ?? undefined;
+    const format = { ...probeStub.audioStreamAac.format, duration: 5 };
+
+    const getPlan = (ffmpeg: Partial<SystemConfig['ffmpeg']>, edits: any[]) =>
+      (sut as any).getVideoEditCommandPlan({ ...defaults.ffmpeg, ...ffmpeg }, edits, videoStream, audioStream, format);
+
+    it('should build a complex filter graph for speed segments with audio', () => {
+      const command = (sut as any).getVideoEditCommand(
+        defaults.ffmpeg,
+        [
+          { action: AssetEditAction.Speed, parameters: { rate: 0.5, startMs: 1000, endMs: 3000 } },
+          { action: AssetEditAction.Audio, parameters: { volume: 0.75 } },
+        ],
+        videoStream,
+        audioStream,
+        format,
+      );
+
+      const filterComplexIndex = command.outputOptions.indexOf('-filter_complex');
+      const filterGraph = command.outputOptions[filterComplexIndex + 1];
+
+      expect(filterComplexIndex).toBeGreaterThan(-1);
+      expect(command.outputOptions).toEqual(expect.arrayContaining(['-map', '[vout]', '-map', '[aout]']));
+      expect(command.outputOptions).not.toContain('-vf');
+      expect(command.outputOptions).not.toContain('-filter:a');
+      expect(filterGraph).toContain('[0:0]trim=start=0:end=1,setpts=1*(PTS-STARTPTS)[v0]');
+      expect(filterGraph).toContain('[0:0]trim=start=1:end=3,setpts=2*(PTS-STARTPTS)[v1]');
+      expect(filterGraph).toContain('[0:1]atrim=start=1:end=3,asetpts=PTS-STARTPTS,atempo=0.5[a1]');
+      expect(filterGraph).toContain('concat=n=3:v=1:a=1[vconcat][aconcat]');
+      expect(filterGraph).toContain('[vconcat]scale=-2:720[vout]');
+      expect(filterGraph).toContain('[aconcat]volume=0.75[aout]');
+    });
+
+    it('should offset text overlay timing after trimming video', () => {
+      const command = (sut as any).getVideoEditCommand(
+        defaults.ffmpeg,
+        [
+          { action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 5000 } },
+          {
+            action: AssetEditAction.TextOverlay,
+            parameters: { text: 'Hello', x: 0.5, y: 0.5, startMs: 3000, endMs: 4000, size: 0.06, color: '#ffffff' },
+          },
+        ],
+        videoStream,
+        audioStream,
+        format,
+      );
+
+      expect(getFilterOption(command.outputOptions)).toContain(String.raw`:enable='between(t\,2\,3)'`);
+    });
+
+    it('should map text overlay timing and duration through trimmed speed segments', () => {
+      const edits = [
+        { action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 5000 } },
+        { action: AssetEditAction.Speed, parameters: { rate: 0.5, startMs: 1000, endMs: 3000 } },
+        {
+          action: AssetEditAction.TextOverlay,
+          parameters: { text: 'Hello', x: 0.5, y: 0.5, startMs: 3000, endMs: 4000, size: 0.06, color: '#ffffff' },
+        },
+      ];
+      const command = (sut as any).getVideoEditCommand(defaults.ffmpeg, edits, videoStream, audioStream, format);
+      const filterComplexIndex = command.outputOptions.indexOf('-filter_complex');
+      const filterGraph = command.outputOptions[filterComplexIndex + 1];
+
+      expect(filterGraph).toContain(String.raw`:enable='between(t\,4\,5)'`);
+      expect((sut as any).getVideoEditDurationMs(edits, format)).toBe(6000);
+    });
+
+    it('should keep software command shape when hardware acceleration is disabled', () => {
+      const plan = getPlan({ accel: TranscodeHardwareAcceleration.Disabled }, [
+        { action: AssetEditAction.Crop, parameters: { x: 2, y: 4, width: 300, height: 201 } },
+      ]);
+
+      expect(plan.mode).toBe('Software');
+      expect(plan.command.inputOptions).not.toEqual(expect.arrayContaining(['-hwaccel']));
+      expect(plan.command.inputOptions).not.toEqual(expect.arrayContaining(['-init_hw_device']));
+      expect(plan.command.outputOptions).toEqual(
+        expect.arrayContaining(['-c:v', 'h264', '-preset', 'ultrafast', '-crf', '23']),
+      );
+      expect(getFilterOption(plan.command.outputOptions)).toBe('crop=300:200:2:4,scale=-2:720');
+    });
+
+    it.each([
+      [TranscodeHardwareAcceleration.Nvenc, 'cuda', 'h264_nvenc'],
+      [TranscodeHardwareAcceleration.Qsv, 'qsv', 'h264_qsv'],
+      [TranscodeHardwareAcceleration.Vaapi, 'vaapi', 'h264_vaapi'],
+      [TranscodeHardwareAcceleration.Rkmpp, 'rkmpp', 'h264_rkmpp'],
+    ])('should keep hardware decode and encode for trim-only edits with %s', (accel, hwaccel, codec) => {
+      sut.videoInterfaces = { dri: ['renderD128'], mali: true };
+
+      const plan = getPlan({ accel, accelDecode: true }, [
+        { action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 3000 } },
+      ]);
+
+      expect(plan.mode).toBe('HardwareNative');
+      expect(plan.command.inputOptions).toEqual(expect.arrayContaining(['-hwaccel', hwaccel]));
+      expect(plan.command.outputOptions).toEqual(expect.arrayContaining(['-c:v', codec]));
+    });
+
+    it.each([
+      [TranscodeHardwareAcceleration.Nvenc, 'h264_nvenc', 'hwupload_cuda'],
+      [TranscodeHardwareAcceleration.Qsv, 'h264_qsv', 'hwupload=extra_hw_frames=64'],
+      [TranscodeHardwareAcceleration.Vaapi, 'h264_vaapi', 'hwupload=extra_hw_frames=64'],
+      [TranscodeHardwareAcceleration.Rkmpp, 'h264_rkmpp', 'scale=-2:720'],
+    ])(
+      'should disable hardware decode and keep hardware encode for CPU edit filters with %s',
+      (accel, codec, upload) => {
+        sut.videoInterfaces = { dri: ['renderD128'], mali: true };
+
+        const plan = getPlan({ accel, accelDecode: true }, [
+          { action: AssetEditAction.Crop, parameters: { x: 2, y: 4, width: 300, height: 200 } },
+          { action: AssetEditAction.Rotate, parameters: { angle: 90 } },
+        ]);
+        const filter = getFilterOption(plan.command.outputOptions);
+
+        expect(plan.mode).toBe('HybridHardwareEncode');
+        expect(plan.command.inputOptions).not.toEqual(expect.arrayContaining(['-hwaccel']));
+        expect(plan.command.outputOptions).toEqual(expect.arrayContaining(['-c:v', codec]));
+        expect(filter).toContain('crop=300:200:2:4');
+        expect(filter).toContain('transpose=1');
+        expect(filter).toContain(upload);
+      },
+    );
+
+    it('should append preset, thread, and bitrate options for edited video output', () => {
+      const plan = getPlan({ maxBitrate: '10000k', threads: 2 }, [
+        { action: AssetEditAction.Trim, parameters: { startMs: 1000, endMs: 3000 } },
+      ]);
+
+      expect(plan.command.outputOptions).toEqual(
+        expect.arrayContaining([
+          '-preset',
+          'ultrafast',
+          '-threads',
+          '2',
+          '-crf',
+          '23',
+          '-maxrate',
+          '10000k',
+          '-bufsize',
+          '20000k',
+        ]),
+      );
+    });
+  });
+
+  describe('handleAssetVideoEditGeneration', () => {
+    it('should retry edited video rendering with software acceleration when hardware rendering fails', async () => {
+      const asset = {
+        ...AssetFactory.create({ id: 'video-id', type: AssetType.Video, originalPath: '/original/path.ext' }),
+        videoStream: probeStub.videoStreamH264.videoStream,
+        audioStream: probeStub.audioStreamAac.audioStream,
+        format: { ...probeStub.videoStreamH264.format, duration: 5 },
+        files: [],
+      };
+      mocks.assetJob.getForVideoConversion.mockResolvedValue(asset);
+      mocks.assetEdit.getAll.mockResolvedValue([
+        { id: 'edit-id', action: AssetEditAction.Crop, parameters: { x: 2, y: 4, width: 300, height: 200 } },
+      ]);
+      mocks.systemMetadata.get.mockResolvedValue({
+        ffmpeg: { accel: TranscodeHardwareAcceleration.Nvenc, accelDecode: true },
+      });
+      mocks.media.transcode.mockRejectedValueOnce(new Error('gpu failed')).mockResolvedValueOnce(void 0);
+      sut.videoInterfaces = { dri: ['renderD128'], mali: true };
+      (sut as any).generateVideoThumbnails = () =>
+        Promise.resolve({
+          files: [],
+          thumbhash: Buffer.from('thumbhash'),
+          fullsizeDimensions: { width: 300, height: 200 },
+        });
+
+      await expect(sut.handleAssetVideoEditGeneration({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.media.transcode).toHaveBeenCalledTimes(2);
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        1,
+        '/original/path.ext',
+        expect.any(String),
+        expect.objectContaining({
+          inputOptions: expect.arrayContaining(['-init_hw_device', 'cuda=cuda:0', '-filter_hw_device', 'cuda']),
+          outputOptions: expect.arrayContaining(['-c:v', 'h264_nvenc']),
+        }),
+      );
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        2,
+        '/original/path.ext',
+        expect.any(String),
+        expect.objectContaining({
+          inputOptions: expect.not.arrayContaining(['-hwaccel', '-init_hw_device']),
+          outputOptions: expect.arrayContaining(['-c:v', 'h264']),
+        }),
+      );
+      expect(mocks.asset.upsertFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetId: asset.id,
+          type: AssetFileType.EncodedVideo,
+          isEdited: true,
+        }),
+      );
     });
   });
 
