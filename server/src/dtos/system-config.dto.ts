@@ -248,6 +248,13 @@ const SystemConfigPasswordLoginSchema = z
   .object({ enabled: configBool.describe('Enabled') })
   .meta({ id: 'SystemConfigPasswordLoginDto' });
 
+const SystemConfigPhysicalDeduplicationSchema = z
+  .object({
+    enabled: configBool.describe('Enabled'),
+    masterUserId: z.uuidv4().nullable().describe('Master user ID'),
+  })
+  .meta({ id: 'SystemConfigPhysicalDeduplicationDto' });
+
 const SystemConfigReverseGeocodingSchema = z
   .object({ enabled: configBool.describe('Enabled') })
   .meta({ id: 'SystemConfigReverseGeocodingDto' });
@@ -382,6 +389,7 @@ export const SystemConfigSchema = z
     nightlyTasks: SystemConfigNightlyTasksSchema,
     oauth: SystemConfigOAuthSchema,
     passwordLogin: SystemConfigPasswordLoginSchema,
+    physicalDeduplication: SystemConfigPhysicalDeduplicationSchema.default(defaults.physicalDeduplication),
     reverseGeocoding: SystemConfigReverseGeocodingSchema,
     metadata: SystemConfigMetadataSchema,
     storageTemplate: SystemConfigStorageTemplateSchema,

@@ -22,6 +22,7 @@ import {
   JobStatus,
   QueueName,
   SourceType,
+  StorageFolder,
 } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
 import { ReverseGeocodeResult } from 'src/repositories/map.repository';
@@ -498,7 +499,7 @@ export class MetadataService extends BaseService {
     const lockedProperties = await this.assetJobRepository.getLockedPropertiesForMetadataExtraction(id);
 
     const { sidecarFile } = getAssetFiles(asset.files);
-    const sidecarPath = sidecarFile?.path || `${asset.originalPath}.xmp`;
+    const sidecarPath = sidecarFile?.path || (await this.getSidecarWritePath(asset));
 
     const { description, dateTimeOriginal, latitude, longitude, rating, tags, timeZone } = _.pick(
       {
@@ -530,6 +531,7 @@ export class MetadataService extends BaseService {
       return JobStatus.Skipped;
     }
 
+    this.storageCore.ensureFolders(sidecarPath);
     await this.metadataRepository.writeTags(sidecarPath, exif);
 
     if (asset.files.length === 0) {
@@ -539,6 +541,24 @@ export class MetadataService extends BaseService {
     await this.assetRepository.unlockProperties(asset.id, lockedProperties);
 
     return JobStatus.Success;
+  }
+
+  private async getSidecarWritePath(asset: {
+    id: string;
+    ownerId: string;
+    originalPath: string;
+    physicalOriginalFileId?: string | null;
+  }) {
+    if (!asset.physicalOriginalFileId) {
+      return `${asset.originalPath}.xmp`;
+    }
+
+    const isCanonical = await this.physicalFileRepository.isOriginalCanonical(asset.id, asset.physicalOriginalFileId);
+    if (isCanonical) {
+      return `${asset.originalPath}.xmp`;
+    }
+
+    return StorageCore.getNestedPath(StorageFolder.Upload, asset.ownerId, `${asset.id}.xmp`);
   }
 
   private getSidecarCandidates({ files, originalPath }: { files: AssetFile[]; originalPath: string }) {

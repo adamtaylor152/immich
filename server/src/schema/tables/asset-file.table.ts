@@ -35,6 +35,9 @@ export class AssetFileTable {
   @Column()
   path!: string;
 
+  @Column({ type: 'uuid', nullable: true, index: true })
+  physicalFileId!: string | null;
+
   @UpdateIdColumn({ index: true })
   updateId!: Generated<string>;
 

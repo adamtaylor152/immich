@@ -199,5 +199,25 @@ describe(StorageService.name, () => {
 
       expect(mocks.storage.unlink).toHaveBeenCalledWith('path/to/something');
     });
+
+    it('should not remove a shared physical file while references remain', async () => {
+      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue({ id: 'physical-file-id' } as never);
+      mocks.physicalFile.countReferences.mockResolvedValue(1);
+
+      await sut.handleDeleteFiles({ files: ['path/to/shared'] });
+
+      expect(mocks.storage.unlink).not.toHaveBeenCalled();
+      expect(mocks.physicalFile.deletePhysicalFile).not.toHaveBeenCalled();
+    });
+
+    it('should remove a shared physical file after the last reference is gone', async () => {
+      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue({ id: 'physical-file-id' } as never);
+      mocks.physicalFile.countReferences.mockResolvedValue(0);
+
+      await sut.handleDeleteFiles({ files: ['path/to/shared'] });
+
+      expect(mocks.storage.unlink).toHaveBeenCalledWith('path/to/shared');
+      expect(mocks.physicalFile.deletePhysicalFile).toHaveBeenCalledWith('physical-file-id');
+    });
   });
 });

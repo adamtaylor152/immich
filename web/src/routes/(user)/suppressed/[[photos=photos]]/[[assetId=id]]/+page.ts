@@ -15,7 +15,7 @@ export const load = (async ({ url }) => {
 
   const [ownedAlbums, sharedAlbums] = await Promise.all([
     getAllAlbums({ suppressedOnly: true }),
-    getAllAlbums({ shared: true, suppressedOnly: true }),
+    getAllAlbums({ isShared: true, suppressedOnly: true }),
   ]);
   const $t = await getFormatter();
 

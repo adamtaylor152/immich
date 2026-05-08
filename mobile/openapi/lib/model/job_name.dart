@@ -73,6 +73,8 @@ class JobName {
   static const smartSearch = JobName._(r'SmartSearch');
   static const storageTemplateMigration = JobName._(r'StorageTemplateMigration');
   static const storageTemplateMigrationSingle = JobName._(r'StorageTemplateMigrationSingle');
+  static const physicalDeduplicationMigrationDryRun = JobName._(r'PhysicalDeduplicationMigrationDryRun');
+  static const physicalDeduplicationMigrationApply = JobName._(r'PhysicalDeduplicationMigrationApply');
   static const tagCleanup = JobName._(r'TagCleanup');
   static const versionCheck = JobName._(r'VersionCheck');
   static const ocrQueueAll = JobName._(r'OcrQueueAll');
@@ -135,6 +137,8 @@ class JobName {
     smartSearch,
     storageTemplateMigration,
     storageTemplateMigrationSingle,
+    physicalDeduplicationMigrationDryRun,
+    physicalDeduplicationMigrationApply,
     tagCleanup,
     versionCheck,
     ocrQueueAll,
@@ -232,6 +236,8 @@ class JobNameTypeTransformer {
         case r'SmartSearch': return JobName.smartSearch;
         case r'StorageTemplateMigration': return JobName.storageTemplateMigration;
         case r'StorageTemplateMigrationSingle': return JobName.storageTemplateMigrationSingle;
+        case r'PhysicalDeduplicationMigrationDryRun': return JobName.physicalDeduplicationMigrationDryRun;
+        case r'PhysicalDeduplicationMigrationApply': return JobName.physicalDeduplicationMigrationApply;
         case r'TagCleanup': return JobName.tagCleanup;
         case r'VersionCheck': return JobName.versionCheck;
         case r'OcrQueueAll': return JobName.ocrQueueAll;

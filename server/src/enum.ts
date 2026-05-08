@@ -370,6 +370,7 @@ export enum SystemMetadataKey {
   SystemFlags = 'system-flags',
   VersionCheckState = 'version-check-state',
   License = 'license',
+  PhysicalDeduplicationMigration = 'physical-deduplication-migration',
 }
 
 export enum UserMetadataKey {
@@ -435,12 +436,22 @@ export enum ManualJobName {
   MemoryCleanup = 'memory-cleanup',
   MemoryCreate = 'memory-create',
   BackupDatabase = 'backup-database',
+  PhysicalDeduplicationDryRun = 'physical-deduplication-dry-run',
+  PhysicalDeduplicationApply = 'physical-deduplication-apply',
 }
 
 export const ManualJobNameSchema = z.enum(ManualJobName).describe('Manual job name').meta({ id: 'ManualJobName' });
 
 export enum AssetPathType {
   Original = 'original',
+  EncodedVideo = 'encoded_video',
+}
+
+export enum PhysicalFileType {
+  Original = 'original',
+  Thumbnail = 'thumbnail',
+  Preview = 'preview',
+  FullSize = 'fullsize',
   EncodedVideo = 'encoded_video',
 }
 
@@ -889,6 +900,8 @@ export enum JobName {
 
   StorageTemplateMigration = 'StorageTemplateMigration',
   StorageTemplateMigrationSingle = 'StorageTemplateMigrationSingle',
+  PhysicalDeduplicationMigrationDryRun = 'PhysicalDeduplicationMigrationDryRun',
+  PhysicalDeduplicationMigrationApply = 'PhysicalDeduplicationMigrationApply',
 
   TagCleanup = 'TagCleanup',
 

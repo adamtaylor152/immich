@@ -337,6 +337,7 @@ export class AssetMediaService extends BaseService {
   }
 
   private async create(ownerId: string, dto: AssetMediaCreateDto, file: UploadFile, sidecarFile?: UploadFile) {
+    const physicalDeduplication = await this.getPhysicalDeduplicationCandidate(ownerId, file);
     const asset = await this.assetRepository.create({
       ownerId,
       libraryId: null,
@@ -375,11 +376,54 @@ export class AssetMediaService extends BaseService {
       lockedPropertiesBehavior: 'override',
     });
 
+    if (physicalDeduplication) {
+      await this.physicalFileRepository.linkAssetToOriginalPhysicalFile(asset.id, physicalDeduplication);
+      await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [file.originalPath] } });
+      asset.originalPath = physicalDeduplication.path;
+      asset.physicalOriginalFileId = physicalDeduplication.id;
+    } else {
+      const masterPhysicalFile = await this.ensureMasterPhysicalOriginal(ownerId, asset.id);
+      if (masterPhysicalFile) {
+        asset.physicalOriginalFileId = masterPhysicalFile.id;
+      }
+    }
+
     await this.eventRepository.emit('AssetCreate', { asset });
 
     await this.jobRepository.queue({ name: JobName.AssetExtractMetadata, data: { id: asset.id, source: 'upload' } });
 
     return asset;
+  }
+
+  private async getPhysicalDeduplicationCandidate(ownerId: string, file: UploadFile) {
+    const { physicalDeduplication } = await this.getConfig({ withCache: true });
+    if (
+      !physicalDeduplication.enabled ||
+      !physicalDeduplication.masterUserId ||
+      ownerId === physicalDeduplication.masterUserId
+    ) {
+      return;
+    }
+
+    const masterAsset = await this.physicalFileRepository.getMasterOriginalCandidate(
+      physicalDeduplication.masterUserId,
+      file.checksum,
+      file.size,
+    );
+    if (!masterAsset) {
+      return;
+    }
+
+    return this.physicalFileRepository.ensureOriginalPhysicalFile(masterAsset.id);
+  }
+
+  private async ensureMasterPhysicalOriginal(ownerId: string, assetId: string) {
+    const { physicalDeduplication } = await this.getConfig({ withCache: true });
+    if (!physicalDeduplication.enabled || ownerId !== physicalDeduplication.masterUserId) {
+      return;
+    }
+
+    return this.physicalFileRepository.ensureOriginalPhysicalFile(assetId);
   }
 
   private requireQuota(auth: AuthDto, size: number) {

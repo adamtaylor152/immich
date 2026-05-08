@@ -10,9 +10,16 @@
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { Route } from '$lib/route';
+  import { handleCreateJob } from '$lib/services/job.service';
   import { handleSystemConfigSave } from '$lib/services/system-config.service';
-  import { getStorageTemplateOptions, type SystemConfigTemplateStorageOptionDto } from '@immich/sdk';
-  import { Heading, Link, LoadingSpinner, Text } from '@immich/ui';
+  import {
+    getStorageTemplateOptions,
+    ManualJobName,
+    searchUsersAdmin,
+    type SystemConfigTemplateStorageOptionDto,
+    type UserAdminResponseDto,
+  } from '@immich/sdk';
+  import { Button, Heading, Link, LoadingSpinner, Text } from '@immich/ui';
   import handlebar from 'handlebars';
   import * as luxon from 'luxon';
   import { onDestroy } from 'svelte';
@@ -31,10 +38,18 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  let physicalDeduplication = $state(configToEdit.physicalDeduplication ?? { enabled: false, masterUserId: null });
+  const savedPhysicalDeduplication = $derived(config.physicalDeduplication ?? { enabled: false, masterUserId: null });
+
+  $effect(() => {
+    configToEdit.physicalDeduplication = physicalDeduplication;
+  });
 
   const bubble = createBubbler();
   let templateOptions: SystemConfigTemplateStorageOptionDto | undefined = $state();
   let selectedPreset = $state('');
+  let users = $state<UserAdminResponseDto[]>([]);
+  let physicalDeduplicationDryRunQueued = $state(false);
 
   const getTemplateOptions = async () => {
     templateOptions = await getStorageTemplateOptions();
@@ -91,6 +106,27 @@
   const handlePresetSelection = () => {
     configToEdit.storageTemplate.template = selectedPreset;
   };
+
+  const getUsers = async () => {
+    users = await searchUsersAdmin({ withDeleted: false });
+  };
+
+  const handlePhysicalDeduplicationMasterSelection = (event: Event) => {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    physicalDeduplication.masterUserId = value || null;
+    physicalDeduplicationDryRunQueued = false;
+  };
+
+  const handlePhysicalDeduplicationDryRun = async () => {
+    const success = await handleCreateJob({ name: ManualJobName.PhysicalDeduplicationDryRun });
+    physicalDeduplicationDryRunQueued = success === true;
+  };
+
+  const handlePhysicalDeduplicationApply = async () => {
+    await handleCreateJob({ name: ManualJobName.PhysicalDeduplicationApply });
+    physicalDeduplicationDryRunQueued = false;
+  };
+
   let parsedTemplate = $derived(() => {
     try {
       return renderTemplate(configToEdit.storageTemplate.template);
@@ -141,6 +177,79 @@
             configToEdit.storageTemplate.hashVerificationEnabled === config.storageTemplate.hashVerificationEnabled
           )}
         />
+      {/if}
+
+      {#if !minified}
+        <hr />
+
+        <div class="flex flex-col gap-4">
+          <Heading size="tiny" color="primary">
+            {$t('admin.physical_deduplication')}
+          </Heading>
+
+          <SettingSwitch
+            title={$t('admin.physical_deduplication_enable')}
+            {disabled}
+            subtitle={$t('admin.physical_deduplication_description')}
+            bind:checked={physicalDeduplication.enabled}
+            isEdited={!(physicalDeduplication.enabled === savedPhysicalDeduplication.enabled)}
+            onToggle={() => (physicalDeduplicationDryRunQueued = false)}
+          />
+
+          <div>
+            <div class="flex place-items-center gap-1">
+              <label class="min-h-6 text-sm font-medium text-primary" for="physical-deduplication-master-user">
+                {$t('admin.physical_deduplication_master_user')}
+              </label>
+              {#if physicalDeduplication.masterUserId !== savedPhysicalDeduplication.masterUserId}
+                <div class="rounded-full bg-orange-100 px-2 text-[10px] text-orange-900">
+                  {$t('unsaved_change')}
+                </div>
+              {/if}
+            </div>
+            <p class="pb-2 text-sm immich-form-label">
+              {$t('admin.physical_deduplication_master_user_description')}
+            </p>
+
+            {#await getUsers() then}
+              <select
+                class="immich-form-input w-full rounded-lg bg-slate-200 p-2 text-sm hover:cursor-pointer dark:bg-gray-600"
+                disabled={disabled || !physicalDeduplication.enabled}
+                id="physical-deduplication-master-user"
+                name="physical-deduplication-master-user"
+                value={physicalDeduplication.masterUserId ?? ''}
+                onchange={handlePhysicalDeduplicationMasterSelection}
+              >
+                <option value="">{$t('admin.physical_deduplication_select_master_user')}</option>
+                {#each users as user (user.id)}
+                  <option value={user.id}>{user.name} ({user.email})</option>
+                {/each}
+              </select>
+            {:catch}
+              <Text size="small">{$t('errors.unable_to_load_users')}</Text>
+            {/await}
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <Button
+              shape="round"
+              size="small"
+              color="secondary"
+              disabled={disabled || !physicalDeduplication.enabled || !physicalDeduplication.masterUserId}
+              onclick={handlePhysicalDeduplicationDryRun}
+            >
+              {$t('admin.physical_deduplication_dry_run')}
+            </Button>
+            <Button
+              shape="round"
+              size="small"
+              disabled={disabled || !physicalDeduplicationDryRunQueued}
+              onclick={handlePhysicalDeduplicationApply}
+            >
+              {$t('admin.physical_deduplication_apply')}
+            </Button>
+          </div>
+        </div>
       {/if}
 
       {#if configToEdit.storageTemplate.enabled}
@@ -270,7 +379,7 @@
       {/if}
 
       {#if !minified}
-        <SettingButtonsRow bind:configToEdit keys={['storageTemplate']} {disabled} />
+        <SettingButtonsRow bind:configToEdit keys={['storageTemplate', 'physicalDeduplication']} {disabled} />
       {/if}
     </div>
   {/await}

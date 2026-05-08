@@ -2143,6 +2143,8 @@ export type ServerFeaturesDto = {
     ocr: boolean;
     /** Whether password login is enabled */
     passwordLogin: boolean;
+    /** Whether physical file deduplication is enabled */
+    physicalDeduplication: boolean;
     /** Whether reverse geocoding is enabled */
     reverseGeocoding: boolean;
     /** Whether search is enabled */
@@ -2669,6 +2671,12 @@ export type SystemConfigPasswordLoginDto = {
     /** Enabled */
     enabled: boolean;
 };
+export type SystemConfigPhysicalDeduplicationDto = {
+    /** Enabled */
+    enabled: boolean;
+    /** Master user ID */
+    masterUserId: string | null;
+};
 export type SystemConfigReverseGeocodingDto = {
     /** Enabled */
     enabled: boolean;
@@ -2729,6 +2737,7 @@ export type SystemConfigDto = {
     notifications: SystemConfigNotificationsDto;
     oauth: SystemConfigOAuthDto;
     passwordLogin: SystemConfigPasswordLoginDto;
+    physicalDeduplication?: SystemConfigPhysicalDeduplicationDto;
     reverseGeocoding: SystemConfigReverseGeocodingDto;
     server: SystemConfigServerDto;
     storageTemplate: SystemConfigStorageTemplateDto;
@@ -7217,7 +7226,9 @@ export enum ManualJobName {
     UserCleanup = "user-cleanup",
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
-    BackupDatabase = "backup-database"
+    BackupDatabase = "backup-database",
+    PhysicalDeduplicationDryRun = "physical-deduplication-dry-run",
+    PhysicalDeduplicationApply = "physical-deduplication-apply"
 }
 export enum QueueName {
     ThumbnailGeneration = "thumbnailGeneration",
@@ -7338,6 +7349,8 @@ export enum JobName {
     SmartSearch = "SmartSearch",
     StorageTemplateMigration = "StorageTemplateMigration",
     StorageTemplateMigrationSingle = "StorageTemplateMigrationSingle",
+    PhysicalDeduplicationMigrationDryRun = "PhysicalDeduplicationMigrationDryRun",
+    PhysicalDeduplicationMigrationApply = "PhysicalDeduplicationMigrationApply",
     TagCleanup = "TagCleanup",
     VersionCheck = "VersionCheck",
     OcrQueueAll = "OcrQueueAll",

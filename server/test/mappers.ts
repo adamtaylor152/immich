@@ -25,6 +25,7 @@ export const getForStorageTemplate = (asset: ReturnType<AssetFactory['build']>) 
     visibility: asset.visibility,
     fileCreatedAt: asset.fileCreatedAt,
     originalPath: asset.originalPath,
+    physicalOriginalFileId: asset.physicalOriginalFileId ?? null,
     originalFileName: asset.originalFileName,
     fileSizeInByte: asset.exifInfo.fileSizeInByte,
     files: asset.files,
@@ -136,6 +137,7 @@ export const getForMetadataExtraction = (asset: ReturnType<AssetFactory['build']
   localDateTime: asset.localDateTime,
   originalFileName: asset.originalFileName,
   originalPath: asset.originalPath,
+  physicalOriginalFileId: asset.physicalOriginalFileId ?? null,
   ownerId: asset.ownerId,
   type: asset.type,
   isEdited: asset.isEdited,
@@ -176,7 +178,9 @@ export const getForDetectedFaces = (asset: ReturnType<AssetFactory['build']>) =>
 
 export const getForSidecarWrite = (asset: ReturnType<AssetFactory['build']>) => ({
   id: asset.id,
+  ownerId: asset.ownerId,
   originalPath: asset.originalPath,
+  physicalOriginalFileId: asset.physicalOriginalFileId ?? null,
   files: asset.files.map((file) => getDehydrated(file)),
   exifInfo: getDehydrated(asset.exifInfo),
 });

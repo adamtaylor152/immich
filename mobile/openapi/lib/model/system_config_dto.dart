@@ -27,6 +27,7 @@ class SystemConfigDto {
     required this.notifications,
     required this.oauth,
     required this.passwordLogin,
+    this.physicalDeduplication,
     required this.reverseGeocoding,
     required this.server,
     required this.storageTemplate,
@@ -64,6 +65,14 @@ class SystemConfigDto {
 
   SystemConfigPasswordLoginDto passwordLogin;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  SystemConfigPhysicalDeduplicationDto? physicalDeduplication;
+
   SystemConfigReverseGeocodingDto reverseGeocoding;
 
   SystemConfigServerDto server;
@@ -94,6 +103,7 @@ class SystemConfigDto {
     other.notifications == notifications &&
     other.oauth == oauth &&
     other.passwordLogin == passwordLogin &&
+    other.physicalDeduplication == physicalDeduplication &&
     other.reverseGeocoding == reverseGeocoding &&
     other.server == server &&
     other.storageTemplate == storageTemplate &&
@@ -119,6 +129,7 @@ class SystemConfigDto {
     (notifications.hashCode) +
     (oauth.hashCode) +
     (passwordLogin.hashCode) +
+    (physicalDeduplication == null ? 0 : physicalDeduplication!.hashCode) +
     (reverseGeocoding.hashCode) +
     (server.hashCode) +
     (storageTemplate.hashCode) +
@@ -128,7 +139,7 @@ class SystemConfigDto {
     (user.hashCode);
 
   @override
-  String toString() => 'SystemConfigDto[backup=$backup, ffmpeg=$ffmpeg, image=$image, job=$job, library_=$library_, logging=$logging, machineLearning=$machineLearning, map=$map, metadata=$metadata, newVersionCheck=$newVersionCheck, nightlyTasks=$nightlyTasks, notifications=$notifications, oauth=$oauth, passwordLogin=$passwordLogin, reverseGeocoding=$reverseGeocoding, server=$server, storageTemplate=$storageTemplate, templates=$templates, theme=$theme, trash=$trash, user=$user]';
+  String toString() => 'SystemConfigDto[backup=$backup, ffmpeg=$ffmpeg, image=$image, job=$job, library_=$library_, logging=$logging, machineLearning=$machineLearning, map=$map, metadata=$metadata, newVersionCheck=$newVersionCheck, nightlyTasks=$nightlyTasks, notifications=$notifications, oauth=$oauth, passwordLogin=$passwordLogin, physicalDeduplication=$physicalDeduplication, reverseGeocoding=$reverseGeocoding, server=$server, storageTemplate=$storageTemplate, templates=$templates, theme=$theme, trash=$trash, user=$user]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -146,6 +157,11 @@ class SystemConfigDto {
       json[r'notifications'] = this.notifications;
       json[r'oauth'] = this.oauth;
       json[r'passwordLogin'] = this.passwordLogin;
+    if (this.physicalDeduplication != null) {
+      json[r'physicalDeduplication'] = this.physicalDeduplication;
+    } else {
+    //  json[r'physicalDeduplication'] = null;
+    }
       json[r'reverseGeocoding'] = this.reverseGeocoding;
       json[r'server'] = this.server;
       json[r'storageTemplate'] = this.storageTemplate;
@@ -179,6 +195,7 @@ class SystemConfigDto {
         notifications: SystemConfigNotificationsDto.fromJson(json[r'notifications'])!,
         oauth: SystemConfigOAuthDto.fromJson(json[r'oauth'])!,
         passwordLogin: SystemConfigPasswordLoginDto.fromJson(json[r'passwordLogin'])!,
+        physicalDeduplication: SystemConfigPhysicalDeduplicationDto.fromJson(json[r'physicalDeduplication']),
         reverseGeocoding: SystemConfigReverseGeocodingDto.fromJson(json[r'reverseGeocoding'])!,
         server: SystemConfigServerDto.fromJson(json[r'server'])!,
         storageTemplate: SystemConfigStorageTemplateDto.fromJson(json[r'storageTemplate'])!,

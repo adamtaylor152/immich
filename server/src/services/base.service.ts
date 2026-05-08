@@ -36,6 +36,7 @@ import { OAuthRepository } from 'src/repositories/oauth.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
+import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
@@ -93,6 +94,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   OcrRepository,
   PartnerRepository,
   PersonRepository,
+  PhysicalFileRepository,
   PluginRepository,
   ProcessRepository,
   SearchRepository,
@@ -152,6 +154,7 @@ export class BaseService {
     protected ocrRepository: OcrRepository,
     protected partnerRepository: PartnerRepository,
     protected personRepository: PersonRepository,
+    protected physicalFileRepository: PhysicalFileRepository,
     protected pluginRepository: PluginRepository,
     protected processRepository: ProcessRepository,
     protected searchRepository: SearchRepository,

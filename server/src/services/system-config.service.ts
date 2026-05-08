@@ -54,10 +54,22 @@ export class SystemConfigService extends BaseService {
   }
 
   @OnEvent({ name: 'ConfigValidate' })
-  onConfigValidate({ newConfig, oldConfig }: ArgOf<'ConfigValidate'>) {
+  async onConfigValidate({ newConfig, oldConfig }: ArgOf<'ConfigValidate'>) {
     const { logLevel } = this.configRepository.getEnv();
     if (!_.isEqual(toPlainObject(newConfig.logging), oldConfig.logging) && logLevel) {
       throw new Error('Logging cannot be changed while the environment variable IMMICH_LOG_LEVEL is set.');
+    }
+
+    const { physicalDeduplication } = newConfig;
+    if (physicalDeduplication.enabled) {
+      if (!physicalDeduplication.masterUserId) {
+        throw new Error('Physical deduplication requires a master user.');
+      }
+
+      const masterUser = await this.userRepository.get(physicalDeduplication.masterUserId, {});
+      if (!masterUser || masterUser.deletedAt) {
+        throw new Error('Physical deduplication master user must exist and be active.');
+      }
     }
   }
 

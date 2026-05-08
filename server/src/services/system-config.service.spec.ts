@@ -54,6 +54,10 @@ const updatedConfig = Object.freeze<SystemConfig>({
       keepLastAmount: 14,
     },
   },
+  physicalDeduplication: {
+    enabled: false,
+    masterUserId: null,
+  },
   ffmpeg: {
     crf: 30,
     threads: 0,
@@ -473,6 +477,37 @@ describe(SystemConfigService.name, () => {
   });
 
   describe('updateConfig', () => {
+    it('should reject physical deduplication without a master user', async () => {
+      await expect(
+        sut.onConfigValidate({
+          newConfig: { ...defaults, physicalDeduplication: { enabled: true, masterUserId: null } },
+          oldConfig: defaults,
+        }),
+      ).rejects.toThrow('Physical deduplication requires a master user.');
+    });
+
+    it('should reject physical deduplication with a missing master user', async () => {
+      mocks.user.get.mockResolvedValue(null as never);
+
+      await expect(
+        sut.onConfigValidate({
+          newConfig: { ...defaults, physicalDeduplication: { enabled: true, masterUserId: 'missing-user-id' } },
+          oldConfig: defaults,
+        }),
+      ).rejects.toThrow('Physical deduplication master user must exist and be active.');
+    });
+
+    it('should allow physical deduplication with an active master user', async () => {
+      mocks.user.get.mockResolvedValue({ id: 'master-user-id', deletedAt: null } as never);
+
+      await expect(
+        sut.onConfigValidate({
+          newConfig: { ...defaults, physicalDeduplication: { enabled: true, masterUserId: 'master-user-id' } },
+          oldConfig: defaults,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it('should update the config and emit an event', async () => {
       mocks.systemMetadata.get.mockResolvedValue(partialConfig);
       await expect(sut.updateSystemConfig(updatedConfig)).resolves.toEqual(updatedConfig);

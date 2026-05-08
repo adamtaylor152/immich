@@ -13,6 +13,7 @@ Use this fork if you want Immich to help with one or more of these jobs:
 - Hide sensitive content unless the current session is unlocked with the locked-folder PIN.
 - Suppress selected tags or people, such as medical, legal, family, work, or private project content.
 - Keep private content in albums without showing it during normal browsing.
+- Reduce physical disk usage in family libraries when multiple users upload the exact same photos or videos.
 - Run image-enrichment ML on common home-lab hardware, including Intel iGPU/OpenVINO and NVIDIA/CUDA setups.
 
 This fork is not a replacement for backups, access control, or careful human review. ML results can be wrong, and visible tags are search metadata, not a security boundary.
@@ -65,26 +66,81 @@ The main navigation includes a lock/unlock control near Upload:
 
 Mobile multi-select surfaces include actions to mark selected owned remote assets as NSFW or safe again. Server-side filtering applies to mobile clients as well, even where native mobile settings UI is still catching up.
 
+### Physical Deduplication
+
+Physical deduplication is an optional admin feature for families or households where several Immich users upload the same original photos or videos. When it is enabled, Immich can keep each user's library record separate while storing only one physical copy of an exact file on disk.
+
+This is different from partner sharing. Partner sharing exposes another user's assets through sharing rules. Physical deduplication does not share library ownership, albums, favorites, descriptions, tags, permissions, or visibility. It only lets eligible duplicate files point at the same stored bytes.
+
+The feature is disabled by default and requires a master account. The master account is the canonical storage owner: when another user uploads an exact copy that already exists in the master account, the non-master user's asset can reference the master copy's physical file. If no matching master copy exists, Immich stores the upload normally.
+
+Eligible shared files are:
+
+- original upload-managed files;
+- thumbnails;
+- previews;
+- fullsize generated files;
+- encoded videos.
+
+Immich does not share these files:
+
+- sidecars;
+- edited thumbnails, previews, or fullsize files;
+- external-library files;
+- files from deleted, offline, or unavailable canonical assets.
+
+The original asset rows remain separate. Each user still has their own asset id, timeline entry, albums, favorites, metadata, permissions, and logical quota behavior. Disk savings are a storage optimization, not a change to who owns or can see an asset.
+
 ## Recommended Home-Lab Rollout
 
 Start slowly. Do not enable automatic hiding until you have reviewed classifier behavior on your own library.
 
-1. Make a backup and confirm your normal Immich backup plan works. DO NOT SKIP THIS. 
+1. Make a backup and confirm your normal Immich backup plan works. DO NOT SKIP THIS.
 2. Deploy the fork using the fork's server, web, and machine-learning images or build outputs. Do not mix upstream Immich containers with fork-only server or web code.
 3. Open `Administration > Settings > Machine Learning Settings`. I have tested this fork on v3.0 and above and did not identify any issues using my existing Immich deployment.
-5. Choose the image-enrichment hardware profile that matches your server:
+4. Choose the image-enrichment hardware profile that matches your server:
    - `Auto-detect` for most users;
    - `Intel iGPU (OpenVINO)` for Intel integrated graphics;
    - `NVIDIA GPU (CUDA)` for NVIDIA GPU hosts.
-6. Enable `Detect NSFW images`.
-8. Run `Administration > Jobs > NSFW Detection > All`.
-9. Review results in the asset detail panel and tune the threshold if needed.
-10. Enable `Hide detected NSFW assets` only after results look acceptable.
-11. Enable `Generate image descriptions and tags` if you want AI descriptions and searchable generated tags.
-12. Run `Administration > Jobs > Image descriptions and tags > All`.
-13. Create or confirm your locked-folder PIN.
-14. Use `Account settings > Suppressed content` to add tags or people you want hidden from normal browsing.
-15. Use `/suppressed` after PIN unlock to review and organize hidden/suppressed content.
+5. Enable `Detect NSFW images`.
+6. Run `Administration > Jobs > NSFW Detection > All`.
+7. Review results in the asset detail panel and tune the threshold if needed.
+8. Enable `Hide detected NSFW assets` only after results look acceptable.
+9. Enable `Generate image descriptions and tags` if you want AI descriptions and searchable generated tags.
+10. Run `Administration > Jobs > Image descriptions and tags > All`.
+11. Create or confirm your locked-folder PIN.
+12. Use `Account settings > Suppressed content` to add tags or people you want hidden from normal browsing.
+13. Use `/suppressed` after PIN unlock to review and organize hidden/suppressed content.
+
+## Physical Deduplication Rollout
+
+Physical deduplication changes how files are referenced on disk, so treat it like a storage migration. Make a backup first and run the dry run before applying any existing-library migration.
+
+1. Choose a stable master account. This should usually be the household account whose storage-template layout you want canonical files to follow.
+2. Confirm the master account is active and not deleted.
+3. Open `Administration > Settings > Storage Template`.
+4. Enable `Physical deduplication`.
+5. Select the master account.
+6. Save the system settings.
+7. Click `Dry run physical deduplication` and review the logs or recorded summary.
+8. Confirm the dry run looks reasonable: expected duplicate counts, expected reclaimable bytes, skipped external-library files, and skipped assets without a master match.
+9. Click `Apply physical deduplication` only after the dry run has completed successfully.
+10. Watch storage, migration, and file-delete jobs until the queue is clear.
+
+New uploads are handled automatically after the feature is enabled. A non-master user's upload is still checked for duplicates inside that same user's library. Cross-user matches are not rejected at upload time; after Immich computes the checksum, it reuses a master physical file only when the master account already has an exact upload-managed match with the same checksum and size.
+
+If the master account does not have a matching file, the upload remains independent. If the uploading user is the master account, Immich stores the file normally and records it as a possible canonical file for future non-master duplicates.
+
+## Physical Deduplication Safety Notes
+
+- Keep a verified backup before running the apply migration.
+- Start with dry run. Apply is intended to be idempotent, but it still deletes redundant duplicate bytes after reference checks pass.
+- External-library files are ignored. They are not moved, linked, or deleted by this feature.
+- Sidecars remain per asset. A non-master linked asset does not write sidecar metadata beside the shared original.
+- Deleting one linked asset does not remove shared bytes while another asset still references them.
+- Deleting the master asset removes it from the master timeline, but shared physical bytes remain until the last linked reference is deleted.
+- Storage-template migration moves canonical master originals and updates linked asset paths together. Non-master linked assets skip moving the shared original.
+- Config-file mode makes the admin UI read-only; configure the feature in the config file instead if your instance uses config-file management.
 
 ## Suggested Model Settings
 

@@ -66,6 +66,7 @@ export class AssetFactory {
       localDateTime: new Date(now),
       originalFileName,
       originalPath: `/data/library/${originalFileName}`,
+      physicalOriginalFileId: null,
       ownerId: newUuid(),
       stackId: null,
       thumbhash: null,

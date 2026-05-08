@@ -122,6 +122,9 @@ interface AssetGetByChecksumOptions {
   libraryId?: string;
 }
 
+type UpsertAssetFile = Pick<Insertable<AssetFileTable>, 'assetId' | 'path' | 'type'> &
+  Partial<Pick<Insertable<AssetFileTable>, 'physicalFileId' | 'isEdited' | 'isProgressive' | 'isTransparent'>>;
+
 interface GetByIdsRelations {
   exifInfo?: boolean;
   faces?: { person?: boolean; withDeleted?: boolean };
@@ -1005,29 +1008,20 @@ export class AssetRepository {
     return new Set(rows.map(({ id }) => id));
   }
 
-  async upsertFile(
-    file: Pick<
-      Insertable<AssetFileTable>,
-      'assetId' | 'path' | 'type' | 'isEdited' | 'isProgressive' | 'isTransparent'
-    >,
-  ): Promise<void> {
+  async upsertFile(file: UpsertAssetFile): Promise<void> {
     await this.db
       .insertInto('asset_file')
       .values(file)
       .onConflict((oc) =>
         oc.columns(['assetId', 'type', 'isEdited']).doUpdateSet((eb) => ({
           path: eb.ref('excluded.path'),
+          physicalFileId: eb.ref('excluded.physicalFileId'),
         })),
       )
       .execute();
   }
 
-  async upsertFiles(
-    files: Pick<
-      Insertable<AssetFileTable>,
-      'assetId' | 'path' | 'type' | 'isEdited' | 'isProgressive' | 'isTransparent'
-    >[],
-  ): Promise<void> {
+  async upsertFiles(files: UpsertAssetFile[]): Promise<void> {
     if (files.length === 0) {
       return;
     }
@@ -1038,6 +1032,7 @@ export class AssetRepository {
       .onConflict((oc) =>
         oc.columns(['assetId', 'type', 'isEdited']).doUpdateSet((eb) => ({
           path: eb.ref('excluded.path'),
+          physicalFileId: eb.ref('excluded.physicalFileId'),
           isProgressive: eb.ref('excluded.isProgressive'),
           isTransparent: eb.ref('excluded.isTransparent'),
         })),

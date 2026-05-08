@@ -226,7 +226,7 @@ export class StorageTemplateService extends BaseService {
     }
 
     return this.databaseRepository.withLock(DatabaseLock.StorageTemplateMigration, async () => {
-      const { id, originalPath, checksum, fileSizeInByte } = asset;
+      const { id, originalPath, checksum, fileSizeInByte, physicalOriginalFileId } = asset;
       const oldPath = originalPath;
       const newPath = await this.getTemplatePath(asset, metadata, stillPhoto);
 
@@ -236,13 +236,20 @@ export class StorageTemplateService extends BaseService {
       }
 
       try {
-        await this.storageCore.moveFile({
-          entityId: id,
-          pathType: AssetPathType.Original,
-          oldPath,
-          newPath,
-          assetInfo: { sizeInBytes: fileSizeInByte, checksum },
-        });
+        const isSharedNonCanonical =
+          physicalOriginalFileId &&
+          !(await this.physicalFileRepository.isOriginalCanonical(id, physicalOriginalFileId));
+
+        if (!isSharedNonCanonical) {
+          await this.storageCore.moveFile({
+            entityId: id,
+            pathType: AssetPathType.Original,
+            oldPath,
+            newPath,
+            assetInfo: { sizeInBytes: fileSizeInByte, checksum },
+          });
+          await this.physicalFileRepository.updateOriginalPhysicalPathForAsset(id, newPath);
+        }
 
         const sidecarPath = getAssetFile(asset.files, AssetFileType.Sidecar, { isEdited: false })?.path;
         if (sidecarPath) {

@@ -136,6 +136,10 @@ export type SystemConfig = {
   passwordLogin: {
     enabled: boolean;
   };
+  physicalDeduplication: {
+    enabled: boolean;
+    masterUserId: string | null;
+  };
   storageTemplate: {
     enabled: boolean;
     hashVerificationEnabled: boolean;
@@ -346,6 +350,10 @@ export const defaults = Object.freeze<SystemConfig>({
   },
   passwordLogin: {
     enabled: true,
+  },
+  physicalDeduplication: {
+    enabled: false,
+    masterUserId: null,
   },
   storageTemplate: {
     enabled: false,

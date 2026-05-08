@@ -18,6 +18,7 @@ import {
   ImmichWorker,
   JobName,
   JobStatus,
+  PhysicalFileType,
   QueueName,
   RawExtractedFormat,
   StorageFolder,
@@ -53,10 +54,17 @@ interface UpsertFileOptions {
   assetId: string;
   type: AssetFileType;
   path: string;
+  physicalFileId?: string | null;
   isEdited: boolean;
   isProgressive: boolean;
   isTransparent: boolean;
 }
+
+type ExistingAssetFile = Omit<AssetFile, 'physicalFileId'> & {
+  physicalFileId?: string | null;
+  isProgressive: boolean;
+  isTransparent: boolean;
+};
 
 type ThumbnailAsset = NonNullable<Awaited<ReturnType<AssetJobRepository['getForGenerateThumbnailJob']>>>;
 
@@ -732,12 +740,18 @@ export class MediaService extends BaseService {
 
     this.logger.log(`Successfully encoded ${asset.id}`);
 
-    await this.assetRepository.upsertFile({
+    const { file: encodedVideo, pathToDelete } = await this.applyPhysicalDeduplicationToGeneratedFile({
       assetId: asset.id,
       type: AssetFileType.EncodedVideo,
       path: output,
       isEdited: false,
+      isProgressive: false,
+      isTransparent: false,
     });
+    await this.assetRepository.upsertFile(encodedVideo);
+    if (pathToDelete) {
+      await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [pathToDelete] } });
+    }
 
     return JobStatus.Success;
   }
@@ -878,15 +892,16 @@ export class MediaService extends BaseService {
     return extractedSize >= targetSize;
   }
 
-  private async syncFiles(
-    oldFiles: (AssetFile & { isProgressive: boolean; isTransparent: boolean })[],
-    newFiles: UpsertFileOptions[],
-  ) {
+  private async syncFiles(oldFiles: ExistingAssetFile[], newFiles: UpsertFileOptions[]) {
     const toUpsert: UpsertFileOptions[] = [];
     const pathsToDelete: string[] = [];
     const toDelete = new Set(oldFiles);
 
-    for (const newFile of newFiles) {
+    for (const inputFile of newFiles) {
+      const { file: newFile, pathToDelete } = await this.applyPhysicalDeduplicationToGeneratedFile(inputFile);
+      if (pathToDelete) {
+        pathsToDelete.push(pathToDelete);
+      }
       const existingFile = oldFiles.find((file) => file.type === newFile.type && file.isEdited === newFile.isEdited);
       if (existingFile) {
         toDelete.delete(existingFile);
@@ -924,6 +939,72 @@ export class MediaService extends BaseService {
 
     if (pathsToDelete.length > 0) {
       await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: pathsToDelete } });
+    }
+  }
+
+  private async applyPhysicalDeduplicationToGeneratedFile(
+    file: UpsertFileOptions,
+  ): Promise<{ file: UpsertFileOptions; pathToDelete?: string }> {
+    if (file.isEdited || !this.isPhysicalDeduplicationGeneratedFile(file.type)) {
+      return { file };
+    }
+
+    const { physicalDeduplication } = await this.getConfig({ withCache: true });
+    if (!physicalDeduplication.enabled) {
+      return { file };
+    }
+
+    const canonical = await this.physicalFileRepository.getCanonicalGeneratedFile(file.assetId, file.type);
+    if (canonical) {
+      return {
+        file: { ...file, path: canonical.path, physicalFileId: canonical.id },
+        pathToDelete: file.path === canonical.path ? undefined : file.path,
+      };
+    }
+
+    const originalPhysical = await this.physicalFileRepository.getOriginalPhysicalFile(file.assetId);
+    if (originalPhysical?.canonicalAssetId !== file.assetId) {
+      return { file };
+    }
+
+    const stat = await this.storageRepository.stat(file.path);
+    const physicalFile = await this.physicalFileRepository.upsertPhysicalFile({
+      canonicalAssetId: file.assetId,
+      checksum: await this.cryptoRepository.hashFile(file.path),
+      path: file.path,
+      sizeInBytes: stat.size,
+      type: this.toPhysicalFileType(file.type),
+    });
+
+    return { file: { ...file, physicalFileId: physicalFile.id } };
+  }
+
+  private isPhysicalDeduplicationGeneratedFile(type: AssetFileType) {
+    return [
+      AssetFileType.Thumbnail,
+      AssetFileType.Preview,
+      AssetFileType.FullSize,
+      AssetFileType.EncodedVideo,
+    ].includes(type);
+  }
+
+  private toPhysicalFileType(type: AssetFileType) {
+    switch (type) {
+      case AssetFileType.Thumbnail: {
+        return PhysicalFileType.Thumbnail;
+      }
+      case AssetFileType.Preview: {
+        return PhysicalFileType.Preview;
+      }
+      case AssetFileType.FullSize: {
+        return PhysicalFileType.FullSize;
+      }
+      case AssetFileType.EncodedVideo: {
+        return PhysicalFileType.EncodedVideo;
+      }
+      default: {
+        throw new Error(`Unsupported physical file type: ${type}`);
+      }
     }
   }
 
