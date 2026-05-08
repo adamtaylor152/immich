@@ -515,14 +515,17 @@ class AlbumsApi {
   /// Parameters:
   ///
   /// * [String] assetId:
-  ///   Filter albums containing this asset ID (ignores shared parameter)
+  ///   Filter albums containing this asset ID (ignores other parameters)
   ///
-  /// * [bool] shared:
-  ///   Filter by shared status: true = only shared, false = not shared, undefined = all owned albums
+  /// * [bool] isOwned:
+  ///   Filter by ownership: true = only owned, false = only shared-with-me, undefined = no filter
+  ///
+  /// * [bool] isShared:
+  ///   Filter by shared status: true = only shared, false = not shared, undefined = no filter
   ///
   /// * [bool] suppressedOnly:
   ///   Return album metadata for suppressed content only
-  Future<Response> getAllAlbumsWithHttpInfo({ String? assetId, bool? shared, bool? suppressedOnly, }) async {
+  Future<Response> getAllAlbumsWithHttpInfo({ String? assetId, bool? isOwned, bool? isShared, bool? suppressedOnly, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/albums';
 
@@ -536,8 +539,11 @@ class AlbumsApi {
     if (assetId != null) {
       queryParams.addAll(_queryParams('', 'assetId', assetId));
     }
-    if (shared != null) {
-      queryParams.addAll(_queryParams('', 'shared', shared));
+    if (isOwned != null) {
+      queryParams.addAll(_queryParams('', 'isOwned', isOwned));
+    }
+    if (isShared != null) {
+      queryParams.addAll(_queryParams('', 'isShared', isShared));
     }
     if (suppressedOnly != null) {
       queryParams.addAll(_queryParams('', 'suppressedOnly', suppressedOnly));
@@ -564,15 +570,18 @@ class AlbumsApi {
   /// Parameters:
   ///
   /// * [String] assetId:
-  ///   Filter albums containing this asset ID (ignores shared parameter)
+  ///   Filter albums containing this asset ID (ignores other parameters)
   ///
-  /// * [bool] shared:
-  ///   Filter by shared status: true = only shared, false = not shared, undefined = all owned albums
+  /// * [bool] isOwned:
+  ///   Filter by ownership: true = only owned, false = only shared-with-me, undefined = no filter
+  ///
+  /// * [bool] isShared:
+  ///   Filter by shared status: true = only shared, false = not shared, undefined = no filter
   ///
   /// * [bool] suppressedOnly:
   ///   Return album metadata for suppressed content only
-  Future<List<AlbumResponseDto>?> getAllAlbums({ String? assetId, bool? shared, bool? suppressedOnly, }) async {
-    final response = await getAllAlbumsWithHttpInfo( assetId: assetId, shared: shared, suppressedOnly: suppressedOnly, );
+  Future<List<AlbumResponseDto>?> getAllAlbums({ String? assetId, bool? isOwned, bool? isShared, bool? suppressedOnly, }) async {
+    final response = await getAllAlbumsWithHttpInfo( assetId: assetId, isOwned: isOwned, isShared: isShared, suppressedOnly: suppressedOnly, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

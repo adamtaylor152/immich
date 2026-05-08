@@ -3792,9 +3792,10 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
 /**
  * List all albums
  */
-export function getAllAlbums({ assetId, shared, suppressedOnly }: {
+export function getAllAlbums({ assetId, isOwned, isShared, suppressedOnly }: {
     assetId?: string;
-    shared?: boolean;
+    isOwned?: boolean;
+    isShared?: boolean;
     suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
@@ -3802,7 +3803,8 @@ export function getAllAlbums({ assetId, shared, suppressedOnly }: {
         data: AlbumResponseDto[];
     }>(`/albums${QS.query(QS.explode({
         assetId,
-        shared,
+        isOwned,
+        isShared,
         suppressedOnly
     }))}`, {
         ...opts
