@@ -1,6 +1,6 @@
 import { AssetTypeEnum, getAssetInfo } from '@immich/sdk';
 import { toastManager } from '@immich/ui';
-import { mdiCog, mdiTune } from '@mdi/js';
+import { mdiTune } from '@mdi/js';
 import { vitest } from 'vitest';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { getAssetActions, handleDownloadAsset } from '$lib/services/asset.service';
@@ -102,7 +102,7 @@ describe('AssetService', () => {
       },
     );
 
-    it('should use a gear icon for video editing and keep the tuning icon for image editing', () => {
+    it('should use the tuning icon for image and video editing', () => {
       setOwnerUser();
       const video = buildEditableVideo();
       const image = assetFactory.build({
@@ -112,7 +112,7 @@ describe('AssetService', () => {
         originalFileName: 'photo.jpg',
       });
 
-      expect(getAssetActions(() => '', video).Edit.icon).toBe(mdiCog);
+      expect(getAssetActions(() => '', video).Edit.icon).toBe(mdiTune);
       expect(getAssetActions(() => '', image).Edit.icon).toBe(mdiTune);
     });
 

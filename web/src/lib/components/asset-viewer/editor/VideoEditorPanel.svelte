@@ -10,7 +10,7 @@
     type AssetResponseDto,
   } from '@immich/sdk';
   import { Button, ConfirmModal, HStack, IconButton, modalManager, toastManager } from '@immich/ui';
-  import { mdiClose } from '@mdi/js';
+  import { mdiClose, mdiFlipHorizontal, mdiFlipVertical, mdiRotateLeft, mdiRotateRight } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -29,6 +29,27 @@
     endSeconds: number;
   };
   type EditParameters = Record<string, unknown>;
+  interface AspectRatioOption {
+    label: string;
+    value: string;
+    width?: number;
+    height?: number;
+    isFree?: boolean;
+  }
+
+  const aspectRatios: AspectRatioOption[] = [
+    { label: $t('crop_aspect_ratio_free'), value: 'free', isFree: true },
+    { label: $t('crop_aspect_ratio_original'), value: 'original', width: 24, height: 18 },
+    { label: '5:4', value: '5:4', width: 22, height: 18 },
+    { label: '4:5', value: '4:5', width: 18, height: 22 },
+    { label: '4:3', value: '4:3', width: 24, height: 18 },
+    { label: '3:4', value: '3:4', width: 18, height: 24 },
+    { label: '3:2', value: '3:2', width: 24, height: 16 },
+    { label: '2:3', value: '2:3', width: 16, height: 24 },
+    { label: '16:9', value: '16:9', width: 24, height: 14 },
+    { label: '9:16', value: '9:16', width: 14, height: 24 },
+    { label: $t('crop_aspect_ratio_square'), value: '1:1', width: 20, height: 20 },
+  ];
 
   let { asset = $bindable(), onClose }: Props = $props();
 
@@ -44,6 +65,7 @@
   let cropY = $state(0);
   let cropWidth = $state(asset.width ?? 0);
   let cropHeight = $state(asset.height ?? 0);
+  let cropAspectRatio = $state('');
   let rotation = $state(0);
   let straighten = $state(0);
   let mirrorHorizontal = $state(false);
@@ -89,6 +111,8 @@
   const durationSeconds = $derived(Math.max(0, (asset.duration ?? 0) / 1000));
   const width = $derived(asset.width ?? 0);
   const height = $derived(asset.height ?? 0);
+  const normalizedRotation = $derived(((Number(rotation) % 360) + 360) % 360);
+  const isRotated = $derived(normalizedRotation % 180 !== 0);
   const hasUnsavedChanges = $derived(!isLoading && !hasAppliedEdits && getCurrentEditKey() !== initialEditKey);
 
   function getNumberParameter(parameters: EditParameters, key: string, fallback: number) {
@@ -116,6 +140,7 @@
       switch (action) {
         case 'crop': {
           cropEnabled = true;
+          cropAspectRatio = 'free';
           cropX = getNumberParameter(parameters, 'x', cropX);
           cropY = getNumberParameter(parameters, 'y', cropY);
           cropWidth = getNumberParameter(parameters, 'width', cropWidth);
@@ -213,6 +238,7 @@
     cropY = 0;
     cropWidth = width;
     cropHeight = height;
+    cropAspectRatio = '';
     rotation = 0;
     straighten = 0;
     mirrorHorizontal = false;
@@ -252,6 +278,97 @@
 
   function createSpeedSegment(rate = 1, startSeconds = trimStartSeconds, endSeconds = trimEndSeconds) {
     return { id: `speed-segment-${speedSegmentId++}`, rate, startSeconds, endSeconds };
+  }
+
+  function normalizeRotation(value: number) {
+    return ((value % 360) + 360) % 360;
+  }
+
+  function rotatedRatio(ratio: AspectRatioOption): string {
+    if (ratio.value === 'free') {
+      return ratio.value;
+    }
+
+    if (isRotated) {
+      const [ratioWidth, ratioHeight] = ratio.value.split(':');
+      return `${ratioHeight}:${ratioWidth}`;
+    }
+
+    return ratio.value;
+  }
+
+  function ratioSelected(ratio: AspectRatioOption): boolean {
+    if (!cropEnabled) {
+      return false;
+    }
+
+    if (ratio.value === 'original') {
+      return cropAspectRatio === `${width}:${height}`;
+    }
+
+    return cropAspectRatio === rotatedRatio(ratio);
+  }
+
+  function selectAspectRatio(ratio: AspectRatioOption) {
+    if (ratio.value === 'free') {
+      cropEnabled = true;
+      cropAspectRatio = 'free';
+      clampCropToFrame();
+      return;
+    }
+
+    const appliedRatio = ratio.value === 'original' ? `${width}:${height}` : rotatedRatio(ratio);
+    setCropAspectRatio(appliedRatio);
+  }
+
+  function setCropAspectRatio(aspectRatio: string) {
+    cropEnabled = true;
+    cropAspectRatio = aspectRatio;
+
+    const [ratioWidth, ratioHeight] = aspectRatio.split(':').map(Number);
+    if (!ratioWidth || !ratioHeight || !width || !height) {
+      clampCropToFrame();
+      return;
+    }
+
+    const targetRatio = ratioWidth / ratioHeight;
+    const frameRatio = width / height;
+    let nextWidth = width;
+    let nextHeight = height;
+
+    if (frameRatio > targetRatio) {
+      nextWidth = height * targetRatio;
+    } else {
+      nextHeight = width / targetRatio;
+    }
+
+    cropWidth = Math.max(1, Math.round(nextWidth));
+    cropHeight = Math.max(1, Math.round(nextHeight));
+    cropX = Math.max(0, Math.round((width - cropWidth) / 2));
+    cropY = Math.max(0, Math.round((height - cropHeight) / 2));
+  }
+
+  function clampCropToFrame() {
+    if (!width || !height) {
+      return;
+    }
+
+    cropWidth = Math.min(Math.max(1, Math.round(cropWidth)), width);
+    cropHeight = Math.min(Math.max(1, Math.round(cropHeight)), height);
+    cropX = Math.min(Math.max(0, Math.round(cropX)), Math.max(0, width - cropWidth));
+    cropY = Math.min(Math.max(0, Math.round(cropY)), Math.max(0, height - cropHeight));
+  }
+
+  function rotateVideo(degrees: number) {
+    rotation = normalizeRotation(rotation + degrees);
+  }
+
+  function mirrorVideo(axis: 'horizontal' | 'vertical') {
+    if (axis === 'horizontal') {
+      mirrorHorizontal = !mirrorHorizontal;
+    } else {
+      mirrorVertical = !mirrorVertical;
+    }
   }
 
   function setSpeedMode(mode: SpeedMode) {
@@ -440,18 +557,23 @@
 
     try {
       const edits = buildEdits();
-      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 120_000);
+      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 600_000)
+        .then(() => {
+          eventManager.emit('AssetEditsApplied', asset.id);
+          if (edits.length > 0) {
+            toastManager.primary($t('editor_edits_applied_success'));
+          }
+        })
+        .catch(() => undefined);
 
-      if (edits.length === 0) {
-        await removeAssetEdits({ id: asset.id });
-      } else {
-        toastManager.primary('Rendering edited video...');
-        await editAsset({ id: asset.id, assetEditsCreateDto: { edits } });
-      }
+      await (edits.length === 0
+        ? removeAssetEdits({ id: asset.id })
+        : editAsset({ id: asset.id, assetEditsCreateDto: { edits } }));
 
-      await editCompleted;
       eventManager.emit('AssetEditsApplied', asset.id);
-      toastManager.primary($t('editor_edits_applied_success'));
+      void editCompleted;
+
+      toastManager.primary(edits.length === 0 ? $t('editor_edits_applied_success') : 'Rendering edited video...');
       hasAppliedEdits = true;
       onClose();
     } catch (error) {
@@ -499,6 +621,8 @@
   use:shortcuts={[
     { shortcut: { key: 'Escape' }, onShortcut: closeEditor },
     { shortcut: { key: 'Enter' }, onShortcut: applyEdits },
+    { shortcut: { key: ']' }, onShortcut: () => selectedTool === 'transform' && rotateVideo(90) },
+    { shortcut: { key: '[' }, onShortcut: () => selectedTool === 'transform' && rotateVideo(-90) },
   ]}
 />
 
@@ -537,13 +661,83 @@
     {#if isLoading}
       <p class="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
     {:else if selectedTool === 'transform'}
-      <div class="space-y-5">
-        <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" bind:checked={cropEnabled} />
-          Crop
+      <div class="mt-3 px-1">
+        <div class="mt-2 flex h-10 w-full items-center justify-between text-sm">
+          <h2>{$t('editor_orientation')}</h2>
+        </div>
+        <HStack>
+          <IconButton
+            class="w-full"
+            size="small"
+            aria-label={$t('editor_rotate_left')}
+            icon={mdiRotateLeft}
+            onclick={() => rotateVideo(-90)}
+          />
+          <IconButton
+            class="w-full"
+            size="small"
+            aria-label={$t('editor_rotate_right')}
+            icon={mdiRotateRight}
+            onclick={() => rotateVideo(90)}
+          />
+          <IconButton
+            class="w-full"
+            size="small"
+            aria-label={$t('editor_flip_horizontal')}
+            icon={mdiFlipHorizontal}
+            color={mirrorHorizontal ? 'primary' : 'secondary'}
+            onclick={() => mirrorVideo('horizontal')}
+          />
+          <IconButton
+            class="w-full"
+            size="small"
+            aria-label={$t('editor_flip_vertical')}
+            icon={mdiFlipVertical}
+            color={mirrorVertical ? 'primary' : 'secondary'}
+            onclick={() => mirrorVideo('vertical')}
+          />
+        </HStack>
+
+        <label class="mt-5 grid gap-2 text-sm">
+          Straighten {straighten}
+          <input type="range" min="-45" max="45" step="0.1" bind:value={straighten} />
         </label>
+
+        <div class="mt-6 flex h-10 w-full items-center justify-between text-sm">
+          <h2>{$t('crop')}</h2>
+        </div>
+
+        <div class="mb-4 grid grid-cols-2">
+          {#each aspectRatios as ratio (ratio.value)}
+            <HStack>
+              <Button
+                class="m-2 size-14"
+                shape="round"
+                onclick={() => selectAspectRatio(ratio)}
+                aria-label={ratio.label}
+                color={ratioSelected(ratio) ? 'primary' : 'secondary'}
+                variant={ratioSelected(ratio) ? 'filled' : 'outline'}
+              >
+                {#if ratio.isFree}
+                  <div
+                    class="size-6 shrink-0 rounded-xs border-2 border-dashed {ratioSelected(ratio)
+                      ? 'border-black'
+                      : 'border-white'}"
+                  ></div>
+                {:else}
+                  <div
+                    class="shrink-0 rounded-xs border-2 {ratioSelected(ratio) ? 'border-black' : 'border-white'}"
+                    style="width: {ratio.width}px; height: {ratio.height}px;"
+                  ></div>
+                {/if}
+              </Button>
+              <span class="text-sm text-white">{ratio.label}</span>
+            </HStack>
+          {/each}
+        </div>
+
         {#if cropEnabled}
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-2 gap-3 border-t border-gray-700 pt-4">
             <label class="grid gap-1 text-xs"
               >X <input class="editor-input" type="number" min="0" max={width} bind:value={cropX} /></label
             >
@@ -558,23 +752,6 @@
             >
           </div>
         {/if}
-        <label class="grid gap-2 text-sm">
-          Rotate
-          <select class="editor-input" bind:value={rotation}>
-            <option value={0}>0</option>
-            <option value={90}>90</option>
-            <option value={180}>180</option>
-            <option value={270}>270</option>
-          </select>
-        </label>
-        <label class="grid gap-2 text-sm">
-          Straighten {straighten}
-          <input type="range" min="-45" max="45" step="0.1" bind:value={straighten} />
-        </label>
-        <div class="grid gap-2 text-sm">
-          <label><input type="checkbox" bind:checked={mirrorHorizontal} /> Mirror horizontal</label>
-          <label><input type="checkbox" bind:checked={mirrorVertical} /> Mirror vertical</label>
-        </div>
       </div>
     {:else if selectedTool === 'auto'}
       <div class="space-y-4 text-sm">

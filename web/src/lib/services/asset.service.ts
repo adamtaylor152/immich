@@ -12,7 +12,6 @@ import {
 import { modalManager, toastManager, type ActionItem } from '@immich/ui';
 import {
   mdiAlertOutline,
-  mdiCog,
   mdiCogRefreshOutline,
   mdiContentCopy,
   mdiDatabaseRefreshOutline,
@@ -230,7 +229,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
 
   const Edit: ActionItem = {
     title: $t('editor'),
-    icon: asset.type === AssetTypeEnum.Video ? mdiCog : mdiTune,
+    icon: mdiTune,
     $if: () => !sharedLink && isOwner && !asset.isTrashed && (isEditableImage || isEditableVideo),
     onAction: () => assetViewerManager.openEditor(),
     shortcuts: [{ key: 'e' }],

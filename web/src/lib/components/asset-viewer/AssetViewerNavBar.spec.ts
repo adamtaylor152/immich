@@ -84,7 +84,7 @@ describe('AssetViewerNavBar component', () => {
       expect(getByRole('menuitem', { name: 'mark_safe' })).toBeInTheDocument();
     });
 
-    it('shows the editor gear for a full-size owned video even when client metadata is missing', async () => {
+    it('shows the editor action for a full-size owned video even when client metadata is missing', async () => {
       const ownerId = 'id-of-the-user';
       const user = userAdminFactory.build({ id: ownerId });
       const asset = assetFactory.build({
