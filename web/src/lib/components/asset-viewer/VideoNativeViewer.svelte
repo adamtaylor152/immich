@@ -13,11 +13,11 @@
     mdiCheck,
     mdiChevronLeft,
     mdiChevronRight,
+    mdiCropRotate,
     mdiFullscreen,
     mdiFullscreenExit,
     mdiPause,
     mdiPlay,
-    mdiTune,
     mdiVolumeHigh,
     mdiVolumeLow,
     mdiVolumeMedium,
@@ -248,7 +248,7 @@
                   title={$t('editor')}
                   onclick={openVideoEditor}
                 >
-                  <Icon icon={mdiTune} />
+                  <Icon icon={mdiCropRotate} />
                 </button>
               {/if}
               <media-fullscreen-button class="shrink-0 rounded-full p-2 outline-none">

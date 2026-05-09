@@ -19,7 +19,7 @@
 
   interface Props {
     asset: AssetResponseDto;
-    onClose: () => void;
+    onClose: (refreshAsset?: boolean) => void;
   }
 
   onMount(async () => {

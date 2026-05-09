@@ -16,7 +16,7 @@
 
   interface Props {
     asset: AssetResponseDto;
-    onClose: () => void;
+    onClose: (refreshAsset?: boolean) => void;
   }
 
   type VideoEdit = AssetEditsCreateDto['edits'][number];
@@ -55,6 +55,7 @@
 
   let selectedTool = $state<Tool>('transform');
   let isSaving = $state(false);
+  let isRendering = $state(false);
   let isLoading = $state(true);
   let isShowingConfirmDialog = $state(false);
   let hasAppliedEdits = $state(false);
@@ -114,6 +115,7 @@
   const normalizedRotation = $derived(((Number(rotation) % 360) + 360) % 360);
   const isRotated = $derived(normalizedRotation % 180 !== 0);
   const hasUnsavedChanges = $derived(!isLoading && !hasAppliedEdits && getCurrentEditKey() !== initialEditKey);
+  const saveButtonText = $derived(isRendering ? 'Rendering...' : $t('save'));
 
   function getNumberParameter(parameters: EditParameters, key: string, fallback: number) {
     const value = parameters[key];
@@ -554,32 +556,37 @@
     }
 
     isSaving = true;
+    isRendering = false;
 
     try {
       const edits = buildEdits();
-      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 600_000)
-        .then(() => {
-          eventManager.emit('AssetEditsApplied', asset.id);
-          if (edits.length > 0) {
-            toastManager.primary($t('editor_edits_applied_success'));
-          }
-        })
-        .catch(() => undefined);
+      const editCompleted =
+        edits.length > 0
+          ? waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 600_000)
+          : undefined;
 
       await (edits.length === 0
         ? removeAssetEdits({ id: asset.id })
         : editAsset({ id: asset.id, assetEditsCreateDto: { edits } }));
 
       eventManager.emit('AssetEditsApplied', asset.id);
-      void editCompleted;
 
-      toastManager.primary(edits.length === 0 ? $t('editor_edits_applied_success') : 'Rendering edited video...');
+      if (editCompleted) {
+        isRendering = true;
+        toastManager.primary('Rendering edited video...');
+
+        await editCompleted;
+        eventManager.emit('AssetEditsApplied', asset.id);
+      }
+
+      toastManager.primary($t('editor_edits_applied_success'));
       hasAppliedEdits = true;
-      onClose();
+      onClose(true);
     } catch (error) {
       toastManager.danger(error instanceof Error ? error.message : $t('editor_edits_applied_error'));
     } finally {
       isSaving = false;
+      isRendering = false;
     }
   }
 
@@ -607,13 +614,13 @@
     }, 'image/png');
   }
 
-  const tools: { id: Tool; label: string }[] = [
-    { id: 'transform', label: 'Transform' },
-    { id: 'auto', label: 'Auto' },
-    { id: 'adjust', label: 'Adjust' },
-    { id: 'look', label: 'Look' },
-    { id: 'timeline', label: 'Timeline' },
-    { id: 'text', label: 'Text' },
+  const tools: { id: Tool; label: string; compactLabel: string }[] = [
+    { id: 'transform', label: 'Transform', compactLabel: 'Crop' },
+    { id: 'auto', label: 'Auto', compactLabel: 'Auto' },
+    { id: 'adjust', label: 'Adjust', compactLabel: 'Adjust' },
+    { id: 'look', label: 'Look', compactLabel: 'Look' },
+    { id: 'timeline', label: 'Timeline', compactLabel: 'Time' },
+    { id: 'text', label: 'Text', compactLabel: 'Text' },
   ];
 </script>
 
@@ -639,23 +646,31 @@
       />
       <p class="text-lg text-immich-fg capitalize dark:text-immich-dark-fg">{$t('editor')}</p>
     </HStack>
-    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}>{$t('save')}</Button
+    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}
+      >{saveButtonText}</Button
     >
   </HStack>
 
-  <nav class="mt-4 grid grid-cols-3 gap-2 px-2">
+  <nav class="mt-4 flex gap-1 overflow-x-auto px-2 pb-1">
     {#each tools as tool (tool.id)}
       <button
         type="button"
-        class="rounded-md p-2 text-sm transition {selectedTool === tool.id
+        class="h-9 shrink-0 rounded-full px-3 text-sm transition {selectedTool === tool.id
           ? 'bg-immich-primary text-white'
           : 'bg-gray-200 text-immich-dark-gray hover:bg-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'}"
         onclick={() => (selectedTool = tool.id)}
       >
-        {tool.label}
+        <span class="hidden sm:inline">{tool.label}</span>
+        <span class="sm:hidden">{tool.compactLabel}</span>
       </button>
     {/each}
   </nav>
+
+  {#if isRendering}
+    <div class="mx-4 mt-4 rounded-md border border-immich-primary/40 bg-immich-primary/10 px-3 py-2 text-sm">
+      Rendering edited video...
+    </div>
+  {/if}
 
   <section class="mt-4 flex-1 overflow-y-auto px-4 pb-4">
     {#if isLoading}
@@ -664,6 +679,9 @@
       <div class="mt-3 px-1">
         <div class="mt-2 flex h-10 w-full items-center justify-between text-sm">
           <h2>{$t('editor_orientation')}</h2>
+          {#if normalizedRotation !== 0}
+            <span class="rounded-full bg-gray-200 px-2 py-1 text-xs dark:bg-gray-800">{normalizedRotation}°</span>
+          {/if}
         </div>
         <HStack>
           <IconButton
@@ -671,6 +689,7 @@
             size="small"
             aria-label={$t('editor_rotate_left')}
             icon={mdiRotateLeft}
+            color={normalizedRotation === 270 ? 'primary' : 'secondary'}
             onclick={() => rotateVideo(-90)}
           />
           <IconButton
@@ -678,6 +697,7 @@
             size="small"
             aria-label={$t('editor_rotate_right')}
             icon={mdiRotateRight}
+            color={normalizedRotation === 90 ? 'primary' : 'secondary'}
             onclick={() => rotateVideo(90)}
           />
           <IconButton
@@ -698,10 +718,13 @@
           />
         </HStack>
 
-        <label class="mt-5 grid gap-2 text-sm">
-          Straighten {straighten}
+        <div class="mt-5 grid gap-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span>Straighten</span>
+            <span class="text-xs text-gray-400">{straighten}°</span>
+          </div>
           <input type="range" min="-45" max="45" step="0.1" bind:value={straighten} />
-        </label>
+        </div>
 
         <div class="mt-6 flex h-10 w-full items-center justify-between text-sm">
           <h2>{$t('crop')}</h2>
@@ -737,20 +760,23 @@
         </div>
 
         {#if cropEnabled}
-          <div class="grid grid-cols-2 gap-3 border-t border-gray-700 pt-4">
-            <label class="grid gap-1 text-xs"
-              >X <input class="editor-input" type="number" min="0" max={width} bind:value={cropX} /></label
-            >
-            <label class="grid gap-1 text-xs"
-              >Y <input class="editor-input" type="number" min="0" max={height} bind:value={cropY} /></label
-            >
-            <label class="grid gap-1 text-xs"
-              >Width <input class="editor-input" type="number" min="1" max={width} bind:value={cropWidth} /></label
-            >
-            <label class="grid gap-1 text-xs"
-              >Height <input class="editor-input" type="number" min="1" max={height} bind:value={cropHeight} /></label
-            >
-          </div>
+          <details class="mt-2 border-t border-gray-700 pt-4 text-sm">
+            <summary class="cursor-pointer text-gray-300">Crop values</summary>
+            <div class="mt-4 grid grid-cols-2 gap-3">
+              <label class="grid gap-1 text-xs"
+                >X <input class="editor-input" type="number" min="0" max={width} bind:value={cropX} /></label
+              >
+              <label class="grid gap-1 text-xs"
+                >Y <input class="editor-input" type="number" min="0" max={height} bind:value={cropY} /></label
+              >
+              <label class="grid gap-1 text-xs"
+                >Width <input class="editor-input" type="number" min="1" max={width} bind:value={cropWidth} /></label
+              >
+              <label class="grid gap-1 text-xs"
+                >Height <input class="editor-input" type="number" min="1" max={height} bind:value={cropHeight} /></label
+              >
+            </div>
+          </details>
         {/if}
       </div>
     {:else if selectedTool === 'auto'}
