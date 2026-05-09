@@ -116,6 +116,20 @@ describe('AssetService', () => {
       expect(getAssetActions(() => '', image).Edit.icon).toBe(mdiTune);
     });
 
+    it('should build actions for shared link assets with hidden metadata', () => {
+      setSharedLink(sharedLinkFactory.build({ allowDownload: true, showMetadata: false }));
+      const asset = assetFactory.build({
+        type: AssetTypeEnum.Image,
+        originalPath: undefined as never,
+        hasMetadata: false,
+      });
+
+      const assetActions = getAssetActions(() => '', asset);
+
+      expect(assetActions.SharedLinkDownload.$if?.()).toStrictEqual(true);
+      expect(assetActions.Info.$if?.()).toStrictEqual(false);
+    });
+
     it('should not allow editing videos from shared links', () => {
       setOwnerUser();
       setSharedLink(sharedLinkFactory.build({ allowDownload: true }));

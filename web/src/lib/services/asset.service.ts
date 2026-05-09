@@ -94,6 +94,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
   const sharedLink = getSharedLink();
   const authUser = authManager.authenticated ? authManager.user : undefined;
   const isOwner = !!(authUser && authUser.id === asset.ownerId);
+  const originalPath = asset.originalPath?.toLowerCase() ?? '';
 
   const Share: ActionItem = {
     title: $t('share'),
@@ -220,9 +221,9 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
   const isUnsupportedEditorMedia =
     asset.livePhotoVideoId ||
     asset.exifInfo?.projectionType === ProjectionType.EQUIRECTANGULAR ||
-    asset.originalPath.toLowerCase().endsWith('.insp') ||
-    asset.originalPath.toLowerCase().endsWith('.gif') ||
-    asset.originalPath.toLowerCase().endsWith('.svg');
+    originalPath.endsWith('.insp') ||
+    originalPath.endsWith('.gif') ||
+    originalPath.endsWith('.svg');
 
   const isEditableImage = asset.type === AssetTypeEnum.Image && !isUnsupportedEditorMedia;
   const isEditableVideo = asset.type === AssetTypeEnum.Video && !isUnsupportedEditorMedia;
