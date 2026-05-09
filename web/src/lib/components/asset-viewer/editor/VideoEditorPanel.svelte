@@ -28,6 +28,7 @@
     startSeconds: number;
     endSeconds: number;
   };
+  type EditParameters = Record<string, unknown>;
 
   let { asset = $bindable(), onClose }: Props = $props();
 
@@ -90,28 +91,43 @@
   const height = $derived(asset.height ?? 0);
   const hasUnsavedChanges = $derived(!isLoading && !hasAppliedEdits && getCurrentEditKey() !== initialEditKey);
 
+  function getNumberParameter(parameters: EditParameters, key: string, fallback: number) {
+    const value = parameters[key];
+    return typeof value === 'number' ? value : fallback;
+  }
+
+  function getStringParameter(parameters: EditParameters, key: string, fallback: string) {
+    const value = parameters[key];
+    return typeof value === 'string' ? value : fallback;
+  }
+
+  function getBooleanParameter(parameters: EditParameters, key: string, fallback: boolean) {
+    const value = parameters[key];
+    return typeof value === 'boolean' ? value : fallback;
+  }
+
   onMount(async () => {
     resetControls();
     const { edits } = await getAssetEdits({ id: asset.id });
     for (const edit of edits) {
       const action = edit.action as string;
-      const parameters = edit.parameters as Record<string, any>;
+      const parameters = edit.parameters as EditParameters;
 
       switch (action) {
         case 'crop': {
           cropEnabled = true;
-          cropX = parameters.x ?? cropX;
-          cropY = parameters.y ?? cropY;
-          cropWidth = parameters.width ?? cropWidth;
-          cropHeight = parameters.height ?? cropHeight;
+          cropX = getNumberParameter(parameters, 'x', cropX);
+          cropY = getNumberParameter(parameters, 'y', cropY);
+          cropWidth = getNumberParameter(parameters, 'width', cropWidth);
+          cropHeight = getNumberParameter(parameters, 'height', cropHeight);
           break;
         }
         case 'rotate': {
-          rotation = parameters.angle ?? rotation;
+          rotation = getNumberParameter(parameters, 'angle', rotation);
           break;
         }
         case 'straighten': {
-          straighten = parameters.angle ?? straighten;
+          straighten = getNumberParameter(parameters, 'angle', straighten);
           break;
         }
         case 'mirror': {
@@ -120,66 +136,68 @@
           break;
         }
         case 'trim': {
-          trimStartSeconds = (parameters.startMs ?? 0) / 1000;
-          trimEndSeconds = (parameters.endMs ?? asset.duration ?? 0) / 1000;
+          trimStartSeconds = getNumberParameter(parameters, 'startMs', 0) / 1000;
+          trimEndSeconds = getNumberParameter(parameters, 'endMs', asset.duration ?? 0) / 1000;
           break;
         }
         case 'autoEnhance': {
-          autoEnhance = parameters.enabled ?? true;
+          autoEnhance = getBooleanParameter(parameters, 'enabled', true);
           break;
         }
         case 'stabilize': {
-          stabilize = parameters.enabled ?? true;
+          stabilize = getBooleanParameter(parameters, 'enabled', true);
           break;
         }
         case 'adjust': {
-          brightness = parameters.brightness ?? brightness;
-          contrast = parameters.contrast ?? contrast;
-          whitePoint = parameters.whitePoint ?? whitePoint;
-          highlights = parameters.highlights ?? highlights;
-          shadows = parameters.shadows ?? shadows;
-          blackPoint = parameters.blackPoint ?? blackPoint;
-          saturation = parameters.saturation ?? saturation;
-          warmth = parameters.warmth ?? warmth;
-          tint = parameters.tint ?? tint;
-          skinTone = parameters.skinTone ?? skinTone;
-          blueTone = parameters.blueTone ?? blueTone;
-          vignette = parameters.vignette ?? vignette;
-          hdr = parameters.hdr ?? hdr;
+          brightness = getNumberParameter(parameters, 'brightness', brightness);
+          contrast = getNumberParameter(parameters, 'contrast', contrast);
+          whitePoint = getNumberParameter(parameters, 'whitePoint', whitePoint);
+          highlights = getNumberParameter(parameters, 'highlights', highlights);
+          shadows = getNumberParameter(parameters, 'shadows', shadows);
+          blackPoint = getNumberParameter(parameters, 'blackPoint', blackPoint);
+          saturation = getNumberParameter(parameters, 'saturation', saturation);
+          warmth = getNumberParameter(parameters, 'warmth', warmth);
+          tint = getNumberParameter(parameters, 'tint', tint);
+          skinTone = getNumberParameter(parameters, 'skinTone', skinTone);
+          blueTone = getNumberParameter(parameters, 'blueTone', blueTone);
+          vignette = getNumberParameter(parameters, 'vignette', vignette);
+          hdr = getNumberParameter(parameters, 'hdr', hdr);
           break;
         }
         case 'filter':
         case 'effect': {
-          lookName = parameters.name ?? lookName;
-          lookIntensity = parameters.intensity ?? lookIntensity;
+          lookName = getStringParameter(parameters, 'name', lookName);
+          lookIntensity = getNumberParameter(parameters, 'intensity', lookIntensity);
           break;
         }
         case 'audio': {
-          muted = parameters.muted ?? muted;
-          volume = parameters.volume ?? volume;
+          muted = getBooleanParameter(parameters, 'muted', muted);
+          volume = getNumberParameter(parameters, 'volume', volume);
           break;
         }
         case 'speed': {
-          if (parameters.startMs !== undefined && parameters.endMs !== undefined) {
+          const startMs = parameters.startMs;
+          const endMs = parameters.endMs;
+          if (typeof startMs === 'number' && typeof endMs === 'number') {
             speedMode = 'segment';
             speedSegments = [
               ...speedSegments,
-              createSpeedSegment(parameters.rate ?? 1, parameters.startMs / 1000, parameters.endMs / 1000),
+              createSpeedSegment(getNumberParameter(parameters, 'rate', 1), startMs / 1000, endMs / 1000),
             ];
           } else {
             speedMode = 'whole';
-            speed = parameters.rate ?? speed;
+            speed = getNumberParameter(parameters, 'rate', speed);
           }
           break;
         }
         case 'textOverlay': {
-          text = parameters.text ?? text;
-          textX = parameters.x ?? textX;
-          textY = parameters.y ?? textY;
-          textStartSeconds = (parameters.startMs ?? 0) / 1000;
-          textEndSeconds = (parameters.endMs ?? asset.duration ?? 0) / 1000;
-          textSize = parameters.size ?? textSize;
-          textColor = parameters.color ?? textColor;
+          text = getStringParameter(parameters, 'text', text);
+          textX = getNumberParameter(parameters, 'x', textX);
+          textY = getNumberParameter(parameters, 'y', textY);
+          textStartSeconds = getNumberParameter(parameters, 'startMs', 0) / 1000;
+          textEndSeconds = getNumberParameter(parameters, 'endMs', asset.duration ?? 0) / 1000;
+          textSize = getNumberParameter(parameters, 'size', textSize);
+          textColor = getStringParameter(parameters, 'color', textColor);
           break;
         }
       }
@@ -502,10 +520,10 @@
   </HStack>
 
   <nav class="mt-4 grid grid-cols-3 gap-2 px-2">
-    {#each tools as tool}
+    {#each tools as tool (tool.id)}
       <button
         type="button"
-        class="rounded-md px-2 py-2 text-sm transition {selectedTool === tool.id
+        class="rounded-md p-2 text-sm transition {selectedTool === tool.id
           ? 'bg-immich-primary text-white'
           : 'bg-gray-200 text-immich-dark-gray hover:bg-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'}"
         onclick={() => (selectedTool = tool.id)}
