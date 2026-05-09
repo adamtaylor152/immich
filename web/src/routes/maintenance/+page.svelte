@@ -4,8 +4,10 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { handleSetMaintenanceMode } from '$lib/services/maintenance.service';
   import { maintenanceStore } from '$lib/stores/maintenance.store';
+  import { loadMaintenanceStatus } from '$lib/utils/maintenance';
   import { MaintenanceAction } from '@immich/sdk';
   import { Button, Heading, Link, ProgressBar, Scrollable, Text } from '@immich/ui';
+  import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -16,6 +18,26 @@
   const { data }: Props = $props();
 
   const { auth, status } = maintenanceStore;
+
+  let refreshMaintenanceStatusPromise: Promise<void> | undefined;
+
+  const refreshMaintenanceStatus = () => {
+    if (refreshMaintenanceStatusPromise) {
+      return;
+    }
+
+    refreshMaintenanceStatusPromise = loadMaintenanceStatus()
+      .catch(() => undefined)
+      .finally(() => {
+        refreshMaintenanceStatusPromise = undefined;
+      });
+  };
+
+  onMount(() => {
+    const interval = setInterval(refreshMaintenanceStatus, 1000);
+
+    return () => clearInterval(interval);
+  });
 
   // strip token from URL after load
   const url = new URL(location.href);
