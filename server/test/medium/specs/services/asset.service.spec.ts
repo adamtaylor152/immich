@@ -490,6 +490,8 @@ describe(AssetService.name, () => {
 
       await expect(ctx.get(AssetRepository).getById(asset.id, { exifInfo: true })).resolves.toEqual(
         expect.objectContaining({
+          fileCreatedAt: new Date('2023-11-20T01:11:00.000Z'),
+          localDateTime: new Date('2023-11-19T18:11:00.000Z'),
           exifInfo: expect.objectContaining({ dateTimeOriginal: '2023-11-20T01:11:00+00:00', timeZone: 'UTC-7' }),
         }),
       );
@@ -659,6 +661,8 @@ describe(AssetService.name, () => {
 
       await expect(ctx.get(AssetRepository).getById(asset.id, { exifInfo: true })).resolves.toEqual(
         expect.objectContaining({
+          fileCreatedAt: new Date('2023-11-20T01:11:00.000Z'),
+          localDateTime: new Date('2023-11-19T18:11:00.000Z'),
           exifInfo: expect.objectContaining({ dateTimeOriginal: '2023-11-20T01:11:00+00:00', timeZone: 'UTC-7' }),
         }),
       );

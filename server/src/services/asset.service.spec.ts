@@ -453,6 +453,13 @@ describe(AssetService.name, () => {
         latitude: 30,
         longitude: 50,
       });
+      expect(mocks.asset.updateAll).toHaveBeenCalledWith(
+        ['asset-1'],
+        expect.objectContaining({
+          fileCreatedAt: new Date(dateTimeOriginal),
+          localDateTime: new Date(dateTimeOriginal),
+        }),
+      );
       expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.SidecarWrite, data: { id: 'asset-1' } }]);
     });
 

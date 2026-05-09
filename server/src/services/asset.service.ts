@@ -74,6 +74,22 @@ const getDurationMs = (duration: number | null | undefined) => {
   return Number.isFinite(value) && value > 0 ? value : null;
 };
 
+const getAssetDateTimeUpdates = (dateTimeOriginal?: string) => {
+  if (!dateTimeOriginal) {
+    return {};
+  }
+
+  const dateTime = DateTime.fromISO(dateTimeOriginal, { setZone: true, zone: 'UTC' });
+  if (!dateTime.isValid) {
+    return {};
+  }
+
+  return {
+    fileCreatedAt: dateTime.toUTC().toJSDate(),
+    localDateTime: dateTime.setZone('UTC', { keepLocalTime: true }).toJSDate(),
+  };
+};
+
 @Injectable()
 export class AssetService extends BaseService {
   async getStatistics(auth: AuthDto, dto: AssetStatsDto) {
@@ -149,7 +165,7 @@ export class AssetService extends BaseService {
 
     await this.updateExif({ id, description, dateTimeOriginal, latitude, longitude, rating });
 
-    const asset = await this.assetRepository.update({ id, ...rest });
+    const asset = await this.assetRepository.update({ id, ...getAssetDateTimeUpdates(dateTimeOriginal), ...rest });
 
     if (previousMotion && asset) {
       await onAfterUnlink(repos, {
@@ -182,7 +198,10 @@ export class AssetService extends BaseService {
     } = dto;
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids });
 
-    const assetDto = _.omitBy({ isFavorite, visibility, duplicateId }, _.isUndefined);
+    const assetDto = _.omitBy(
+      { isFavorite, visibility, duplicateId, ...getAssetDateTimeUpdates(dateTimeOriginal) },
+      _.isUndefined,
+    );
     const exifDto = _.omitBy(
       {
         latitude,
