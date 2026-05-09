@@ -1,3 +1,4 @@
+import { AssetTypeEnum } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -64,6 +65,20 @@ describe('AssetViewerNavBar component', () => {
 
       const { getByLabelText } = renderWithTooltips(AssetViewerNavBar, { asset, ...additionalProps });
       expect(getByLabelText('delete')).toBeInTheDocument();
+    });
+
+    it('shows NSFW review actions for a full-size owned image', () => {
+      const ownerId = 'id-of-the-user';
+      const user = userAdminFactory.build({ id: ownerId });
+      const asset = assetFactory.build({ ownerId, isTrashed: false, type: AssetTypeEnum.Image });
+      authManager.setUser(user);
+
+      const preferences = preferencesFactory.build({ cast: { gCastEnabled: false } });
+      authManager.setPreferences(preferences);
+
+      const { getByRole } = renderWithTooltips(AssetViewerNavBar, { asset, ...additionalProps });
+      expect(getByRole('menuitem', { name: 'mark_nsfw' })).toBeInTheDocument();
+      expect(getByRole('menuitem', { name: 'mark_safe' })).toBeInTheDocument();
     });
   });
 });

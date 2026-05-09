@@ -8,20 +8,23 @@
   import { t } from 'svelte-i18n';
 
   interface Props {
+    assetIds?: string[];
+    clearSelection?: boolean;
     markSafe?: boolean;
     menuItem?: boolean;
     onMark?: (assetIds: string[], action: AssetImageEnrichmentAction) => void | Promise<void>;
   }
 
-  let { markSafe = false, menuItem = false, onMark }: Props = $props();
+  let { assetIds, clearSelection = true, markSafe = false, menuItem = false, onMark }: Props = $props();
 
   let action = $derived(markSafe ? AssetImageEnrichmentAction.MarkSafe : AssetImageEnrichmentAction.MarkNsfw);
   let text = $derived(markSafe ? $t('mark_safe') : $t('mark_nsfw'));
   let icon = $derived(markSafe ? mdiShieldCheck : mdiShieldAlert);
+  let targetAssetIds = $derived(assetIds ?? assetMultiSelectManager.ownedAssets.map(({ id }) => id));
   let loading = $state(false);
 
   const handleMark = async () => {
-    const ids = assetMultiSelectManager.ownedAssets.map(({ id }) => id);
+    const ids = targetAssetIds;
 
     if (ids.length === 0) {
       return;
@@ -44,7 +47,9 @@
       toastManager.primary(
         $t(markSafe ? 'mark_safe_action_prompt' : 'mark_nsfw_action_prompt', { values: { count: ids.length } }),
       );
-      assetMultiSelectManager.clear();
+      if (clearSelection) {
+        assetMultiSelectManager.clear();
+      }
     } catch (error) {
       handleError(error, $t('errors.unable_to_update_image_enrichment'));
     } finally {

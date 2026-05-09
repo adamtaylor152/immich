@@ -4,8 +4,9 @@
   import { assetViewerFadeDuration } from '$lib/constants';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { castManager } from '$lib/managers/cast-manager.svelte';
+  import { getAssetActions } from '$lib/services/asset.service';
   import { autoPlayVideo, lang, loopVideo as loopVideoPreference } from '$lib/stores/preferences.store';
-  import { getAssetMediaUrl, getAssetPlaybackUrl } from '$lib/utils';
+  import { getAssetMediaUrl, getAssetPlaybackUrl, isEnabled } from '$lib/utils';
   import { AssetMediaSize, type AssetResponseDto } from '@immich/sdk';
   import { Icon, LoadingSpinner } from '@immich/ui';
   import {
@@ -16,6 +17,7 @@
     mdiFullscreenExit,
     mdiPause,
     mdiPlay,
+    mdiTune,
     mdiVolumeHigh,
     mdiVolumeLow,
     mdiVolumeMedium,
@@ -77,6 +79,8 @@
   const aspectRatio = $derived(asset.width && asset.height ? `${asset.width} / ${asset.height}` : undefined);
   let showVideo = $state(false);
   let hasFocused = $state(false);
+  const Actions = $derived(getAssetActions($t, asset));
+  const canEditVideo = $derived(isEnabled(Actions.Edit));
 
   onMount(() => {
     showVideo = true;
@@ -134,6 +138,11 @@
     if (event.detail.direction === 'right') {
       onPreviousAsset();
     }
+  };
+
+  const openVideoEditor = () => {
+    videoPlayer?.pause();
+    Actions.Edit.onAction(Actions.Edit);
   };
 
   let containerWidth = $state(0);
@@ -231,6 +240,17 @@
             </div>
 
             {#if extendedControls}
+              {#if canEditVideo}
+                <button
+                  type="button"
+                  class="video-editor-button shrink-0 rounded-full p-2 outline-none"
+                  aria-label={$t('editor')}
+                  title={$t('editor')}
+                  onclick={openVideoEditor}
+                >
+                  <Icon icon={mdiTune} />
+                </button>
+              {/if}
               <media-fullscreen-button class="shrink-0 rounded-full p-2 outline-none">
                 <Icon slot="enter" icon={mdiFullscreen} />
                 <Icon slot="exit" icon={mdiFullscreenExit} />
@@ -313,6 +333,20 @@
 
   .volume-wrapper {
     --media-control-hover-background: none;
+  }
+
+  .video-editor-button {
+    color: var(--media-primary-color);
+    background: none;
+  }
+
+  .video-editor-button:hover,
+  .video-editor-button:focus-visible {
+    background: var(--media-control-hover-background);
+  }
+
+  .video-editor-button:focus-visible {
+    box-shadow: var(--media-focus-box-shadow);
   }
 
   media-volume-range:has(+ media-mute-button) {

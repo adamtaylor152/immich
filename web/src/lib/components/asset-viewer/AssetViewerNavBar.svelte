@@ -18,6 +18,7 @@
   import LoadingDots from '$lib/components/LoadingDots.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
+  import MarkNsfwAction from '$lib/components/timeline/actions/MarkNsfwAction.svelte';
   import RemoveFromAlbumAction from '$lib/components/timeline/actions/RemoveFromAlbumAction.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -208,6 +209,11 @@
 
         {#if !asset.isTrashed && isOwner}
           <SetVisibilityAction asset={toTimelineAsset(asset)} {onAction} {preAction} />
+        {/if}
+
+        {#if asset.type === AssetTypeEnum.Image && !asset.isTrashed && isOwner}
+          <MarkNsfwAction menuItem assetIds={[asset.id]} clearSelection={false} />
+          <MarkNsfwAction menuItem markSafe assetIds={[asset.id]} clearSelection={false} />
         {/if}
 
         {#if asset.type === AssetTypeEnum.Video}

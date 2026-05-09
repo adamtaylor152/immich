@@ -90,4 +90,23 @@ describe('MarkNsfwAction', () => {
       assetImageEnrichmentActionRequestDto: { action: AssetImageEnrichmentAction.MarkSafe },
     });
   });
+
+  it('marks explicit asset ids without clearing timeline selection', async () => {
+    assetMultiSelectManager.selectAsset(timelineAsset('selected-asset', authManager.user.id));
+
+    render(MarkNsfwAction, {
+      menuItem: true,
+      assetIds: ['open-asset'],
+      clearSelection: false,
+    });
+
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'mark_nsfw' }));
+
+    await waitFor(() => expect(updateAssetImageEnrichment).toHaveBeenCalledTimes(1));
+    expect(updateAssetImageEnrichment).toHaveBeenCalledWith({
+      id: 'open-asset',
+      assetImageEnrichmentActionRequestDto: { action: AssetImageEnrichmentAction.MarkNsfw },
+    });
+    expect(assetMultiSelectManager.selectionActive).toBe(true);
+  });
 });

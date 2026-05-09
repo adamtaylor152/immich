@@ -467,6 +467,10 @@
         {/if}
         <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
           <DownloadAction menuItem filename="{album.albumName}.zip" />
+          {#if assetMultiSelectManager.ownedAssets.length > 0}
+            <MarkNsfwAction menuItem onMark={() => timelineManager.refresh()} />
+            <MarkNsfwAction menuItem markSafe onMark={() => timelineManager.refresh()} />
+          {/if}
           {#if assetMultiSelectManager.isAllUserOwned}
             <ChangeDate menuItem />
             <ChangeDescription menuItem />
@@ -476,8 +480,6 @@
               unarchive={assetMultiSelectManager.isAllArchived}
               onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
             />
-            <MarkNsfwAction menuItem onMark={() => timelineManager.refresh()} />
-            <MarkNsfwAction menuItem markSafe onMark={() => timelineManager.refresh()} />
             <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
           {/if}
           {#if assetMultiSelectManager.assets.length === 1}
