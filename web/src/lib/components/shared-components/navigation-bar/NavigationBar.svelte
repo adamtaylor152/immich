@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { clickOutside } from '$lib/actions/click-outside';
   import ElevatedSessionToggle from '$lib/components/shared-components/navigation-bar/ElevatedSessionToggle.svelte';
@@ -11,13 +12,15 @@
   import SkipLink from '$lib/elements/SkipLink.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+  import SearchFilterModal from '$lib/modals/SearchFilterModal.svelte';
   import { Route } from '$lib/route';
   import { getGlobalActions } from '$lib/services/app.service';
   import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
   import { notificationManager } from '$lib/stores/notification-manager.svelte';
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
-  import { ActionButton, Button, IconButton, Logo } from '@immich/ui';
-  import { mdiBellBadge, mdiBellOutline, mdiMagnify, mdiMenu, mdiTrayArrowUp } from '@mdi/js';
+  import { handlePromiseError } from '$lib/utils';
+  import { ActionButton, Button, IconButton, Logo, modalManager } from '@immich/ui';
+  import { mdiBellBadge, mdiBellOutline, mdiMenu, mdiTrayArrowUp, mdiTune } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import ThemeButton from '../ThemeButton.svelte';
@@ -34,6 +37,7 @@
 
   let shouldShowAccountInfoPanel = $state(false);
   let shouldShowNotificationPanel = $state(false);
+  let isSearchOptionsOpen = $state(false);
   let innerWidth: number = $state(0);
   const hasUnreadNotifications = $derived(notificationManager.notifications.length > 0);
 
@@ -44,6 +48,25 @@
       console.error('Failed to load notifications on mount', error);
     }
   });
+
+  const openSearchOptions = async () => {
+    if (isSearchOptionsOpen) {
+      return;
+    }
+
+    isSearchOptionsOpen = true;
+
+    try {
+      const result = modalManager.open(SearchFilterModal, { searchQuery: {} });
+      const searchResult = await result.onClose;
+
+      if (searchResult) {
+        await goto(Route.search(searchResult));
+      }
+    } finally {
+      isSearchOptionsOpen = false;
+    }
+  };
 
   const { Cast } = $derived(getGlobalActions($t));
 </script>
@@ -95,11 +118,11 @@
             shape="round"
             variant="ghost"
             size="medium"
-            icon={mdiMagnify}
-            href={Route.search()}
+            icon={mdiTune}
+            onclick={() => handlePromiseError(openSearchOptions())}
             id="search-button"
             class="sm:hidden"
-            aria-label={$t('go_to_search')}
+            aria-label={$t('show_search_options')}
           />
         {/if}
 
