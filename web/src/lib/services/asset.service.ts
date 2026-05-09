@@ -12,6 +12,7 @@ import {
 import { modalManager, toastManager, type ActionItem } from '@immich/ui';
 import {
   mdiAlertOutline,
+  mdiCog,
   mdiCogRefreshOutline,
   mdiContentCopy,
   mdiDatabaseRefreshOutline,
@@ -225,16 +226,11 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     asset.originalPath.toLowerCase().endsWith('.svg');
 
   const isEditableImage = asset.type === AssetTypeEnum.Image && !isUnsupportedEditorMedia;
-  const isEditableVideo =
-    asset.type === AssetTypeEnum.Video &&
-    !isUnsupportedEditorMedia &&
-    !!asset.width &&
-    !!asset.height &&
-    !!asset.duration;
+  const isEditableVideo = asset.type === AssetTypeEnum.Video && !isUnsupportedEditorMedia;
 
   const Edit: ActionItem = {
     title: $t('editor'),
-    icon: mdiTune,
+    icon: asset.type === AssetTypeEnum.Video ? mdiCog : mdiTune,
     $if: () => !sharedLink && isOwner && !asset.isTrashed && (isEditableImage || isEditableVideo),
     onAction: () => assetViewerManager.openEditor(),
     shortcuts: [{ key: 'e' }],

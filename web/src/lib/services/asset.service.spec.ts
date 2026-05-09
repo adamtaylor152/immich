@@ -1,5 +1,6 @@
 import { AssetTypeEnum, getAssetInfo } from '@immich/sdk';
 import { toastManager } from '@immich/ui';
+import { mdiCog, mdiTune } from '@mdi/js';
 import { vitest } from 'vitest';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { getAssetActions, handleDownloadAsset } from '$lib/services/asset.service';
@@ -92,14 +93,28 @@ describe('AssetService', () => {
     });
 
     it.each([{ width: null }, { height: null }, { duration: null }, { width: 0 }, { height: 0 }, { duration: 0 }])(
-      'should not allow editing videos with missing metadata: %o',
+      'should still show the video editor action when client metadata is missing: %o',
       (overrides) => {
         setOwnerUser();
         const asset = buildEditableVideo(overrides);
         const assetActions = getAssetActions(() => '', asset);
-        expect(assetActions.Edit.$if?.()).toStrictEqual(false);
+        expect(assetActions.Edit.$if?.()).toStrictEqual(true);
       },
     );
+
+    it('should use a gear icon for video editing and keep the tuning icon for image editing', () => {
+      setOwnerUser();
+      const video = buildEditableVideo();
+      const image = assetFactory.build({
+        ownerId,
+        type: AssetTypeEnum.Image,
+        originalPath: '/upload/photo.jpg',
+        originalFileName: 'photo.jpg',
+      });
+
+      expect(getAssetActions(() => '', video).Edit.icon).toBe(mdiCog);
+      expect(getAssetActions(() => '', image).Edit.icon).toBe(mdiTune);
+    });
 
     it('should not allow editing videos from shared links', () => {
       setOwnerUser();

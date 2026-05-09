@@ -1,6 +1,8 @@
 import { AssetTypeEnum } from '@immich/sdk';
 import '@testing-library/jest-dom';
+import { fireEvent } from '@testing-library/svelte';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
+import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
@@ -37,6 +39,7 @@ describe('AssetViewerNavBar component', () => {
   });
 
   afterEach(() => {
+    assetViewerManager.closeEditor();
     authManager.reset();
   });
 
@@ -79,6 +82,30 @@ describe('AssetViewerNavBar component', () => {
       const { getByRole } = renderWithTooltips(AssetViewerNavBar, { asset, ...additionalProps });
       expect(getByRole('menuitem', { name: 'mark_nsfw' })).toBeInTheDocument();
       expect(getByRole('menuitem', { name: 'mark_safe' })).toBeInTheDocument();
+    });
+
+    it('shows the editor gear for a full-size owned video even when client metadata is missing', async () => {
+      const ownerId = 'id-of-the-user';
+      const user = userAdminFactory.build({ id: ownerId });
+      const asset = assetFactory.build({
+        ownerId,
+        isTrashed: false,
+        type: AssetTypeEnum.Video,
+        originalPath: '/upload/video.mp4',
+        originalFileName: 'video.mp4',
+        width: null,
+        height: null,
+        duration: null,
+      });
+      authManager.setUser(user);
+
+      const preferences = preferencesFactory.build({ cast: { gCastEnabled: false } });
+      authManager.setPreferences(preferences);
+
+      const { getByLabelText } = renderWithTooltips(AssetViewerNavBar, { asset, ...additionalProps });
+      await fireEvent.click(getByLabelText('editor'));
+
+      expect(assetViewerManager.isShowEditor).toBe(true);
     });
   });
 });
