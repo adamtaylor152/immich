@@ -1,4 +1,4 @@
-import { AssetTypeEnum, AssetOrderBy, type AssetResponseDto } from '@immich/sdk';
+import { AssetTypeEnum, TimeBucketDateType, type AssetResponseDto } from '@immich/sdk';
 import { DateTime, type LocaleOptions } from 'luxon';
 import { SvelteSet } from 'svelte/reactivity';
 import { get } from 'svelte/store';
@@ -239,5 +239,5 @@ export function setDifference<T>(setA: Set<T>, setB: Set<T>): SvelteSet<T> {
   return result;
 }
 
-export const getOrderingDate = (asset: TimelineAsset, order: AssetOrderBy) =>
-  order === AssetOrderBy.CreatedAt ? asset.createdAt : asset.localDateTime;
+export const getOrderingDate = (asset: TimelineAsset, dateType: TimeBucketDateType = TimeBucketDateType.Taken) =>
+  dateType === TimeBucketDateType.Added ? asset.createdAt : asset.localDateTime;

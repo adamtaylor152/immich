@@ -31,7 +31,7 @@
     type OnUnlink,
   } from '$lib/utils/actions';
   import { openFileUploadDialog } from '$lib/utils/file-uploader';
-  import { AssetVisibility, AssetOrderBy } from '@immich/sdk';
+  import { AssetVisibility, TimeBucketDateType } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -48,7 +48,7 @@
     visibility: AssetVisibility.Timeline,
     withStacked: true,
     withPartners: true,
-    orderBy: AssetOrderBy.CreatedAt,
+    dateType: TimeBucketDateType.Added,
   };
 
   let selectedAssets = $derived(assetMultiSelectManager.assets);
