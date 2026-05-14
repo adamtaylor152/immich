@@ -98,6 +98,10 @@ describe(SearchService.name, () => {
         fieldName: 'exifInfo.city',
         items: [],
       });
+      mocks.asset.getRecentlyCreatedAssetIds.mockResolvedValue({
+        fieldName: 'createdAt',
+        items: [],
+      });
       mocks.asset.getByIdsWithAllRelationsButStacks.mockResolvedValue([]);
 
       await sut.getExploreData(auth);

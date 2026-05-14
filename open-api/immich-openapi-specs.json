@@ -13540,15 +13540,6 @@
             }
           },
           {
-            "name": "orderBy",
-            "required": false,
-            "in": "query",
-            "description": "Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)",
-            "schema": {
-              "$ref": "#/components/schemas/AssetOrderBy"
-            }
-          },
-          {
             "name": "personId",
             "required": false,
             "in": "query",
@@ -13754,15 +13745,6 @@
             "description": "Sort order for assets within time buckets (ASC for oldest first, DESC for newest first)",
             "schema": {
               "$ref": "#/components/schemas/AssetOrder"
-            }
-          },
-          {
-            "name": "orderBy",
-            "required": false,
-            "in": "query",
-            "description": "Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)",
-            "schema": {
-              "$ref": "#/components/schemas/AssetOrderBy"
             }
           },
           {
@@ -16991,14 +16973,6 @@
         ],
         "type": "string"
       },
-      "AssetOrderBy": {
-        "description": "Asset sorting property",
-        "enum": [
-          "takenAt",
-          "createdAt"
-        ],
-        "type": "string"
-      },
       "AssetRejectReason": {
         "description": "Rejection reason if rejected",
         "enum": [
@@ -17306,6 +17280,7 @@
         "enum": [
           "mp3",
           "aac",
+          "libopus",
           "opus",
           "pcm_s16le"
         ],
@@ -26129,13 +26104,6 @@
             },
             "type": "array"
           },
-          "createdAt": {
-            "description": "Array of UTC timestamps when each asset was originally uploaded to Immich",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "duration": {
             "description": "Array of video/gif durations in milliseconds (null for static images)",
             "items": {
@@ -26266,7 +26234,6 @@
         "required": [
           "city",
           "country",
-          "createdAt",
           "duration",
           "fileCreatedAt",
           "id",

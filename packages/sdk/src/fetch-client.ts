@@ -2854,8 +2854,6 @@ export type TimeBucketAssetResponseDto = {
     city: (string | null)[];
     /** Array of country names extracted from EXIF GPS data */
     country: (string | null)[];
-    /** Array of UTC timestamps when each asset was originally uploaded to Immich */
-    createdAt: string[];
     /** Array of video/gif durations in milliseconds (null for static images) */
     duration: (number | null)[];
     /** Array of file creation timestamps in UTC */
@@ -6561,7 +6559,7 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, personId, slug, suppressedOnly, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
     dateType?: TimeBucketDateType;
@@ -6569,7 +6567,6 @@ export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, 
     isTrashed?: boolean;
     key?: string;
     order?: AssetOrder;
-    orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
     suppressedOnly?: boolean;
@@ -6592,7 +6589,6 @@ export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, 
         isTrashed,
         key,
         order,
-        orderBy,
         personId,
         slug,
         suppressedOnly,
@@ -6610,7 +6606,7 @@ export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, 
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, personId, slug, suppressedOnly, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
     dateType?: TimeBucketDateType;
@@ -6618,7 +6614,6 @@ export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed,
     isTrashed?: boolean;
     key?: string;
     order?: AssetOrder;
-    orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
     suppressedOnly?: boolean;
@@ -6640,7 +6635,6 @@ export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed,
         isTrashed,
         key,
         order,
-        orderBy,
         personId,
         slug,
         suppressedOnly,
@@ -7546,6 +7540,7 @@ export enum TranscodeHWAccel {
 export enum AudioCodec {
     Mp3 = "mp3",
     Aac = "aac",
+    Libopus = "libopus",
     Opus = "opus",
     PcmS16Le = "pcm_s16le"
 }
@@ -7607,10 +7602,6 @@ export enum OAuthTokenEndpointAuthMethod {
 export enum TimeBucketDateType {
     Added = "added",
     Taken = "taken"
-}
-export enum AssetOrderBy {
-    TakenAt = "takenAt",
-    CreatedAt = "createdAt"
 }
 export enum UserMetadataKey {
     Preferences = "preferences",

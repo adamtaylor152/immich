@@ -104,6 +104,7 @@ Class | Method | HTTP request | Description
 *AssetsApi* | [**downloadAsset**](doc//AssetsApi.md#downloadasset) | **GET** /assets/{id}/original | Download original asset
 *AssetsApi* | [**editAsset**](doc//AssetsApi.md#editasset) | **PUT** /assets/{id}/edits | Apply edits to an existing asset
 *AssetsApi* | [**getAssetEdits**](doc//AssetsApi.md#getassetedits) | **GET** /assets/{id}/edits | Retrieve edits for an existing asset
+*AssetsApi* | [**getAssetImageEnrichment**](doc//AssetsApi.md#getassetimageenrichment) | **GET** /assets/{id}/image-enrichment | Get image enrichment metadata
 *AssetsApi* | [**getAssetInfo**](doc//AssetsApi.md#getassetinfo) | **GET** /assets/{id} | Retrieve an asset
 *AssetsApi* | [**getAssetMetadata**](doc//AssetsApi.md#getassetmetadata) | **GET** /assets/{id}/metadata | Get asset metadata
 *AssetsApi* | [**getAssetMetadataByKey**](doc//AssetsApi.md#getassetmetadatabykey) | **GET** /assets/{id}/metadata/{key} | Retrieve asset metadata by key
@@ -113,6 +114,7 @@ Class | Method | HTTP request | Description
 *AssetsApi* | [**removeAssetEdits**](doc//AssetsApi.md#removeassetedits) | **DELETE** /assets/{id}/edits | Remove edits from an existing asset
 *AssetsApi* | [**runAssetJobs**](doc//AssetsApi.md#runassetjobs) | **POST** /assets/jobs | Run an asset job
 *AssetsApi* | [**updateAsset**](doc//AssetsApi.md#updateasset) | **PUT** /assets/{id} | Update an asset
+*AssetsApi* | [**updateAssetImageEnrichment**](doc//AssetsApi.md#updateassetimageenrichment) | **PUT** /assets/{id}/image-enrichment | Update image enrichment metadata
 *AssetsApi* | [**updateAssetMetadata**](doc//AssetsApi.md#updateassetmetadata) | **PUT** /assets/{id}/metadata | Update asset metadata
 *AssetsApi* | [**updateAssets**](doc//AssetsApi.md#updateassets) | **PUT** /assets | Update assets
 *AssetsApi* | [**updateBulkAssetMetadata**](doc//AssetsApi.md#updatebulkassetmetadata) | **PUT** /assets/metadata | Upsert asset metadata
@@ -264,6 +266,7 @@ Class | Method | HTTP request | Description
 *SyncApi* | [**sendSyncAck**](doc//SyncApi.md#sendsyncack) | **POST** /sync/ack | Acknowledge changes
 *SystemConfigApi* | [**getConfig**](doc//SystemConfigApi.md#getconfig) | **GET** /system-config | Get system configuration
 *SystemConfigApi* | [**getConfigDefaults**](doc//SystemConfigApi.md#getconfigdefaults) | **GET** /system-config/defaults | Get system configuration defaults
+*SystemConfigApi* | [**getMachineLearningHardware**](doc//SystemConfigApi.md#getmachinelearninghardware) | **GET** /system-config/machine-learning/hardware | Get machine learning hardware
 *SystemConfigApi* | [**getStorageTemplateOptions**](doc//SystemConfigApi.md#getstoragetemplateoptions) | **GET** /system-config/storage-template-options | Get storage template options
 *SystemConfigApi* | [**updateConfig**](doc//SystemConfigApi.md#updateconfig) | **PUT** /system-config | Update system configuration
 *SystemMetadataApi* | [**getAdminOnboarding**](doc//SystemMetadataApi.md#getadminonboarding) | **GET** /system-metadata/admin-onboarding | Retrieve admin onboarding
@@ -324,6 +327,7 @@ Class | Method | HTTP request | Description
  - [ActivityResponseDto](doc//ActivityResponseDto.md)
  - [ActivityStatisticsResponseDto](doc//ActivityStatisticsResponseDto.md)
  - [AddUsersDto](doc//AddUsersDto.md)
+ - [AdjustParameters](doc//AdjustParameters.md)
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)
@@ -360,6 +364,9 @@ Class | Method | HTTP request | Description
  - [AssetIdErrorReason](doc//AssetIdErrorReason.md)
  - [AssetIdsDto](doc//AssetIdsDto.md)
  - [AssetIdsResponseDto](doc//AssetIdsResponseDto.md)
+ - [AssetImageEnrichmentAction](doc//AssetImageEnrichmentAction.md)
+ - [AssetImageEnrichmentActionRequestDto](doc//AssetImageEnrichmentActionRequestDto.md)
+ - [AssetImageEnrichmentResponseDto](doc//AssetImageEnrichmentResponseDto.md)
  - [AssetJobName](doc//AssetJobName.md)
  - [AssetJobsDto](doc//AssetJobsDto.md)
  - [AssetMediaResponseDto](doc//AssetMediaResponseDto.md)
@@ -375,7 +382,6 @@ Class | Method | HTTP request | Description
  - [AssetMetadataUpsertItemDto](doc//AssetMetadataUpsertItemDto.md)
  - [AssetOcrResponseDto](doc//AssetOcrResponseDto.md)
  - [AssetOrder](doc//AssetOrder.md)
- - [AssetOrderBy](doc//AssetOrderBy.md)
  - [AssetRejectReason](doc//AssetRejectReason.md)
  - [AssetResponseDto](doc//AssetResponseDto.md)
  - [AssetStackResponseDto](doc//AssetStackResponseDto.md)
@@ -384,6 +390,7 @@ Class | Method | HTTP request | Description
  - [AssetUploadAction](doc//AssetUploadAction.md)
  - [AssetVisibility](doc//AssetVisibility.md)
  - [AudioCodec](doc//AudioCodec.md)
+ - [AudioParameters](doc//AudioParameters.md)
  - [AuthStatusResponseDto](doc//AuthStatusResponseDto.md)
  - [AvatarUpdate](doc//AvatarUpdate.md)
  - [BulkIdErrorReason](doc//BulkIdErrorReason.md)
@@ -411,6 +418,7 @@ Class | Method | HTTP request | Description
  - [DownloadResponseDto](doc//DownloadResponseDto.md)
  - [DownloadUpdate](doc//DownloadUpdate.md)
  - [DuplicateDetectionConfig](doc//DuplicateDetectionConfig.md)
+ - [DuplicateDetectionConfigEnhancedVideo](doc//DuplicateDetectionConfigEnhancedVideo.md)
  - [DuplicateResolveDto](doc//DuplicateResolveDto.md)
  - [DuplicateResolveGroupDto](doc//DuplicateResolveGroupDto.md)
  - [DuplicateResponseDto](doc//DuplicateResponseDto.md)
@@ -421,6 +429,11 @@ Class | Method | HTTP request | Description
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FoldersResponse](doc//FoldersResponse.md)
  - [FoldersUpdate](doc//FoldersUpdate.md)
+ - [ImageDescriptionConfig](doc//ImageDescriptionConfig.md)
+ - [ImageDescriptionEnrichmentResponseDto](doc//ImageDescriptionEnrichmentResponseDto.md)
+ - [ImageDescriptionEnrichmentResponseDtoPeopleInner](doc//ImageDescriptionEnrichmentResponseDtoPeopleInner.md)
+ - [ImageEnrichmentFilter](doc//ImageEnrichmentFilter.md)
+ - [ImageEnrichmentReview](doc//ImageEnrichmentReview.md)
  - [ImageFormat](doc//ImageFormat.md)
  - [JobCreateDto](doc//JobCreateDto.md)
  - [JobName](doc//JobName.md)
@@ -432,7 +445,10 @@ Class | Method | HTTP request | Description
  - [LoginCredentialDto](doc//LoginCredentialDto.md)
  - [LoginResponseDto](doc//LoginResponseDto.md)
  - [LogoutResponseDto](doc//LogoutResponseDto.md)
+ - [LookParameters](doc//LookParameters.md)
  - [MachineLearningAvailabilityChecksDto](doc//MachineLearningAvailabilityChecksDto.md)
+ - [MachineLearningHardwareAcceleration](doc//MachineLearningHardwareAcceleration.md)
+ - [MachineLearningHardwareResponseDto](doc//MachineLearningHardwareResponseDto.md)
  - [MaintenanceAction](doc//MaintenanceAction.md)
  - [MaintenanceAuthDto](doc//MaintenanceAuthDto.md)
  - [MaintenanceDetectInstallResponseDto](doc//MaintenanceDetectInstallResponseDto.md)
@@ -461,6 +477,8 @@ Class | Method | HTTP request | Description
  - [NotificationType](doc//NotificationType.md)
  - [NotificationUpdateAllDto](doc//NotificationUpdateAllDto.md)
  - [NotificationUpdateDto](doc//NotificationUpdateDto.md)
+ - [NsfwDetectionConfig](doc//NsfwDetectionConfig.md)
+ - [NsfwDetectionEnrichmentResponseDto](doc//NsfwDetectionEnrichmentResponseDto.md)
  - [OAuthAuthorizeResponseDto](doc//OAuthAuthorizeResponseDto.md)
  - [OAuthCallbackDto](doc//OAuthCallbackDto.md)
  - [OAuthConfigDto](doc//OAuthConfigDto.md)
@@ -497,6 +515,8 @@ Class | Method | HTTP request | Description
  - [PluginResponseDto](doc//PluginResponseDto.md)
  - [PluginTriggerResponseDto](doc//PluginTriggerResponseDto.md)
  - [PluginTriggerType](doc//PluginTriggerType.md)
+ - [PrivacyResponse](doc//PrivacyResponse.md)
+ - [PrivacyUpdate](doc//PrivacyUpdate.md)
  - [PurchaseResponse](doc//PurchaseResponse.md)
  - [PurchaseUpdate](doc//PurchaseUpdate.md)
  - [QueueCommand](doc//QueueCommand.md)
@@ -553,11 +573,16 @@ Class | Method | HTTP request | Description
  - [SignUpDto](doc//SignUpDto.md)
  - [SmartSearchDto](doc//SmartSearchDto.md)
  - [SourceType](doc//SourceType.md)
+ - [SpeedParameters](doc//SpeedParameters.md)
  - [StackCreateDto](doc//StackCreateDto.md)
  - [StackResponseDto](doc//StackResponseDto.md)
  - [StackUpdateDto](doc//StackUpdateDto.md)
  - [StatisticsSearchDto](doc//StatisticsSearchDto.md)
  - [StorageFolder](doc//StorageFolder.md)
+ - [StraightenParameters](doc//StraightenParameters.md)
+ - [SuppressionResponse](doc//SuppressionResponse.md)
+ - [SuppressionScope](doc//SuppressionScope.md)
+ - [SuppressionUpdate](doc//SuppressionUpdate.md)
  - [SyncAckDeleteDto](doc//SyncAckDeleteDto.md)
  - [SyncAckDto](doc//SyncAckDto.md)
  - [SyncAckSetDto](doc//SyncAckSetDto.md)
@@ -617,6 +642,7 @@ Class | Method | HTTP request | Description
  - [SystemConfigNotificationsDto](doc//SystemConfigNotificationsDto.md)
  - [SystemConfigOAuthDto](doc//SystemConfigOAuthDto.md)
  - [SystemConfigPasswordLoginDto](doc//SystemConfigPasswordLoginDto.md)
+ - [SystemConfigPhysicalDeduplicationDto](doc//SystemConfigPhysicalDeduplicationDto.md)
  - [SystemConfigReverseGeocodingDto](doc//SystemConfigReverseGeocodingDto.md)
  - [SystemConfigServerDto](doc//SystemConfigServerDto.md)
  - [SystemConfigSmtpDto](doc//SystemConfigSmtpDto.md)
@@ -639,12 +665,16 @@ Class | Method | HTTP request | Description
  - [TemplateDto](doc//TemplateDto.md)
  - [TemplateResponseDto](doc//TemplateResponseDto.md)
  - [TestEmailResponseDto](doc//TestEmailResponseDto.md)
+ - [TextOverlayParameters](doc//TextOverlayParameters.md)
  - [TimeBucketAssetResponseDto](doc//TimeBucketAssetResponseDto.md)
+ - [TimeBucketDateType](doc//TimeBucketDateType.md)
  - [TimeBucketsResponseDto](doc//TimeBucketsResponseDto.md)
+ - [ToggleParameters](doc//ToggleParameters.md)
  - [ToneMapping](doc//ToneMapping.md)
  - [TranscodeHWAccel](doc//TranscodeHWAccel.md)
  - [TranscodePolicy](doc//TranscodePolicy.md)
  - [TrashResponseDto](doc//TrashResponseDto.md)
+ - [TrimParameters](doc//TrimParameters.md)
  - [UpdateAlbumDto](doc//UpdateAlbumDto.md)
  - [UpdateAlbumUserDto](doc//UpdateAlbumUserDto.md)
  - [UpdateAssetDto](doc//UpdateAssetDto.md)

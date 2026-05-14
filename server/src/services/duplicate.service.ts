@@ -22,8 +22,8 @@ import { AssetDuplicateResult } from 'src/repositories/search.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
-import { ThumbnailConfig } from 'src/utils/media';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
+import { ThumbnailConfig } from 'src/utils/media';
 import { isDuplicateDetectionEnabled } from 'src/utils/misc';
 
 type ResolveRequest = {
@@ -400,7 +400,9 @@ export class DuplicateService extends BaseService {
   }
 
   @OnJob({ name: JobName.AssetGenerateVideoDuplicateFrames, queue: QueueName.VideoDuplicateDetection })
-  async handleGenerateVideoDuplicateFrames({ id }: JobOf<JobName.AssetGenerateVideoDuplicateFrames>): Promise<JobStatus> {
+  async handleGenerateVideoDuplicateFrames({
+    id,
+  }: JobOf<JobName.AssetGenerateVideoDuplicateFrames>): Promise<JobStatus> {
     const config = await this.getConfig({ withCache: true });
     const { machineLearning } = config;
     if (!isDuplicateDetectionEnabled(machineLearning)) {
@@ -553,9 +555,7 @@ export class DuplicateService extends BaseService {
       ...new Set(
         Array.from({ length: frameCount }, (_, index) => {
           const timestamp = (duration * (index + 1)) / (frameCount + 1);
-          return Number(
-            Math.min(Math.max(timestamp, VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS), latest).toFixed(3),
-          );
+          return Number(Math.min(Math.max(timestamp, VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS), latest).toFixed(3));
         }),
       ),
     ].filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
