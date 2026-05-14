@@ -16,7 +16,7 @@
 
   interface Props {
     asset: AssetResponseDto;
-    onClose: () => void;
+    onClose: (refreshAsset?: boolean) => void;
   }
 
   type VideoEdit = AssetEditsCreateDto['edits'][number];
@@ -33,6 +33,7 @@
 
   let selectedTool = $state<Tool>('transform');
   let isSaving = $state(false);
+  let isRendering = $state(false);
   let isLoading = $state(true);
   let isShowingConfirmDialog = $state(false);
   let hasAppliedEdits = $state(false);
@@ -89,6 +90,7 @@
   const width = $derived(asset.width ?? 0);
   const height = $derived(asset.height ?? 0);
   const hasUnsavedChanges = $derived(!isLoading && !hasAppliedEdits && getCurrentEditKey() !== initialEditKey);
+  const saveButtonText = $derived(isRendering ? 'Rendering...' : $t('save'));
 
   onMount(async () => {
     resetControls();
@@ -419,27 +421,37 @@
     }
 
     isSaving = true;
+    isRendering = false;
 
     try {
       const edits = buildEdits();
-      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 120_000);
+      const editCompleted =
+        edits.length > 0
+          ? waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === asset.id, 600_000)
+          : undefined;
 
-      if (edits.length === 0) {
-        await removeAssetEdits({ id: asset.id });
-      } else {
+      await (edits.length === 0
+        ? removeAssetEdits({ id: asset.id })
+        : editAsset({ id: asset.id, assetEditsCreateDto: { edits } }));
+
+      eventManager.emit('AssetEditsApplied', asset.id);
+
+      if (editCompleted) {
+        isRendering = true;
         toastManager.primary('Rendering edited video...');
-        await editAsset({ id: asset.id, assetEditsCreateDto: { edits } });
+
+        await editCompleted;
+        eventManager.emit('AssetEditsApplied', asset.id);
       }
 
-      await editCompleted;
-      eventManager.emit('AssetEditsApplied', asset.id);
       toastManager.primary($t('editor_edits_applied_success'));
       hasAppliedEdits = true;
-      onClose();
+      onClose(true);
     } catch (error) {
       toastManager.danger(error instanceof Error ? error.message : $t('editor_edits_applied_error'));
     } finally {
       isSaving = false;
+      isRendering = false;
     }
   }
 
@@ -497,7 +509,8 @@
       />
       <p class="text-lg text-immich-fg capitalize dark:text-immich-dark-fg">{$t('editor')}</p>
     </HStack>
-    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}>{$t('save')}</Button
+    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}
+      >{saveButtonText}</Button
     >
   </HStack>
 
@@ -514,6 +527,12 @@
       </button>
     {/each}
   </nav>
+
+  {#if isRendering}
+    <div class="mx-4 mt-4 rounded-md border border-immich-primary/40 bg-immich-primary/10 px-3 py-2 text-sm">
+      Rendering edited video...
+    </div>
+  {/if}
 
   <section class="mt-4 flex-1 overflow-y-auto px-4 pb-4">
     {#if isLoading}

@@ -115,19 +115,21 @@ export class EditManager {
   }
 
   async applyEdits(): Promise<boolean> {
-    this.isApplyingEdits = true;
-
-    const edits = this.tools.flatMap((tool) => tool.manager.edits);
     if (!this.currentAsset) {
       return false;
     }
 
+    const edits = this.tools.flatMap((tool) => tool.manager.edits);
     const assetId = this.currentAsset.id;
     const t = await getFormatter();
 
+    this.isApplyingEdits = true;
+
     try {
       // Setup the websocket listener before sending the edit request
-      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === assetId, 10_000);
+      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === assetId, 600_000)
+        .then(() => eventManager.emit('AssetEditsApplied', assetId))
+        .catch(() => undefined);
 
       await (edits.length === 0
         ? removeAssetEdits({ id: assetId })
@@ -138,9 +140,8 @@ export class EditManager {
             },
           }));
 
-      await editCompleted;
-
       eventManager.emit('AssetEditsApplied', assetId);
+      void editCompleted;
 
       toastManager.primary(t('editor_edits_applied_success'));
       this.hasAppliedEdits = true;
