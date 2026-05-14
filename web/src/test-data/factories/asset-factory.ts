@@ -67,7 +67,6 @@ export const toResponseDto = (...timelineAsset: TimelineAsset[]) => {
     livePhotoVideoId: [],
     fileCreatedAt: [],
     localOffsetHours: [],
-    createdAt: [],
     ownerId: [],
     projectionType: [],
     ratio: [],

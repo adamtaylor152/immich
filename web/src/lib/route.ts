@@ -109,7 +109,6 @@ export const Route = {
   suppressedAlbum: ({ id }: { id: string }) => `/suppressed/albums/${id}`,
   trash: () => '/trash',
   viewTrashedAsset: ({ id }: { id: string }) => `/trash/photos/${id}`,
-  recentlyAdded: () => '/recently-added',
 
   // search
   search: (dto?: MetadataSearchDto | SmartSearchDto) => {
