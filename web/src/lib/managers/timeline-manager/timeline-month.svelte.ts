@@ -15,7 +15,6 @@ import {
   fromTimelinePlainDate,
   fromTimelinePlainDateTime,
   fromTimelinePlainYearMonth,
-  fromISODateTimeUTC,
   getTimes,
   setDifference,
   type TimelineDateTime,
