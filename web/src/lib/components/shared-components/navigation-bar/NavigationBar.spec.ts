@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen } from '@testing-library/svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
@@ -12,9 +12,6 @@ const mocks = vi.hoisted(() => ({
     route: { id: '/(user)/photos/[[assetId=id]]' },
     url: new URL('http://localhost/photos'),
   },
-  modalManager: {
-    open: vi.fn(),
-  },
   notificationManager: {
     notifications: [],
     refresh: vi.fn().mockResolvedValue(undefined),
@@ -23,10 +20,6 @@ const mocks = vi.hoisted(() => ({
     isOpen: false,
     toggle: vi.fn(),
   },
-}));
-
-vi.mock('$app/navigation', () => ({
-  goto: mocks.goto,
 }));
 
 vi.mock('$app/state', () => ({
@@ -70,7 +63,6 @@ vi.mock('@immich/ui', async () => {
     Icon,
     IconButton,
     Logo: Icon,
-    modalManager: mocks.modalManager,
   };
 });
 
@@ -116,18 +108,11 @@ describe('NavigationBar', () => {
     authManager.reset();
   });
 
-  it('opens advanced search from the mobile top-nav search button', async () => {
-    mocks.modalManager.open.mockReturnValue({
-      onClose: Promise.resolve({ query: 'birthday' }),
-    });
-
+  it('navigates to search from the mobile top-nav search button', () => {
     const { container } = render(NavigationBar);
     const searchButton = container.querySelector('#search-button');
 
     expect(searchButton).toBeInstanceOf(HTMLButtonElement);
-    await fireEvent.click(screen.getByRole('button', { name: 'show_search_options' }));
-
-    expect(mocks.modalManager.open).toHaveBeenCalledWith(expect.anything(), { searchQuery: {} });
-    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith('/search?query=%7B%22query%22%3A%22birthday%22%7D'));
+    expect(screen.getByRole('button', { name: 'go_to_search' })).toHaveAttribute('href', '/search');
   });
 });
