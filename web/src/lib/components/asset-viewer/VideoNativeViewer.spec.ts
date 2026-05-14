@@ -65,7 +65,7 @@ describe('VideoNativeViewer component', () => {
       extendedControls: true,
     });
 
-    const editButton = await findByLabelText('editor');
+    const editButton = await findByLabelText('editor_video_edit');
     await fireEvent.click(editButton);
 
     expect(assetViewerManager.isShowEditor).toBe(true);
