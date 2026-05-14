@@ -31,6 +31,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
   job: {
     [QueueName.BackgroundTask]: { concurrency: 5 },
     [QueueName.SmartSearch]: { concurrency: 2 },
+    [QueueName.VideoDuplicateDetection]: { concurrency: 1 },
     [QueueName.MetadataExtraction]: { concurrency: 5 },
     [QueueName.FaceDetection]: { concurrency: 2 },
     [QueueName.Search]: { concurrency: 5 },
@@ -105,6 +106,12 @@ const updatedConfig = Object.freeze<SystemConfig>({
     duplicateDetection: {
       enabled: true,
       maxDistance: 0.01,
+      enhancedVideo: {
+        enabled: true,
+        frameCount: 4,
+        minMatchingFrames: 2,
+        maxDistance: 0.01,
+      },
     },
     facialRecognition: {
       enabled: true,

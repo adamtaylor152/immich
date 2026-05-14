@@ -14,11 +14,14 @@ class DuplicateDetectionConfig {
   /// Returns a new [DuplicateDetectionConfig] instance.
   DuplicateDetectionConfig({
     required this.enabled,
+    required this.enhancedVideo,
     required this.maxDistance,
   });
 
   /// Whether the task is enabled
   bool enabled;
+
+  DuplicateDetectionConfigEnhancedVideo enhancedVideo;
 
   /// Maximum distance threshold for duplicate detection
   ///
@@ -29,20 +32,23 @@ class DuplicateDetectionConfig {
   @override
   bool operator ==(Object other) => identical(this, other) || other is DuplicateDetectionConfig &&
     other.enabled == enabled &&
+    other.enhancedVideo == enhancedVideo &&
     other.maxDistance == maxDistance;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (enabled.hashCode) +
+    (enhancedVideo.hashCode) +
     (maxDistance.hashCode);
 
   @override
-  String toString() => 'DuplicateDetectionConfig[enabled=$enabled, maxDistance=$maxDistance]';
+  String toString() => 'DuplicateDetectionConfig[enabled=$enabled, enhancedVideo=$enhancedVideo, maxDistance=$maxDistance]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'enabled'] = this.enabled;
+      json[r'enhancedVideo'] = this.enhancedVideo;
       json[r'maxDistance'] = this.maxDistance;
     return json;
   }
@@ -57,6 +63,7 @@ class DuplicateDetectionConfig {
 
       return DuplicateDetectionConfig(
         enabled: mapValueOfType<bool>(json, r'enabled')!,
+        enhancedVideo: DuplicateDetectionConfigEnhancedVideo.fromJson(json[r'enhancedVideo'])!,
         maxDistance: (mapValueOfType<num>(json, r'maxDistance')!).toDouble(),
       );
     }
@@ -106,6 +113,7 @@ class DuplicateDetectionConfig {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'enabled',
+    'enhancedVideo',
     'maxDistance',
   };
 }

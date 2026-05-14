@@ -32,6 +32,7 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 
 ## Deduplicate Content in Multiple Accounts
 - Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
+- Enhanced video duplicate detection that samples multiple internal-only video frames and compares CLIP embeddings, reducing false duplicate groups caused by black frames, title cards, or intro screens while still matching different-resolution copies.
 
 ## Advanced GPU (and non-GPU) Video Editing
 - Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.

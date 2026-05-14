@@ -374,6 +374,8 @@ export type JobItem =
   // Duplicate Detection
   | { name: JobName.AssetDetectDuplicatesQueueAll; data: IBaseJob }
   | { name: JobName.AssetDetectDuplicates; data: IEntityJob }
+  | { name: JobName.AssetGenerateVideoDuplicateFramesQueueAll; data: IBaseJob }
+  | { name: JobName.AssetGenerateVideoDuplicateFrames; data: IEntityJob }
 
   // Memories
   | { name: JobName.MemoryCleanup; data?: IBaseJob }

@@ -21,6 +21,26 @@ export const DuplicateDetectionConfigSchema = TaskConfigSchema.extend({
     .min(0.001)
     .max(0.1)
     .describe('Maximum distance threshold for duplicate detection'),
+  enhancedVideo: z
+    .object({
+      enabled: z.boolean().describe('Whether enhanced video duplicate detection is enabled'),
+      frameCount: z.int().min(2).max(8).describe('Number of video frames to sample for duplicate confirmation'),
+      minMatchingFrames: z
+        .int()
+        .min(1)
+        .max(8)
+        .describe('Minimum matching sampled frames required to confirm a video duplicate'),
+      maxDistance: z
+        .number()
+        .meta({ format: 'double' })
+        .min(0.001)
+        .max(0.1)
+        .describe('Maximum distance threshold for enhanced video duplicate frame matching'),
+    })
+    .refine(({ frameCount, minMatchingFrames }) => minMatchingFrames <= frameCount, {
+      message: 'Minimum matching frames cannot exceed frame count',
+      path: ['minMatchingFrames'],
+    }),
 }).meta({ id: 'DuplicateDetectionConfig' });
 
 export const FacialRecognitionConfigSchema = ModelConfigSchema.extend({

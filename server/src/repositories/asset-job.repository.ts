@@ -207,6 +207,39 @@ export class AssetJobRepository {
       .stream();
   }
 
+  @GenerateSql({ params: [{ force: false, frameCount: 4 }], stream: true })
+  streamForVideoDuplicateFrames(options: { force?: boolean; frameCount: number }) {
+    return this.db
+      .selectFrom('asset')
+      .select(['asset.id'])
+      .where('asset.type', '=', sql.lit(AssetType.Video))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.visibility', '!=', sql.lit(AssetVisibility.Hidden))
+      .where('asset.visibility', '!=', sql.lit(AssetVisibility.Locked))
+      .$if(!options.force, (qb) =>
+        qb.where(
+          sql<number>`(select count(*) from "asset_video_duplicate_frame" where "assetId" = "asset"."id")`,
+          '<',
+          options.frameCount,
+        ),
+      )
+      .stream();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getForVideoDuplicateFrameJob(id: string) {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_video', 'asset_video.assetId', 'asset.id')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select(['asset.id', 'asset.ownerId', 'asset.originalPath', 'asset.visibility'])
+      .select((eb) => withVideoStream(eb).$notNull().as('videoStream'))
+      .select((eb) => withVideoFormat(eb).$notNull().as('format'))
+      .where('asset.id', '=', id)
+      .where('asset.type', '=', sql.lit(AssetType.Video))
+      .executeTakeFirst();
+  }
+
   @GenerateSql({ params: [], stream: true })
   streamForEncodeClip(force?: boolean) {
     return this.assetsWithPreviews()

@@ -232,7 +232,7 @@ export const targetImageSize = (asset: AssetResponseDto, forceOriginal: boolean)
 };
 
 export const getAssetMediaUrl = (options: AssetUrlOptions) => {
-  const { id, size, cacheKey: c, edited = true } = options;
+  const { id, size, cacheKey: c, edited = false } = options;
   const isOriginal = size === AssetMediaSize.Original;
   const path = isOriginal ? getAssetOriginalPath(id) : getAssetThumbnailPath(id);
   return createUrl(path, { ...authManager.params, size: isOriginal ? undefined : size, c, edited });

@@ -29,6 +29,7 @@ class SystemConfigJobDto {
     required this.smartSearch,
     required this.thumbnailGeneration,
     required this.videoConversion,
+    required this.videoDuplicateDetection,
     required this.workflow,
   });
 
@@ -82,6 +83,8 @@ class SystemConfigJobDto {
 
   JobSettingsDto videoConversion;
 
+  JobSettingsDto videoDuplicateDetection;
+
   JobSettingsDto workflow;
 
   @override
@@ -102,6 +105,7 @@ class SystemConfigJobDto {
     other.smartSearch == smartSearch &&
     other.thumbnailGeneration == thumbnailGeneration &&
     other.videoConversion == videoConversion &&
+    other.videoDuplicateDetection == videoDuplicateDetection &&
     other.workflow == workflow;
 
   @override
@@ -123,10 +127,11 @@ class SystemConfigJobDto {
     (smartSearch.hashCode) +
     (thumbnailGeneration.hashCode) +
     (videoConversion.hashCode) +
+    (videoDuplicateDetection.hashCode) +
     (workflow.hashCode);
 
   @override
-  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -158,6 +163,7 @@ class SystemConfigJobDto {
       json[r'smartSearch'] = this.smartSearch;
       json[r'thumbnailGeneration'] = this.thumbnailGeneration;
       json[r'videoConversion'] = this.videoConversion;
+      json[r'videoDuplicateDetection'] = this.videoDuplicateDetection;
       json[r'workflow'] = this.workflow;
     return json;
   }
@@ -187,6 +193,7 @@ class SystemConfigJobDto {
         smartSearch: JobSettingsDto.fromJson(json[r'smartSearch'])!,
         thumbnailGeneration: JobSettingsDto.fromJson(json[r'thumbnailGeneration'])!,
         videoConversion: JobSettingsDto.fromJson(json[r'videoConversion'])!,
+        videoDuplicateDetection: JobSettingsDto.fromJson(json[r'videoDuplicateDetection'])!,
         workflow: JobSettingsDto.fromJson(json[r'workflow'])!,
       );
     }
@@ -248,6 +255,7 @@ class SystemConfigJobDto {
     'smartSearch',
     'thumbnailGeneration',
     'videoConversion',
+    'videoDuplicateDetection',
     'workflow',
   };
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, NotNull, Selectable, ShallowDehydrateObject, sql } from 'kysely';
+import { Insertable, Kysely, NotNull, Selectable, ShallowDehydrateObject, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
@@ -9,6 +9,7 @@ import { AssetType, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
+import { AssetVideoDuplicateFrameTable } from 'src/schema/tables/asset-video-duplicate-frame.table';
 import { anyUuid, asUuid, withDefaultVisibility, withHiddenContentFilter } from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 
@@ -30,6 +31,17 @@ interface DuplicateMergeOptions {
 }
 
 type DuplicatePrivacyOptions = HiddenContentQueryOptions;
+type VideoDuplicateFrameInsert = Pick<
+  Insertable<AssetVideoDuplicateFrameTable>,
+  'assetId' | 'frameIndex' | 'timestampMs' | 'path' | 'embedding'
+>;
+
+type VideoDuplicateFrameMatchOptions = {
+  assetId: string;
+  candidateAssetIds: string[];
+  maxDistance: number;
+  minMatchingFrames: number;
+};
 
 @Injectable()
 export class DuplicateRepository {
@@ -238,5 +250,64 @@ export class DuplicateRepository {
         eb.or([eb('duplicateId', '=', anyUuid(options.sourceIds)), eb('id', '=', anyUuid(options.assetIds))]),
       )
       .execute();
+  }
+
+  async getVideoDuplicateFrames(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    return this.db
+      .selectFrom('asset_video_duplicate_frame')
+      .selectAll()
+      .where('assetId', '=', anyUuid(assetIds))
+      .orderBy('assetId')
+      .orderBy('frameIndex')
+      .execute();
+  }
+
+  async replaceVideoDuplicateFrames(assetId: string, frames: VideoDuplicateFrameInsert[]): Promise<string[]> {
+    return this.db.transaction().execute(async (trx) => {
+      const existing = await trx
+        .selectFrom('asset_video_duplicate_frame')
+        .select('path')
+        .where('assetId', '=', asUuid(assetId))
+        .execute();
+      const nextPaths = new Set(frames.map(({ path }) => path));
+      const stalePaths = existing.map(({ path }) => path).filter((path) => !nextPaths.has(path));
+
+      await trx.deleteFrom('asset_video_duplicate_frame').where('assetId', '=', asUuid(assetId)).execute();
+
+      if (frames.length > 0) {
+        await trx.insertInto('asset_video_duplicate_frame').values(frames).execute();
+      }
+
+      return stalePaths;
+    });
+  }
+
+  async getVideoDuplicateFrameMatches({
+    assetId,
+    candidateAssetIds,
+    maxDistance,
+    minMatchingFrames,
+  }: VideoDuplicateFrameMatchOptions): Promise<string[]> {
+    if (candidateAssetIds.length === 0) {
+      return [];
+    }
+
+    const { rows } = await sql<{ assetId: string }>`
+      select candidate."assetId" as "assetId"
+      from "asset_video_duplicate_frame" source
+      inner join "asset_video_duplicate_frame" candidate
+        on candidate."frameIndex" = source."frameIndex"
+        and candidate."assetId" = ${anyUuid(candidateAssetIds)}
+      where source."assetId" = ${asUuid(assetId)}
+        and source."embedding" <=> candidate."embedding" <= ${maxDistance}
+      group by candidate."assetId"
+      having count(*) >= ${minMatchingFrames}
+    `.execute(this.db);
+
+    return rows.map(({ assetId }) => assetId);
   }
 }
