@@ -426,6 +426,7 @@ export class DuplicateService extends BaseService {
     const timestamps = this.getVideoDuplicateFrameTimestamps(enhancedVideo.frameCount, asset.format);
     if (timestamps.length < VIDEO_DUPLICATE_FRAME_MIN_COUNT) {
       this.logger.debug(`Asset ${id} is too short for enhanced video duplicate detection`);
+      await this.assetRepository.upsertJobStatus({ assetId: asset.id, duplicatesDetectedAt: new Date() });
       return JobStatus.Skipped;
     }
 
@@ -513,15 +514,11 @@ export class DuplicateService extends BaseService {
     });
 
     if (asset.type === AssetType.Video && duplicateAssets.length > 0) {
-      const confirmedAssets = await this.filterConfirmedVideoDuplicates(
+      duplicateAssets = await this.filterConfirmedVideoDuplicates(
         asset,
         duplicateAssets,
         machineLearning.duplicateDetection,
       );
-      if (!confirmedAssets) {
-        return JobStatus.Skipped;
-      }
-      duplicateAssets = confirmedAssets;
     }
 
     let assetIds = [asset.id];
@@ -568,7 +565,7 @@ export class DuplicateService extends BaseService {
     asset: { id: string },
     duplicateAssets: AssetDuplicateResult[],
     duplicateDetection: SystemConfig['machineLearning']['duplicateDetection'],
-  ): Promise<AssetDuplicateResult[] | null> {
+  ): Promise<AssetDuplicateResult[]> {
     const enhancedVideo = getEnhancedVideoDuplicateConfig({ duplicateDetection } as SystemConfig['machineLearning']);
     if (!enhancedVideo.enabled) {
       return duplicateAssets;
@@ -581,7 +578,9 @@ export class DuplicateService extends BaseService {
       frameCounts.set(frame.assetId, (frameCounts.get(frame.assetId) ?? 0) + 1);
     }
 
-    const missingFrameAssetIds = assetIds.filter((assetId) => (frameCounts.get(assetId) ?? 0) < enhancedVideo.frameCount);
+    const missingFrameAssetIds = assetIds.filter(
+      (assetId) => (frameCounts.get(assetId) ?? 0) < enhancedVideo.minMatchingFrames,
+    );
     if (missingFrameAssetIds.length > 0) {
       await this.jobRepository.queueAll(
         [...new Set(missingFrameAssetIds)].map((id) => ({
@@ -589,7 +588,7 @@ export class DuplicateService extends BaseService {
           data: { id },
         })),
       );
-      return null;
+      return duplicateAssets;
     }
 
     const matchingAssetIds = new Set(

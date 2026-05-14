@@ -277,7 +277,7 @@ describe(DuplicateService.name, () => {
       });
     });
 
-    it('should skip videos too short for at least two sampled frames', async () => {
+    it('should mark videos too short for at least two sampled frames as detected', async () => {
       const asset = AssetFactory.create({ type: AssetType.Video });
       mocks.assetJob.getForVideoDuplicateFrameJob.mockResolvedValue({
         id: asset.id,
@@ -290,7 +290,10 @@ describe(DuplicateService.name, () => {
 
       await expect(sut.handleGenerateVideoDuplicateFrames({ id: asset.id })).resolves.toBe(JobStatus.Skipped);
       expect(mocks.media.transcode).not.toHaveBeenCalled();
-      expect(mocks.duplicateRepository.replaceVideoDuplicateFrames).not.toHaveBeenCalled();
+      expect(mocks.asset.upsertJobStatus).toHaveBeenCalledWith({
+        assetId: asset.id,
+        duplicatesDetectedAt: expect.any(Date),
+      });
     });
 
     it('should delete generated files and skip when the CLIP model changes before persistence', async () => {
@@ -756,22 +759,23 @@ describe(DuplicateService.name, () => {
       );
     });
 
-    it('should queue enhanced frames and skip video duplicate grouping when frames are missing', async () => {
+    it('should queue enhanced frames and fall back to embedding duplicate grouping when frames are missing', async () => {
       const video = { ...hasEmbedding, type: AssetType.Video };
       const duplicate = { assetId: 'asset-2', distance: 0.01, duplicateId: null };
       mocks.assetJob.getForSearchDuplicatesJob.mockResolvedValue(video);
       mocks.duplicateRepository.search.mockResolvedValue([duplicate]);
       mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([]);
+      mocks.duplicateRepository.merge.mockResolvedValue();
 
       const result = await sut.handleSearchDuplicates({ id: video.id });
 
-      expect(result).toBe(JobStatus.Skipped);
+      expect(result).toBe(JobStatus.Success);
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
         { name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: video.id } },
         { name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: duplicate.assetId } },
       ]);
-      expect(mocks.duplicateRepository.merge).not.toHaveBeenCalled();
-      expect(mocks.asset.upsertJobStatus).not.toHaveBeenCalled();
+      expect(mocks.duplicateRepository.merge).toHaveBeenCalled();
+      expect(mocks.asset.upsertJobStatus).toHaveBeenCalled();
     });
 
     it('should not group video duplicates when enhanced frames do not match', async () => {

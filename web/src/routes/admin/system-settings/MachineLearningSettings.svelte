@@ -29,6 +29,13 @@
   const nsfwDetection = $derived(configToEdit.machineLearning.nsfwDetection!);
   const savedNsfwDetection = $derived(config.machineLearning.nsfwDetection!);
 
+  $effect(() => {
+    const enhancedVideo = configToEdit.machineLearning.duplicateDetection.enhancedVideo;
+    if (enhancedVideo.minMatchingFrames > enhancedVideo.frameCount) {
+      enhancedVideo.minMatchingFrames = enhancedVideo.frameCount;
+    }
+  });
+
   const hardwareAcceleration = {
     Auto: MachineLearningHardwareAcceleration.Auto,
     OpenVino: MachineLearningHardwareAcceleration.Openvino,
@@ -319,7 +326,7 @@
             bind:value={configToEdit.machineLearning.duplicateDetection.enhancedVideo.minMatchingFrames}
             step="1"
             min={1}
-            max={8}
+            max={configToEdit.machineLearning.duplicateDetection.enhancedVideo.frameCount}
             description={$t('admin.enhanced_video_duplicate_detection_min_matching_frames_description')}
             disabled={disabled || !featureFlagsManager.value.duplicateDetection}
             isEdited={configToEdit.machineLearning.duplicateDetection.enhancedVideo.minMatchingFrames !==

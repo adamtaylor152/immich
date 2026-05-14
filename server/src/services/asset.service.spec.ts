@@ -35,6 +35,7 @@ describe(AssetService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(AssetService));
+    mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([]);
   });
 
   describe('getStatistics', () => {
@@ -490,6 +491,11 @@ describe(AssetService.name, () => {
         timeZone,
       });
       expect(mocks.asset.updateDateTimeOriginal).toHaveBeenCalledWith(['asset-1'], dateTimeRelative, timeZone);
+      expect(mocks.asset.update).toHaveBeenCalledWith({
+        id: 'asset-1',
+        fileCreatedAt: new Date('2020-02-25T04:41:00.000Z'),
+        localDateTime: new Date('2020-02-25T04:41:00.000Z'),
+      });
       expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.SidecarWrite, data: { id: 'asset-1' } }]);
     });
   });
@@ -575,6 +581,9 @@ describe(AssetService.name, () => {
         .file({ type: AssetFileType.Thumbnail, isEdited: true })
         .build();
       mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
+      mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([
+        { assetId: asset.id, frameIndex: 0, path: '/data/thumbs/video-frame.jpeg' } as any,
+      ]);
 
       await sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true });
 
@@ -583,7 +592,7 @@ describe(AssetService.name, () => {
           {
             name: JobName.FileDelete,
             data: {
-              files: [...asset.files.map(({ path }) => path), asset.originalPath],
+              files: [...asset.files.map(({ path }) => path), '/data/thumbs/video-frame.jpeg', asset.originalPath],
             },
           },
         ],

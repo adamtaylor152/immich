@@ -64,7 +64,7 @@ describe(SmartInfoService.name, () => {
 
       await sut.onConfigInit({ newConfig: systemConfigStub.machineLearningEnabled as SystemConfig });
 
-      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(1);
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(2);
       expect(mocks.database.setDimensionSize).not.toHaveBeenCalled();
       expect(mocks.database.deleteAllSearchEmbeddings).not.toHaveBeenCalled();
     });
@@ -74,7 +74,17 @@ describe(SmartInfoService.name, () => {
 
       await sut.onConfigInit({ newConfig: systemConfigStub.machineLearningEnabled as SystemConfig });
 
-      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(1);
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(2);
+      expect(mocks.database.setDimensionSize).toHaveBeenCalledWith(512);
+    });
+
+    it('should update DB dimension size if video duplicate frames have a stale dimension', async () => {
+      mocks.database.getDimensionSize.mockResolvedValueOnce(512).mockResolvedValueOnce(768);
+
+      await sut.onConfigInit({ newConfig: systemConfigStub.machineLearningEnabled as SystemConfig });
+
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledWith('smart_search');
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledWith('asset_video_duplicate_frame');
       expect(mocks.database.setDimensionSize).toHaveBeenCalledWith(512);
     });
   });
@@ -106,7 +116,7 @@ describe(SmartInfoService.name, () => {
         } as SystemConfig,
       });
 
-      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(1);
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(2);
       expect(mocks.database.setDimensionSize).not.toHaveBeenCalled();
       expect(mocks.database.deleteAllSearchEmbeddings).not.toHaveBeenCalled();
     });
@@ -123,7 +133,7 @@ describe(SmartInfoService.name, () => {
         } as SystemConfig,
       });
 
-      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(1);
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(2);
       expect(mocks.database.setDimensionSize).toHaveBeenCalledWith(768);
     });
 
@@ -140,7 +150,7 @@ describe(SmartInfoService.name, () => {
       });
 
       expect(mocks.database.deleteAllSearchEmbeddings).toHaveBeenCalled();
-      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(1);
+      expect(mocks.database.getDimensionSize).toHaveBeenCalledTimes(2);
       expect(mocks.database.setDimensionSize).not.toHaveBeenCalled();
     });
   });

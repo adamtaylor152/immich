@@ -6,6 +6,7 @@ import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -36,6 +37,7 @@ const setup = (db?: Kysely<DB>) => {
       AccessRepository,
       SharedLinkAssetRepository,
       StackRepository,
+      DuplicateRepository,
       UserRepository,
     ],
     mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository, OcrRepository],
