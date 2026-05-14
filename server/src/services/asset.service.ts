@@ -219,12 +219,15 @@ export class AssetService extends BaseService {
 
     const extractedTimeZone = extractTimeZone(dateTimeOriginal);
 
-    if (
+    const updatedDateTimes =
       (dateTimeRelative !== undefined && dateTimeRelative !== 0) ||
       timeZone !== undefined ||
       extractedTimeZone?.type === 'fixed'
-    ) {
-      await this.assetRepository.updateDateTimeOriginal(ids, dateTimeRelative, timeZone ?? extractedTimeZone?.name);
+        ? await this.assetRepository.updateDateTimeOriginal(ids, dateTimeRelative, timeZone ?? extractedTimeZone?.name)
+        : [];
+
+    for (const { assetId, dateTimeOriginal } of updatedDateTimes) {
+      await this.assetRepository.update({ id: assetId, ...getAssetDateTimeUpdates(dateTimeOriginal?.toISOString()) });
     }
 
     if (Object.keys(assetDto).length > 0) {
@@ -387,6 +390,8 @@ export class AssetService extends BaseService {
       }
     }
 
+    const videoDuplicateFrameFiles = await this.duplicateRepository.getVideoDuplicateFrames([id]);
+
     await this.assetRepository.remove(asset);
     if (!asset.libraryId) {
       await this.userRepository.updateUsage(asset.ownerId, -(asset.exifInfo?.fileSizeInByte || 0));
@@ -414,6 +419,7 @@ export class AssetService extends BaseService {
       assetFiles.editedPreviewFile?.path,
       assetFiles.editedThumbnailFile?.path,
       assetFiles.encodedVideoFile?.path,
+      ...videoDuplicateFrameFiles.map(({ path }) => path),
     ];
 
     if (deleteOnDisk && !asset.isOffline) {

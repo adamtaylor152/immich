@@ -17919,6 +17919,40 @@
             "description": "Whether the task is enabled",
             "type": "boolean"
           },
+          "enhancedVideo": {
+            "properties": {
+              "enabled": {
+                "description": "Whether enhanced video duplicate detection is enabled",
+                "type": "boolean"
+              },
+              "frameCount": {
+                "description": "Number of video frames to sample for duplicate confirmation",
+                "maximum": 8,
+                "minimum": 2,
+                "type": "integer"
+              },
+              "maxDistance": {
+                "description": "Maximum distance threshold for enhanced video duplicate frame matching",
+                "format": "double",
+                "maximum": 0.1,
+                "minimum": 0.001,
+                "type": "number"
+              },
+              "minMatchingFrames": {
+                "description": "Minimum matching sampled frames required to confirm a video duplicate",
+                "maximum": 8,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "enabled",
+              "frameCount",
+              "minMatchingFrames",
+              "maxDistance"
+            ],
+            "type": "object"
+          },
           "maxDistance": {
             "description": "Maximum distance threshold for duplicate detection",
             "format": "double",
@@ -17929,6 +17963,7 @@
         },
         "required": [
           "enabled",
+          "enhancedVideo",
           "maxDistance"
         ],
         "type": "object"
@@ -18475,6 +18510,8 @@
           "AssetDetectFaces",
           "AssetDetectDuplicatesQueueAll",
           "AssetDetectDuplicates",
+          "AssetGenerateVideoDuplicateFramesQueueAll",
+          "AssetGenerateVideoDuplicateFrames",
           "AssetEditThumbnailGeneration",
           "AssetVideoEditGeneration",
           "AssetEncodeVideoQueueAll",
@@ -21121,6 +21158,7 @@
           "facialRecognition",
           "smartSearch",
           "duplicateDetection",
+          "videoDuplicateDetection",
           "backgroundTask",
           "storageTemplateMigration",
           "migration",
@@ -21310,6 +21348,9 @@
           "videoConversion": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "videoDuplicateDetection": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "workflow": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           }
@@ -21335,6 +21376,7 @@
           "storageTemplateMigration",
           "thumbnailGeneration",
           "videoConversion",
+          "videoDuplicateDetection",
           "workflow"
         ],
         "type": "object"
@@ -25259,6 +25301,9 @@
           "videoConversion": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
+          "videoDuplicateDetection": {
+            "$ref": "#/components/schemas/JobSettingsDto"
+          },
           "workflow": {
             "$ref": "#/components/schemas/JobSettingsDto"
           }
@@ -25277,6 +25322,7 @@
           "smartSearch",
           "thumbnailGeneration",
           "videoConversion",
+          "videoDuplicateDetection",
           "workflow"
         ],
         "type": "object"

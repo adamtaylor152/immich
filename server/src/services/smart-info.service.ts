@@ -38,23 +38,27 @@ export class SmartInfoService extends BaseService {
 
     await this.databaseRepository.withLock(DatabaseLock.CLIPDimSize, async () => {
       const { dimSize } = getCLIPModelInfo(newConfig.machineLearning.clip.modelName);
-      const dbDimSize = await this.databaseRepository.getDimensionSize('smart_search');
-      this.logger.verbose(`Current database CLIP dimension size is ${dbDimSize}`);
+      const smartSearchDimSize = await this.databaseRepository.getDimensionSize('smart_search');
+      const videoDuplicateFrameDimSize = await this.databaseRepository.getDimensionSize('asset_video_duplicate_frame');
+      this.logger.verbose(`Current smart search database CLIP dimension size is ${smartSearchDimSize}`);
+      this.logger.verbose(
+        `Current video duplicate frame database CLIP dimension size is ${videoDuplicateFrameDimSize}`,
+      );
 
       const modelChange =
         oldConfig && oldConfig.machineLearning.clip.modelName !== newConfig.machineLearning.clip.modelName;
-      const dimSizeChange = dbDimSize !== dimSize;
+      const dimSizeChange = smartSearchDimSize !== dimSize || videoDuplicateFrameDimSize !== dimSize;
       if (!modelChange && !dimSizeChange) {
         return;
       }
 
       if (dimSizeChange) {
         this.logger.log(
-          `Dimension size of model ${newConfig.machineLearning.clip.modelName} is ${dimSize}, but database expects ${dbDimSize}.`,
+          `Dimension size of model ${newConfig.machineLearning.clip.modelName} is ${dimSize}, but database dimensions are smart_search=${smartSearchDimSize}, asset_video_duplicate_frame=${videoDuplicateFrameDimSize}.`,
         );
         this.logger.log(`Updating database CLIP dimension size to ${dimSize}.`);
         await this.databaseRepository.setDimensionSize(dimSize);
-        this.logger.log(`Successfully updated database CLIP dimension size from ${dbDimSize} to ${dimSize}.`);
+        this.logger.log(`Successfully updated database CLIP dimension size to ${dimSize}.`);
       } else {
         await this.databaseRepository.deleteAllSearchEmbeddings();
       }

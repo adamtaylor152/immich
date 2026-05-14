@@ -2,16 +2,31 @@
   import { shortcuts } from '$lib/actions/shortcut';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { waitForWebsocketEvent } from '$lib/stores/websocket';
+  import { getAssetMediaUrl } from '$lib/utils';
   import {
+    AssetMediaSize,
     editAsset,
     getAssetEdits,
     removeAssetEdits,
     type AssetEditsCreateDto,
     type AssetResponseDto,
   } from '@immich/sdk';
-  import { Button, ConfirmModal, HStack, IconButton, modalManager, toastManager } from '@immich/ui';
-  import { mdiClose, mdiFlipHorizontal, mdiFlipVertical, mdiRotateLeft, mdiRotateRight } from '@mdi/js';
-  import { onMount } from 'svelte';
+  import { Button, ConfirmModal, HStack, Icon, IconButton, modalManager, toastManager } from '@immich/ui';
+  import {
+    mdiClockOutline,
+    mdiClose,
+    mdiCropRotate,
+    mdiFlipHorizontal,
+    mdiFlipVertical,
+    mdiImageOutline,
+    mdiPaletteOutline,
+    mdiRotateLeft,
+    mdiRotateRight,
+    mdiText,
+    mdiTune,
+    mdiVolumeHigh,
+  } from '@mdi/js';
+  import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -20,7 +35,7 @@
   }
 
   type VideoEdit = AssetEditsCreateDto['edits'][number];
-  type Tool = 'transform' | 'auto' | 'adjust' | 'look' | 'timeline' | 'text';
+  type Tool = 'auto' | 'crop' | 'adjust' | 'filters' | 'trim' | 'speed' | 'audio' | 'text' | 'frame';
   type SpeedMode = 'whole' | 'segment';
   type SpeedSegment = {
     id: string;
@@ -29,31 +44,94 @@
     endSeconds: number;
   };
   type EditParameters = Record<string, unknown>;
-  interface AspectRatioOption {
+  type CropHandle =
+    | 'move'
+    | 'top'
+    | 'right'
+    | 'bottom'
+    | 'left'
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-right'
+    | 'bottom-left';
+  type TimeDragTarget = 'trim-start' | 'trim-end' | 'text-start' | 'text-end' | 'speed-start' | 'speed-end';
+  type AdjustmentKey =
+    | 'brightness'
+    | 'contrast'
+    | 'whitePoint'
+    | 'highlights'
+    | 'shadows'
+    | 'blackPoint'
+    | 'saturation'
+    | 'warmth'
+    | 'tint'
+    | 'skinTone'
+    | 'blueTone'
+    | 'vignette'
+    | 'hdr';
+
+  interface CropPreset {
     label: string;
     value: string;
     width?: number;
     height?: number;
+    caption?: string;
     isFree?: boolean;
+    isOriginal?: boolean;
   }
 
-  const aspectRatios: AspectRatioOption[] = [
+  interface CropBox {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+
+  const cropPresets: CropPreset[] = [
     { label: $t('crop_aspect_ratio_free'), value: 'free', isFree: true },
-    { label: $t('crop_aspect_ratio_original'), value: 'original', width: 24, height: 18 },
-    { label: '5:4', value: '5:4', width: 22, height: 18 },
-    { label: '4:5', value: '4:5', width: 18, height: 22 },
-    { label: '4:3', value: '4:3', width: 24, height: 18 },
-    { label: '3:4', value: '3:4', width: 18, height: 24 },
-    { label: '3:2', value: '3:2', width: 24, height: 16 },
-    { label: '2:3', value: '2:3', width: 16, height: 24 },
-    { label: '16:9', value: '16:9', width: 24, height: 14 },
-    { label: '9:16', value: '9:16', width: 14, height: 24 },
+    { label: $t('crop_aspect_ratio_original'), value: 'original', width: 24, height: 18, isOriginal: true },
     { label: $t('crop_aspect_ratio_square'), value: '1:1', width: 20, height: 20 },
+    { label: '4:5', value: '4:5', width: 18, height: 22, caption: $t('editor_video_social_portrait') },
+    { label: '5:4', value: '5:4', width: 22, height: 18 },
+    { label: '3:4', value: '3:4', width: 18, height: 24 },
+    { label: '4:3', value: '4:3', width: 24, height: 18 },
+    { label: '9:16', value: '9:16', width: 14, height: 24, caption: $t('editor_video_social_shorts') },
+    { label: '16:9', value: '16:9', width: 24, height: 14, caption: $t('editor_video_social_wide') },
   ];
+
+  const adjustmentControls: { key: AdjustmentKey; label: string }[] = [
+    { key: 'brightness', label: $t('editor_video_brightness') },
+    { key: 'contrast', label: $t('editor_video_contrast') },
+    { key: 'whitePoint', label: $t('editor_video_white_point') },
+    { key: 'highlights', label: $t('editor_video_highlights') },
+    { key: 'shadows', label: $t('editor_video_shadows') },
+    { key: 'blackPoint', label: $t('editor_video_black_point') },
+    { key: 'saturation', label: $t('editor_video_saturation') },
+    { key: 'warmth', label: $t('editor_video_warmth') },
+    { key: 'tint', label: $t('editor_video_tint') },
+    { key: 'skinTone', label: $t('editor_video_skin_tone') },
+    { key: 'blueTone', label: $t('editor_video_blue_tone') },
+    { key: 'vignette', label: $t('editor_video_vignette') },
+    { key: 'hdr', label: $t('editor_video_hdr') },
+  ];
+
+  const filterOptions = [
+    { value: 'none', label: $t('none'), class: 'bg-linear-to-br from-gray-900 to-gray-500' },
+    { value: 'vivid', label: $t('editor_video_filter_vivid'), class: 'bg-linear-to-br from-sky-500 to-rose-500' },
+    { value: 'warm', label: $t('editor_video_filter_warm'), class: 'bg-linear-to-br from-amber-300 to-red-500' },
+    { value: 'cool', label: $t('editor_video_filter_cool'), class: 'bg-linear-to-br from-cyan-300 to-indigo-600' },
+    { value: 'bw', label: $t('editor_video_filter_bw'), class: 'bg-linear-to-br from-white to-gray-800' },
+    { value: 'fade', label: $t('editor_video_filter_fade'), class: 'bg-linear-to-br from-lime-100 to-slate-500' },
+    { value: 'vignette', label: $t('editor_video_filter_vignette'), class: 'bg-radial from-slate-300 to-black' },
+  ];
+
+  const speedRates = [0.25, 0.5, 1, 2, 4];
+  const minimumTimelineGap = 0.1;
+  const minimumCropSize = 32;
 
   let { asset = $bindable(), onClose }: Props = $props();
 
-  let selectedTool = $state<Tool>('transform');
+  let selectedTool = $state<Tool>('auto');
   let isSaving = $state(false);
   let isRendering = $state(false);
   let isLoading = $state(true);
@@ -66,7 +144,7 @@
   let cropY = $state(0);
   let cropWidth = $state(asset.width ?? 0);
   let cropHeight = $state(asset.height ?? 0);
-  let cropAspectRatio = $state('');
+  let cropAspectRatio = $state('free');
   let rotation = $state(0);
   let straighten = $state(0);
   let mirrorHorizontal = $state(false);
@@ -75,19 +153,7 @@
   let autoEnhance = $state(false);
   let stabilize = $state(false);
 
-  let brightness = $state(0);
-  let contrast = $state(0);
-  let whitePoint = $state(0);
-  let highlights = $state(0);
-  let shadows = $state(0);
-  let blackPoint = $state(0);
-  let saturation = $state(0);
-  let warmth = $state(0);
-  let tint = $state(0);
-  let skinTone = $state(0);
-  let blueTone = $state(0);
-  let vignette = $state(0);
-  let hdr = $state(0);
+  let adjustments = $state<Record<AdjustmentKey, number>>(getDefaultAdjustments());
 
   let lookName = $state('none');
   let lookIntensity = $state(100);
@@ -109,13 +175,69 @@
   let textSize = $state(0.06);
   let textColor = $state('#ffffff');
 
+  let cropStageElement = $state<HTMLElement | null>(null);
+  let timelineDrag = $state<{ target: TimeDragTarget; segmentId?: string; rect: DOMRect } | null>(null);
+  let cropInteraction = $state<{
+    handle: CropHandle;
+    startClientX: number;
+    startClientY: number;
+    startCrop: CropBox;
+    rect: DOMRect;
+  } | null>(null);
+  let textDrag = $state<{ rect: DOMRect } | null>(null);
+
   const durationSeconds = $derived(Math.max(0, (asset.duration ?? 0) / 1000));
   const width = $derived(asset.width ?? 0);
   const height = $derived(asset.height ?? 0);
+  const canUseDimensions = $derived(width > 0 && height > 0);
+  const canUseTimeline = $derived(durationSeconds > 0);
   const normalizedRotation = $derived(((Number(rotation) % 360) + 360) % 360);
-  const isRotated = $derived(normalizedRotation % 180 !== 0);
   const hasUnsavedChanges = $derived(!isLoading && !hasAppliedEdits && getCurrentEditKey() !== initialEditKey);
-  const saveButtonText = $derived(isRendering ? 'Rendering...' : $t('save'));
+  const saveButtonText = $derived(isRendering ? $t('editor_video_rendering') : $t('save'));
+  const previewUrl = $derived(
+    getAssetMediaUrl({ id: asset.id, cacheKey: asset.thumbhash, edited: false, size: AssetMediaSize.Preview }),
+  );
+  const cropFrameStyle = $derived(
+    canUseDimensions
+      ? `left: ${(cropX / width) * 100}%; top: ${(cropY / height) * 100}%; width: ${(cropWidth / width) * 100}%; height: ${(cropHeight / height) * 100}%;`
+      : '',
+  );
+  const textFrameStyle = $derived(
+    `left: ${textX * 100}%; top: ${textY * 100}%; font-size: ${Math.round(textSize * 900)}%; color: ${textColor};`,
+  );
+  const trimRangeStyle = $derived(getTimelineStyle(trimStartSeconds, trimEndSeconds));
+  const textRangeStyle = $derived(getTimelineStyle(textStartSeconds, textEndSeconds));
+  const speedSegmentError = $derived(getSpeedSegmentError());
+
+  const tools: { id: Tool; label: string; icon: string }[] = [
+    { id: 'auto', label: $t('editor_video_auto'), icon: mdiTune },
+    { id: 'crop', label: $t('crop'), icon: mdiCropRotate },
+    { id: 'adjust', label: $t('editor_video_adjust'), icon: mdiTune },
+    { id: 'filters', label: $t('filters'), icon: mdiPaletteOutline },
+    { id: 'trim', label: $t('editor_video_trim'), icon: mdiClockOutline },
+    { id: 'speed', label: $t('editor_video_speed'), icon: mdiClockOutline },
+    { id: 'audio', label: $t('editor_video_audio'), icon: mdiVolumeHigh },
+    { id: 'text', label: $t('editor_video_text'), icon: mdiText },
+    { id: 'frame', label: $t('editor_video_frame'), icon: mdiImageOutline },
+  ];
+
+  function getDefaultAdjustments(): Record<AdjustmentKey, number> {
+    return {
+      brightness: 0,
+      contrast: 0,
+      whitePoint: 0,
+      highlights: 0,
+      shadows: 0,
+      blackPoint: 0,
+      saturation: 0,
+      warmth: 0,
+      tint: 0,
+      skinTone: 0,
+      blueTone: 0,
+      vignette: 0,
+      hdr: 0,
+    };
+  }
 
   function getNumberParameter(parameters: EditParameters, key: string, fallback: number) {
     const value = parameters[key];
@@ -147,6 +269,7 @@
           cropY = getNumberParameter(parameters, 'y', cropY);
           cropWidth = getNumberParameter(parameters, 'width', cropWidth);
           cropHeight = getNumberParameter(parameters, 'height', cropHeight);
+          clampCropToFrame();
           break;
         }
         case 'rotate': {
@@ -176,19 +299,9 @@
           break;
         }
         case 'adjust': {
-          brightness = getNumberParameter(parameters, 'brightness', brightness);
-          contrast = getNumberParameter(parameters, 'contrast', contrast);
-          whitePoint = getNumberParameter(parameters, 'whitePoint', whitePoint);
-          highlights = getNumberParameter(parameters, 'highlights', highlights);
-          shadows = getNumberParameter(parameters, 'shadows', shadows);
-          blackPoint = getNumberParameter(parameters, 'blackPoint', blackPoint);
-          saturation = getNumberParameter(parameters, 'saturation', saturation);
-          warmth = getNumberParameter(parameters, 'warmth', warmth);
-          tint = getNumberParameter(parameters, 'tint', tint);
-          skinTone = getNumberParameter(parameters, 'skinTone', skinTone);
-          blueTone = getNumberParameter(parameters, 'blueTone', blueTone);
-          vignette = getNumberParameter(parameters, 'vignette', vignette);
-          hdr = getNumberParameter(parameters, 'hdr', hdr);
+          for (const control of adjustmentControls) {
+            adjustments[control.key] = getNumberParameter(parameters, control.key, adjustments[control.key]);
+          }
           break;
         }
         case 'filter':
@@ -230,8 +343,15 @@
       }
     }
 
+    clampTimelineState();
     initialEditKey = getCurrentEditKey();
     isLoading = false;
+  });
+
+  onDestroy(() => {
+    stopCropInteraction();
+    stopTimelineDrag();
+    stopTextDrag();
   });
 
   function resetControls() {
@@ -240,26 +360,14 @@
     cropY = 0;
     cropWidth = width;
     cropHeight = height;
-    cropAspectRatio = '';
+    cropAspectRatio = 'free';
     rotation = 0;
     straighten = 0;
     mirrorHorizontal = false;
     mirrorVertical = false;
     autoEnhance = false;
     stabilize = false;
-    brightness = 0;
-    contrast = 0;
-    whitePoint = 0;
-    highlights = 0;
-    shadows = 0;
-    blackPoint = 0;
-    saturation = 0;
-    warmth = 0;
-    tint = 0;
-    skinTone = 0;
-    blueTone = 0;
-    vignette = 0;
-    hdr = 0;
+    adjustments = getDefaultAdjustments();
     lookName = 'none';
     lookIntensity = 100;
     trimStartSeconds = 0;
@@ -278,70 +386,87 @@
     textColor = '#ffffff';
   }
 
-  function createSpeedSegment(rate = 1, startSeconds = trimStartSeconds, endSeconds = trimEndSeconds) {
-    return { id: `speed-segment-${speedSegmentId++}`, rate, startSeconds, endSeconds };
+  function clamp(value: number, min: number, max: number) {
+    if (max < min) {
+      return min;
+    }
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function roundTime(value: number) {
+    return Math.round(value * 10) / 10;
   }
 
   function normalizeRotation(value: number) {
     return ((value % 360) + 360) % 360;
   }
 
-  function rotatedRatio(ratio: AspectRatioOption): string {
-    if (ratio.value === 'free') {
-      return ratio.value;
-    }
-
-    if (isRotated) {
-      const [ratioWidth, ratioHeight] = ratio.value.split(':');
-      return `${ratioHeight}:${ratioWidth}`;
-    }
-
-    return ratio.value;
+  function rotateVideo(degrees: number) {
+    rotation = normalizeRotation(rotation + degrees);
   }
 
-  function ratioSelected(ratio: AspectRatioOption): boolean {
-    if (!cropEnabled) {
-      return false;
+  function mirrorVideo(axis: 'horizontal' | 'vertical') {
+    if (axis === 'horizontal') {
+      mirrorHorizontal = !mirrorHorizontal;
+    } else {
+      mirrorVertical = !mirrorVertical;
     }
+  }
 
-    if (ratio.value === 'original') {
+  function parseAspectRatio(aspectRatio = cropAspectRatio) {
+    const [ratioWidth, ratioHeight] = aspectRatio.split(':').map(Number);
+    return ratioWidth && ratioHeight ? ratioWidth / ratioHeight : undefined;
+  }
+
+  function ratioSelected(preset: CropPreset): boolean {
+    if (preset.isOriginal) {
       return cropAspectRatio === `${width}:${height}`;
     }
-
-    return cropAspectRatio === rotatedRatio(ratio);
+    return cropAspectRatio === preset.value;
   }
 
-  function selectAspectRatio(ratio: AspectRatioOption) {
-    if (ratio.value === 'free') {
-      cropEnabled = true;
+  function applyCropPreset(preset: CropPreset) {
+    if (!canUseDimensions) {
+      return;
+    }
+
+    cropEnabled = true;
+
+    if (preset.isFree) {
       cropAspectRatio = 'free';
       clampCropToFrame();
       return;
     }
 
-    const appliedRatio = ratio.value === 'original' ? `${width}:${height}` : rotatedRatio(ratio);
-    setCropAspectRatio(appliedRatio);
+    const aspectRatio = preset.isOriginal ? `${width}:${height}` : preset.value;
+    cropAspectRatio = aspectRatio;
+    fitCropToAspectRatio(aspectRatio);
   }
 
-  function setCropAspectRatio(aspectRatio: string) {
-    cropEnabled = true;
-    cropAspectRatio = aspectRatio;
+  function clearCrop() {
+    cropEnabled = false;
+    cropAspectRatio = 'free';
+    cropX = 0;
+    cropY = 0;
+    cropWidth = width;
+    cropHeight = height;
+  }
 
-    const [ratioWidth, ratioHeight] = aspectRatio.split(':').map(Number);
-    if (!ratioWidth || !ratioHeight || !width || !height) {
+  function fitCropToAspectRatio(aspectRatio: string) {
+    const ratio = parseAspectRatio(aspectRatio);
+    if (!ratio || !width || !height) {
       clampCropToFrame();
       return;
     }
 
-    const targetRatio = ratioWidth / ratioHeight;
     const frameRatio = width / height;
     let nextWidth = width;
     let nextHeight = height;
 
-    if (frameRatio > targetRatio) {
-      nextWidth = height * targetRatio;
+    if (frameRatio > ratio) {
+      nextWidth = height * ratio;
     } else {
-      nextHeight = width / targetRatio;
+      nextHeight = width / ratio;
     }
 
     cropWidth = Math.max(1, Math.round(nextWidth));
@@ -361,16 +486,336 @@
     cropY = Math.min(Math.max(0, Math.round(cropY)), Math.max(0, height - cropHeight));
   }
 
-  function rotateVideo(degrees: number) {
-    rotation = normalizeRotation(rotation + degrees);
+  function setCropBox(crop: CropBox) {
+    if (!canUseDimensions) {
+      return;
+    }
+
+    const nextWidth = clamp(Math.round(crop.width), 1, width);
+    const nextHeight = clamp(Math.round(crop.height), 1, height);
+    cropX = clamp(Math.round(crop.x), 0, Math.max(0, width - nextWidth));
+    cropY = clamp(Math.round(crop.y), 0, Math.max(0, height - nextHeight));
+    cropWidth = nextWidth;
+    cropHeight = nextHeight;
   }
 
-  function mirrorVideo(axis: 'horizontal' | 'vertical') {
-    if (axis === 'horizontal') {
-      mirrorHorizontal = !mirrorHorizontal;
-    } else {
-      mirrorVertical = !mirrorVertical;
+  function getCropBox() {
+    return { x: cropX, y: cropY, width: cropWidth, height: cropHeight };
+  }
+
+  function isFullFrameCrop() {
+    return cropX === 0 && cropY === 0 && cropWidth === width && cropHeight === height;
+  }
+
+  function startCropInteraction(event: PointerEvent, handle: CropHandle) {
+    if (!cropStageElement || !canUseDimensions) {
+      return;
     }
+
+    event.preventDefault();
+    event.stopPropagation();
+    cropEnabled = true;
+    cropInteraction = {
+      handle,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startCrop: getCropBox(),
+      rect: cropStageElement.getBoundingClientRect(),
+    };
+    globalThis.addEventListener('pointermove', handleCropPointerMove);
+    globalThis.addEventListener('pointerup', stopCropInteraction);
+  }
+
+  function stopCropInteraction() {
+    globalThis.removeEventListener('pointermove', handleCropPointerMove);
+    globalThis.removeEventListener('pointerup', stopCropInteraction);
+    cropInteraction = null;
+  }
+
+  function handleCropPointerMove(event: PointerEvent) {
+    if (!cropInteraction || !canUseDimensions) {
+      return;
+    }
+
+    const dx = ((event.clientX - cropInteraction.startClientX) / cropInteraction.rect.width) * width;
+    const dy = ((event.clientY - cropInteraction.startClientY) / cropInteraction.rect.height) * height;
+    const start = cropInteraction.startCrop;
+
+    if (cropInteraction.handle === 'move') {
+      setCropBox({
+        ...start,
+        x: start.x + dx,
+        y: start.y + dy,
+      });
+      return;
+    }
+
+    setCropBox(resizeCropBox(start, cropInteraction.handle, dx, dy));
+  }
+
+  function resizeCropBox(start: CropBox, handle: CropHandle, dx: number, dy: number): CropBox {
+    const movesLeft = handle.includes('left');
+    const movesRight = handle.includes('right');
+    const movesTop = handle.includes('top');
+    const movesBottom = handle.includes('bottom');
+    const ratio = parseAspectRatio();
+    let left = start.x;
+    let right = start.x + start.width;
+    let top = start.y;
+    let bottom = start.y + start.height;
+
+    if (movesLeft) {
+      left += dx;
+    }
+    if (movesRight) {
+      right += dx;
+    }
+    if (movesTop) {
+      top += dy;
+    }
+    if (movesBottom) {
+      bottom += dy;
+    }
+
+    let nextWidth = Math.max(minimumCropSize, right - left);
+    let nextHeight = Math.max(minimumCropSize, bottom - top);
+
+    if (ratio && cropAspectRatio !== 'free') {
+      const horizontalOnly = (movesLeft || movesRight) && !movesTop && !movesBottom;
+      const verticalOnly = (movesTop || movesBottom) && !movesLeft && !movesRight;
+
+      if (horizontalOnly || Math.abs(dx) >= Math.abs(dy)) {
+        nextHeight = nextWidth / ratio;
+      } else if (verticalOnly || Math.abs(dy) > Math.abs(dx)) {
+        nextWidth = nextHeight * ratio;
+      }
+
+      if (horizontalOnly) {
+        top = start.y + (start.height - nextHeight) / 2;
+      } else if (movesTop) {
+        top = start.y + start.height - nextHeight;
+      }
+      if (verticalOnly) {
+        left = start.x + (start.width - nextWidth) / 2;
+      } else if (movesLeft) {
+        left = start.x + start.width - nextWidth;
+      }
+    }
+
+    if (!movesLeft && !movesRight) {
+      left = start.x + (start.width - nextWidth) / 2;
+    } else if (!movesLeft) {
+      left = start.x;
+    }
+
+    if (!movesTop && !movesBottom) {
+      top = start.y + (start.height - nextHeight) / 2;
+    } else if (!movesTop) {
+      top = start.y;
+    }
+
+    if (left < 0) {
+      left = 0;
+    }
+    if (top < 0) {
+      top = 0;
+    }
+    if (left + nextWidth > width) {
+      nextWidth = width - left;
+    }
+    if (top + nextHeight > height) {
+      nextHeight = height - top;
+    }
+
+    if (ratio && cropAspectRatio !== 'free') {
+      if (nextWidth / nextHeight > ratio) {
+        nextWidth = nextHeight * ratio;
+      } else {
+        nextHeight = nextWidth / ratio;
+      }
+    }
+
+    return { x: left, y: top, width: nextWidth, height: nextHeight };
+  }
+
+  function formatTime(seconds: number) {
+    if (!Number.isFinite(seconds)) {
+      return '0:00';
+    }
+
+    const safeSeconds = Math.max(0, seconds);
+    const minutes = Math.floor(safeSeconds / 60);
+    const remainingSeconds = Math.floor(safeSeconds % 60);
+    const tenths = Math.round((safeSeconds % 1) * 10);
+
+    return tenths > 0
+      ? `${minutes}:${remainingSeconds.toString().padStart(2, '0')}.${tenths}`
+      : `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  function percentFromSeconds(seconds: number) {
+    return durationSeconds > 0 ? clamp((seconds / durationSeconds) * 100, 0, 100) : 0;
+  }
+
+  function getTimelineStyle(startSeconds: number, endSeconds: number) {
+    const start = percentFromSeconds(startSeconds);
+    const end = percentFromSeconds(endSeconds);
+    return `left: ${start}%; width: ${Math.max(0, end - start)}%;`;
+  }
+
+  function getSegmentTimelineStyle(segment: SpeedSegment) {
+    return getTimelineStyle(segment.startSeconds, segment.endSeconds);
+  }
+
+  function getHandleStyle(seconds: number) {
+    return `left: ${percentFromSeconds(seconds)}%;`;
+  }
+
+  function secondsFromPointer(event: PointerEvent, rect: DOMRect) {
+    return roundTime(clamp(((event.clientX - rect.left) / rect.width) * durationSeconds, 0, durationSeconds));
+  }
+
+  function startTimelineDrag(event: PointerEvent, target: TimeDragTarget, segmentId?: string) {
+    if (!canUseTimeline) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    timelineDrag = { target, segmentId, rect: (event.currentTarget as HTMLElement).getBoundingClientRect() };
+    handleTimelinePointerMove(event);
+    globalThis.addEventListener('pointermove', handleTimelinePointerMove);
+    globalThis.addEventListener('pointerup', stopTimelineDrag);
+  }
+
+  function stopTimelineDrag() {
+    globalThis.removeEventListener('pointermove', handleTimelinePointerMove);
+    globalThis.removeEventListener('pointerup', stopTimelineDrag);
+    timelineDrag = null;
+  }
+
+  function handleTimelinePointerMove(event: PointerEvent) {
+    if (!timelineDrag || !canUseTimeline) {
+      return;
+    }
+
+    const seconds = secondsFromPointer(event, timelineDrag.rect);
+    switch (timelineDrag.target) {
+      case 'trim-start': {
+        setTrimStart(seconds);
+        break;
+      }
+      case 'trim-end': {
+        setTrimEnd(seconds);
+        break;
+      }
+      case 'text-start': {
+        textStartSeconds = clamp(
+          seconds,
+          trimStartSeconds,
+          Math.max(trimStartSeconds, textEndSeconds - minimumTimelineGap),
+        );
+        break;
+      }
+      case 'text-end': {
+        textEndSeconds = clamp(
+          seconds,
+          Math.min(trimEndSeconds, textStartSeconds + minimumTimelineGap),
+          trimEndSeconds,
+        );
+        break;
+      }
+      case 'speed-start': {
+        updateSpeedSegmentTime(timelineDrag.segmentId, { startSeconds: seconds });
+        break;
+      }
+      case 'speed-end': {
+        updateSpeedSegmentTime(timelineDrag.segmentId, { endSeconds: seconds });
+        break;
+      }
+    }
+  }
+
+  function setTrimStart(seconds: number) {
+    trimStartSeconds = clamp(seconds, 0, Math.max(0, trimEndSeconds - minimumTimelineGap));
+    clampTimelineState();
+  }
+
+  function setTrimEnd(seconds: number) {
+    trimEndSeconds = clamp(seconds, Math.min(durationSeconds, trimStartSeconds + minimumTimelineGap), durationSeconds);
+    clampTimelineState();
+  }
+
+  function clampTimelineState() {
+    if (!canUseTimeline) {
+      trimStartSeconds = 0;
+      trimEndSeconds = 0;
+      textStartSeconds = 0;
+      textEndSeconds = 0;
+      speedSegments = [];
+      return;
+    }
+
+    trimStartSeconds = clamp(trimStartSeconds, 0, Math.max(0, durationSeconds - minimumTimelineGap));
+    trimEndSeconds = clamp(trimEndSeconds || durationSeconds, trimStartSeconds + minimumTimelineGap, durationSeconds);
+    textStartSeconds = clamp(
+      textStartSeconds,
+      trimStartSeconds,
+      Math.max(trimStartSeconds, trimEndSeconds - minimumTimelineGap),
+    );
+    textEndSeconds = clamp(textEndSeconds || trimEndSeconds, textStartSeconds + minimumTimelineGap, trimEndSeconds);
+    speedSegments = speedSegments.map((segment) => clampSpeedSegment(segment));
+  }
+
+  function createSpeedSegment(rate = 0.5, startSeconds?: number, endSeconds?: number) {
+    const rangeStart = trimStartSeconds;
+    const rangeEnd = trimEndSeconds || durationSeconds;
+    const segmentSpan = Math.max(minimumTimelineGap, Math.min(2, (rangeEnd - rangeStart) / 4));
+    const previousEnd = Math.max(rangeStart, ...speedSegments.map((segment) => segment.endSeconds));
+    const nextStart =
+      startSeconds ?? clamp(previousEnd, rangeStart, Math.max(rangeStart, rangeEnd - minimumTimelineGap));
+    const nextEnd = endSeconds ?? clamp(nextStart + segmentSpan, nextStart + minimumTimelineGap, rangeEnd);
+
+    return { id: `speed-segment-${speedSegmentId++}`, rate, startSeconds: nextStart, endSeconds: nextEnd };
+  }
+
+  function addSpeedSegment() {
+    speedMode = 'segment';
+    speedSegments = [...speedSegments, createSpeedSegment()];
+  }
+
+  function removeSpeedSegment(id: string) {
+    speedSegments = speedSegments.filter((segment) => segment.id !== id);
+  }
+
+  function updateSpeedSegment(id: string, patch: Partial<SpeedSegment>) {
+    speedSegments = speedSegments.map((segment) =>
+      segment.id === id ? clampSpeedSegment({ ...segment, ...patch }) : segment,
+    );
+  }
+
+  function updateSpeedSegmentTime(
+    id: string | undefined,
+    patch: Partial<Pick<SpeedSegment, 'startSeconds' | 'endSeconds'>>,
+  ) {
+    if (!id) {
+      return;
+    }
+    updateSpeedSegment(id, patch);
+  }
+
+  function clampSpeedSegment(segment: SpeedSegment) {
+    const startSeconds = clamp(
+      segment.startSeconds,
+      trimStartSeconds,
+      Math.max(trimStartSeconds, trimEndSeconds - minimumTimelineGap),
+    );
+    const endSeconds = clamp(
+      segment.endSeconds,
+      startSeconds + minimumTimelineGap,
+      Math.max(startSeconds + minimumTimelineGap, trimEndSeconds),
+    );
+    return { ...segment, startSeconds, endSeconds };
   }
 
   function setSpeedMode(mode: SpeedMode) {
@@ -380,40 +825,32 @@
     }
   }
 
-  function addSpeedSegment() {
-    speedSegments = [...speedSegments, createSpeedSegment()];
-  }
+  function getSpeedSegmentError() {
+    if (speedMode !== 'segment') {
+      return '';
+    }
 
-  function removeSpeedSegment(id: string) {
-    speedSegments = speedSegments.filter((segment) => segment.id !== id);
-  }
-
-  function pushEdit(edits: VideoEdit[], action: string, parameters: Record<string, unknown>) {
-    edits.push({ action, parameters } as VideoEdit);
-  }
-
-  function nonZeroAdjustments() {
-    const parameters = {
-      brightness,
-      contrast,
-      whitePoint,
-      highlights,
-      shadows,
-      blackPoint,
-      saturation,
-      warmth,
-      tint,
-      skinTone,
-      blueTone,
-      vignette,
-      hdr,
-    };
-
-    return Object.fromEntries(Object.entries(parameters).filter(([, value]) => value !== 0));
+    const segments = speedSegments.toSorted((a, b) => a.startSeconds - b.startSeconds);
+    for (const segment of segments) {
+      if (segment.endSeconds <= segment.startSeconds) {
+        return $t('editor_video_speed_segment_invalid');
+      }
+    }
+    for (let index = 1; index < segments.length; index++) {
+      if (segments[index].startSeconds < segments[index - 1].endSeconds) {
+        return $t('editor_video_speed_segment_overlap');
+      }
+    }
+    return '';
   }
 
   function getSpeedSegmentEdits() {
-    const segments = speedSegments
+    const error = getSpeedSegmentError();
+    if (error) {
+      throw new Error(error);
+    }
+
+    return speedSegments
       .filter((segment) => segment.rate !== 1)
       .map((segment) => ({
         ...segment,
@@ -421,26 +858,54 @@
         endMs: Math.round(segment.endSeconds * 1000),
       }))
       .sort((a, b) => a.startMs - b.startMs);
+  }
 
-    for (const segment of segments) {
-      if (segment.endMs <= segment.startMs) {
-        throw new Error('Speed segment end must be after start');
-      }
+  function updateAdjustment(key: AdjustmentKey, value: number) {
+    adjustments[key] = value;
+  }
+
+  function startTextDrag(event: PointerEvent) {
+    const stage =
+      event.currentTarget instanceof HTMLElement ? event.currentTarget.closest<HTMLElement>('.text-preview') : null;
+    if (!stage) {
+      return;
     }
 
-    for (let index = 1; index < segments.length; index++) {
-      if (segments[index].startMs < segments[index - 1].endMs) {
-        throw new Error('Speed segments cannot overlap');
-      }
+    event.preventDefault();
+    event.stopPropagation();
+    textDrag = { rect: stage.getBoundingClientRect() };
+    updateTextPosition(event);
+    globalThis.addEventListener('pointermove', updateTextPosition);
+    globalThis.addEventListener('pointerup', stopTextDrag);
+  }
+
+  function stopTextDrag() {
+    globalThis.removeEventListener('pointermove', updateTextPosition);
+    globalThis.removeEventListener('pointerup', stopTextDrag);
+    textDrag = null;
+  }
+
+  function updateTextPosition(event: PointerEvent) {
+    if (!textDrag) {
+      return;
     }
 
-    return segments;
+    textX = clamp((event.clientX - textDrag.rect.left) / textDrag.rect.width, 0.05, 0.95);
+    textY = clamp((event.clientY - textDrag.rect.top) / textDrag.rect.height, 0.08, 0.92);
+  }
+
+  function pushEdit(edits: VideoEdit[], action: string, parameters: Record<string, unknown>) {
+    edits.push({ action, parameters } as VideoEdit);
+  }
+
+  function nonZeroAdjustments() {
+    return Object.fromEntries(Object.entries(adjustments).filter(([, value]) => value !== 0));
   }
 
   function buildEdits() {
     const edits: VideoEdit[] = [];
 
-    if (cropEnabled) {
+    if (cropEnabled && canUseDimensions && !isFullFrameCrop()) {
       pushEdit(edits, 'crop', {
         x: Math.round(cropX),
         y: Math.round(cropY),
@@ -468,21 +933,22 @@
       pushEdit(edits, 'stabilize', { enabled: true });
     }
 
-    const adjustments = nonZeroAdjustments();
-    if (Object.keys(adjustments).length > 0) {
-      pushEdit(edits, 'adjust', adjustments);
+    const nextAdjustments = nonZeroAdjustments();
+    if (Object.keys(nextAdjustments).length > 0) {
+      pushEdit(edits, 'adjust', nextAdjustments);
     }
 
     if (lookName !== 'none') {
       pushEdit(edits, 'filter', { name: lookName, intensity: lookIntensity });
     }
 
-    if (trimStartSeconds > 0 || trimEndSeconds < durationSeconds) {
+    if (canUseTimeline && (trimStartSeconds > 0 || trimEndSeconds < durationSeconds)) {
       pushEdit(edits, 'trim', {
         startMs: Math.round(trimStartSeconds * 1000),
         endMs: Math.round(trimEndSeconds * 1000),
       });
     }
+
     if (speedMode === 'whole') {
       if (speed !== 1) {
         pushEdit(edits, 'speed', { rate: speed });
@@ -496,19 +962,26 @@
         });
       }
     }
+
     if (muted || volume !== 1) {
       pushEdit(edits, 'audio', { muted, volume });
     }
+
     if (text.trim()) {
-      pushEdit(edits, 'textOverlay', {
+      const textParameters: Record<string, unknown> = {
         text: text.trim(),
         x: textX,
         y: textY,
-        startMs: Math.round(textStartSeconds * 1000),
-        endMs: Math.round(textEndSeconds * 1000),
         size: textSize,
         color: textColor,
-      });
+      };
+
+      if (canUseTimeline) {
+        textParameters.startMs = Math.round(textStartSeconds * 1000);
+        textParameters.endMs = Math.round(textEndSeconds * 1000);
+      }
+
+      pushEdit(edits, 'textOverlay', textParameters);
     }
 
     return edits;
@@ -573,7 +1046,7 @@
 
       if (editCompleted) {
         isRendering = true;
-        toastManager.primary('Rendering edited video...');
+        toastManager.primary($t('editor_video_rendering_toast'));
 
         await editCompleted;
         eventManager.emit('AssetEditsApplied', asset.id);
@@ -593,7 +1066,7 @@
   function exportFrame() {
     const video = document.querySelector<HTMLVideoElement>('video');
     if (!video || !video.videoWidth || !video.videoHeight) {
-      toastManager.danger('Unable to export the current frame');
+      toastManager.danger($t('editor_video_export_frame_error'));
       return;
     }
 
@@ -613,23 +1086,14 @@
       URL.revokeObjectURL(url);
     }, 'image/png');
   }
-
-  const tools: { id: Tool; label: string; compactLabel: string }[] = [
-    { id: 'transform', label: 'Transform', compactLabel: 'Crop' },
-    { id: 'auto', label: 'Auto', compactLabel: 'Auto' },
-    { id: 'adjust', label: 'Adjust', compactLabel: 'Adjust' },
-    { id: 'look', label: 'Look', compactLabel: 'Look' },
-    { id: 'timeline', label: 'Timeline', compactLabel: 'Time' },
-    { id: 'text', label: 'Text', compactLabel: 'Text' },
-  ];
 </script>
 
 <svelte:document
   use:shortcuts={[
     { shortcut: { key: 'Escape' }, onShortcut: closeEditor },
     { shortcut: { key: 'Enter' }, onShortcut: applyEdits },
-    { shortcut: { key: ']' }, onShortcut: () => selectedTool === 'transform' && rotateVideo(90) },
-    { shortcut: { key: '[' }, onShortcut: () => selectedTool === 'transform' && rotateVideo(-90) },
+    { shortcut: { key: ']' }, onShortcut: () => selectedTool === 'crop' && rotateVideo(90) },
+    { shortcut: { key: '[' }, onShortcut: () => selectedTool === 'crop' && rotateVideo(-90) },
   ]}
 />
 
@@ -644,350 +1108,736 @@
         aria-label={$t('close')}
         onclick={closeEditor}
       />
-      <p class="text-lg text-immich-fg capitalize dark:text-immich-dark-fg">{$t('editor')}</p>
+      <p class="text-lg text-immich-fg capitalize dark:text-immich-dark-fg">{$t('editor_video_edit')}</p>
     </HStack>
-    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}
-      >{saveButtonText}</Button
-    >
+    <Button shape="round" size="small" onclick={applyEdits} loading={isSaving} disabled={isLoading}>
+      {saveButtonText}
+    </Button>
   </HStack>
 
-  <nav class="mt-4 flex gap-1 overflow-x-auto px-2 pb-1">
+  <nav class="mt-4 flex gap-1 overflow-x-auto px-2 pb-1" aria-label={$t('editor_video_tools')}>
     {#each tools as tool (tool.id)}
       <button
         type="button"
-        class="h-9 shrink-0 rounded-full px-3 text-sm transition {selectedTool === tool.id
-          ? 'bg-immich-primary text-white'
-          : 'bg-gray-200 text-immich-dark-gray hover:bg-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'}"
+        aria-pressed={selectedTool === tool.id}
+        class="tool-tab {selectedTool === tool.id ? 'active' : ''}"
         onclick={() => (selectedTool = tool.id)}
       >
-        <span class="hidden sm:inline">{tool.label}</span>
-        <span class="sm:hidden">{tool.compactLabel}</span>
+        <Icon icon={tool.icon} size="18" />
+        <span>{tool.label}</span>
       </button>
     {/each}
   </nav>
 
   {#if isRendering}
     <div class="mx-4 mt-4 rounded-md border border-immich-primary/40 bg-immich-primary/10 px-3 py-2 text-sm">
-      Rendering edited video...
+      {$t('editor_video_rendering_toast')}
     </div>
   {/if}
 
   <section class="mt-4 flex-1 overflow-y-auto px-4 pb-4">
     {#if isLoading}
-      <p class="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
-    {:else if selectedTool === 'transform'}
-      <div class="mt-3 px-1">
-        <div class="mt-2 flex h-10 w-full items-center justify-between text-sm">
-          <h2>{$t('editor_orientation')}</h2>
-          {#if normalizedRotation !== 0}
-            <span class="rounded-full bg-gray-200 px-2 py-1 text-xs dark:bg-gray-800">{normalizedRotation}°</span>
-          {/if}
-        </div>
-        <HStack>
-          <IconButton
-            class="w-full"
-            size="small"
-            aria-label={$t('editor_rotate_left')}
-            icon={mdiRotateLeft}
-            color={normalizedRotation === 270 ? 'primary' : 'secondary'}
-            onclick={() => rotateVideo(-90)}
-          />
-          <IconButton
-            class="w-full"
-            size="small"
-            aria-label={$t('editor_rotate_right')}
-            icon={mdiRotateRight}
-            color={normalizedRotation === 90 ? 'primary' : 'secondary'}
-            onclick={() => rotateVideo(90)}
-          />
-          <IconButton
-            class="w-full"
-            size="small"
-            aria-label={$t('editor_flip_horizontal')}
-            icon={mdiFlipHorizontal}
-            color={mirrorHorizontal ? 'primary' : 'secondary'}
-            onclick={() => mirrorVideo('horizontal')}
-          />
-          <IconButton
-            class="w-full"
-            size="small"
-            aria-label={$t('editor_flip_vertical')}
-            icon={mdiFlipVertical}
-            color={mirrorVertical ? 'primary' : 'secondary'}
-            onclick={() => mirrorVideo('vertical')}
-          />
-        </HStack>
-
-        <div class="mt-5 grid gap-2 text-sm">
-          <div class="flex items-center justify-between">
-            <span>Straighten</span>
-            <span class="text-xs text-gray-400">{straighten}°</span>
-          </div>
-          <input type="range" min="-45" max="45" step="0.1" bind:value={straighten} />
-        </div>
-
-        <div class="mt-6 flex h-10 w-full items-center justify-between text-sm">
-          <h2>{$t('crop')}</h2>
-        </div>
-
-        <div class="mb-4 grid grid-cols-2">
-          {#each aspectRatios as ratio (ratio.value)}
-            <HStack>
-              <Button
-                class="m-2 size-14"
-                shape="round"
-                onclick={() => selectAspectRatio(ratio)}
-                aria-label={ratio.label}
-                color={ratioSelected(ratio) ? 'primary' : 'secondary'}
-                variant={ratioSelected(ratio) ? 'filled' : 'outline'}
-              >
-                {#if ratio.isFree}
-                  <div
-                    class="size-6 shrink-0 rounded-xs border-2 border-dashed {ratioSelected(ratio)
-                      ? 'border-black'
-                      : 'border-white'}"
-                  ></div>
-                {:else}
-                  <div
-                    class="shrink-0 rounded-xs border-2 {ratioSelected(ratio) ? 'border-black' : 'border-white'}"
-                    style="width: {ratio.width}px; height: {ratio.height}px;"
-                  ></div>
-                {/if}
-              </Button>
-              <span class="text-sm text-white">{ratio.label}</span>
-            </HStack>
-          {/each}
-        </div>
-
-        {#if cropEnabled}
-          <details class="mt-2 border-t border-gray-700 pt-4 text-sm">
-            <summary class="cursor-pointer text-gray-300">Crop values</summary>
-            <div class="mt-4 grid grid-cols-2 gap-3">
-              <label class="grid gap-1 text-xs"
-                >X <input class="editor-input" type="number" min="0" max={width} bind:value={cropX} /></label
-              >
-              <label class="grid gap-1 text-xs"
-                >Y <input class="editor-input" type="number" min="0" max={height} bind:value={cropY} /></label
-              >
-              <label class="grid gap-1 text-xs"
-                >Width <input class="editor-input" type="number" min="1" max={width} bind:value={cropWidth} /></label
-              >
-              <label class="grid gap-1 text-xs"
-                >Height <input class="editor-input" type="number" min="1" max={height} bind:value={cropHeight} /></label
-              >
+      <p class="text-sm text-gray-500 dark:text-gray-400">{$t('loading')}...</p>
+    {:else if selectedTool === 'auto'}
+      <div class="space-y-3">
+        <button
+          type="button"
+          aria-pressed={autoEnhance}
+          class="toggle-card {autoEnhance ? 'active' : ''}"
+          onclick={() => (autoEnhance = !autoEnhance)}
+        >
+          <span class="font-medium">{$t('editor_video_auto_enhance')}</span>
+          <span>{$t('editor_video_auto_enhance_description')}</span>
+        </button>
+        <button
+          type="button"
+          aria-pressed={stabilize}
+          class="toggle-card {stabilize ? 'active' : ''}"
+          onclick={() => (stabilize = !stabilize)}
+        >
+          <span class="font-medium">{$t('editor_video_stabilize')}</span>
+          <span>{$t('editor_video_stabilize_description')}</span>
+        </button>
+      </div>
+    {:else if selectedTool === 'crop'}
+      <div class="space-y-5">
+        {#if !canUseDimensions}
+          <p class="rounded-md bg-gray-100 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {$t('editor_video_dimensions_unavailable')}
+          </p>
+        {:else}
+          <div class="crop-preview" style:aspect-ratio={`${width} / ${height}`} bind:this={cropStageElement}>
+            <img src={previewUrl} alt="" draggable="false" />
+            <div class="crop-frame" style={cropFrameStyle}>
+              <button
+                type="button"
+                class="crop-grid"
+                aria-label={$t('editor_video_move_crop')}
+                onpointerdown={(event) => startCropInteraction(event, 'move')}
+              ></button>
+              {#each ['top', 'right', 'bottom', 'left'] as edge (edge)}
+                <button
+                  type="button"
+                  class="crop-handle edge {edge}"
+                  aria-label={$t('editor_handle_edge', { values: { edge } })}
+                  onpointerdown={(event) => startCropInteraction(event, edge as CropHandle)}
+                ></button>
+              {/each}
+              {#each ['top-left', 'top-right', 'bottom-right', 'bottom-left'] as corner (corner)}
+                <button
+                  type="button"
+                  class="crop-handle corner {corner}"
+                  aria-label={$t('editor_handle_corner', { values: { corner: corner.replace('-', '_') } })}
+                  onpointerdown={(event) => startCropInteraction(event, corner as CropHandle)}
+                ></button>
+              {/each}
             </div>
-          </details>
+          </div>
+
+          <div>
+            <div class="mb-2 flex items-center justify-between text-sm">
+              <h2>{$t('editor_orientation')}</h2>
+              {#if normalizedRotation !== 0}
+                <span class="rounded-full bg-gray-200 px-2 py-1 text-xs dark:bg-gray-800">{normalizedRotation}°</span>
+              {/if}
+            </div>
+            <HStack>
+              <IconButton
+                class="w-full"
+                size="small"
+                aria-label={$t('editor_rotate_left')}
+                icon={mdiRotateLeft}
+                color={normalizedRotation === 270 ? 'primary' : 'secondary'}
+                onclick={() => rotateVideo(-90)}
+              />
+              <IconButton
+                class="w-full"
+                size="small"
+                aria-label={$t('editor_rotate_right')}
+                icon={mdiRotateRight}
+                color={normalizedRotation === 90 ? 'primary' : 'secondary'}
+                onclick={() => rotateVideo(90)}
+              />
+              <IconButton
+                class="w-full"
+                size="small"
+                aria-label={$t('editor_flip_horizontal')}
+                icon={mdiFlipHorizontal}
+                color={mirrorHorizontal ? 'primary' : 'secondary'}
+                onclick={() => mirrorVideo('horizontal')}
+              />
+              <IconButton
+                class="w-full"
+                size="small"
+                aria-label={$t('editor_flip_vertical')}
+                icon={mdiFlipVertical}
+                color={mirrorVertical ? 'primary' : 'secondary'}
+                onclick={() => mirrorVideo('vertical')}
+              />
+            </HStack>
+          </div>
+
+          <label class="slider-row">
+            <span>{$t('editor_video_straighten')}</span>
+            <span>{straighten}°</span>
+            <input type="range" min="-45" max="45" step="0.1" bind:value={straighten} />
+          </label>
+
+          <div>
+            <div class="mb-2 flex items-center justify-between text-sm">
+              <h2>{$t('crop')}</h2>
+              <Button variant="ghost" shape="round" size="small" onclick={clearCrop} disabled={!cropEnabled}>
+                {$t('editor_video_clear_crop')}
+              </Button>
+            </div>
+            <div class="preset-grid">
+              {#each cropPresets as preset (preset.value)}
+                <button
+                  type="button"
+                  class="preset-button {ratioSelected(preset) ? 'active' : ''}"
+                  aria-label={preset.caption ? `${preset.label} ${preset.caption}` : preset.label}
+                  onclick={() => applyCropPreset(preset)}
+                >
+                  {#if preset.isFree}
+                    <span class="free-crop-icon"></span>
+                  {:else}
+                    <span class="aspect-icon" style="width: {preset.width}px; height: {preset.height}px;"></span>
+                  {/if}
+                  <span class="leading-tight">{preset.label}</span>
+                  {#if preset.caption}
+                    <span class="text-[0.65rem] text-gray-400">{preset.caption}</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
         {/if}
       </div>
-    {:else if selectedTool === 'auto'}
-      <div class="space-y-4 text-sm">
-        <label class="flex items-center gap-2"><input type="checkbox" bind:checked={autoEnhance} /> Auto enhance</label>
-        <label class="flex items-center gap-2"><input type="checkbox" bind:checked={stabilize} /> Stabilize</label>
-      </div>
     {:else if selectedTool === 'adjust'}
-      <div class="space-y-4">
-        <label class="grid gap-1 text-sm"
-          >Brightness {brightness}<input type="range" min="-100" max="100" bind:value={brightness} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Contrast {contrast}<input type="range" min="-100" max="100" bind:value={contrast} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >White point {whitePoint}<input type="range" min="-100" max="100" bind:value={whitePoint} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Highlights {highlights}<input type="range" min="-100" max="100" bind:value={highlights} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Shadows {shadows}<input type="range" min="-100" max="100" bind:value={shadows} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Black point {blackPoint}<input type="range" min="-100" max="100" bind:value={blackPoint} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Saturation {saturation}<input type="range" min="-100" max="100" bind:value={saturation} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Warmth {warmth}<input type="range" min="-100" max="100" bind:value={warmth} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Tint {tint}<input type="range" min="-100" max="100" bind:value={tint} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Skin tone {skinTone}<input type="range" min="-100" max="100" bind:value={skinTone} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Blue tone {blueTone}<input type="range" min="-100" max="100" bind:value={blueTone} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >Vignette {vignette}<input type="range" min="-100" max="100" bind:value={vignette} /></label
-        >
-        <label class="grid gap-1 text-sm"
-          >HDR effect {hdr}<input type="range" min="-100" max="100" bind:value={hdr} /></label
-        >
+      <div class="space-y-3">
+        {#each adjustmentControls as control (control.key)}
+          <div class="slider-row">
+            <div class="flex items-center justify-between">
+              <span>{control.label}</span>
+              <button
+                type="button"
+                class="text-xs text-immich-primary disabled:text-gray-400"
+                disabled={adjustments[control.key] === 0}
+                onclick={() => updateAdjustment(control.key, 0)}
+              >
+                {$t('editor_video_reset_value')}
+              </button>
+            </div>
+            <div class="flex items-center gap-3">
+              <input
+                type="range"
+                min="-100"
+                max="100"
+                value={adjustments[control.key]}
+                oninput={(event) => updateAdjustment(control.key, Number(event.currentTarget.value))}
+              />
+              <span class="w-9 text-end text-xs text-gray-400">{adjustments[control.key]}</span>
+            </div>
+          </div>
+        {/each}
       </div>
-    {:else if selectedTool === 'look'}
+    {:else if selectedTool === 'filters'}
       <div class="space-y-5">
-        <label class="grid gap-2 text-sm">
-          Filter
-          <select class="editor-input" bind:value={lookName}>
-            <option value="none">None</option>
-            <option value="vivid">Vivid</option>
-            <option value="warm">Warm</option>
-            <option value="cool">Cool</option>
-            <option value="bw">Black and white</option>
-            <option value="fade">Fade</option>
-            <option value="vignette">Vignette</option>
-          </select>
-        </label>
-        <label class="grid gap-2 text-sm">
-          Intensity {lookIntensity}
-          <input type="range" min="0" max="100" bind:value={lookIntensity} />
+        <div class="grid grid-cols-2 gap-3">
+          {#each filterOptions as option (option.value)}
+            <button
+              type="button"
+              class="filter-tile {lookName === option.value ? 'active' : ''}"
+              aria-pressed={lookName === option.value}
+              onclick={() => (lookName = option.value)}
+            >
+              <span class="h-16 rounded-md {option.class}"></span>
+              <span>{option.label}</span>
+            </button>
+          {/each}
+        </div>
+        <label class="slider-row">
+          <span>{$t('editor_video_intensity')}</span>
+          <span>{lookIntensity}</span>
+          <input type="range" min="0" max="100" bind:value={lookIntensity} disabled={lookName === 'none'} />
         </label>
       </div>
-    {:else if selectedTool === 'timeline'}
+    {:else if selectedTool === 'trim'}
       <div class="space-y-5">
-        <label class="grid gap-2 text-sm">
-          Trim start
-          <input
-            class="editor-input"
-            type="number"
-            min="0"
-            max={durationSeconds}
-            step="0.1"
-            bind:value={trimStartSeconds}
-          />
-        </label>
-        <label class="grid gap-2 text-sm">
-          Trim end
-          <input
-            class="editor-input"
-            type="number"
-            min="0"
-            max={durationSeconds}
-            step="0.1"
-            bind:value={trimEndSeconds}
-          />
-        </label>
-        <label class="grid gap-2 text-sm">
-          Speed range
-          <select
-            class="editor-input"
-            value={speedMode}
-            onchange={(event) => setSpeedMode(event.currentTarget.value as SpeedMode)}
+        {#if !canUseTimeline}
+          <p class="rounded-md bg-gray-100 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {$t('editor_video_duration_unavailable')}
+          </p>
+        {:else}
+          <div class="time-readout">
+            <span>{$t('start')}: {formatTime(trimStartSeconds)}</span>
+            <span>{$t('editor_video_end')}: {formatTime(trimEndSeconds)}</span>
+          </div>
+          <div
+            class="timeline-track"
+            role="group"
+            aria-label={$t('editor_video_trim')}
+            onpointerdown={(event) => startTimelineDrag(event, 'trim-start')}
           >
-            <option value="whole">Whole video</option>
-            <option value="segment">Segment</option>
-          </select>
-        </label>
+            <div class="timeline-fill" style={trimRangeStyle}></div>
+            <button
+              type="button"
+              class="timeline-handle"
+              style={getHandleStyle(trimStartSeconds)}
+              aria-label={$t('editor_video_trim_start')}
+              onpointerdown={(event) => startTimelineDrag(event, 'trim-start')}
+            ></button>
+            <button
+              type="button"
+              class="timeline-handle"
+              style={getHandleStyle(trimEndSeconds)}
+              aria-label={$t('editor_video_trim_end')}
+              onpointerdown={(event) => startTimelineDrag(event, 'trim-end')}
+            ></button>
+          </div>
+        {/if}
+      </div>
+    {:else if selectedTool === 'speed'}
+      <div class="space-y-5">
+        <div class="segmented-control">
+          <button type="button" class:active={speedMode === 'whole'} onclick={() => setSpeedMode('whole')}>
+            {$t('editor_video_whole_video')}
+          </button>
+          <button type="button" class:active={speedMode === 'segment'} onclick={() => setSpeedMode('segment')}>
+            {$t('editor_video_segment')}
+          </button>
+        </div>
 
         {#if speedMode === 'whole'}
-          <label class="grid gap-2 text-sm">
-            Speed {speed}x
-            <input type="range" min="0.25" max="4" step="0.25" bind:value={speed} />
-          </label>
+          <div class="speed-grid">
+            {#each speedRates as rate (rate)}
+              <button type="button" class:active={speed === rate} onclick={() => (speed = rate)}>{rate}x</button>
+            {/each}
+          </div>
+        {:else if !canUseTimeline}
+          <p class="rounded-md bg-gray-100 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {$t('editor_video_duration_unavailable')}
+          </p>
         {:else}
           <div class="space-y-4">
             {#each speedSegments as segment, index (segment.id)}
-              <section class="space-y-3 border-t border-gray-200 pt-4 text-sm dark:border-gray-700">
+              <section class="rounded-md border border-gray-200 p-3 dark:border-gray-700">
                 <HStack class="justify-between">
-                  <p>Segment {index + 1}</p>
-                  <Button variant="ghost" shape="round" size="small" onclick={() => removeSpeedSegment(segment.id)}
-                    >Remove</Button
-                  >
+                  <p class="text-sm font-medium">{$t('editor_video_segment')} {index + 1}</p>
+                  <Button variant="ghost" shape="round" size="small" onclick={() => removeSpeedSegment(segment.id)}>
+                    {$t('remove')}
+                  </Button>
                 </HStack>
-                <label class="grid gap-2">
-                  Speed {segment.rate}x
-                  <input type="range" min="0.25" max="4" step="0.25" bind:value={segment.rate} />
-                </label>
-                <div class="grid grid-cols-2 gap-3">
-                  <label class="grid gap-1 text-xs"
-                    >Start <input
-                      class="editor-input"
-                      type="number"
-                      min={trimStartSeconds}
-                      max={trimEndSeconds}
-                      step="0.1"
-                      bind:value={segment.startSeconds}
-                    /></label
-                  >
-                  <label class="grid gap-1 text-xs"
-                    >End <input
-                      class="editor-input"
-                      type="number"
-                      min={trimStartSeconds}
-                      max={trimEndSeconds}
-                      step="0.1"
-                      bind:value={segment.endSeconds}
-                    /></label
-                  >
+                <div class="mt-3 speed-grid">
+                  {#each speedRates as rate (rate)}
+                    <button
+                      type="button"
+                      class:active={segment.rate === rate}
+                      onclick={() => updateSpeedSegment(segment.id, { rate })}
+                    >
+                      {rate}x
+                    </button>
+                  {/each}
+                </div>
+                <div class="mt-4 time-readout">
+                  <span>{formatTime(segment.startSeconds)}</span>
+                  <span>{formatTime(segment.endSeconds)}</span>
+                </div>
+                <div
+                  class="timeline-track"
+                  role="group"
+                  aria-label={$t('editor_video_speed_segment_timeline')}
+                  onpointerdown={(event) => startTimelineDrag(event, 'speed-start', segment.id)}
+                >
+                  <div class="timeline-fill" style={getSegmentTimelineStyle(segment)}></div>
+                  <button
+                    type="button"
+                    class="timeline-handle"
+                    style={getHandleStyle(segment.startSeconds)}
+                    aria-label={$t('editor_video_segment_start')}
+                    onpointerdown={(event) => startTimelineDrag(event, 'speed-start', segment.id)}
+                  ></button>
+                  <button
+                    type="button"
+                    class="timeline-handle"
+                    style={getHandleStyle(segment.endSeconds)}
+                    aria-label={$t('editor_video_segment_end')}
+                    onpointerdown={(event) => startTimelineDrag(event, 'speed-end', segment.id)}
+                  ></button>
                 </div>
               </section>
             {/each}
-            <Button variant="outline" shape="round" size="small" onclick={addSpeedSegment}>Add segment</Button>
+
+            {#if speedSegmentError}
+              <p class="text-sm text-red-500">{speedSegmentError}</p>
+            {/if}
+
+            <Button variant="outline" shape="round" size="small" onclick={addSpeedSegment}>
+              {$t('editor_video_add_segment')}
+            </Button>
           </div>
         {/if}
-        <label class="flex items-center gap-2 text-sm"><input type="checkbox" bind:checked={muted} /> Mute</label>
-        <label class="grid gap-2 text-sm">
-          Volume {volume}x
+      </div>
+    {:else if selectedTool === 'audio'}
+      <div class="space-y-5">
+        <button
+          type="button"
+          aria-pressed={muted}
+          class="toggle-card {muted ? 'active' : ''}"
+          onclick={() => (muted = !muted)}
+        >
+          <span class="font-medium">{$t('editor_video_mute')}</span>
+          <span>{$t('editor_video_mute_description')}</span>
+        </button>
+        <label class="slider-row">
+          <span>{$t('editor_video_volume')}</span>
+          <span>{volume}x</span>
           <input type="range" min="0" max="2" step="0.05" bind:value={volume} disabled={muted} />
         </label>
-        <Button variant="outline" shape="round" size="small" onclick={exportFrame}>Export frame</Button>
       </div>
     {:else if selectedTool === 'text'}
       <div class="space-y-5">
-        <label class="grid gap-2 text-sm">
-          Text
+        <div class="text-preview" style:aspect-ratio={canUseDimensions ? `${width} / ${height}` : '16 / 9'}>
+          <img src={previewUrl} alt="" draggable="false" />
+          <button
+            type="button"
+            class="text-overlay"
+            style={textFrameStyle}
+            aria-label={$t('editor_video_move_text')}
+            onpointerdown={startTextDrag}
+          >
+            {text || $t('editor_video_text_placeholder')}
+          </button>
+        </div>
+
+        <label class="field">
+          <span>{$t('editor_video_text')}</span>
           <input class="editor-input" type="text" maxlength="200" bind:value={text} />
         </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="grid gap-1 text-xs"
-            >X <input class="editor-input" type="number" min="0" max="1" step="0.01" bind:value={textX} /></label
-          >
-          <label class="grid gap-1 text-xs"
-            >Y <input class="editor-input" type="number" min="0" max="1" step="0.01" bind:value={textY} /></label
-          >
-          <label class="grid gap-1 text-xs"
-            >Start <input
-              class="editor-input"
-              type="number"
-              min="0"
-              max={durationSeconds}
-              step="0.1"
-              bind:value={textStartSeconds}
-            /></label
-          >
-          <label class="grid gap-1 text-xs"
-            >End <input
-              class="editor-input"
-              type="number"
-              min="0"
-              max={durationSeconds}
-              step="0.1"
-              bind:value={textEndSeconds}
-            /></label
-          >
-        </div>
-        <label class="grid gap-2 text-sm">
-          Size {textSize}
+
+        {#if canUseTimeline}
+          <div>
+            <div class="time-readout">
+              <span>{formatTime(textStartSeconds)}</span>
+              <span>{formatTime(textEndSeconds)}</span>
+            </div>
+            <div
+              class="timeline-track"
+              role="group"
+              aria-label={$t('editor_video_text_timing')}
+              onpointerdown={(event) => startTimelineDrag(event, 'text-start')}
+            >
+              <div class="timeline-fill" style={textRangeStyle}></div>
+              <button
+                type="button"
+                class="timeline-handle"
+                style={getHandleStyle(textStartSeconds)}
+                aria-label={$t('editor_video_text_start')}
+                onpointerdown={(event) => startTimelineDrag(event, 'text-start')}
+              ></button>
+              <button
+                type="button"
+                class="timeline-handle"
+                style={getHandleStyle(textEndSeconds)}
+                aria-label={$t('editor_video_text_end')}
+                onpointerdown={(event) => startTimelineDrag(event, 'text-end')}
+              ></button>
+            </div>
+          </div>
+        {/if}
+
+        <label class="slider-row">
+          <span>{$t('size')}</span>
+          <span>{textSize}</span>
           <input type="range" min="0.02" max="0.2" step="0.01" bind:value={textSize} />
         </label>
-        <label class="grid gap-2 text-sm">
-          Color
+
+        <label class="field">
+          <span>{$t('color')}</span>
           <input class="h-10 w-20" type="color" bind:value={textColor} />
         </label>
+      </div>
+    {:else if selectedTool === 'frame'}
+      <div class="space-y-4">
+        <div class="rounded-md bg-gray-100 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          {$t('editor_video_frame_description')}
+        </div>
+        <Button variant="outline" shape="round" size="small" onclick={exportFrame}>
+          {$t('editor_video_export_frame')}
+        </Button>
       </div>
     {/if}
   </section>
 
   <section class="p-4">
-    <Button variant="outline" onclick={resetControls} class="self-start" shape="round" size="small">
+    <Button
+      variant="outline"
+      onclick={resetControls}
+      disabled={!hasUnsavedChanges}
+      class="self-start"
+      shape="round"
+      size="small"
+    >
       {$t('editor_reset_all_changes')}
     </Button>
   </section>
 </section>
 
 <style>
+  .tool-tab {
+    display: inline-flex;
+    height: 2.5rem;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: rgb(229 231 235);
+    background: rgb(31 41 55);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .tool-tab:hover,
+  .tool-tab.active {
+    color: white;
+    background: var(--immich-primary);
+  }
+
+  .toggle-card {
+    display: grid;
+    width: 100%;
+    gap: 0.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(55 65 81);
+    padding: 0.875rem;
+    text-align: start;
+    font-size: 0.875rem;
+    color: rgb(209 213 219);
+    background: rgb(17 24 39);
+  }
+
+  .toggle-card.active {
+    border-color: var(--immich-primary);
+    background: color-mix(in srgb, var(--immich-primary) 18%, transparent);
+    color: white;
+  }
+
+  .crop-preview,
+  .text-preview {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: black;
+  }
+
+  .crop-preview img,
+  .text-preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    user-select: none;
+  }
+
+  .crop-frame {
+    position: absolute;
+    border: 2px solid white;
+    box-shadow: 0 0 0 9999px rgb(0 0 0 / 55%);
+  }
+
+  .crop-grid {
+    position: absolute;
+    inset: 0;
+    cursor: move;
+    background-image:
+      linear-gradient(rgb(255 255 255 / 72%) 1px, transparent 0),
+      linear-gradient(90deg, rgb(255 255 255 / 72%) 1px, transparent 0);
+    background-size: calc(100% / 3) calc(100% / 3);
+  }
+
+  .crop-handle {
+    position: absolute;
+    z-index: 1;
+    border-radius: 9999px;
+    background: white;
+  }
+
+  .crop-handle.edge.top,
+  .crop-handle.edge.bottom {
+    left: 50%;
+    width: 2.25rem;
+    height: 0.375rem;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+  }
+
+  .crop-handle.edge.top {
+    top: -0.25rem;
+  }
+
+  .crop-handle.edge.bottom {
+    bottom: -0.25rem;
+  }
+
+  .crop-handle.edge.left,
+  .crop-handle.edge.right {
+    top: 50%;
+    width: 0.375rem;
+    height: 2.25rem;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+  }
+
+  .crop-handle.edge.left {
+    left: -0.25rem;
+  }
+
+  .crop-handle.edge.right {
+    right: -0.25rem;
+  }
+
+  .crop-handle.corner {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .crop-handle.corner.top-left {
+    top: -0.45rem;
+    left: -0.45rem;
+    cursor: nwse-resize;
+  }
+
+  .crop-handle.corner.top-right {
+    top: -0.45rem;
+    right: -0.45rem;
+    cursor: nesw-resize;
+  }
+
+  .crop-handle.corner.bottom-right {
+    right: -0.45rem;
+    bottom: -0.45rem;
+    cursor: nwse-resize;
+  }
+
+  .crop-handle.corner.bottom-left {
+    bottom: -0.45rem;
+    left: -0.45rem;
+    cursor: nesw-resize;
+  }
+
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .preset-button,
+  .filter-tile,
+  .speed-grid button,
+  .segmented-control button {
+    border-radius: 0.5rem;
+    border: 1px solid rgb(55 65 81);
+    background: rgb(17 24 39);
+    color: rgb(229 231 235);
+  }
+
+  .preset-button {
+    display: grid;
+    min-height: 5rem;
+    place-items: center;
+    gap: 0.25rem;
+    padding: 0.625rem;
+    font-size: 0.875rem;
+  }
+
+  .preset-button.active,
+  .filter-tile.active,
+  .speed-grid button.active,
+  .segmented-control button.active {
+    border-color: var(--immich-primary);
+    background: color-mix(in srgb, var(--immich-primary) 24%, transparent);
+    color: white;
+  }
+
+  .aspect-icon,
+  .free-crop-icon {
+    display: block;
+    border: 2px solid currentColor;
+    border-radius: 0.125rem;
+  }
+
+  .free-crop-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-style: dashed;
+  }
+
+  .slider-row {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .slider-row > span:first-child {
+    font-weight: 500;
+  }
+
+  .slider-row > span:nth-child(2) {
+    justify-self: end;
+    color: rgb(156 163 175);
+    font-size: 0.75rem;
+  }
+
+  .slider-row input[type='range'] {
+    width: 100%;
+  }
+
+  .filter-tile {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    text-align: start;
+    font-size: 0.875rem;
+  }
+
+  .time-readout {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: rgb(156 163 175);
+  }
+
+  .timeline-track {
+    position: relative;
+    height: 2.75rem;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, rgb(255 255 255 / 18%) 1px, transparent 1px), rgb(31 41 55);
+    background-size: 10% 100%;
+  }
+
+  .timeline-fill {
+    position: absolute;
+    top: 0.875rem;
+    height: 1rem;
+    border-radius: 9999px;
+    background: var(--immich-primary);
+  }
+
+  .timeline-handle {
+    position: absolute;
+    top: 50%;
+    width: 1.125rem;
+    height: 2.125rem;
+    border-radius: 9999px;
+    background: white;
+    box-shadow: 0 0 0 2px rgb(0 0 0 / 25%);
+    transform: translate(-50%, -50%);
+  }
+
+  .speed-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.375rem;
+  }
+
+  .speed-grid button {
+    min-height: 2.25rem;
+    font-size: 0.875rem;
+  }
+
+  .segmented-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.375rem;
+  }
+
+  .segmented-control button {
+    min-height: 2.5rem;
+    font-size: 0.875rem;
+  }
+
+  .text-overlay {
+    position: absolute;
+    max-width: 80%;
+    border-radius: 0.375rem;
+    border: 1px dashed rgb(255 255 255 / 75%);
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+    text-shadow: 0 1px 5px rgb(0 0 0 / 90%);
+    transform: translate(-50%, -50%);
+    cursor: move;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+
   .editor-input {
     border-radius: 0.375rem;
     border: 1px solid rgb(209 213 219);

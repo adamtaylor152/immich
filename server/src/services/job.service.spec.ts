@@ -32,6 +32,18 @@ describe(JobService.name, () => {
       expect(mocks.logger.error).not.toHaveBeenCalled();
     });
 
+    it('should not run duplicate detection follow-up when video duplicate frame generation is skipped', async () => {
+      mocks.job.run.mockResolvedValue(JobStatus.Skipped);
+
+      const job: JobItem = { name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: 'asset-1' } };
+      await sut.onJobRun(QueueName.VideoDuplicateDetection, job);
+
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.AssetDetectDuplicates,
+        data: { id: 'asset-1' },
+      });
+    });
+
     const tests: Array<{ item: JobItem; jobs: JobName[]; stub?: any }> = [
       {
         item: { name: JobName.SidecarCheck, data: { id: 'asset-1' } },

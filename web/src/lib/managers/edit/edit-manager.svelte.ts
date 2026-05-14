@@ -127,9 +127,10 @@ export class EditManager {
 
     try {
       // Setup the websocket listener before sending the edit request
-      const editCompleted = waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === assetId, 600_000)
-        .then(() => eventManager.emit('AssetEditsApplied', assetId))
-        .catch(() => undefined);
+      const editCompleted =
+        edits.length > 0
+          ? waitForWebsocketEvent('AssetEditReadyV2', (event) => event.asset.id === assetId, 600_000)
+          : undefined;
 
       await (edits.length === 0
         ? removeAssetEdits({ id: assetId })
@@ -140,8 +141,8 @@ export class EditManager {
             },
           }));
 
+      await editCompleted;
       eventManager.emit('AssetEditsApplied', assetId);
-      void editCompleted;
 
       toastManager.primary(t('editor_edits_applied_success'));
       this.hasAppliedEdits = true;

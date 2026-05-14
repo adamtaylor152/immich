@@ -13,11 +13,11 @@
     mdiCheck,
     mdiChevronLeft,
     mdiChevronRight,
-    mdiCropRotate,
     mdiFullscreen,
     mdiFullscreenExit,
     mdiPause,
     mdiPlay,
+    mdiTune,
     mdiVolumeHigh,
     mdiVolumeLow,
     mdiVolumeMedium,
@@ -81,6 +81,7 @@
   let hasFocused = $state(false);
   const Actions = $derived(getAssetActions($t, asset));
   const canEditVideo = $derived(isEnabled(Actions.Edit));
+  const editVideoLabel = $derived($t('editor_video_edit'));
 
   onMount(() => {
     showVideo = true;
@@ -244,11 +245,11 @@
                 <button
                   type="button"
                   class="video-editor-button shrink-0 rounded-full p-2 outline-none"
-                  aria-label={$t('editor')}
-                  title={$t('editor')}
+                  aria-label={editVideoLabel}
+                  title={editVideoLabel}
                   onclick={openVideoEditor}
                 >
-                  <Icon icon={mdiCropRotate} />
+                  <Icon icon={mdiTune} />
                 </button>
               {/if}
               <media-fullscreen-button class="shrink-0 rounded-full p-2 outline-none">

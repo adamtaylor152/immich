@@ -211,6 +211,10 @@ export class QueueService extends BaseService {
         return this.jobRepository.queue({ name: JobName.AssetDetectDuplicatesQueueAll, data: { force } });
       }
 
+      case QueueName.VideoDuplicateDetection: {
+        return this.jobRepository.queue({ name: JobName.AssetGenerateVideoDuplicateFramesQueueAll, data: { force } });
+      }
+
       case QueueName.MetadataExtraction: {
         return this.jobRepository.queue({ name: JobName.AssetExtractMetadataQueueAll, data: { force } });
       }

@@ -374,6 +374,8 @@ class ApiClient {
           return DownloadUpdate.fromJson(value);
         case 'DuplicateDetectionConfig':
           return DuplicateDetectionConfig.fromJson(value);
+        case 'DuplicateDetectionConfigEnhancedVideo':
+          return DuplicateDetectionConfigEnhancedVideo.fromJson(value);
         case 'DuplicateResolveDto':
           return DuplicateResolveDto.fromJson(value);
         case 'DuplicateResolveGroupDto':
