@@ -198,6 +198,7 @@ export const endpointTags: Record<ApiTag, string> = {
 
 export const AUDIO_ENCODER: Record<AudioCodec, string> = {
   [AudioCodec.Aac]: 'aac',
+  [AudioCodec.Libopus]: 'libopus',
   [AudioCodec.Mp3]: 'mp3',
   [AudioCodec.Opus]: 'libopus',
   [AudioCodec.PcmS16le]: 'pcm_s16le',
