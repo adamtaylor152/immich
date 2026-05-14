@@ -301,6 +301,17 @@ export type PeopleResponse = {
     /** Whether people appear in web sidebar */
     sidebarWeb: boolean;
 };
+export type SuppressionResponse = {
+    /** Person IDs to suppress from locked browsing sessions */
+    personIds: string[];
+    /** Whether suppression applies only to owned assets or all visible assets */
+    scope: SuppressionScope;
+    /** Tag IDs to suppress from locked browsing sessions */
+    tagIds: string[];
+};
+export type PrivacyResponse = {
+    suppression: SuppressionResponse;
+};
 export type PurchaseResponse = {
     /** Date until which to hide buy button */
     hideBuyButtonUntil: string;
@@ -331,6 +342,7 @@ export type UserPreferencesResponseDto = {
     folders: FoldersResponse;
     memories: MemoriesResponse;
     people: PeopleResponse;
+    privacy: PrivacyResponse;
     purchase: PurchaseResponse;
     ratings: RatingsResponse;
     sharedLinks: SharedLinksResponse;
@@ -378,6 +390,17 @@ export type PeopleUpdate = {
     /** Whether people appear in web sidebar */
     sidebarWeb?: boolean;
 };
+export type SuppressionUpdate = {
+    /** Person IDs to suppress from locked browsing sessions */
+    personIds?: string[];
+    /** Whether suppression applies only to owned assets or all visible assets */
+    scope?: SuppressionScope;
+    /** Tag IDs to suppress from locked browsing sessions */
+    tagIds?: string[];
+};
+export type PrivacyUpdate = {
+    suppression?: SuppressionUpdate;
+};
 export type PurchaseUpdate = {
     /** Date until which to hide buy button */
     hideBuyButtonUntil?: string;
@@ -409,6 +432,7 @@ export type UserPreferencesUpdateDto = {
     folders?: FoldersUpdate;
     memories?: MemoriesUpdate;
     people?: PeopleUpdate;
+    privacy?: PrivacyUpdate;
     purchase?: PurchaseUpdate;
     ratings?: RatingsUpdate;
     sharedLinks?: SharedLinksUpdate;
@@ -922,12 +946,74 @@ export type RotateParameters = {
 export type MirrorParameters = {
     axis: MirrorAxis;
 };
+export type TrimParameters = {
+    /** Trim end time in milliseconds */
+    endMs: number;
+    /** Trim start time in milliseconds */
+    startMs: number;
+};
+export type StraightenParameters = {
+    /** Straighten angle in degrees */
+    angle: number;
+};
+export type AdjustParameters = {
+    blackPoint?: number;
+    blueTone?: number;
+    brightness?: number;
+    contrast?: number;
+    hdr?: number;
+    highlights?: number;
+    saturation?: number;
+    shadows?: number;
+    skinTone?: number;
+    tint?: number;
+    vignette?: number;
+    warmth?: number;
+    whitePoint?: number;
+};
+export type LookParameters = {
+    /** Filter or effect intensity */
+    intensity?: number;
+    /** Filter or effect name */
+    name: string;
+};
+export type ToggleParameters = {
+    enabled?: boolean;
+};
+export type TextOverlayParameters = {
+    /** Text color in hex format */
+    color?: string;
+    /** Overlay end time in milliseconds */
+    endMs?: number;
+    /** Font size as a percentage of video height */
+    size?: number;
+    /** Overlay start time in milliseconds */
+    startMs?: number;
+    text: string;
+    /** Horizontal position as a percentage of video width */
+    x: number;
+    /** Vertical position as a percentage of video height */
+    y: number;
+};
+export type AudioParameters = {
+    muted?: boolean;
+    /** Audio volume multiplier */
+    volume?: number;
+};
+export type SpeedParameters = {
+    /** Speed segment end time in milliseconds */
+    endMs?: number;
+    /** Playback speed multiplier */
+    rate: number;
+    /** Speed segment start time in milliseconds */
+    startMs?: number;
+};
 export type AssetEditActionItemResponseDto = {
     action: AssetEditAction;
     /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsResponseDto = {
     /** Asset ID these edits belong to */
@@ -937,12 +1023,63 @@ export type AssetEditsResponseDto = {
 };
 export type AssetEditActionItemDto = {
     action: AssetEditAction;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsCreateDto = {
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply */
     edits: AssetEditActionItemDto[];
+};
+export type ImageDescriptionEnrichmentResponseDto = {
+    appliedDescription: boolean;
+    appliedTags: boolean;
+    context?: string;
+    description?: string;
+    environment?: string;
+    error?: string;
+    modelName?: string;
+    objects?: string[];
+    people?: {
+        activity: string;
+        apparent_age_group: string;
+        confidence: string;
+        count: number;
+    }[];
+    status: Status;
+    tags?: string[];
+    updatedAt?: string;
+    visibleText?: string[];
+};
+export type ImageEnrichmentReview = {
+    action: Action;
+    isNsfw: boolean;
+    /** Review timestamp */
+    reviewedAt: string;
+    /** Reviewer user ID */
+    reviewedBy: string;
+};
+export type NsfwDetectionEnrichmentResponseDto = {
+    appliedTags: boolean;
+    effectiveIsNsfw: boolean;
+    error?: string;
+    isNsfw?: boolean;
+    labels?: {
+        [key: string]: number;
+    };
+    modelName?: string;
+    review?: ImageEnrichmentReview;
+    score?: number;
+    status: Status;
+    updatedAt?: string;
+};
+export type AssetImageEnrichmentResponseDto = {
+    /** Asset ID */
+    assetId: string;
+    description: ImageDescriptionEnrichmentResponseDto;
+    nsfwDetection: NsfwDetectionEnrichmentResponseDto;
+};
+export type AssetImageEnrichmentActionRequestDto = {
+    action: AssetImageEnrichmentAction;
 };
 export type AssetMetadataResponseDto = {
     /** Metadata key */
@@ -1192,10 +1329,13 @@ export type QueuesResponseLegacyDto = {
     editor: QueueResponseLegacyDto;
     faceDetection: QueueResponseLegacyDto;
     facialRecognition: QueueResponseLegacyDto;
+    imageDescription: QueueResponseLegacyDto;
+    imageEnrichment: QueueResponseLegacyDto;
     library: QueueResponseLegacyDto;
     metadataExtraction: QueueResponseLegacyDto;
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
+    nsfwDetection: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
@@ -1203,6 +1343,7 @@ export type QueuesResponseLegacyDto = {
     storageTemplateMigration: QueueResponseLegacyDto;
     thumbnailGeneration: QueueResponseLegacyDto;
     videoConversion: QueueResponseLegacyDto;
+    videoDuplicateDetection: QueueResponseLegacyDto;
     workflow: QueueResponseLegacyDto;
 };
 export type JobCreateDto = {
@@ -1611,6 +1752,7 @@ export type MetadataSearchDto = {
     encodedVideoPath?: string;
     /** Filter by asset ID */
     id?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -1649,6 +1791,8 @@ export type MetadataSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -1732,6 +1876,7 @@ export type RandomSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -1760,6 +1905,8 @@ export type RandomSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -1796,6 +1943,7 @@ export type SmartSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -1832,6 +1980,8 @@ export type SmartSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -1866,6 +2016,7 @@ export type StatisticsSearchDto = {
     createdBefore?: string;
     /** Filter by description text */
     description?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -1892,6 +2043,8 @@ export type StatisticsSearchDto = {
     rating?: number | null;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2000,10 +2153,14 @@ export type ServerFeaturesDto = {
     email: boolean;
     /** Whether facial recognition is enabled */
     facialRecognition: boolean;
+    /** Whether image description and tag generation is enabled */
+    imageDescription: boolean;
     /** Whether face import is enabled */
     importFaces: boolean;
     /** Whether map feature is enabled */
     map: boolean;
+    /** Whether NSFW detection is enabled */
+    nsfwDetection: boolean;
     /** Whether OAuth is enabled */
     oauth: boolean;
     /** Whether OAuth auto-launch is enabled */
@@ -2012,6 +2169,8 @@ export type ServerFeaturesDto = {
     ocr: boolean;
     /** Whether password login is enabled */
     passwordLogin: boolean;
+    /** Whether physical file deduplication is enabled */
+    physicalDeduplication: boolean;
     /** Whether reverse geocoding is enabled */
     reverseGeocoding: boolean;
     /** Whether search is enabled */
@@ -2342,16 +2501,20 @@ export type SystemConfigJobDto = {
     backgroundTask: JobSettingsDto;
     editor: JobSettingsDto;
     faceDetection: JobSettingsDto;
+    imageDescription?: JobSettingsDto;
+    imageEnrichment?: JobSettingsDto;
     library: JobSettingsDto;
     metadataExtraction: JobSettingsDto;
     migration: JobSettingsDto;
     notifications: JobSettingsDto;
+    nsfwDetection?: JobSettingsDto;
     ocr: JobSettingsDto;
     search: JobSettingsDto;
     sidecar: JobSettingsDto;
     smartSearch: JobSettingsDto;
     thumbnailGeneration: JobSettingsDto;
     videoConversion: JobSettingsDto;
+    videoDuplicateDetection: JobSettingsDto;
     workflow: JobSettingsDto;
 };
 export type SystemConfigLibraryScanDto = {
@@ -2388,6 +2551,16 @@ export type ClipConfig = {
 export type DuplicateDetectionConfig = {
     /** Whether the task is enabled */
     enabled: boolean;
+    enhancedVideo: {
+        /** Whether enhanced video duplicate detection is enabled */
+        enabled: boolean;
+        /** Number of video frames to sample for duplicate confirmation */
+        frameCount: number;
+        /** Maximum distance threshold for enhanced video duplicate frame matching */
+        maxDistance: number;
+        /** Minimum matching sampled frames required to confirm a video duplicate */
+        minMatchingFrames: number;
+    };
     /** Maximum distance threshold for duplicate detection */
     maxDistance: number;
 };
@@ -2402,6 +2575,30 @@ export type FacialRecognitionConfig = {
     minScore: number;
     /** Name of the model to use */
     modelName: string;
+};
+export type ImageDescriptionConfig = {
+    /** Hardware acceleration backend to use */
+    acceleration?: MachineLearningHardwareAcceleration;
+    /** Hardware device to use */
+    device: string;
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Name of the fallback model to use */
+    fallbackModelName: string;
+    /** Name of the model to use */
+    modelName: string;
+};
+export type NsfwDetectionConfig = {
+    /** Hardware device to use */
+    device: string;
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Hide NSFW assets from library views unless the session has PIN-elevated access */
+    hideFromLibrary: boolean;
+    /** Name of the model to use */
+    modelName: string;
+    /** Minimum score required to mark an image as NSFW */
+    threshold: number;
 };
 export type OcrConfig = {
     /** Whether the task is enabled */
@@ -2422,6 +2619,8 @@ export type SystemConfigMachineLearningDto = {
     /** Enabled */
     enabled: boolean;
     facialRecognition: FacialRecognitionConfig;
+    imageDescription?: ImageDescriptionConfig;
+    nsfwDetection?: NsfwDetectionConfig;
     ocr: OcrConfig;
     /** ML service URLs */
     urls: string[];
@@ -2509,6 +2708,12 @@ export type SystemConfigPasswordLoginDto = {
     /** Enabled */
     enabled: boolean;
 };
+export type SystemConfigPhysicalDeduplicationDto = {
+    /** Enabled */
+    enabled: boolean;
+    /** Master user ID */
+    masterUserId: string | null;
+};
 export type SystemConfigReverseGeocodingDto = {
     /** Enabled */
     enabled: boolean;
@@ -2569,6 +2774,7 @@ export type SystemConfigDto = {
     notifications: SystemConfigNotificationsDto;
     oauth: SystemConfigOAuthDto;
     passwordLogin: SystemConfigPasswordLoginDto;
+    physicalDeduplication?: SystemConfigPhysicalDeduplicationDto;
     reverseGeocoding: SystemConfigReverseGeocodingDto;
     server: SystemConfigServerDto;
     storageTemplate: SystemConfigStorageTemplateDto;
@@ -2576,6 +2782,18 @@ export type SystemConfigDto = {
     theme: SystemConfigThemeDto;
     trash: SystemConfigTrashDto;
     user: SystemConfigUserDto;
+};
+export type MachineLearningHardwareResponseDto = {
+    /** Available PyTorch CUDA device count */
+    cudaDeviceCount: number;
+    /** Available OpenVINO device IDs */
+    openvinoDeviceIds: string[];
+    /** Detected preferred hardware acceleration */
+    preferredAcceleration: MachineLearningHardwareAcceleration;
+    /** Available ONNX Runtime providers */
+    providers: string[];
+    /** Whether PyTorch CUDA is available */
+    torchCudaAvailable: boolean;
 };
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
@@ -3626,10 +3844,11 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
 /**
  * List all albums
  */
-export function getAllAlbums({ assetId, isOwned, isShared }: {
+export function getAllAlbums({ assetId, isOwned, isShared, suppressedOnly }: {
     assetId?: string;
     isOwned?: boolean;
     isShared?: boolean;
+    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -3637,7 +3856,8 @@ export function getAllAlbums({ assetId, isOwned, isShared }: {
     }>(`/albums${QS.query(QS.explode({
         assetId,
         isOwned,
-        isShared
+        isShared,
+        suppressedOnly
     }))}`, {
         ...opts
     }));
@@ -3697,17 +3917,19 @@ export function deleteAlbum({ id }: {
 /**
  * Retrieve an album
  */
-export function getAlbumInfo({ id, key, slug }: {
+export function getAlbumInfo({ id, key, slug, suppressedOnly }: {
     id: string;
     key?: string;
     slug?: string;
+    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumResponseDto;
     }>(`/albums/${encodeURIComponent(id)}${QS.query(QS.explode({
         key,
-        slug
+        slug,
+        suppressedOnly
     }))}`, {
         ...opts
     }));
@@ -4105,6 +4327,35 @@ export function editAsset({ id, assetEditsCreateDto }: {
         ...opts,
         method: "PUT",
         body: assetEditsCreateDto
+    })));
+}
+/**
+ * Get image enrichment metadata
+ */
+export function getAssetImageEnrichment({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetImageEnrichmentResponseDto;
+    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, {
+        ...opts
+    }));
+}
+/**
+ * Update image enrichment metadata
+ */
+export function updateAssetImageEnrichment({ id, assetImageEnrichmentActionRequestDto }: {
+    id: string;
+    assetImageEnrichmentActionRequestDto: AssetImageEnrichmentActionRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetImageEnrichmentResponseDto;
+    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: assetImageEnrichmentActionRequestDto
     })));
 }
 /**
@@ -5366,12 +5617,13 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, imageEnrichment, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, suppressedOnly, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
     createdAfter?: string;
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     isEncoded?: boolean;
     isFavorite?: boolean;
     isMotion?: boolean;
@@ -5387,6 +5639,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     rating?: number | null;
     size?: number;
     state?: string | null;
+    suppressedOnly?: boolean;
     tagIds?: string[] | null;
     takenAfter?: string;
     takenBefore?: string;
@@ -5408,6 +5661,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         country,
         createdAfter,
         createdBefore,
+        imageEnrichment,
         isEncoded,
         isFavorite,
         isMotion,
@@ -5423,6 +5677,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         rating,
         size,
         state,
+        suppressedOnly,
         tagIds,
         takenAfter,
         takenBefore,
@@ -6109,6 +6364,17 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Get machine learning hardware
+ */
+export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MachineLearningHardwareResponseDto;
+    }>("/system-config/machine-learning/hardware", {
+        ...opts
+    }));
+}
+/**
  * Get storage template options
  */
 export function getStorageTemplateOptions(opts?: Oazapfts.RequestOpts) {
@@ -6295,9 +6561,10 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
+    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
@@ -6305,6 +6572,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
     orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
+    suppressedOnly?: boolean;
     tagId?: string;
     timeBucket: string;
     userId?: string;
@@ -6319,6 +6587,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
     }>(`/timeline/bucket${QS.query(QS.explode({
         albumId,
         bbox,
+        dateType,
         isFavorite,
         isTrashed,
         key,
@@ -6326,6 +6595,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
         orderBy,
         personId,
         slug,
+        suppressedOnly,
         tagId,
         timeBucket,
         userId,
@@ -6340,9 +6610,10 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
+    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
@@ -6350,6 +6621,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
     orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
+    suppressedOnly?: boolean;
     tagId?: string;
     userId?: string;
     visibility?: AssetVisibility;
@@ -6363,6 +6635,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
     }>(`/timeline/buckets${QS.query(QS.explode({
         albumId,
         bbox,
+        dateType,
         isFavorite,
         isTrashed,
         key,
@@ -6370,6 +6643,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
         orderBy,
         personId,
         slug,
+        suppressedOnly,
         tagId,
         userId,
         visibility,
@@ -6751,6 +7025,10 @@ export enum AssetOrder {
     Asc = "asc",
     Desc = "desc"
 }
+export enum SuppressionScope {
+    Owned = "owned",
+    Visible = "visible"
+}
 export enum AssetVisibility {
     Archive = "archive",
     Timeline = "timeline",
@@ -6953,11 +7231,40 @@ export enum AssetTypeEnum {
 export enum AssetEditAction {
     Crop = "crop",
     Rotate = "rotate",
-    Mirror = "mirror"
+    Mirror = "mirror",
+    Trim = "trim",
+    Straighten = "straighten",
+    Adjust = "adjust",
+    Filter = "filter",
+    Effect = "effect",
+    AutoEnhance = "autoEnhance",
+    Stabilize = "stabilize",
+    TextOverlay = "textOverlay",
+    Audio = "audio",
+    Speed = "speed"
 }
 export enum MirrorAxis {
     Horizontal = "horizontal",
     Vertical = "vertical"
+}
+export enum Status {
+    Missing = "missing",
+    Success = "success",
+    Failed = "failed"
+}
+export enum Action {
+    Accepted = "accepted",
+    MarkedSafe = "marked-safe",
+    MarkedNsfw = "marked-nsfw"
+}
+export enum AssetImageEnrichmentAction {
+    RerunImageDescription = "rerun-image-description",
+    RerunNsfwDetection = "rerun-nsfw-detection",
+    AcceptNsfwResult = "accept-nsfw-result",
+    MarkNsfw = "mark-nsfw",
+    MarkSafe = "mark-safe",
+    ClearGeneratedDescription = "clear-generated-description",
+    ClearGeneratedTags = "clear-generated-tags"
 }
 export enum AssetMediaSize {
     Original = "original",
@@ -6976,7 +7283,9 @@ export enum ManualJobName {
     UserCleanup = "user-cleanup",
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
-    BackupDatabase = "backup-database"
+    BackupDatabase = "backup-database",
+    PhysicalDeduplicationDryRun = "physical-deduplication-dry-run",
+    PhysicalDeduplicationApply = "physical-deduplication-apply"
 }
 export enum QueueName {
     ThumbnailGeneration = "thumbnailGeneration",
@@ -6986,6 +7295,7 @@ export enum QueueName {
     FacialRecognition = "facialRecognition",
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
+    VideoDuplicateDetection = "videoDuplicateDetection",
     BackgroundTask = "backgroundTask",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
@@ -6995,6 +7305,9 @@ export enum QueueName {
     Notifications = "notifications",
     BackupDatabase = "backupDatabase",
     Ocr = "ocr",
+    ImageEnrichment = "imageEnrichment",
+    ImageDescription = "imageDescription",
+    NsfwDetection = "nsfwDetection",
     Workflow = "workflow",
     Editor = "editor"
 }
@@ -7050,7 +7363,10 @@ export enum JobName {
     AssetDetectFaces = "AssetDetectFaces",
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
+    AssetGenerateVideoDuplicateFramesQueueAll = "AssetGenerateVideoDuplicateFramesQueueAll",
+    AssetGenerateVideoDuplicateFrames = "AssetGenerateVideoDuplicateFrames",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
+    AssetVideoEditGeneration = "AssetVideoEditGeneration",
     AssetEncodeVideoQueueAll = "AssetEncodeVideoQueueAll",
     AssetEncodeVideo = "AssetEncodeVideo",
     AssetEmptyTrash = "AssetEmptyTrash",
@@ -7094,11 +7410,27 @@ export enum JobName {
     SmartSearch = "SmartSearch",
     StorageTemplateMigration = "StorageTemplateMigration",
     StorageTemplateMigrationSingle = "StorageTemplateMigrationSingle",
+    PhysicalDeduplicationMigrationDryRun = "PhysicalDeduplicationMigrationDryRun",
+    PhysicalDeduplicationMigrationApply = "PhysicalDeduplicationMigrationApply",
     TagCleanup = "TagCleanup",
     VersionCheck = "VersionCheck",
     OcrQueueAll = "OcrQueueAll",
     Ocr = "Ocr",
+    ImageDescriptionQueueAll = "ImageDescriptionQueueAll",
+    ImageDescription = "ImageDescription",
+    NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
+    NsfwDetection = "NsfwDetection",
     WorkflowRun = "WorkflowRun"
+}
+export enum ImageEnrichmentFilter {
+    Nsfw = "nsfw",
+    NsfwReview = "nsfw-review",
+    NsfwReviewed = "nsfw-reviewed",
+    NsfwOverridden = "nsfw-overridden",
+    ImageDescriptionFailed = "image-description-failed",
+    NsfwDetectionFailed = "nsfw-detection-failed",
+    MissingImageDescription = "missing-image-description",
+    MissingNsfwDetection = "missing-nsfw-detection"
 }
 export enum SearchSuggestionType {
     Country = "country",
@@ -7263,9 +7595,18 @@ export enum LogLevel {
     Error = "error",
     Fatal = "fatal"
 }
+export enum MachineLearningHardwareAcceleration {
+    Auto = "auto",
+    Openvino = "openvino",
+    Cuda = "cuda"
+}
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
     ClientSecretBasic = "client_secret_basic"
+}
+export enum TimeBucketDateType {
+    Added = "added",
+    Taken = "taken"
 }
 export enum AssetOrderBy {
     TakenAt = "takenAt",
