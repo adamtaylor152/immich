@@ -79,7 +79,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     preferredHwDevice: 'auto',
     transcode: TranscodePolicy.Required,
     accel: TranscodeHardwareAcceleration.Disabled,
-    accelDecode: false,
+    accelDecode: true,
     tonemap: ToneMapping.Hable,
   },
   logging: {

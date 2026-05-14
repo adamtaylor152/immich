@@ -648,6 +648,22 @@ where
 limit
   $5
 
+-- AssetRepository.getRecentlyCreatedAssetIds
+select
+  "id" as "data",
+  "createdAt" as "value"
+from
+  "asset"
+where
+  "ownerId" = $1::uuid
+  and "asset"."visibility" = $2
+  and "type" = $3
+  and "deletedAt" is null
+order by
+  "value" desc
+limit
+  $4
+
 -- AssetRepository.getNsfwAssetIds
 select
   "asset"."id"

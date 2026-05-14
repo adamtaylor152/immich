@@ -977,6 +977,24 @@ export class AssetRepository {
     return { fieldName: 'exifInfo.city', items };
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, { minAssetsPerField: 5, maxFields: 12 }] })
+  async getRecentlyCreatedAssetIds(ownerId: string, options: AssetExploreFieldOptions) {
+    const { maxFields } = options;
+    const items = await this.db
+      .selectFrom('asset')
+      .select(['id as data', 'createdAt as value'])
+      .where('ownerId', '=', asUuid(ownerId))
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('type', '=', AssetType.Image)
+      .where('deletedAt', 'is', null)
+      .$call((qb) => withHiddenContentFilter(qb, options))
+      .orderBy('value', 'desc')
+      .limit(maxFields)
+      .execute();
+
+    return { fieldName: 'createdAt', items };
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   @ChunkedArray()
   async getNsfwAssetIds(ids: string[]): Promise<Set<string>> {

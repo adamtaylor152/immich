@@ -187,9 +187,7 @@ describe(AssetJobRepository.name, () => {
       const queuedIds = queued.map(({ id }) => id);
 
       expect(queuedIds).toEqual(expect.arrayContaining([missing.id, partial.id]));
-      expect(queuedIds).not.toEqual(
-        expect.arrayContaining([complete.id, image.id, hidden.id, locked.id, deleted.id]),
-      );
+      expect(queuedIds).not.toEqual(expect.arrayContaining([complete.id, image.id, hidden.id, locked.id, deleted.id]));
     });
 
     it('should include completed video assets when forced', async () => {
