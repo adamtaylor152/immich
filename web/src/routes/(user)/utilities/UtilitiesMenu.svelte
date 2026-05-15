@@ -1,5 +1,6 @@
 <script lang="ts">
   import AppDownloadModal from '$lib/modals/AppDownloadModal.svelte';
+  import { authManager } from '$lib/managers/auth-manager.svelte';
   import ObtainiumConfigModal from '$lib/modals/ObtainiumConfigModal.svelte';
   import { Route } from '$lib/route';
   import { Icon, modalManager, Text } from '@immich/ui';
@@ -7,17 +8,25 @@
     mdiCellphoneArrowDownVariant,
     mdiContentDuplicate,
     mdiCrosshairsGps,
+    mdiFileSearchOutline,
     mdiImageSizeSelectLarge,
+    mdiImageBrokenVariant,
     mdiLinkEdit,
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
-  const links = [
+  const links = $derived([
     { href: Route.duplicatesUtility(), icon: mdiContentDuplicate, label: $t('review_duplicates') },
     { href: Route.largeFileUtility(), icon: mdiImageSizeSelectLarge, label: $t('review_large_files') },
     { href: Route.geolocationUtility(), icon: mdiCrosshairsGps, label: $t('manage_geolocation') },
+    ...(authManager.user.isAdmin
+      ? [
+          { href: Route.missingMediaUtility(), icon: mdiFileSearchOutline, label: $t('review_missing_media') },
+          { href: Route.corruptMediaUtility(), icon: mdiImageBrokenVariant, label: $t('review_corrupt_media') },
+        ]
+      : []),
     // { href: Route.workflows(), icon: mdiStateMachine, label: $t('workflows') },
-  ];
+  ]);
 </script>
 
 <div class="rounded-3xl border border-gray-300 pt-1 pb-6 dark:border-immich-dark-gray dark:text-white">

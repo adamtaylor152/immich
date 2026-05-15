@@ -40,6 +40,7 @@ import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetFaceAuditTable } from 'src/schema/tables/asset-face-audit.table';
 import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { AssetFileTable } from 'src/schema/tables/asset-file.table';
+import { AssetHealthCandidateTable, AssetHealthRunTable, AssetHealthTable } from 'src/schema/tables/asset-health.table';
 import { AssetJobStatusTable } from 'src/schema/tables/asset-job-status.table';
 import { AssetMetadataAuditTable } from 'src/schema/tables/asset-metadata-audit.table';
 import { AssetMetadataTable } from 'src/schema/tables/asset-metadata.table';
@@ -109,6 +110,9 @@ export class ImmichDatabase {
     AssetOcrTable,
     AssetTable,
     AssetFileTable,
+    AssetHealthRunTable,
+    AssetHealthTable,
+    AssetHealthCandidateTable,
     AssetExifTable,
     AssetVideoDuplicateFrameTable,
     FaceSearchTable,
@@ -205,6 +209,9 @@ export interface DB {
   asset_face: AssetFaceTable;
   asset_face_audit: AssetFaceAuditTable;
   asset_file: AssetFileTable;
+  asset_health_run: AssetHealthRunTable;
+  asset_health: AssetHealthTable;
+  asset_health_candidate: AssetHealthCandidateTable;
   asset_metadata: AssetMetadataTable;
   asset_metadata_audit: AssetMetadataAuditTable;
   asset_job_status: AssetJobStatusTable;

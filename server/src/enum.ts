@@ -570,7 +570,50 @@ export const ImageFormatSchema = z.enum(ImageFormat).describe('Image format').me
 export enum RawExtractedFormat {
   Jpeg = 'jpeg',
   Jxl = 'jxl',
+  Tiff = 'tiff',
 }
+
+export enum MediaHealthCategory {
+  Missing = 'missing',
+  Corrupt = 'corrupt',
+}
+
+export const MediaHealthCategorySchema = z
+  .enum(MediaHealthCategory)
+  .describe('Media health category')
+  .meta({ id: 'MediaHealthCategory' });
+
+export enum MediaHealthSeverity {
+  Info = 'info',
+  Warning = 'warning',
+  Critical = 'critical',
+}
+
+export const MediaHealthSeveritySchema = z
+  .enum(MediaHealthSeverity)
+  .describe('Media health severity')
+  .meta({ id: 'MediaHealthSeverity' });
+
+export enum MediaHealthStatus {
+  Found = 'found',
+  Missing = 'missing',
+  Candidate = 'candidate',
+  Relinked = 'relinked',
+  Dismissed = 'dismissed',
+  Resolved = 'resolved',
+  UnsupportedRaw = 'unsupported_raw',
+  CorruptSuspect = 'corrupt_suspect',
+  CorruptConfirmed = 'corrupt_confirmed',
+  TrashQueued = 'trash_queued',
+  Trashed = 'trashed',
+  DeleteQueued = 'delete_queued',
+  Deleted = 'deleted',
+}
+
+export const MediaHealthStatusSchema = z
+  .enum(MediaHealthStatus)
+  .describe('Media health status')
+  .meta({ id: 'MediaHealthStatus' });
 
 export enum LogLevel {
   Verbose = 'verbose',
@@ -818,6 +861,7 @@ export enum QueueName {
   ImageEnrichment = 'imageEnrichment',
   ImageDescription = 'imageDescription',
   NsfwDetection = 'nsfwDetection',
+  MediaHealth = 'mediaHealth',
   Workflow = 'workflow',
   Editor = 'editor',
 }
@@ -854,6 +898,11 @@ export enum JobName {
   AssetFileMigration = 'AssetFileMigration',
   AssetGenerateThumbnailsQueueAll = 'AssetGenerateThumbnailsQueueAll',
   AssetGenerateThumbnails = 'AssetGenerateThumbnails',
+
+  MediaHealthScanMissing = 'MediaHealthScanMissing',
+  MediaHealthLocateMissing = 'MediaHealthLocateMissing',
+  MediaHealthScanCorrupt = 'MediaHealthScanCorrupt',
+  MediaHealthDeleteCorrupt = 'MediaHealthDeleteCorrupt',
 
   AuditTableCleanup = 'AuditTableCleanup',
 
@@ -1187,6 +1236,7 @@ export enum ApiTag {
   Libraries = 'Libraries',
   Maintenance = 'Maintenance (admin)',
   Map = 'Map',
+  MediaHealth = 'Media Health',
   Memories = 'Memories',
   Notifications = 'Notifications',
   NotificationsAdmin = 'Notifications (admin)',

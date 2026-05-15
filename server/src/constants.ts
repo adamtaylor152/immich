@@ -155,6 +155,7 @@ export const endpointTags: Record<ApiTag, string> = {
   [ApiTag.Maintenance]: 'Maintenance mode allows you to put Immich in a read-only state to perform various operations.',
   [ApiTag.Map]:
     'Map endpoints include supplemental functionality related to geolocation, such as reverse geocoding and retrieving map markers for assets with geolocation data.',
+  [ApiTag.MediaHealth]: 'Media health utilities identify missing and corrupt source files.',
   [ApiTag.Memories]:
     'A memory is a specialized collection of assets with dedicated viewing implementations in the web and mobile clients. A memory includes fields related to visibility and are automatically generated per user via a background job.',
   [ApiTag.Notifications]:

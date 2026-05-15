@@ -20,6 +20,7 @@ import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { MapRepository } from 'src/repositories/map.repository';
+import { MediaHealthRepository } from 'src/repositories/media-health.repository';
 import { MediaRepository } from 'src/repositories/media.repository';
 import { MemoryRepository } from 'src/repositories/memory.repository';
 import { MetadataRepository } from 'src/repositories/metadata.repository';
@@ -75,6 +76,7 @@ export const repositories = [
   LoggingRepository,
   MachineLearningRepository,
   MapRepository,
+  MediaHealthRepository,
   MediaRepository,
   MemoryRepository,
   MetadataRepository,

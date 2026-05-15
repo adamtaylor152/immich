@@ -18,6 +18,7 @@ import {
   mdiFileXmlBox,
   mdiFolderMove,
   mdiImageSearch,
+  mdiImageBrokenVariant,
   mdiLibraryShelves,
   mdiOcr,
   mdiPause,
@@ -198,6 +199,11 @@ export const asQueueItem = ($t: MessageFormatter, queue: { name: QueueName }): Q
       icon: mdiVideo,
       title: $t('admin.enhanced_video_duplicate_detection'),
       subtitle: $t('admin.enhanced_video_duplicate_detection_job_description'),
+    },
+    [QueueName.MediaHealth]: {
+      icon: mdiImageBrokenVariant,
+      title: $t('admin.media_health_job'),
+      subtitle: $t('admin.media_health_job_description'),
     },
     [QueueName.FaceDetection]: {
       icon: mdiFaceRecognition,

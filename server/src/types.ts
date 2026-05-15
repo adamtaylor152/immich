@@ -258,6 +258,21 @@ export interface IDeferrableJob extends IEntityJob {
   deferred?: boolean;
 }
 
+export interface IMediaHealthScanJob extends IBaseJob {
+  runId?: string;
+  assetIds?: string[];
+}
+
+export interface IMediaHealthLocateJob extends IBaseJob {
+  runId?: string;
+  ids?: string[];
+}
+
+export interface IMediaHealthDeleteCorruptJob extends IBaseJob {
+  ids: string[];
+  userId: string;
+}
+
 export interface INightlyJob extends IBaseJob {
   nightly?: boolean;
 }
@@ -330,6 +345,12 @@ export type JobItem =
   // Thumbnails
   | { name: JobName.AssetGenerateThumbnailsQueueAll; data: IBaseJob }
   | { name: JobName.AssetGenerateThumbnails; data: IEntityJob }
+
+  // Media Health
+  | { name: JobName.MediaHealthScanMissing; data: IMediaHealthScanJob }
+  | { name: JobName.MediaHealthLocateMissing; data: IMediaHealthLocateJob }
+  | { name: JobName.MediaHealthScanCorrupt; data: IMediaHealthScanJob }
+  | { name: JobName.MediaHealthDeleteCorrupt; data: IMediaHealthDeleteCorruptJob }
 
   // User
   | { name: JobName.UserDeleteCheck; data?: IBaseJob }

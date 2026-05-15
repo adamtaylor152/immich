@@ -22,6 +22,7 @@ import {
 } from 'src/enum';
 import { MediaService } from 'src/services/media.service';
 import { AudioStreamInfo, JobCounts, RawImageInfo, VideoFormat, VideoStreamInfo } from 'src/types';
+import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { PersonFactory } from 'test/factories/person.factory';
@@ -35,7 +36,12 @@ import { makeStream, newTestService, ServiceMocks } from 'test/utils';
 const fullsizeBuffer = Buffer.from('embedded image data');
 const rawBuffer = Buffer.from('raw image data');
 const extractedBuffer = Buffer.from('embedded image file');
+const renderedRawBuffer = Buffer.from('rendered raw image');
 const getFilterOption = (outputOptions: string[], option = '-vf') => outputOptions[outputOptions.indexOf(option) + 1];
+
+vi.mock('src/utils/raw-renderer', () => ({
+  renderRawWithLibRaw: vi.fn(),
+}));
 
 describe(MediaService.name, () => {
   let sut: MediaService;
@@ -359,6 +365,8 @@ describe(MediaService.name, () => {
         ),
       );
       mocks.media.getImageMetadata.mockResolvedValue({ width: 100, height: 100, isTransparent: false });
+      vi.mocked(renderRawWithLibRaw).mockReset();
+      vi.mocked(renderRawWithLibRaw).mockRejectedValue(new Error('dcraw_emu unavailable'));
     });
 
     it('should skip thumbnail generation if asset not found', async () => {
@@ -1134,6 +1142,67 @@ describe(MediaService.name, () => {
         processInvalidImages: false,
         size: 1440,
       });
+    });
+
+    it('should skip unsupported or corrupt raw files', async () => {
+      const asset = AssetFactory.from({ originalFileName: 'file.cr2' })
+        .exif({ fileSizeInByte: 5000, profileDescription: 'Adobe RGB', bitsPerSample: 14, orientation: undefined })
+        .build();
+      mocks.systemMetadata.get.mockResolvedValue({ image: { extractEmbedded: true } });
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+      mocks.media.decodeImage.mockRejectedValue(
+        new Error(
+          `Input file has corrupt header: magickload: Magick: Unsupported file format or not RAW file '${asset.originalPath}'`,
+        ),
+      );
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.media.generateThumbnail).not.toHaveBeenCalled();
+    });
+
+    it('should render RAW with LibRaw when Sharp cannot decode the source and enhanced RAW rendering is enabled', async () => {
+      const asset = AssetFactory.from({ originalFileName: 'file.cr2' })
+        .exif({ fileSizeInByte: 5000, profileDescription: 'Adobe RGB', bitsPerSample: 14, orientation: undefined })
+        .build();
+      mocks.systemMetadata.get.mockResolvedValue({ image: { extractEmbedded: false, enhancedRaw: { enabled: true } } });
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+      vi.mocked(renderRawWithLibRaw).mockResolvedValue(renderedRawBuffer);
+      mocks.media.getImageMetadata.mockResolvedValue({ width: 2000, height: 2000, isTransparent: false });
+      mocks.media.decodeImage.mockImplementation((input) => {
+        if (input === asset.originalPath) {
+          throw new Error(`Input file has corrupt header: unsupported RAW file '${asset.originalPath}'`);
+        }
+        return Promise.resolve({ data: fullsizeBuffer, info: rawInfo as OutputInfo });
+      });
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(renderRawWithLibRaw).toHaveBeenCalledWith(asset.originalPath);
+      expect(mocks.media.decodeImage).toHaveBeenCalledWith(renderedRawBuffer, {
+        colorspace: Colorspace.P3,
+        processInvalidImages: false,
+        size: 1440,
+      });
+      expect(mocks.media.generateThumbnail).toHaveBeenCalled();
+    });
+
+    it('should not render RAW with LibRaw when enhanced RAW rendering is disabled', async () => {
+      const asset = AssetFactory.from({ originalFileName: 'file.cr2' })
+        .exif({ fileSizeInByte: 5000, profileDescription: 'Adobe RGB', bitsPerSample: 14, orientation: undefined })
+        .build();
+      mocks.systemMetadata.get.mockResolvedValue({
+        image: { extractEmbedded: false, enhancedRaw: { enabled: false } },
+      });
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+      mocks.media.decodeImage.mockRejectedValue(
+        new Error(`Input file has corrupt header: unsupported RAW file '${asset.originalPath}'`),
+      );
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).resolves.toBe(JobStatus.Skipped);
+
+      expect(renderRawWithLibRaw).not.toHaveBeenCalled();
+      expect(mocks.media.generateThumbnail).not.toHaveBeenCalled();
     });
 
     it('should process invalid images if enabled', async () => {
