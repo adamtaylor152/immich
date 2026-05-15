@@ -138,6 +138,11 @@ export class SessionRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
+  async requestSyncResetForUser(userId: string) {
+    await this.db.updateTable('session').set({ isPendingSyncReset: true }).where('userId', '=', userId).execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
   async resetSyncProgress(sessionId: string) {
     await this.db.transaction().execute((tx) => {
       return Promise.all([

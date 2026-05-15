@@ -557,7 +557,7 @@ describe(MediaService.name, () => {
       mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
         ...getForGenerateThumbnail(asset),
         ...probeStub.videoStream2160p,
-        format: { ...probeStub.videoStream2160p.format, duration: 120_000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 120 },
       });
       mocks.media.scoreThumbnailCandidate
         .mockResolvedValueOnce(10)
@@ -600,7 +600,7 @@ describe(MediaService.name, () => {
       mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
         ...getForGenerateThumbnail(asset),
         ...probeStub.videoStream2160p,
-        format: { ...probeStub.videoStream2160p.format, duration: 10_000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 10 },
       });
       mocks.media.scoreThumbnailCandidate.mockResolvedValueOnce(10).mockResolvedValueOnce(80).mockResolvedValueOnce(30);
 
@@ -655,7 +655,7 @@ describe(MediaService.name, () => {
       mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
         ...getForGenerateThumbnail(asset),
         ...probeStub.videoStream2160p,
-        format: { ...probeStub.videoStream2160p.format, duration: 10_000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 10 },
       });
       mocks.media.scoreThumbnailCandidate.mockRejectedValue(new Error('could not read candidate'));
 

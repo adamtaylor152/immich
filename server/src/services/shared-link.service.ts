@@ -159,13 +159,17 @@ export class SharedLinkService extends BaseService {
   }
 
   async addAssets(auth: AuthDto, id: string, dto: AssetIdsDto): Promise<AssetIdsResponseDto[]> {
-    const sharedLink = await this.findOrFail(auth.user.id, id);
+    const [sharedLink, rawSharedLink] = await Promise.all([
+      this.findOrFail(auth.user.id, id, this.nsfwOptions(auth)),
+      this.findOrFail(auth.user.id, id),
+    ]);
     if (sharedLink.type !== SharedLinkType.Individual) {
       throw new BadRequestException('Invalid shared link type');
     }
 
     const existingAssetIds = new Set(sharedLink.assets.map((asset) => asset.id));
-    const notPresentAssetIds = dto.assetIds.filter((assetId) => !existingAssetIds.has(assetId));
+    const rawExistingAssetIds = new Set(rawSharedLink.assets.map((asset) => asset.id));
+    const notPresentAssetIds = dto.assetIds.filter((assetId) => !rawExistingAssetIds.has(assetId));
     const allowedAssetIds = await this.checkAccess({
       auth,
       permission: Permission.AssetShare,
@@ -177,6 +181,11 @@ export class SharedLinkService extends BaseService {
       const hasAsset = existingAssetIds.has(assetId);
       if (hasAsset) {
         results.push({ assetId, success: false, error: AssetIdErrorReason.DUPLICATE });
+        continue;
+      }
+
+      if (rawExistingAssetIds.has(assetId)) {
+        results.push({ assetId, success: false, error: AssetIdErrorReason.NO_PERMISSION });
         continue;
       }
 
@@ -198,7 +207,7 @@ export class SharedLinkService extends BaseService {
   }
 
   async removeAssets(auth: AuthDto, id: string, dto: AssetIdsDto): Promise<AssetIdsResponseDto[]> {
-    const sharedLink = await this.findOrFail(auth.user.id, id);
+    const sharedLink = await this.findOrFail(auth.user.id, id, this.nsfwOptions(auth));
 
     if (sharedLink.type !== SharedLinkType.Individual) {
       throw new BadRequestException('Invalid shared link type');

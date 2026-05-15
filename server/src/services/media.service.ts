@@ -654,7 +654,7 @@ export class MediaService extends BaseService {
   }
 
   private getVideoThumbnailCandidateTimestamps(format: VideoFormat) {
-    const duration = format.duration / 1000;
+    const duration = format.duration;
     if (!Number.isFinite(duration) || duration <= 1) {
       return [];
     }

@@ -253,7 +253,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 120_000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 120 },
       });
       mocks.machineLearning.encodeImage.mockResolvedValue('[1, 2, 3, 4]');
       mocks.duplicateRepository.replaceVideoDuplicateFrames.mockResolvedValue(['/data/thumbs/old-frame.jpeg']);
@@ -285,7 +285,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 2000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 2 },
       });
 
       await expect(sut.handleGenerateVideoDuplicateFrames({ id: asset.id })).resolves.toBe(JobStatus.Skipped);
@@ -304,7 +304,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 120_000 },
+        format: { ...probeStub.videoStream2160p.format, duration: 120 },
       });
       mocks.machineLearning.encodeImage.mockResolvedValue('[1, 2, 3, 4]');
       mocks.systemMetadata.get

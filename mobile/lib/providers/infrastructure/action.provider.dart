@@ -195,6 +195,10 @@ class ActionNotifier extends Notifier<void> {
 
   Future<ActionResult> markNsfw(ActionSource source) async {
     final ids = _getOwnedRemoteIdsForSource(source);
+    if (ids.isEmpty) {
+      return const ActionResult(count: 0, success: false, error: 'No eligible assets selected');
+    }
+
     try {
       await _service.markNsfw(ids);
       return ActionResult(count: ids.length, success: true);
@@ -206,6 +210,10 @@ class ActionNotifier extends Notifier<void> {
 
   Future<ActionResult> markSafe(ActionSource source) async {
     final ids = _getOwnedRemoteIdsForSource(source);
+    if (ids.isEmpty) {
+      return const ActionResult(count: 0, success: false, error: 'No eligible assets selected');
+    }
+
     try {
       await _service.markSafe(ids);
       return ActionResult(count: ids.length, success: true);

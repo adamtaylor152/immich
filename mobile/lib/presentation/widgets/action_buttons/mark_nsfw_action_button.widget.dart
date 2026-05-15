@@ -16,7 +16,9 @@ Future<void> performMarkNsfwAction(
   if (!context.mounted) return;
 
   final result = await ref.read(actionProvider.notifier).markNsfw(source);
-  ref.read(multiSelectProvider.notifier).reset();
+  if (result.success) {
+    ref.read(multiSelectProvider.notifier).reset();
+  }
 
   final successMessage = 'mark_nsfw_action_prompt'.t(
     context: context,
@@ -70,7 +72,9 @@ Future<void> performMarkSafeAction(
   if (!context.mounted) return;
 
   final result = await ref.read(actionProvider.notifier).markSafe(source);
-  ref.read(multiSelectProvider.notifier).reset();
+  if (result.success) {
+    ref.read(multiSelectProvider.notifier).reset();
+  }
 
   final successMessage = 'mark_safe_action_prompt'.t(
     context: context,

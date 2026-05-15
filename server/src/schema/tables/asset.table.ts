@@ -16,6 +16,7 @@ import { AssetStatus, AssetType, AssetVisibility, ChecksumAlgorithm } from 'src/
 import { asset_checksum_algorithm_enum, asset_visibility_enum, assets_status_enum } from 'src/schema/enums';
 import { asset_delete_audit } from 'src/schema/functions';
 import { LibraryTable } from 'src/schema/tables/library.table';
+import { PhysicalFileTable } from 'src/schema/tables/physical-file.table';
 import { StackTable } from 'src/schema/tables/stack.table';
 import { UserTable } from 'src/schema/tables/user.table';
 import { ASSET_CHECKSUM_CONSTRAINT } from 'src/utils/database';
@@ -74,7 +75,7 @@ export class AssetTable {
   @Column()
   originalPath!: string;
 
-  @Column({ type: 'uuid', nullable: true, index: true })
+  @ForeignKeyColumn(() => PhysicalFileTable, { nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE', index: true })
   physicalOriginalFileId!: string | null;
 
   @Column({ type: 'timestamp with time zone', index: true })

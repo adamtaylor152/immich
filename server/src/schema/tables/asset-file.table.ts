@@ -12,6 +12,7 @@ import {
 import { UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
 import { AssetFileType } from 'src/enum';
 import { AssetTable } from 'src/schema/tables/asset.table';
+import { PhysicalFileTable } from 'src/schema/tables/physical-file.table';
 
 @Table('asset_file')
 @Unique({ columns: ['assetId', 'type', 'isEdited'] })
@@ -35,7 +36,7 @@ export class AssetFileTable {
   @Column()
   path!: string;
 
-  @Column({ type: 'uuid', nullable: true, index: true })
+  @ForeignKeyColumn(() => PhysicalFileTable, { nullable: true, onDelete: 'SET NULL', onUpdate: 'CASCADE', index: true })
   physicalFileId!: string | null;
 
   @UpdateIdColumn({ index: true })
