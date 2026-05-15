@@ -359,11 +359,6 @@ export class MediaHealthService {
             checkedAt: new Date(),
           })),
         );
-
-        const validCandidates = candidates.filter(({ status }) => status === MediaHealthStatus.Found);
-        if (validCandidates.length === 1 && asset.isExternal && asset.libraryId) {
-          await this.relinkAsset(asset, validCandidates[0].evidence.path as string, finding.id);
-        }
       }
 
       await this.mediaHealthRepository.finishRun(run, {

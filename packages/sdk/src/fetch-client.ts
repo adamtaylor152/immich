@@ -4928,9 +4928,8 @@ export function validateAccessToken(opts?: Oazapfts.RequestOpts) {
 /**
  * Retrieve best photos
  */
-export function getBestPhotos({ includeArchived, includeVideos, limit, minScore, page }: {
+export function getBestPhotos({ includeArchived, limit, minScore, page }: {
     includeArchived?: boolean;
-    includeVideos?: boolean;
     limit?: number;
     minScore?: number;
     page?: number;
@@ -4940,7 +4939,6 @@ export function getBestPhotos({ includeArchived, includeVideos, limit, minScore,
         data: BestPhotosResponseDto;
     }>(`/best-photos${QS.query(QS.explode({
         includeArchived,
-        includeVideos,
         limit,
         minScore,
         page

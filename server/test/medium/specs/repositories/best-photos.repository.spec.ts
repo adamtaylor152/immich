@@ -123,9 +123,46 @@ describe(BestPhotosRepository.name, () => {
     await defaultDatabase.updateTable('asset').set({ status: AssetStatus.Active }).execute();
 
     const page = await sut.getBestPhotos({ ownerId: user.id, page: 1, limit: 10 });
+    expect(page.total).toBe(2);
     expect(page.items.map((asset) => asset.id)).toEqual([high.id, low.id]);
 
     const withArchive = await sut.getBestPhotos({ ownerId: user.id, page: 1, limit: 10, includeArchived: true });
+    expect(withArchive.total).toBe(3);
     expect(withArchive.items.map((asset) => asset.id)).toEqual([archived.id, high.id, low.id]);
+  });
+
+  it('should return the total match count separately from the current page size', async () => {
+    const { assetRepository, sut, userRepository } = setup();
+    const user = await createUser(userRepository);
+    const first = await createAsset(assetRepository, user.id);
+    const second = await createAsset(assetRepository, user.id);
+
+    for (const [asset, score] of [
+      [first, 0.9],
+      [second, 0.8],
+    ] as const) {
+      await sut.upsertScore({
+        assetId: asset.id,
+        ownerId: user.id,
+        score,
+        aestheticScore: score,
+        technicalScore: score,
+        subjectScore: score,
+        diversityScore: score,
+        scoreVersion: 1,
+        computedAt: new Date(),
+        metadata: {},
+        bestFrameTimestampMs: null,
+        frameScore: null,
+        frameMetadata: null,
+      });
+    }
+
+    await defaultDatabase.updateTable('asset').set({ status: AssetStatus.Active }).execute();
+
+    const page = await sut.getBestPhotos({ ownerId: user.id, page: 1, limit: 1 });
+    expect(page.total).toBe(2);
+    expect(page.hasNextPage).toBe(true);
+    expect(page.items).toHaveLength(1);
   });
 });

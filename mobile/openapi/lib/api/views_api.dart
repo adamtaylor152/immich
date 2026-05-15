@@ -87,14 +87,12 @@ class ViewsApi {
   ///
   /// * [bool] includeArchived:
   ///
-  /// * [bool] includeVideos:
-  ///
   /// * [int] limit:
   ///
   /// * [num] minScore:
   ///
   /// * [int] page:
-  Future<Response> getBestPhotosWithHttpInfo({ bool? includeArchived, bool? includeVideos, int? limit, num? minScore, int? page, }) async {
+  Future<Response> getBestPhotosWithHttpInfo({ bool? includeArchived, int? limit, num? minScore, int? page, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/best-photos';
 
@@ -107,9 +105,6 @@ class ViewsApi {
 
     if (includeArchived != null) {
       queryParams.addAll(_queryParams('', 'includeArchived', includeArchived));
-    }
-    if (includeVideos != null) {
-      queryParams.addAll(_queryParams('', 'includeVideos', includeVideos));
     }
     if (limit != null) {
       queryParams.addAll(_queryParams('', 'limit', limit));
@@ -143,15 +138,13 @@ class ViewsApi {
   ///
   /// * [bool] includeArchived:
   ///
-  /// * [bool] includeVideos:
-  ///
   /// * [int] limit:
   ///
   /// * [num] minScore:
   ///
   /// * [int] page:
-  Future<BestPhotosResponseDto?> getBestPhotos({ bool? includeArchived, bool? includeVideos, int? limit, num? minScore, int? page, }) async {
-    final response = await getBestPhotosWithHttpInfo( includeArchived: includeArchived, includeVideos: includeVideos, limit: limit, minScore: minScore, page: page, );
+  Future<BestPhotosResponseDto?> getBestPhotos({ bool? includeArchived, int? limit, num? minScore, int? page, }) async {
+    final response = await getBestPhotosWithHttpInfo( includeArchived: includeArchived, limit: limit, minScore: minScore, page: page, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

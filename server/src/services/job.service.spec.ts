@@ -91,7 +91,7 @@ describe(JobService.name, () => {
       },
       {
         item: { name: JobName.AssetDetectFaces, data: { id: 'asset-1' } },
-        jobs: [],
+        jobs: [JobName.BestPhotosScore],
       },
       {
         item: { name: JobName.FacialRecognition, data: { id: 'asset-1' } },
@@ -138,6 +138,7 @@ describe(JobService.name, () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: {
           enabled: true,
+          facialRecognition: { enabled: true },
           imageDescription: { enabled: true },
           nsfwDetection: { enabled: true },
         },
@@ -164,6 +165,7 @@ describe(JobService.name, () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: {
           enabled: true,
+          facialRecognition: { enabled: true },
           imageDescription: { enabled: false },
           nsfwDetection: { enabled: true },
         },
@@ -190,6 +192,7 @@ describe(JobService.name, () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: {
           enabled: true,
+          facialRecognition: { enabled: true },
           imageDescription: { enabled: true },
           nsfwDetection: { enabled: true },
         },
@@ -207,6 +210,37 @@ describe(JobService.name, () => {
         { name: JobName.Ocr, data: { id: asset.id, source: 'upload' } },
         { name: JobName.AssetEncodeVideo, data: { id: asset.id, source: 'upload' } },
       ]);
+    });
+
+    it('should requeue Best Photos scoring after face detection succeeds', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: { enabled: true },
+        },
+      });
+      mocks.job.run.mockResolvedValue(JobStatus.Success);
+
+      await sut.onJobRun(QueueName.FaceDetection, {
+        name: JobName.AssetDetectFaces,
+        data: { id: 'asset-1' },
+      });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.BestPhotosScore, data: { id: 'asset-1' } });
+    });
+
+    it('should requeue Best Photos scoring after edited image thumbnails are generated', async () => {
+      const asset = AssetFactory.create({ id: 'asset-1', type: AssetType.Image });
+      mocks.asset.getById.mockResolvedValue(asset as never);
+      mocks.assetEdit.getWithSyncInfo.mockResolvedValue([] as never);
+      mocks.job.run.mockResolvedValue(JobStatus.Success);
+
+      await sut.onJobRun(QueueName.Editor, {
+        name: JobName.AssetEditThumbnailGeneration,
+        data: { id: asset.id },
+      });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.BestPhotosScore, data: { id: asset.id } });
     });
   });
 });

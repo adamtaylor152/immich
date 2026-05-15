@@ -40,7 +40,6 @@ const BestPhotosQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     minScore: z.coerce.number().min(0).max(1).optional(),
     includeArchived: stringToBool.default(false),
-    includeVideos: stringToBool.default(false),
   })
   .meta({ id: 'BestPhotosQueryDto' });
 

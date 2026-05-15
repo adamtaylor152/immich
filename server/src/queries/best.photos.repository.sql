@@ -59,6 +59,20 @@ set
 
 -- BestPhotosRepository.getBestPhotos
 select
+  count(*) as "count"
+from
+  "asset_best_photo_score"
+  inner join "asset" on "asset"."id" = "asset_best_photo_score"."assetId"
+where
+  "asset_best_photo_score"."ownerId" = $1::uuid
+  and "asset"."ownerId" = $2::uuid
+  and "asset"."deletedAt" is null
+  and "asset"."status" = 'active'
+  and "asset"."visibility" in ('timeline')
+  and "asset"."type" = 'IMAGE'
+  and "asset_best_photo_score"."score" >= $3
+
+select
   "asset".*,
   "asset_best_photo_score"."score" as "bestPhotoScore",
   "asset_best_photo_score"."aestheticScore" as "bestPhotoAestheticScore",

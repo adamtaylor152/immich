@@ -7,7 +7,7 @@ import { ArgsOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem } from 'src/types';
 import { hexOrBufferToBase64 } from 'src/utils/bytes';
-import { isImageDescriptionEnabled, isNsfwDetectionEnabled } from 'src/utils/misc';
+import { isFacialRecognitionEnabled, isImageDescriptionEnabled, isNsfwDetectionEnabled } from 'src/utils/misc';
 
 const asJobItem = (dto: JobCreateDto): JobItem => {
   switch (dto.name) {
@@ -114,7 +114,43 @@ export class JobService extends BaseService {
         break;
       }
 
-      case JobName.AssetEditThumbnailGeneration:
+      case JobName.AssetEditThumbnailGeneration: {
+        const asset = await this.assetRepository.getById(item.data.id);
+        const edits = await this.assetEditRepository.getWithSyncInfo(item.data.id);
+
+        if (asset) {
+          this.websocketRepository.clientSend('AssetEditReadyV2', asset.ownerId, {
+            asset: {
+              id: asset.id,
+              ownerId: asset.ownerId,
+              originalFileName: asset.originalFileName,
+              thumbhash: asset.thumbhash ? hexOrBufferToBase64(asset.thumbhash) : null,
+              checksum: hexOrBufferToBase64(asset.checksum),
+              fileCreatedAt: asset.fileCreatedAt,
+              fileModifiedAt: asset.fileModifiedAt,
+              createdAt: asset.createdAt,
+              localDateTime: asset.localDateTime,
+              duration: asset.duration,
+              type: asset.type,
+              deletedAt: asset.deletedAt,
+              isFavorite: asset.isFavorite,
+              visibility: asset.visibility,
+              livePhotoVideoId: asset.livePhotoVideoId,
+              stackId: asset.stackId,
+              libraryId: asset.libraryId,
+              width: asset.width,
+              height: asset.height,
+              isEdited: asset.isEdited,
+            },
+            edit: edits,
+          });
+
+          await this.jobRepository.queue({ name: JobName.BestPhotosScore, data: item.data });
+        }
+
+        break;
+      }
+
       case JobName.AssetVideoEditGeneration: {
         const asset = await this.assetRepository.getById(item.data.id);
         const edits = await this.assetEditRepository.getWithSyncInfo(item.data.id);
@@ -255,6 +291,14 @@ export class JobService extends BaseService {
                 : JobName.AssetDetectDuplicates,
             data: item.data,
           });
+        }
+        break;
+      }
+
+      case JobName.AssetDetectFaces: {
+        const { machineLearning } = await this.getConfig({ withCache: true });
+        if (isFacialRecognitionEnabled(machineLearning)) {
+          await this.jobRepository.queue({ name: JobName.BestPhotosScore, data: item.data });
         }
         break;
       }

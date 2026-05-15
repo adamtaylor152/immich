@@ -39,18 +39,17 @@ export class BestPhotosService {
   }
 
   async getBestPhotos(auth: AuthDto, dto: BestPhotosQueryDto): Promise<BestPhotosResponseDto> {
-    const { hasNextPage, items } = await this.bestPhotosRepository.getBestPhotos({
+    const { hasNextPage, items, total } = await this.bestPhotosRepository.getBestPhotos({
       ...getHiddenContentQueryOptions(auth),
       ownerId: auth.user.id,
       limit: dto.limit,
       page: dto.page,
       minScore: dto.minScore,
       includeArchived: dto.includeArchived,
-      includeVideos: dto.includeVideos,
     });
 
     return {
-      total: items.length,
+      total,
       count: items.length,
       items: items.map((asset) => this.mapBestPhotoAsset(auth, asset)),
       nextPage: hasNextPage ? String(dto.page + 1) : null,

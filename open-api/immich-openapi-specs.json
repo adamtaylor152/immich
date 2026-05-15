@@ -5016,15 +5016,6 @@
             }
           },
           {
-            "name": "includeVideos",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": false,
-              "type": "boolean"
-            }
-          },
-          {
             "name": "limit",
             "required": false,
             "in": "query",

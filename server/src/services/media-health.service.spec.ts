@@ -13,9 +13,12 @@ describe(MediaHealthService.name, () => {
   beforeEach(() => {
     mocks = getMocks();
     mediaHealthRepository = {
+      createRun: vi.fn(),
+      finishRun: vi.fn(),
       getByIds: vi.fn(),
       getAssets: vi.fn(),
       markStatus: vi.fn(),
+      replaceCandidates: vi.fn(),
       upsertFinding: vi.fn(),
     } as unknown as MediaHealthRepository;
 
@@ -65,7 +68,7 @@ describe(MediaHealthService.name, () => {
       await expect(
         sut.deleteCorrupt(authStub.admin, { ids: ['health-1'], confirmText: CORRUPT_MEDIA_DELETE_CONFIRM_TEXT }),
       ).resolves.toEqual({
-        results: [{ id: 'health-1', success: true, status: MediaHealthStatus.TrashQueued, error: undefined }],
+        results: [{ id: 'health-1', success: true, status: MediaHealthStatus.TrashQueued }],
       });
 
       expect(mediaHealthRepository.markStatus).toHaveBeenCalledWith(['health-1'], MediaHealthStatus.TrashQueued);
@@ -114,6 +117,56 @@ describe(MediaHealthService.name, () => {
       });
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
       expect(mediaHealthRepository.markStatus).toHaveBeenCalledWith(['health-1'], MediaHealthStatus.Trashed);
+    });
+  });
+
+  describe('handleLocateMissing', () => {
+    it('stores validated candidates without relinking during locate', async () => {
+      vi.mocked(mediaHealthRepository.createRun).mockResolvedValue({ id: 'run-1' } as never);
+      vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([
+        {
+          id: 'health-1',
+          assetId: 'asset-1',
+          category: MediaHealthCategory.Missing,
+        },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssets).mockResolvedValue([
+        {
+          id: 'asset-1',
+          originalPath: '/library/file.jpg',
+          originalFileName: 'file.jpg',
+          type: AssetType.Image,
+          isExternal: true,
+          libraryId: 'library-1',
+        },
+      ] as never);
+
+      vi.spyOn(sut as never, 'locateCandidates').mockResolvedValue([
+        {
+          status: MediaHealthStatus.Found,
+          score: 0.98,
+          evidence: { path: '/library/relinked/file.jpg' },
+          resolution: {},
+        },
+      ]);
+      const relinkSpy = vi.spyOn(sut as never, 'relinkAsset').mockImplementation(() => Promise.resolve());
+
+      await expect(sut.handleLocateMissing({ ids: ['health-1'] })).resolves.toBe(JobStatus.Success);
+
+      expect(mediaHealthRepository.replaceCandidates).toHaveBeenCalledWith(
+        'health-1',
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidatePath: '/library/relinked/file.jpg',
+            status: MediaHealthStatus.Found,
+          }),
+        ]),
+      );
+      expect(relinkSpy).not.toHaveBeenCalled();
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'run-1',
+        expect.objectContaining({ status: 'completed', checkedAssets: 1, foundAssets: 1 }),
+      );
     });
   });
 });

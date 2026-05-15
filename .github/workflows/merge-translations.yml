@@ -5,9 +5,9 @@ on:
   workflow_call:
     secrets:
       PUSH_O_MATIC_APP_CLIENT_ID:
-        required: true
+        required: false
       PUSH_O_MATIC_APP_KEY:
-        required: true
+        required: false
       WEBLATE_TOKEN:
         required: true
     inputs:
@@ -26,15 +26,17 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pull-requests: write
     steps:
       - name: Generate a token
         id: generate_token
         if: ${{ inputs.skip != true }}
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: ./.github/actions/fork-workflow-token
         with:
-          client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
+          github-token: ${{ github.token }}
+          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
 
       - name: Find translation PR
         id: find_pr
