@@ -361,6 +361,33 @@ export class MediaHealthService {
         );
 
         const validCandidates = candidates.filter(({ status }) => status === MediaHealthStatus.Found);
+        const findingStatus =
+          validCandidates.length > 0
+            ? MediaHealthStatus.Found
+            : candidates.length > 0
+              ? MediaHealthStatus.Candidate
+              : MediaHealthStatus.Missing;
+
+        await this.mediaHealthRepository.upsertFinding({
+          runId: run,
+          assetId: asset.id,
+          category: MediaHealthCategory.Missing,
+          status: findingStatus,
+          severity: findingStatus === MediaHealthStatus.Missing ? MediaHealthSeverity.Critical : MediaHealthSeverity.Warning,
+          originalPath: asset.originalPath,
+          originalFileName: asset.originalFileName,
+          evidence: {
+            ...(finding.evidence as Record<string, unknown>),
+            candidateCount: candidates.length,
+            validatedCandidateCount: validCandidates.length,
+          },
+          resolution: {
+            ...(finding.resolution as Record<string, unknown>),
+            autoRelinkable: validCandidates.length === 1 && !!asset.isExternal && !!asset.libraryId,
+          },
+          checkedAt: new Date(),
+        });
+
         if (validCandidates.length === 1 && asset.isExternal && asset.libraryId) {
           await this.relinkAsset(asset, validCandidates[0].evidence.path as string, finding.id);
         }

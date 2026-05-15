@@ -23,7 +23,7 @@ export const classifyImageDecodeFailure = (
 ): MediaHealthStatus => {
   const message = getErrorMessage(error).toLowerCase();
 
-  if (options.isRaw && isUnsupportedRawDecodeError(error) && !options.enhancedRawAttempted) {
+  if (options.isRaw && isUnsupportedRawDecodeError(error)) {
     return MediaHealthStatus.UnsupportedRaw;
   }
 
