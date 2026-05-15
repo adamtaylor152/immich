@@ -71,7 +71,6 @@ where
   and "asset"."visibility" in ('timeline')
   and "asset"."type" = 'IMAGE'
   and "asset_best_photo_score"."score" >= $3
-
 select
   "asset".*,
   "asset_best_photo_score"."score" as "bestPhotoScore",
