@@ -43,6 +43,7 @@ class QueueName {
   static const imageEnrichment = QueueName._(r'imageEnrichment');
   static const imageDescription = QueueName._(r'imageDescription');
   static const nsfwDetection = QueueName._(r'nsfwDetection');
+  static const mediaHealth = QueueName._(r'mediaHealth');
   static const workflow = QueueName._(r'workflow');
   static const editor = QueueName._(r'editor');
 
@@ -68,6 +69,7 @@ class QueueName {
     imageEnrichment,
     imageDescription,
     nsfwDetection,
+    mediaHealth,
     workflow,
     editor,
   ];
@@ -128,6 +130,7 @@ class QueueNameTypeTransformer {
         case r'imageEnrichment': return QueueName.imageEnrichment;
         case r'imageDescription': return QueueName.imageDescription;
         case r'nsfwDetection': return QueueName.nsfwDetection;
+        case r'mediaHealth': return QueueName.mediaHealth;
         case r'workflow': return QueueName.workflow;
         case r'editor': return QueueName.editor;
         default:

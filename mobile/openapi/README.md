@@ -173,6 +173,13 @@ Class | Method | HTTP request | Description
 *MaintenanceAdminApi* | [**setMaintenanceMode**](doc//MaintenanceAdminApi.md#setmaintenancemode) | **POST** /admin/maintenance | Set maintenance mode
 *MapApi* | [**getMapMarkers**](doc//MapApi.md#getmapmarkers) | **GET** /map/markers | Retrieve map markers
 *MapApi* | [**reverseGeocode**](doc//MapApi.md#reversegeocode) | **GET** /map/reverse-geocode | Reverse geocode coordinates
+*MediaHealthApi* | [**deleteCorrupt**](doc//MediaHealthApi.md#deletecorrupt) | **DELETE** /media-health/corrupt | Move confirmed corrupt media to trash
+*MediaHealthApi* | [**dismiss**](doc//MediaHealthApi.md#dismiss) | **POST** /media-health/dismiss | Dismiss media health findings
+*MediaHealthApi* | [**list**](doc//MediaHealthApi.md#list) | **GET** /media-health | List media health findings
+*MediaHealthApi* | [**locateMissing**](doc//MediaHealthApi.md#locatemissing) | **POST** /media-health/missing/locate | Locate missing media
+*MediaHealthApi* | [**relinkMissing**](doc//MediaHealthApi.md#relinkmissing) | **POST** /media-health/missing/relink | Relink missing media
+*MediaHealthApi* | [**startCorruptScan**](doc//MediaHealthApi.md#startcorruptscan) | **POST** /media-health/corrupt/scan | Start corrupt media scan
+*MediaHealthApi* | [**startMissingScan**](doc//MediaHealthApi.md#startmissingscan) | **POST** /media-health/missing/scan | Start missing media scan
 *MemoriesApi* | [**addMemoryAssets**](doc//MemoriesApi.md#addmemoryassets) | **PUT** /memories/{id}/assets | Add assets to a memory
 *MemoriesApi* | [**createMemory**](doc//MemoriesApi.md#creatememory) | **POST** /memories | Create a memory
 *MemoriesApi* | [**deleteMemory**](doc//MemoriesApi.md#deletememory) | **DELETE** /memories/{id} | Delete a memory
@@ -313,6 +320,7 @@ Class | Method | HTTP request | Description
 *UsersAdminApi* | [**updateUserAdmin**](doc//UsersAdminApi.md#updateuseradmin) | **PUT** /admin/users/{id} | Update a user
 *UsersAdminApi* | [**updateUserPreferencesAdmin**](doc//UsersAdminApi.md#updateuserpreferencesadmin) | **PUT** /admin/users/{id}/preferences | Update user preferences
 *ViewsApi* | [**getAssetsByOriginalPath**](doc//ViewsApi.md#getassetsbyoriginalpath) | **GET** /view/folder | Retrieve assets by original path
+*ViewsApi* | [**getBestPhotos**](doc//ViewsApi.md#getbestphotos) | **GET** /best-photos | Retrieve best photos
 *ViewsApi* | [**getUniqueOriginalPaths**](doc//ViewsApi.md#getuniqueoriginalpaths) | **GET** /view/folder/unique-paths | Retrieve unique paths
 *WorkflowsApi* | [**createWorkflow**](doc//WorkflowsApi.md#createworkflow) | **POST** /workflows | Create a workflow
 *WorkflowsApi* | [**deleteWorkflow**](doc//WorkflowsApi.md#deleteworkflow) | **DELETE** /workflows/{id} | Delete a workflow
@@ -393,6 +401,9 @@ Class | Method | HTTP request | Description
  - [AudioParameters](doc//AudioParameters.md)
  - [AuthStatusResponseDto](doc//AuthStatusResponseDto.md)
  - [AvatarUpdate](doc//AvatarUpdate.md)
+ - [BestPhotoAssetResponseDto](doc//BestPhotoAssetResponseDto.md)
+ - [BestPhotoScoreDto](doc//BestPhotoScoreDto.md)
+ - [BestPhotosResponseDto](doc//BestPhotosResponseDto.md)
  - [BulkIdErrorReason](doc//BulkIdErrorReason.md)
  - [BulkIdResponseDto](doc//BulkIdResponseDto.md)
  - [BulkIdsDto](doc//BulkIdsDto.md)
@@ -458,6 +469,19 @@ Class | Method | HTTP request | Description
  - [ManualJobName](doc//ManualJobName.md)
  - [MapMarkerResponseDto](doc//MapMarkerResponseDto.md)
  - [MapReverseGeocodeResponseDto](doc//MapReverseGeocodeResponseDto.md)
+ - [MediaHealthBucketDto](doc//MediaHealthBucketDto.md)
+ - [MediaHealthBulkActionDto](doc//MediaHealthBulkActionDto.md)
+ - [MediaHealthBulkResponseDto](doc//MediaHealthBulkResponseDto.md)
+ - [MediaHealthBulkResultDto](doc//MediaHealthBulkResultDto.md)
+ - [MediaHealthCandidateDto](doc//MediaHealthCandidateDto.md)
+ - [MediaHealthCategory](doc//MediaHealthCategory.md)
+ - [MediaHealthDeleteCorruptDto](doc//MediaHealthDeleteCorruptDto.md)
+ - [MediaHealthItemDto](doc//MediaHealthItemDto.md)
+ - [MediaHealthListResponseDto](doc//MediaHealthListResponseDto.md)
+ - [MediaHealthRunResponseDto](doc//MediaHealthRunResponseDto.md)
+ - [MediaHealthScanResponseDto](doc//MediaHealthScanResponseDto.md)
+ - [MediaHealthSeverity](doc//MediaHealthSeverity.md)
+ - [MediaHealthStatus](doc//MediaHealthStatus.md)
  - [MemoriesResponse](doc//MemoriesResponse.md)
  - [MemoriesUpdate](doc//MemoriesUpdate.md)
  - [MemoryCreateDto](doc//MemoryCreateDto.md)
@@ -624,6 +648,7 @@ Class | Method | HTTP request | Description
  - [SyncUserV1](doc//SyncUserV1.md)
  - [SystemConfigBackupsDto](doc//SystemConfigBackupsDto.md)
  - [SystemConfigDto](doc//SystemConfigDto.md)
+ - [SystemConfigEnhancedRawImageDto](doc//SystemConfigEnhancedRawImageDto.md)
  - [SystemConfigFFmpegDto](doc//SystemConfigFFmpegDto.md)
  - [SystemConfigFacesDto](doc//SystemConfigFacesDto.md)
  - [SystemConfigGeneratedFullsizeImageDto](doc//SystemConfigGeneratedFullsizeImageDto.md)

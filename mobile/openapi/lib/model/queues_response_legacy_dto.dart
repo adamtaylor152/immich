@@ -22,6 +22,7 @@ class QueuesResponseLegacyDto {
     required this.imageDescription,
     required this.imageEnrichment,
     required this.library_,
+    required this.mediaHealth,
     required this.metadataExtraction,
     required this.migration,
     required this.notifications,
@@ -54,6 +55,8 @@ class QueuesResponseLegacyDto {
   QueueResponseLegacyDto imageEnrichment;
 
   QueueResponseLegacyDto library_;
+
+  QueueResponseLegacyDto mediaHealth;
 
   QueueResponseLegacyDto metadataExtraction;
 
@@ -92,6 +95,7 @@ class QueuesResponseLegacyDto {
     other.imageDescription == imageDescription &&
     other.imageEnrichment == imageEnrichment &&
     other.library_ == library_ &&
+    other.mediaHealth == mediaHealth &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
     other.notifications == notifications &&
@@ -118,6 +122,7 @@ class QueuesResponseLegacyDto {
     (imageDescription.hashCode) +
     (imageEnrichment.hashCode) +
     (library_.hashCode) +
+    (mediaHealth.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
     (notifications.hashCode) +
@@ -133,7 +138,7 @@ class QueuesResponseLegacyDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
+  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, mediaHealth=$mediaHealth, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -146,6 +151,7 @@ class QueuesResponseLegacyDto {
       json[r'imageDescription'] = this.imageDescription;
       json[r'imageEnrichment'] = this.imageEnrichment;
       json[r'library'] = this.library_;
+      json[r'mediaHealth'] = this.mediaHealth;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
       json[r'notifications'] = this.notifications;
@@ -180,6 +186,7 @@ class QueuesResponseLegacyDto {
         imageDescription: QueueResponseLegacyDto.fromJson(json[r'imageDescription'])!,
         imageEnrichment: QueueResponseLegacyDto.fromJson(json[r'imageEnrichment'])!,
         library_: QueueResponseLegacyDto.fromJson(json[r'library'])!,
+        mediaHealth: QueueResponseLegacyDto.fromJson(json[r'mediaHealth'])!,
         metadataExtraction: QueueResponseLegacyDto.fromJson(json[r'metadataExtraction'])!,
         migration: QueueResponseLegacyDto.fromJson(json[r'migration'])!,
         notifications: QueueResponseLegacyDto.fromJson(json[r'notifications'])!,
@@ -249,6 +256,7 @@ class QueuesResponseLegacyDto {
     'imageDescription',
     'imageEnrichment',
     'library',
+    'mediaHealth',
     'metadataExtraction',
     'migration',
     'notifications',

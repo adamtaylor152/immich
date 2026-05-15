@@ -14,6 +14,7 @@ class SystemConfigImageDto {
   /// Returns a new [SystemConfigImageDto] instance.
   SystemConfigImageDto({
     required this.colorspace,
+    this.enhancedRaw,
     required this.extractEmbedded,
     required this.fullsize,
     required this.preview,
@@ -21,6 +22,14 @@ class SystemConfigImageDto {
   });
 
   Colorspace colorspace;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  SystemConfigEnhancedRawImageDto? enhancedRaw;
 
   /// Extract embedded
   bool extractEmbedded;
@@ -34,6 +43,7 @@ class SystemConfigImageDto {
   @override
   bool operator ==(Object other) => identical(this, other) || other is SystemConfigImageDto &&
     other.colorspace == colorspace &&
+    other.enhancedRaw == enhancedRaw &&
     other.extractEmbedded == extractEmbedded &&
     other.fullsize == fullsize &&
     other.preview == preview &&
@@ -43,17 +53,23 @@ class SystemConfigImageDto {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (colorspace.hashCode) +
+    (enhancedRaw == null ? 0 : enhancedRaw!.hashCode) +
     (extractEmbedded.hashCode) +
     (fullsize.hashCode) +
     (preview.hashCode) +
     (thumbnail.hashCode);
 
   @override
-  String toString() => 'SystemConfigImageDto[colorspace=$colorspace, extractEmbedded=$extractEmbedded, fullsize=$fullsize, preview=$preview, thumbnail=$thumbnail]';
+  String toString() => 'SystemConfigImageDto[colorspace=$colorspace, enhancedRaw=$enhancedRaw, extractEmbedded=$extractEmbedded, fullsize=$fullsize, preview=$preview, thumbnail=$thumbnail]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'colorspace'] = this.colorspace;
+    if (this.enhancedRaw != null) {
+      json[r'enhancedRaw'] = this.enhancedRaw;
+    } else {
+    //  json[r'enhancedRaw'] = null;
+    }
       json[r'extractEmbedded'] = this.extractEmbedded;
       json[r'fullsize'] = this.fullsize;
       json[r'preview'] = this.preview;
@@ -71,6 +87,7 @@ class SystemConfigImageDto {
 
       return SystemConfigImageDto(
         colorspace: Colorspace.fromJson(json[r'colorspace'])!,
+        enhancedRaw: SystemConfigEnhancedRawImageDto.fromJson(json[r'enhancedRaw']),
         extractEmbedded: mapValueOfType<bool>(json, r'extractEmbedded')!,
         fullsize: SystemConfigGeneratedFullsizeImageDto.fromJson(json[r'fullsize'])!,
         preview: SystemConfigGeneratedImageDto.fromJson(json[r'preview'])!,

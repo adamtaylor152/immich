@@ -322,6 +322,12 @@ class ApiClient {
           return AuthStatusResponseDto.fromJson(value);
         case 'AvatarUpdate':
           return AvatarUpdate.fromJson(value);
+        case 'BestPhotoAssetResponseDto':
+          return BestPhotoAssetResponseDto.fromJson(value);
+        case 'BestPhotoScoreDto':
+          return BestPhotoScoreDto.fromJson(value);
+        case 'BestPhotosResponseDto':
+          return BestPhotosResponseDto.fromJson(value);
         case 'BulkIdErrorReason':
           return BulkIdErrorReasonTypeTransformer().decode(value);
         case 'BulkIdResponseDto':
@@ -452,6 +458,32 @@ class ApiClient {
           return MapMarkerResponseDto.fromJson(value);
         case 'MapReverseGeocodeResponseDto':
           return MapReverseGeocodeResponseDto.fromJson(value);
+        case 'MediaHealthBucketDto':
+          return MediaHealthBucketDto.fromJson(value);
+        case 'MediaHealthBulkActionDto':
+          return MediaHealthBulkActionDto.fromJson(value);
+        case 'MediaHealthBulkResponseDto':
+          return MediaHealthBulkResponseDto.fromJson(value);
+        case 'MediaHealthBulkResultDto':
+          return MediaHealthBulkResultDto.fromJson(value);
+        case 'MediaHealthCandidateDto':
+          return MediaHealthCandidateDto.fromJson(value);
+        case 'MediaHealthCategory':
+          return MediaHealthCategoryTypeTransformer().decode(value);
+        case 'MediaHealthDeleteCorruptDto':
+          return MediaHealthDeleteCorruptDto.fromJson(value);
+        case 'MediaHealthItemDto':
+          return MediaHealthItemDto.fromJson(value);
+        case 'MediaHealthListResponseDto':
+          return MediaHealthListResponseDto.fromJson(value);
+        case 'MediaHealthRunResponseDto':
+          return MediaHealthRunResponseDto.fromJson(value);
+        case 'MediaHealthScanResponseDto':
+          return MediaHealthScanResponseDto.fromJson(value);
+        case 'MediaHealthSeverity':
+          return MediaHealthSeverityTypeTransformer().decode(value);
+        case 'MediaHealthStatus':
+          return MediaHealthStatusTypeTransformer().decode(value);
         case 'MemoriesResponse':
           return MemoriesResponse.fromJson(value);
         case 'MemoriesUpdate':
@@ -784,6 +816,8 @@ class ApiClient {
           return SystemConfigBackupsDto.fromJson(value);
         case 'SystemConfigDto':
           return SystemConfigDto.fromJson(value);
+        case 'SystemConfigEnhancedRawImageDto':
+          return SystemConfigEnhancedRawImageDto.fromJson(value);
         case 'SystemConfigFFmpegDto':
           return SystemConfigFFmpegDto.fromJson(value);
         case 'SystemConfigFacesDto':

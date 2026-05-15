@@ -346,6 +346,10 @@ export type JobItem =
   | { name: JobName.AssetGenerateThumbnailsQueueAll; data: IBaseJob }
   | { name: JobName.AssetGenerateThumbnails; data: IEntityJob }
 
+  // Best Photos
+  | { name: JobName.BestPhotosScoreQueueAll; data: IBaseJob }
+  | { name: JobName.BestPhotosScore; data: IEntityJob }
+
   // Media Health
   | { name: JobName.MediaHealthScanMissing; data: IMediaHealthScanJob }
   | { name: JobName.MediaHealthLocateMissing; data: IMediaHealthLocateJob }

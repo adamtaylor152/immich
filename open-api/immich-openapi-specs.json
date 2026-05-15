@@ -5001,6 +5001,103 @@
         "x-immich-state": "Stable"
       }
     },
+    "/best-photos": {
+      "get": {
+        "description": "Retrieve visible photo assets ranked by the locally computed Best Photos score.",
+        "operationId": "getBestPhotos",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "includeVideos",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "minScore",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BestPhotosResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Retrieve best photos",
+        "tags": [
+          "Views"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.0",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.0",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "asset.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/download/archive": {
       "post": {
         "description": "Download a ZIP archive containing the specified assets. The assets must have been previously requested via the \"getDownloadInfo\" endpoint.",
@@ -17725,6 +17822,333 @@
         },
         "type": "object"
       },
+      "BestPhotoAssetResponseDto": {
+        "properties": {
+          "bestPhotoScore": {
+            "$ref": "#/components/schemas/BestPhotoScoreDto"
+          },
+          "checksum": {
+            "description": "Base64 encoded SHA1 hash",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "The UTC timestamp when the asset was originally uploaded to Immich.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "duplicateId": {
+            "description": "Duplicate group ID",
+            "nullable": true,
+            "type": "string"
+          },
+          "duration": {
+            "description": "Video/gif duration in milliseconds (null for static images)",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "exifInfo": {
+            "$ref": "#/components/schemas/ExifResponseDto"
+          },
+          "fileCreatedAt": {
+            "description": "The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "fileModifiedAt": {
+            "description": "The UTC timestamp when the file was last modified on the filesystem. This reflects the last time the physical file was changed, which may be different from when the photo was originally taken.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hasMetadata": {
+            "description": "Whether asset has metadata",
+            "type": "boolean"
+          },
+          "height": {
+            "description": "Asset height",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Asset ID",
+            "type": "string"
+          },
+          "isArchived": {
+            "description": "Is archived",
+            "type": "boolean"
+          },
+          "isEdited": {
+            "description": "Is edited",
+            "type": "boolean",
+            "x-immich-history": [
+              {
+                "version": "v2.5.0",
+                "state": "Added"
+              },
+              {
+                "version": "v2.5.0",
+                "state": "Beta"
+              }
+            ],
+            "x-immich-state": "Beta"
+          },
+          "isFavorite": {
+            "description": "Is favorite",
+            "type": "boolean"
+          },
+          "isOffline": {
+            "description": "Is offline",
+            "type": "boolean"
+          },
+          "isTrashed": {
+            "description": "Is trashed",
+            "type": "boolean"
+          },
+          "libraryId": {
+            "description": "Library ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string",
+            "x-immich-history": [
+              {
+                "version": "v1",
+                "state": "Added"
+              },
+              {
+                "version": "v1",
+                "state": "Deprecated"
+              }
+            ],
+            "x-immich-state": "Deprecated"
+          },
+          "livePhotoVideoId": {
+            "description": "Live photo video ID",
+            "nullable": true,
+            "type": "string"
+          },
+          "localDateTime": {
+            "description": "The local date and time when the photo/video was taken, derived from EXIF metadata. This represents the photographer's local time regardless of timezone, stored as a timezone-agnostic timestamp. Used for timeline grouping by \"local\" days and months.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "originalFileName": {
+            "description": "Original file name",
+            "type": "string"
+          },
+          "originalMimeType": {
+            "description": "Original MIME type",
+            "type": "string"
+          },
+          "originalPath": {
+            "description": "Original file path",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserResponseDto"
+          },
+          "ownerId": {
+            "description": "Owner user ID",
+            "type": "string"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonResponseDto"
+            },
+            "type": "array"
+          },
+          "resized": {
+            "description": "Is resized",
+            "type": "boolean",
+            "x-immich-history": [
+              {
+                "version": "v1",
+                "state": "Added"
+              },
+              {
+                "version": "v1.113.0",
+                "state": "Deprecated"
+              }
+            ],
+            "x-immich-state": "Deprecated"
+          },
+          "stack": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AssetStackResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagResponseDto"
+            },
+            "type": "array"
+          },
+          "thumbhash": {
+            "description": "Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "updatedAt": {
+            "description": "The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          },
+          "width": {
+            "description": "Asset width",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bestPhotoScore",
+          "checksum",
+          "createdAt",
+          "duration",
+          "fileCreatedAt",
+          "fileModifiedAt",
+          "hasMetadata",
+          "height",
+          "id",
+          "isArchived",
+          "isEdited",
+          "isFavorite",
+          "isOffline",
+          "isTrashed",
+          "localDateTime",
+          "originalFileName",
+          "originalPath",
+          "ownerId",
+          "thumbhash",
+          "type",
+          "updatedAt",
+          "visibility",
+          "width"
+        ],
+        "type": "object"
+      },
+      "BestPhotoScoreDto": {
+        "properties": {
+          "aestheticScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "bestFrameTimestampMs": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "computedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "diversityScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "frameMetadata": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "frameScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "score": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "scoreVersion": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "subjectScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "technicalScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "aestheticScore",
+          "bestFrameTimestampMs",
+          "computedAt",
+          "diversityScore",
+          "frameMetadata",
+          "frameScore",
+          "metadata",
+          "score",
+          "scoreVersion",
+          "subjectScore",
+          "technicalScore"
+        ],
+        "type": "object"
+      },
+      "BestPhotosResponseDto": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BestPhotoAssetResponseDto"
+            },
+            "type": "array"
+          },
+          "nextPage": {
+            "nullable": true,
+            "type": "string"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "items",
+          "nextPage",
+          "total"
+        ],
+        "type": "object"
+      },
       "BulkIdErrorReason": {
         "description": "Error reason",
         "enum": [
@@ -18844,6 +19268,8 @@
           "AssetFileMigration",
           "AssetGenerateThumbnailsQueueAll",
           "AssetGenerateThumbnails",
+          "BestPhotosScoreQueueAll",
+          "BestPhotosScore",
           "MediaHealthScanMissing",
           "MediaHealthLocateMissing",
           "MediaHealthScanCorrupt",
@@ -19338,6 +19764,7 @@
           "memory-cleanup",
           "memory-create",
           "backup-database",
+          "best-photos-backfill",
           "physical-deduplication-dry-run",
           "physical-deduplication-apply"
         ],

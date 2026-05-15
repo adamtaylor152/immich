@@ -6,6 +6,7 @@ import { AssetMediaService } from 'src/services/asset-media.service';
 import { AssetService } from 'src/services/asset.service';
 import { AuthAdminService } from 'src/services/auth-admin.service';
 import { AuthService } from 'src/services/auth.service';
+import { BestPhotosService } from 'src/services/best-photos.service';
 import { CliService } from 'src/services/cli.service';
 import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { DatabaseService } from 'src/services/database.service';
@@ -58,6 +59,7 @@ export const services = [
   AssetService,
   AuthService,
   AuthAdminService,
+  BestPhotosService,
   CliService,
   DatabaseBackupService,
   DatabaseService,

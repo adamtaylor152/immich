@@ -35,6 +35,10 @@ const asJobItem = (dto: JobCreateDto): JobItem => {
       return { name: JobName.DatabaseBackup };
     }
 
+    case ManualJobName.BestPhotosBackfill: {
+      return { name: JobName.BestPhotosScoreQueueAll, data: { force: true } };
+    }
+
     case ManualJobName.PhysicalDeduplicationDryRun: {
       return { name: JobName.PhysicalDeduplicationMigrationDryRun };
     }
@@ -168,6 +172,8 @@ export class JobService extends BaseService {
         }
 
         if (asset.type === AssetType.Image) {
+          jobs.push({ name: JobName.BestPhotosScore, data: item.data });
+
           const { machineLearning } = await this.getConfig({ withCache: true });
           if (isImageDescriptionEnabled(machineLearning)) {
             jobs.push({ name: JobName.ImageDescription, data: item.data });

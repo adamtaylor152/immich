@@ -20,6 +20,7 @@ class ServerAboutResponseDto {
     this.exiftool,
     this.ffmpeg,
     this.imagemagick,
+    this.libraw,
     this.libvips,
     required this.licensed,
     this.nodejs,
@@ -98,6 +99,15 @@ class ServerAboutResponseDto {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   String? imagemagick;
+
+  /// LibRaw/dcraw_emu version
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? libraw;
 
   /// libvips version
   ///
@@ -216,6 +226,7 @@ class ServerAboutResponseDto {
     other.exiftool == exiftool &&
     other.ffmpeg == ffmpeg &&
     other.imagemagick == imagemagick &&
+    other.libraw == libraw &&
     other.libvips == libvips &&
     other.licensed == licensed &&
     other.nodejs == nodejs &&
@@ -241,6 +252,7 @@ class ServerAboutResponseDto {
     (exiftool == null ? 0 : exiftool!.hashCode) +
     (ffmpeg == null ? 0 : ffmpeg!.hashCode) +
     (imagemagick == null ? 0 : imagemagick!.hashCode) +
+    (libraw == null ? 0 : libraw!.hashCode) +
     (libvips == null ? 0 : libvips!.hashCode) +
     (licensed.hashCode) +
     (nodejs == null ? 0 : nodejs!.hashCode) +
@@ -257,7 +269,7 @@ class ServerAboutResponseDto {
     (versionUrl.hashCode);
 
   @override
-  String toString() => 'ServerAboutResponseDto[build=$build, buildImage=$buildImage, buildImageUrl=$buildImageUrl, buildUrl=$buildUrl, exiftool=$exiftool, ffmpeg=$ffmpeg, imagemagick=$imagemagick, libvips=$libvips, licensed=$licensed, nodejs=$nodejs, repository=$repository, repositoryUrl=$repositoryUrl, sourceCommit=$sourceCommit, sourceRef=$sourceRef, sourceUrl=$sourceUrl, thirdPartyBugFeatureUrl=$thirdPartyBugFeatureUrl, thirdPartyDocumentationUrl=$thirdPartyDocumentationUrl, thirdPartySourceUrl=$thirdPartySourceUrl, thirdPartySupportUrl=$thirdPartySupportUrl, version=$version, versionUrl=$versionUrl]';
+  String toString() => 'ServerAboutResponseDto[build=$build, buildImage=$buildImage, buildImageUrl=$buildImageUrl, buildUrl=$buildUrl, exiftool=$exiftool, ffmpeg=$ffmpeg, imagemagick=$imagemagick, libraw=$libraw, libvips=$libvips, licensed=$licensed, nodejs=$nodejs, repository=$repository, repositoryUrl=$repositoryUrl, sourceCommit=$sourceCommit, sourceRef=$sourceRef, sourceUrl=$sourceUrl, thirdPartyBugFeatureUrl=$thirdPartyBugFeatureUrl, thirdPartyDocumentationUrl=$thirdPartyDocumentationUrl, thirdPartySourceUrl=$thirdPartySourceUrl, thirdPartySupportUrl=$thirdPartySupportUrl, version=$version, versionUrl=$versionUrl]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -295,6 +307,11 @@ class ServerAboutResponseDto {
       json[r'imagemagick'] = this.imagemagick;
     } else {
     //  json[r'imagemagick'] = null;
+    }
+    if (this.libraw != null) {
+      json[r'libraw'] = this.libraw;
+    } else {
+    //  json[r'libraw'] = null;
     }
     if (this.libvips != null) {
       json[r'libvips'] = this.libvips;
@@ -373,6 +390,7 @@ class ServerAboutResponseDto {
         exiftool: mapValueOfType<String>(json, r'exiftool'),
         ffmpeg: mapValueOfType<String>(json, r'ffmpeg'),
         imagemagick: mapValueOfType<String>(json, r'imagemagick'),
+        libraw: mapValueOfType<String>(json, r'libraw'),
         libvips: mapValueOfType<String>(json, r'libvips'),
         licensed: mapValueOfType<bool>(json, r'licensed')!,
         nodejs: mapValueOfType<String>(json, r'nodejs'),

@@ -17,11 +17,12 @@
 
 This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment, enhanced RAW rendering, media-health repair tools, stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups (we know you don't want to see photos of your EX), and family-library storage tools.
 
-Upstream Immich did not accept this local feature set *because it was "slop,"* so be cautious about using this or other forks not suitable for inclusion in the main codebase. I have maintained the fork here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
+Upstream Immich did not accept this local feature set _because it was "slop,"_ so be cautious about using this or other forks not suitable for inclusion in the main codebase. I have maintained the fork here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
 
 I use the term NSFW generatelly to describe sensitive or private images that you want to keep in Albums without moving them to the locked folder. Yes, you can use it to manage your 🍆 collection, but it's purpose is really to catch the 5 photos from your wife that you don't want your in-laws to see, gross medical photos, perscription information, and other media that you want to keep private.
 
 ## AI and Privacy Features
+
 - OpenVINO (Intel iGPU) and CUDA (Nvidia GPU) machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups. The ML features do fall back to CPU, but are not recommended.
 - Multi-select actions for marking owned remote assets as NSFW or safe again.
 - AI-generated image descriptions and searchable tags (alpha right now, improving later).
@@ -31,21 +32,32 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 - Admin review and repair tools for generated descriptions, generated tags, and NSFW decisions.
 
 ## Deduplicate Content in Multiple Accounts
+
 - Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
 - Enhanced video duplicate detection that samples multiple internal-only video frames and compares CLIP embeddings, reducing false duplicate groups caused by black frames, title cards, or intro screens while still matching different-resolution copies.
 
 ## Advanced GPU (and non-GPU) Video Editing
+
 - Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.
 - A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
 - GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
 
 ## Enhanced RAW Support and Media Health
+
 - Enhanced RAW rendering is enabled by default and can be turned off in Admin > System Settings > Image. It uses embedded previews first, then falls back to LibRaw/dcraw_emu when needed so difficult RAW and .cr2 files can still generate usable previews and thumbnails.
 - Missing media utilities help admins find assets whose source files are missing or unreadable, locate same-named files inside external-library import paths, compare candidates against existing thumbnails/previews, and relink validated matches.
 - Corrupt media review scans originals for decode failures, separates unsupported RAW files from true corruption, shows timeline-style findings with thumbnails and evidence, and can move recently revalidated corrupt assets to Immich trash after PIN and typed confirmation.
 
 ## Recently Added Media
+
 - Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.
+
+## Best Photos
+
+- Best Photos left nav view that ranks your highest-quality photos using local scoring from Immich-generated previews.
+- Scores are stored per asset and computed privately on your server; the feature does not call cloud APIs, create a physical album, duplicate files, or change favorites.
+- The first version focuses on image assets and considers practical quality signals like sharpness, exposure, contrast, usable resolution, simple subject presence, and screenshot/document-style penalties.
+- Videos are not auto-scored or used to change thumbnails yet, but the stored score data is ready for future video-frame scoring.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for plain-language setup notes, recommended rollout steps, physical deduplication guidance, and the differences from upstream Immich.
 
