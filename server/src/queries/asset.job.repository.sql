@@ -635,6 +635,82 @@ from
 where
   "asset"."id" = $2
 
+-- AssetJobRepository.streamForBestPhotosScoring
+select
+  "asset"."id"
+from
+  "asset"
+where
+  "asset"."type" = 'IMAGE'
+  and "asset"."status" = 'active'
+  and "asset"."deletedAt" is null
+  and "asset"."visibility" in ('archive', 'timeline')
+  and exists (
+    select
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = 'preview'
+  )
+  and (
+    not exists (
+      select
+      from
+        "asset_best_photo_score"
+      where
+        "asset_best_photo_score"."assetId" = "asset"."id"
+    )
+    or exists (
+      select
+      from
+        "asset_best_photo_score"
+      where
+        "asset_best_photo_score"."assetId" = "asset"."id"
+        and "asset_best_photo_score"."scoreVersion" < $1
+    )
+  )
+
+-- AssetJobRepository.getForBestPhotoScoring
+select
+  "asset"."id",
+  "asset"."ownerId",
+  "asset"."type",
+  "asset"."status",
+  "asset"."deletedAt",
+  "asset"."visibility",
+  "asset"."originalFileName",
+  "asset"."width",
+  "asset"."height",
+  (
+    select
+      "asset_file"."path"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = 'preview'
+      and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
+  ) as "previewFile",
+  (
+    select
+      count(*)
+    from
+      asset_face
+    where
+      asset_face."assetId" = asset.id
+      and asset_face."deletedAt" is null
+      and asset_face."isVisible" is true
+  ) as "faceCount"
+from
+  "asset"
+where
+  "asset"."id" = $2
+
 -- AssetJobRepository.getForSyncAssets
 select
   "asset"."id",

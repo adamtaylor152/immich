@@ -87,6 +87,13 @@ set
 where
   "userId" = $2
 
+-- SessionRepository.requestSyncResetForUser
+update "session"
+set
+  "isPendingSyncReset" = $1
+where
+  "userId" = $2
+
 -- SessionRepository.resetSyncProgress
 begin
 update "session"

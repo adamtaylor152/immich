@@ -33,7 +33,7 @@ describe('/server', () => {
         .get('/server/about')
         .set('Authorization', `Bearer ${admin.accessToken}`);
       expect(status).toBe(200);
-      expect(body).toEqual({
+      expect(body).toMatchObject({
         version: expect.any(String),
         versionUrl: expect.any(String),
         repository: 'immich-app/immich',
@@ -52,6 +52,9 @@ describe('/server', () => {
         exiftool: expect.any(String),
         licensed: false,
       });
+      if ('libraw' in body) {
+        expect(body.libraw).toEqual(expect.any(String));
+      }
     });
   });
 

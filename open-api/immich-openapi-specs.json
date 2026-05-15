@@ -3778,7 +3778,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "asset.update",
+        "x-immich-permission": "asset.read",
         "x-immich-state": "Beta"
       },
       "put": {
