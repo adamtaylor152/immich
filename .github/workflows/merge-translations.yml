@@ -4,10 +4,6 @@ on:
   workflow_dispatch:
   workflow_call:
     secrets:
-      PUSH_O_MATIC_APP_CLIENT_ID:
-        required: false
-      PUSH_O_MATIC_APP_KEY:
-        required: false
       WEBLATE_TOKEN:
         required: true
     inputs:
@@ -29,26 +25,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout workflow source
-        if: ${{ inputs.skip != true }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Generate a token
-        id: generate_token
-        if: ${{ inputs.skip != true }}
-        uses: ./.github/actions/fork-workflow-token
-        with:
-          github-token: ${{ github.token }}
-          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Find translation PR
         id: find_pr
         if: ${{ inputs.skip != true }}
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -90,7 +71,7 @@ jobs:
         id: merge_pr
         if: ${{ inputs.skip != true }}
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.find_pr.outputs.PR_NUMBER }}
         run: |
           set -euo pipefail
@@ -103,7 +84,7 @@ jobs:
       - name: Wait for PR to merge
         if: ${{ inputs.skip != true }}
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.find_pr.outputs.PR_NUMBER }}
           REVIEW_ID: ${{ steps.merge_pr.outputs.REVIEW_ID }}
         run: |

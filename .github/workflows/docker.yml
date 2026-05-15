@@ -22,23 +22,11 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - name: Checkout workflow source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - id: token
-        uses: ./.github/actions/fork-workflow-token
-        with:
-          github-token: ${{ github.token }}
-          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Check what should run
         id: check
         uses: immich-app/devtools/actions/pre-job@91f342bb4477c4bc10c576ae739da875d85aa164 # pre-job-action-v2.0.4
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           filters: |
             server:
               - 'server/**'

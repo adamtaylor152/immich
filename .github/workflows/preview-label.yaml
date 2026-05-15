@@ -13,21 +13,9 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Checkout workflow source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - id: token
-        uses: ./.github/actions/fork-workflow-token
-        with:
-          github-token: ${{ github.token }}
-          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - uses: mshick/add-pr-comment@8e4927817251f1ff60c001f04568532b38e0b4a0 # v3.11.0
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           message-id: 'preview-status'
           message: 'Deploying preview environment to https://pr-${{ github.event.pull_request.number }}.preview.internal.immich.build/'
 
@@ -37,21 +25,9 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Checkout workflow source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - id: token
-        uses: ./.github/actions/fork-workflow-token
-        with:
-          github-token: ${{ github.token }}
-          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           script: |
             github.rest.issues.removeLabel({
               issue_number: context.payload.pull_request.number,
@@ -63,13 +39,13 @@ jobs:
       - uses: mshick/add-pr-comment@8e4927817251f1ff60c001f04568532b38e0b4a0 # v3.11.0
         if: ${{ github.event.pull_request.head.repo.fork }}
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           message-id: 'preview-status'
           message: 'PRs from forks cannot have preview environments.'
 
       - uses: mshick/add-pr-comment@8e4927817251f1ff60c001f04568532b38e0b4a0 # v3.11.0
         if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
-          github-token: ${{ steps.token.outputs.token }}
+          github-token: ${{ github.token }}
           message-id: 'preview-status'
           message: 'Preview environment has been removed.'

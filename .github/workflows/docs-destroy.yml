@@ -16,28 +16,16 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout workflow source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - id: token
-        uses: ./.github/actions/fork-workflow-token
-        with:
-          github-token: ${{ github.token }}
-          app-client-id: ${{ secrets.PUSH_O_MATIC_APP_CLIENT_ID }}
-          app-private-key: ${{ secrets.PUSH_O_MATIC_APP_KEY }}
-
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
 
       - name: Setup Mise
         uses: immich-app/devtools/actions/use-mise@cf6e190bacde3d7bda59372a786b36ac7d01536a # use-mise-action-v2.0.1
         with:
-          github_token: ${{ steps.token.outputs.token }}
+          github_token: ${{ github.token }}
 
       - name: Destroy Docs Subdomain
         env:
@@ -52,7 +40,7 @@ jobs:
       - name: Comment
         uses: actions-cool/maintain-one-comment@909842216bc8e8658364c572ec52100f4c2cc50a # v3.3.0
         with:
-          token: ${{ steps.token.outputs.token }}
+          token: ${{ github.token }}
           number: ${{ github.event.number }}
           delete: true
           body-include: '<!-- Docs PR URL -->'
