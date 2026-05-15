@@ -1332,6 +1332,7 @@ export type QueuesResponseLegacyDto = {
     imageDescription: QueueResponseLegacyDto;
     imageEnrichment: QueueResponseLegacyDto;
     library: QueueResponseLegacyDto;
+    mediaHealth: QueueResponseLegacyDto;
     metadataExtraction: QueueResponseLegacyDto;
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
@@ -1427,6 +1428,95 @@ export type MapReverseGeocodeResponseDto = {
     country: string | null;
     /** State/Province name */
     state: string | null;
+};
+export type MediaHealthCandidateDto = {
+    /** Candidate file path */
+    candidatePath: string;
+    checkedAt: string;
+    evidence: {
+        [key: string]: any;
+    };
+    /** Media health finding ID */
+    healthId: string;
+    /** Candidate ID */
+    id: string;
+    resolution: {
+        [key: string]: any;
+    };
+    status: MediaHealthStatus;
+    /** Visual match score from 0 to 1 */
+    visualMatchScore: number | null;
+};
+export type MediaHealthItemDto = {
+    asset: AssetResponseDto;
+    /** Asset ID */
+    assetId: string;
+    candidates: MediaHealthCandidateDto[];
+    category: MediaHealthCategory;
+    checkedAt: string;
+    dismissedAt: string | null;
+    evidence: {
+        [key: string]: any;
+    };
+    /** Media health finding ID */
+    id: string;
+    /** Original media filename */
+    originalFileName: string;
+    /** Original media path */
+    originalPath: string;
+    resolution: {
+        [key: string]: any;
+    };
+    resolvedAt: string | null;
+    severity: MediaHealthSeverity;
+    status: MediaHealthStatus;
+};
+export type MediaHealthBucketDto = {
+    /** Number of findings in the bucket */
+    count: number;
+    items: MediaHealthItemDto[];
+    /** Timeline bucket date */
+    timeBucket: string;
+};
+export type MediaHealthRunResponseDto = {
+    category: MediaHealthCategory;
+    checkedAssets: number;
+    error: string | null;
+    finishedAt: string | null;
+    foundAssets: number;
+    /** Media health run ID */
+    id: string;
+    startedAt: string;
+    /** Run status */
+    status: string;
+    totalAssets: number;
+};
+export type MediaHealthListResponseDto = {
+    buckets: MediaHealthBucketDto[];
+    run: (MediaHealthRunResponseDto) | null;
+    total: number;
+};
+export type MediaHealthDeleteCorruptDto = {
+    /** Typed confirmation text */
+    confirmText: string;
+    /** Media health finding IDs */
+    ids: string[];
+};
+export type MediaHealthBulkResultDto = {
+    error?: string;
+    id: string;
+    status?: MediaHealthStatus;
+    success: boolean;
+};
+export type MediaHealthBulkResponseDto = {
+    results: MediaHealthBulkResultDto[];
+};
+export type MediaHealthScanResponseDto = {
+    runId: string;
+};
+export type MediaHealthBulkActionDto = {
+    /** Media health finding IDs */
+    ids: string[];
 };
 export type OnThisDayDto = {
     /** Year for on this day memory */
@@ -2081,6 +2171,8 @@ export type ServerAboutResponseDto = {
     ffmpeg?: string;
     /** ImageMagick version */
     imagemagick?: string;
+    /** LibRaw/dcraw_emu version */
+    libraw?: string;
     /** libvips version */
     libvips?: string;
     /** Whether the server is licensed */
@@ -2467,6 +2559,10 @@ export type SystemConfigFFmpegDto = {
     /** Two pass */
     twoPass: boolean;
 };
+export type SystemConfigEnhancedRawImageDto = {
+    /** Enhanced RAW rendering */
+    enabled: boolean;
+};
 export type SystemConfigGeneratedFullsizeImageDto = {
     /** Enabled */
     enabled: boolean;
@@ -2487,6 +2583,7 @@ export type SystemConfigGeneratedImageDto = {
 };
 export type SystemConfigImageDto = {
     colorspace: Colorspace;
+    enhancedRaw?: SystemConfigEnhancedRawImageDto;
     /** Extract embedded */
     extractEmbedded: boolean;
     fullsize: SystemConfigGeneratedFullsizeImageDto;
@@ -2504,6 +2601,7 @@ export type SystemConfigJobDto = {
     imageDescription?: JobSettingsDto;
     imageEnrichment?: JobSettingsDto;
     library: JobSettingsDto;
+    mediaHealth?: JobSettingsDto;
     metadataExtraction: JobSettingsDto;
     migration: JobSettingsDto;
     notifications: JobSettingsDto;
@@ -4954,6 +5052,106 @@ export function reverseGeocode({ lat, lon }: {
     }));
 }
 /**
+ * List media health findings
+ */
+export function list({ category, size, status }: {
+    category?: MediaHealthCategory;
+    size?: number;
+    status?: MediaHealthStatus;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MediaHealthListResponseDto;
+    }>(`/media-health${QS.query(QS.explode({
+        category,
+        size,
+        status
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Move confirmed corrupt media to trash
+ */
+export function deleteCorrupt({ mediaHealthDeleteCorruptDto }: {
+    mediaHealthDeleteCorruptDto: MediaHealthDeleteCorruptDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MediaHealthBulkResponseDto;
+    }>("/media-health/corrupt", oazapfts.json({
+        ...opts,
+        method: "DELETE",
+        body: mediaHealthDeleteCorruptDto
+    })));
+}
+/**
+ * Start corrupt media scan
+ */
+export function startCorruptScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/corrupt/scan", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Dismiss media health findings
+ */
+export function dismiss({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/media-health/dismiss", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Locate missing media
+ */
+export function locateMissing({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/missing/locate", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Relink missing media
+ */
+export function relinkMissing({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthBulkResponseDto;
+    }>("/media-health/missing/relink", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Start missing media scan
+ */
+export function startMissingScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/missing/scan", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * Retrieve memories
  */
 export function searchMemories({ $for, isSaved, isTrashed, order, size, $type }: {
@@ -7302,6 +7500,7 @@ export enum QueueName {
     ImageEnrichment = "imageEnrichment",
     ImageDescription = "imageDescription",
     NsfwDetection = "nsfwDetection",
+    MediaHealth = "mediaHealth",
     Workflow = "workflow",
     Editor = "editor"
 }
@@ -7311,6 +7510,30 @@ export enum QueueCommand {
     Resume = "resume",
     Empty = "empty",
     ClearFailed = "clear-failed"
+}
+export enum MediaHealthCategory {
+    Missing = "missing",
+    Corrupt = "corrupt"
+}
+export enum MediaHealthStatus {
+    Found = "found",
+    Missing = "missing",
+    Candidate = "candidate",
+    Relinked = "relinked",
+    Dismissed = "dismissed",
+    Resolved = "resolved",
+    UnsupportedRaw = "unsupported_raw",
+    CorruptSuspect = "corrupt_suspect",
+    CorruptConfirmed = "corrupt_confirmed",
+    TrashQueued = "trash_queued",
+    Trashed = "trashed",
+    DeleteQueued = "delete_queued",
+    Deleted = "deleted"
+}
+export enum MediaHealthSeverity {
+    Info = "info",
+    Warning = "warning",
+    Critical = "critical"
 }
 export enum MemorySearchOrder {
     Asc = "asc",
@@ -7369,6 +7592,10 @@ export enum JobName {
     AssetFileMigration = "AssetFileMigration",
     AssetGenerateThumbnailsQueueAll = "AssetGenerateThumbnailsQueueAll",
     AssetGenerateThumbnails = "AssetGenerateThumbnails",
+    MediaHealthScanMissing = "MediaHealthScanMissing",
+    MediaHealthLocateMissing = "MediaHealthLocateMissing",
+    MediaHealthScanCorrupt = "MediaHealthScanCorrupt",
+    MediaHealthDeleteCorrupt = "MediaHealthDeleteCorrupt",
     AuditTableCleanup = "AuditTableCleanup",
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",

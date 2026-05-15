@@ -26,6 +26,7 @@ const ServerAboutResponseSchema = z
     ffmpeg: z.string().optional().describe('FFmpeg version'),
     imagemagick: z.string().optional().describe('ImageMagick version'),
     libvips: z.string().optional().describe('libvips version'),
+    libraw: z.string().optional().describe('LibRaw/dcraw_emu version'),
     exiftool: z.string().optional().describe('ExifTool version'),
     licensed: z.boolean().describe('Whether the server is licensed'),
     thirdPartySourceUrl: z.string().optional().describe('Third-party source URL'),

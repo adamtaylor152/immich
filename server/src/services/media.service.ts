@@ -46,8 +46,10 @@ import {
 import { getAssetFile, getDimensions } from 'src/utils/asset.util';
 import { checkFaceVisibility, checkOcrVisibility } from 'src/utils/editor';
 import { BaseConfig, ThumbnailConfig } from 'src/utils/media';
+import { isUnsupportedRawDecodeError } from 'src/utils/media-health';
 import { mimeTypes } from 'src/utils/mime-types';
 import { clamp, isFaceImportEnabled, isFacialRecognitionEnabled } from 'src/utils/misc';
+import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 import { getOutputDimensions } from 'src/utils/transform';
 
 interface UpsertFileOptions {
@@ -302,7 +304,16 @@ export class MediaService extends BaseService {
       );
     } else if (asset.type === AssetType.Image) {
       this.logger.verbose(`Thumbnail generation for image ${id} ${asset.originalPath}`);
-      generated = await this.generateImageThumbnails(asset, config);
+      try {
+        generated = await this.generateImageThumbnails(asset, config);
+      } catch (error) {
+        if (this.shouldSkipThumbnailDecodeError(error, asset.originalFileName)) {
+          this.logger.warn(`Skipping thumbnail generation for asset ${id}: ${error}`);
+          return JobStatus.Skipped;
+        }
+
+        throw error;
+      }
     } else {
       this.logger.warn(`Skipping thumbnail generation for asset ${id}: ${asset.type} is not an image or video`);
       return JobStatus.Skipped;
@@ -332,6 +343,15 @@ export class MediaService extends BaseService {
     return extracted;
   }
 
+  private async renderRawImage(originalPath: string, minSize: number) {
+    const buffer = await renderRawWithLibRaw(originalPath);
+    if (!(await this.shouldUseExtractedImage(buffer, minSize))) {
+      return null;
+    }
+
+    return { buffer, format: RawExtractedFormat.Tiff };
+  }
+
   private async decodeImage(thumbSource: string | Buffer, exifInfo: ThumbnailAsset['exifInfo'], targetSize?: number) {
     const { image } = await this.getConfig({ withCache: true });
     const colorspace = this.isSRGB(exifInfo) ? Colorspace.Srgb : image.colorspace;
@@ -346,23 +366,76 @@ export class MediaService extends BaseService {
     return { info, data, colorspace };
   }
 
+  private shouldSkipThumbnailDecodeError(error: unknown, fileName: string) {
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      isUnsupportedRawDecodeError(error) ||
+      (mimeTypes.isRaw(fileName) &&
+        (message.includes('dcraw_emu') ||
+          message.includes('Command failed') ||
+          message.includes('ENOENT') ||
+          message.includes('unsupported RAW')))
+    );
+  }
+
   private async extractOriginalImage(asset: ThumbnailAsset, image: SystemConfig['image'], useEdits = false) {
-    const extractEmbedded = image.extractEmbedded && mimeTypes.isRaw(asset.originalFileName);
-    const extracted = extractEmbedded ? await this.extractImage(asset.originalPath, image.preview.size) : null;
+    const isRaw = mimeTypes.isRaw(asset.originalFileName);
+    const extractEmbedded = image.extractEmbedded && isRaw;
+    const enhancedRawEnabled = image.enhancedRaw?.enabled !== false;
+    let extracted = extractEmbedded ? await this.extractImage(asset.originalPath, image.preview.size) : null;
+    let renderedRaw = false;
+    let rawRenderError: unknown;
+
+    if (!extracted && extractEmbedded && enhancedRawEnabled) {
+      try {
+        extracted = await this.renderRawImage(asset.originalPath, image.preview.size);
+        renderedRaw = !!extracted;
+      } catch (error) {
+        rawRenderError = error;
+        this.logger.debug(`Could not render RAW image with LibRaw for ${asset.id}: ${error}`);
+      }
+    }
+
     const generateFullsize =
       ((image.fullsize.enabled || asset.exifInfo.projectionType === 'EQUIRECTANGULAR') &&
         !mimeTypes.isWebSupportedImage(asset.originalPath)) ||
       useEdits;
-    const convertFullsize = generateFullsize && (!extracted || !mimeTypes.isWebSupportedImage(` .${extracted.format}`));
 
-    const thumbSource = extracted ? extracted.buffer : asset.originalPath;
-    const { data, info, colorspace } = await this.decodeImage(
-      thumbSource,
-      // only specify orientation to extracted images which don't have EXIF orientation data
-      // or it can double rotate the image
-      extracted ? asset.exifInfo : { ...asset.exifInfo, orientation: null },
-      convertFullsize ? undefined : image.preview.size,
-    );
+    const decodeThumbSource = () => {
+      const convertFullsize =
+        generateFullsize && (!extracted || !mimeTypes.isWebSupportedImage(` .${extracted.format}`));
+      const thumbSource = extracted ? extracted.buffer : asset.originalPath;
+      return this.decodeImage(
+        thumbSource,
+        // only specify orientation to extracted images which don't have EXIF orientation data
+        // or it can double rotate the image
+        extracted ? asset.exifInfo : { ...asset.exifInfo, orientation: null },
+        convertFullsize ? undefined : image.preview.size,
+      ).then((decoded) => ({ ...decoded, convertFullsize }));
+    };
+
+    let decoded: Awaited<ReturnType<typeof decodeThumbSource>>;
+    try {
+      decoded = await decodeThumbSource();
+    } catch (error) {
+      if (isRaw && enhancedRawEnabled && !renderedRaw) {
+        try {
+          extracted = await this.renderRawImage(asset.originalPath, image.preview.size);
+          renderedRaw = !!extracted;
+          if (extracted) {
+            decoded = await decodeThumbSource();
+          } else {
+            throw error;
+          }
+        } catch (fallbackError) {
+          throw rawRenderError ?? fallbackError;
+        }
+      } else {
+        throw rawRenderError ?? error;
+      }
+    }
+
+    const { data, info, colorspace, convertFullsize } = decoded;
 
     let isTransparent = false;
     if (!extracted && mimeTypes.canBeTransparent(asset.originalPath)) {

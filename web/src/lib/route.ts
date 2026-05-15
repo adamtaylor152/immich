@@ -1,4 +1,4 @@
-import { QueueName, type MetadataSearchDto, type SmartSearchDto } from '@immich/sdk';
+import { QueueName, type MediaHealthStatus, type MetadataSearchDto, type SmartSearchDto } from '@immich/sdk';
 import { omitBy } from 'lodash-es';
 import { OpenQueryParam, type SharedLinkTab } from '$lib/constants';
 
@@ -147,6 +147,8 @@ export const Route = {
   duplicatesUtility: (params?: { index?: number }) => '/utilities/duplicates' + asQueryString(params),
   largeFileUtility: () => '/utilities/large-files',
   geolocationUtility: () => '/utilities/geolocation',
+  missingMediaUtility: (params?: { status?: MediaHealthStatus }) => '/utilities/missing-media' + asQueryString(params),
+  corruptMediaUtility: (params?: { status?: MediaHealthStatus }) => '/utilities/corrupt-media' + asQueryString(params),
 
   // workflows
   workflows: () => '/utilities/workflows',

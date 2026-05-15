@@ -103,6 +103,7 @@ const SystemConfigJobSchema = z
     imageEnrichment: JobSettingsSchema.default(defaults.job.imageEnrichment),
     imageDescription: JobSettingsSchema.default(defaults.job.imageDescription),
     nsfwDetection: JobSettingsSchema.default(defaults.job.nsfwDetection),
+    mediaHealth: JobSettingsSchema.default(defaults.job.mediaHealth),
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
   })
@@ -352,6 +353,12 @@ const SystemConfigGeneratedFullsizeImageSchema = z
   })
   .meta({ id: 'SystemConfigGeneratedFullsizeImageDto' });
 
+const SystemConfigEnhancedRawImageSchema = z
+  .object({
+    enabled: configBool.describe('Enhanced RAW rendering'),
+  })
+  .meta({ id: 'SystemConfigEnhancedRawImageDto' });
+
 const SystemConfigImageSchema = z
   .object({
     thumbnail: SystemConfigGeneratedImageSchema,
@@ -359,6 +366,7 @@ const SystemConfigImageSchema = z
     fullsize: SystemConfigGeneratedFullsizeImageSchema,
     colorspace: ColorspaceSchema,
     extractEmbedded: configBool.describe('Extract embedded'),
+    enhancedRaw: SystemConfigEnhancedRawImageSchema.default(defaults.image.enhancedRaw),
   })
   .meta({ id: 'SystemConfigImageDto' });
 

@@ -256,6 +256,10 @@ export class QueueService extends BaseService {
         return this.jobRepository.queue({ name: JobName.NsfwDetectionQueueAll, data: { force } });
       }
 
+      case QueueName.MediaHealth: {
+        return this.jobRepository.queue({ name: JobName.MediaHealthScanMissing, data: { force } });
+      }
+
       case QueueName.ImageDescription: {
         const { machineLearning } = await this.getConfig({ withCache: false });
         if (!isImageDescriptionEnabled(machineLearning)) {

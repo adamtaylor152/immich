@@ -156,6 +156,9 @@ export type SystemConfig = {
     preview: ImageOptions;
     colorspace: Colorspace;
     extractEmbedded: boolean;
+    enhancedRaw: {
+      enabled: boolean;
+    };
     fullsize: FullsizeImageOptions;
   };
   newVersionCheck: {
@@ -267,6 +270,7 @@ export const defaults = Object.freeze<SystemConfig>({
     [QueueName.ImageEnrichment]: { concurrency: 1 },
     [QueueName.ImageDescription]: { concurrency: 1 },
     [QueueName.NsfwDetection]: { concurrency: 1 },
+    [QueueName.MediaHealth]: { concurrency: 1 },
     [QueueName.Workflow]: { concurrency: 5 },
     [QueueName.Editor]: { concurrency: 2 },
   },
@@ -388,6 +392,9 @@ export const defaults = Object.freeze<SystemConfig>({
     },
     colorspace: Colorspace.P3,
     extractEmbedded: false,
+    enhancedRaw: {
+      enabled: true,
+    },
     fullsize: {
       enabled: false,
       format: ImageFormat.Jpeg,

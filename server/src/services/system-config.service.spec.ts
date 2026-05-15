@@ -32,6 +32,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     [QueueName.BackgroundTask]: { concurrency: 5 },
     [QueueName.SmartSearch]: { concurrency: 2 },
     [QueueName.VideoDuplicateDetection]: { concurrency: 1 },
+    [QueueName.MediaHealth]: { concurrency: 1 },
     [QueueName.MetadataExtraction]: { concurrency: 5 },
     [QueueName.FaceDetection]: { concurrency: 2 },
     [QueueName.Search]: { concurrency: 5 },
@@ -210,6 +211,9 @@ const updatedConfig = Object.freeze<SystemConfig>({
     fullsize: { enabled: false, format: ImageFormat.Jpeg, quality: 80, progressive: false },
     colorspace: Colorspace.P3,
     extractEmbedded: false,
+    enhancedRaw: {
+      enabled: true,
+    },
   },
   newVersionCheck: {
     enabled: true,

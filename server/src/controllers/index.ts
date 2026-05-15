@@ -14,6 +14,7 @@ import { JobController } from 'src/controllers/job.controller';
 import { LibraryController } from 'src/controllers/library.controller';
 import { MaintenanceController } from 'src/controllers/maintenance.controller';
 import { MapController } from 'src/controllers/map.controller';
+import { MediaHealthController } from 'src/controllers/media-health.controller';
 import { MemoryController } from 'src/controllers/memory.controller';
 import { NotificationAdminController } from 'src/controllers/notification-admin.controller';
 import { NotificationController } from 'src/controllers/notification.controller';
@@ -55,6 +56,7 @@ export const controllers = [
   LibraryController,
   MaintenanceController,
   MapController,
+  MediaHealthController,
   MemoryController,
   NotificationController,
   NotificationAdminController,

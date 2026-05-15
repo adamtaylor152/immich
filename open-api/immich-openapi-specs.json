@@ -6481,6 +6481,389 @@
         "x-immich-state": "Stable"
       }
     },
+    "/media-health": {
+      "get": {
+        "description": "List missing and corrupt media health findings in timeline buckets.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHealthCategory"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHealthStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthListResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List media health findings",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/corrupt": {
+      "delete": {
+        "description": "Move recently confirmed corrupt media findings to trash after revalidation.",
+        "operationId": "deleteCorrupt",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthDeleteCorruptDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthBulkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Move confirmed corrupt media to trash",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/corrupt/scan": {
+      "post": {
+        "description": "Queue an explicit scan that validates source media integrity.",
+        "operationId": "startCorruptScan",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Start corrupt media scan",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/dismiss": {
+      "post": {
+        "description": "Dismiss selected media health findings without modifying assets.",
+        "operationId": "dismiss",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Dismiss media health findings",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/locate": {
+      "post": {
+        "description": "Queue candidate discovery for missing media findings.",
+        "operationId": "locateMissing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Locate missing media",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/relink": {
+      "post": {
+        "description": "Relink missing external-library assets to validated candidate files.",
+        "operationId": "relinkMissing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthBulkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Relink missing media",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/scan": {
+      "post": {
+        "description": "Queue a scan that identifies missing or unreadable source files.",
+        "operationId": "startMissingScan",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Start missing media scan",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
     "/memories": {
       "get": {
         "description": "Retrieve a list of memories. Memories are sorted descending by creation date by default, although they can also be sorted in ascending order, or randomly.",
@@ -15287,6 +15670,10 @@
       "description": "Map endpoints include supplemental functionality related to geolocation, such as reverse geocoding and retrieving map markers for assets with geolocation data."
     },
     {
+      "name": "Media Health",
+      "description": "Media health utilities identify missing and corrupt source files."
+    },
+    {
       "name": "Memories",
       "description": "A memory is a specialized collection of assets with dedicated viewing implementations in the web and mobile clients. A memory includes fields related to visibility and are automatically generated per user via a background job."
     },
@@ -18457,6 +18844,10 @@
           "AssetFileMigration",
           "AssetGenerateThumbnailsQueueAll",
           "AssetGenerateThumbnails",
+          "MediaHealthScanMissing",
+          "MediaHealthLocateMissing",
+          "MediaHealthScanCorrupt",
+          "MediaHealthDeleteCorrupt",
           "AuditTableCleanup",
           "DatabaseBackup",
           "FacialRecognitionQueueAll",
@@ -19018,6 +19409,379 @@
           "state"
         ],
         "type": "object"
+      },
+      "MediaHealthBucketDto": {
+        "properties": {
+          "count": {
+            "description": "Number of findings in the bucket",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthItemDto"
+            },
+            "type": "array"
+          },
+          "timeBucket": {
+            "description": "Timeline bucket date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "items",
+          "timeBucket"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkActionDto": {
+        "properties": {
+          "ids": {
+            "description": "Media health finding IDs",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkResponseDto": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthBulkResultDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkResultDto": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "success"
+        ],
+        "type": "object"
+      },
+      "MediaHealthCandidateDto": {
+        "properties": {
+          "candidatePath": {
+            "description": "Candidate file path",
+            "type": "string"
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "healthId": {
+            "description": "Media health finding ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Candidate ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "resolution": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          },
+          "visualMatchScore": {
+            "description": "Visual match score from 0 to 1",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "candidatePath",
+          "checkedAt",
+          "evidence",
+          "healthId",
+          "id",
+          "resolution",
+          "status",
+          "visualMatchScore"
+        ],
+        "type": "object"
+      },
+      "MediaHealthCategory": {
+        "description": "Media health category",
+        "enum": [
+          "missing",
+          "corrupt"
+        ],
+        "type": "string"
+      },
+      "MediaHealthDeleteCorruptDto": {
+        "properties": {
+          "confirmText": {
+            "description": "Typed confirmation text",
+            "type": "string"
+          },
+          "ids": {
+            "description": "Media health finding IDs",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmText",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaHealthItemDto": {
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          },
+          "assetId": {
+            "description": "Asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthCandidateDto"
+            },
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/MediaHealthCategory"
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "dismissedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "id": {
+            "description": "Media health finding ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "originalFileName": {
+            "description": "Original media filename",
+            "type": "string"
+          },
+          "originalPath": {
+            "description": "Original media path",
+            "type": "string"
+          },
+          "resolution": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "resolvedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/MediaHealthSeverity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          }
+        },
+        "required": [
+          "asset",
+          "assetId",
+          "candidates",
+          "category",
+          "checkedAt",
+          "dismissedAt",
+          "evidence",
+          "id",
+          "originalFileName",
+          "originalPath",
+          "resolution",
+          "resolvedAt",
+          "severity",
+          "status"
+        ],
+        "type": "object"
+      },
+      "MediaHealthListResponseDto": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthBucketDto"
+            },
+            "type": "array"
+          },
+          "run": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaHealthRunResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "buckets",
+          "run",
+          "total"
+        ],
+        "type": "object"
+      },
+      "MediaHealthRunResponseDto": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/MediaHealthCategory"
+          },
+          "checkedAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "foundAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Media health run ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "description": "Run status",
+            "type": "string"
+          },
+          "totalAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "checkedAssets",
+          "error",
+          "finishedAt",
+          "foundAssets",
+          "id",
+          "startedAt",
+          "status",
+          "totalAssets"
+        ],
+        "type": "object"
+      },
+      "MediaHealthScanResponseDto": {
+        "properties": {
+          "runId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "type": "object"
+      },
+      "MediaHealthSeverity": {
+        "description": "Media health severity",
+        "enum": [
+          "info",
+          "warning",
+          "critical"
+        ],
+        "type": "string"
+      },
+      "MediaHealthStatus": {
+        "description": "Media health status",
+        "enum": [
+          "found",
+          "missing",
+          "candidate",
+          "relinked",
+          "dismissed",
+          "resolved",
+          "unsupported_raw",
+          "corrupt_suspect",
+          "corrupt_confirmed",
+          "trash_queued",
+          "trashed",
+          "delete_queued",
+          "deleted"
+        ],
+        "type": "string"
       },
       "MemoriesResponse": {
         "properties": {
@@ -21019,6 +21783,7 @@
           "imageEnrichment",
           "imageDescription",
           "nsfwDetection",
+          "mediaHealth",
           "workflow",
           "editor"
         ],
@@ -21163,6 +21928,9 @@
           "library": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "mediaHealth": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "metadataExtraction": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
@@ -21213,6 +21981,7 @@
           "imageDescription",
           "imageEnrichment",
           "library",
+          "mediaHealth",
           "metadataExtraction",
           "migration",
           "notifications",
@@ -21723,6 +22492,10 @@
           },
           "imagemagick": {
             "description": "ImageMagick version",
+            "type": "string"
+          },
+          "libraw": {
+            "description": "LibRaw/dcraw_emu version",
             "type": "string"
           },
           "libvips": {
@@ -24887,6 +25660,18 @@
         ],
         "type": "object"
       },
+      "SystemConfigEnhancedRawImageDto": {
+        "properties": {
+          "enabled": {
+            "description": "Enhanced RAW rendering",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "SystemConfigFFmpegDto": {
         "properties": {
           "accel": {
@@ -25085,6 +25870,9 @@
           "colorspace": {
             "$ref": "#/components/schemas/Colorspace"
           },
+          "enhancedRaw": {
+            "$ref": "#/components/schemas/SystemConfigEnhancedRawImageDto"
+          },
           "extractEmbedded": {
             "description": "Extract embedded",
             "type": "boolean"
@@ -25133,6 +25921,12 @@
           },
           "library": {
             "$ref": "#/components/schemas/JobSettingsDto"
+          },
+          "mediaHealth": {
+            "$ref": "#/components/schemas/JobSettingsDto",
+            "default": {
+              "concurrency": 1
+            }
           },
           "metadataExtraction": {
             "$ref": "#/components/schemas/JobSettingsDto"

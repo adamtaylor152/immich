@@ -26,6 +26,7 @@ export interface ServerBuildVersions {
   nodejs: string;
   ffmpeg: string;
   libvips: string;
+  libraw: string;
   exiftool: string;
   imagemagick: string;
 }
@@ -101,7 +102,7 @@ export class ServerInfoRepository {
         .then((buffer) => JSON.parse(buffer.toString()))
         .catch(() => this.logger.warn(`Failed to read ${resourcePaths.lockFile}`));
 
-      const [nodejsVersion, ffmpegVersion, magickVersion, exiftoolVersion] = await Promise.all([
+      const [nodejsVersion, ffmpegVersion, magickVersion, librawVersion, exiftoolVersion] = await Promise.all([
         this.retrieveVersionFallback('node --version', undefined, nodeVersion),
         this.retrieveVersionFallback(
           'ffmpeg -version',
@@ -113,6 +114,7 @@ export class ServerInfoRepository {
           (output) => output.replaceAll('Version: ImageMagick ', ''),
           getLockfileVersion('imagemagick', lockfile),
         ),
+        this.retrieveVersionFallback('dcraw_emu -v 2>&1'),
         exiftool.version(),
       ]);
 
@@ -123,6 +125,7 @@ export class ServerInfoRepository {
         exiftool: exiftoolVersion,
         ffmpeg: ffmpegVersion,
         libvips: libvipsVersion,
+        libraw: librawVersion,
         imagemagick: magickVersion,
       };
     }

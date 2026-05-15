@@ -214,6 +214,18 @@
             {disabled}
           />
         </div>
+
+        <div class="mt-4">
+          <SettingSwitch
+            title={$t('admin.image_enhanced_raw_rendering')}
+            subtitle={$t('admin.image_enhanced_raw_rendering_description')}
+            checked={configToEdit.image.enhancedRaw?.enabled !== false}
+            onToggle={(isChecked) => (configToEdit.image.enhancedRaw = { enabled: isChecked })}
+            isEdited={(configToEdit.image.enhancedRaw?.enabled !== false) !==
+              (config.image.enhancedRaw?.enabled !== false)}
+            {disabled}
+          />
+        </div>
       </div>
 
       <div class="ms-4 mt-4">
