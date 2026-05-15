@@ -13,48 +13,210 @@
 </p>
 <h3 align="center">High performance self-hosted photo and video management solution</h3>
 
-## AJ Taylor's maintained privacy fork
+# Immich Enhanced
 
-This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment, stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups (we know you don't want to see photos of your EX), and family-library storage tools.
+A privacy-first, AI-aware Immich fork with Google Photos-like discovery for self-hosted family libraries.
 
-Upstream Immich did not accept this local feature set *because it was "slop,"* so be cautious about using this or other forks not suitable for inclusion in the main codebase. I have maintained the fork here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
+This repository is a maintained downstream fork of Immich for home-lab users who want more control over privacy, storage, search, and local ML-powered image enrichment.
 
-I use the term NSFW generatelly to describe sensitive or private images that you want to keep in Albums without moving them to the locked folder. Yes, you can use it to manage your 🍆 collection, but it's purpose is really to catch the 5 photos from your wife that you don't want your in-laws to see, gross medical photos, perscription information, and other media that you want to keep private.
+It is designed for users who want to keep the Immich experience they already know, while adding fork-only features for:
+
+- PIN-gated sensitive media hiding
+- Optional NSFW/sensitive-content detection
+- Local AI-generated descriptions and tags
+- Family-library physical deduplication
+- Better duplicate video detection
+- Non-destructive photo and video editing
+- Natural-language local discovery
+- A “Recently Added” media view
+
+This fork is actively maintained and kept up to date with upstream Immich while preserving the additional features documented below.
+
+> [!CAUTION]
+> This is a downstream fork, not upstream Immich. It includes database changes and fork-only features that are not part of `immich-app/immich`.
+>
+> These database changes are designed to be reversible back to the main Immich branch, so users can switch back if needed. However, as with any fork that modifies application behavior and database state, you should back up your database and media library before upgrading.
+
+Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for setup notes, recommended rollout steps, physical deduplication guidance, and differences from upstream Immich.
+
+---
+
+## Why This Fork Exists
+
+Immich is already excellent. This fork adds features aimed at real home-lab and family-library workflows where users often need more than a standard photo timeline.
+
+Common use cases include:
+
+- Keeping sensitive or private media in normal albums without exposing it in the main UI
+- Hiding medical, financial, identity, or personal records from casual browsing
+- Letting family members keep separate accounts while avoiding duplicate storage
+- Finding receipts, screenshots, forms, places, people, and dates with natural-language search
+- Using local GPUs for ML and video workflows where available
+- Editing photos and videos without replacing the original upload
+
+This fork is especially useful for users who want a self-hosted photo library that behaves more like a mature family photo platform while still keeping processing local.
+
+---
+
+## Sensitive Media and Privacy Controls
+
+This fork uses the term **NSFW** broadly to describe sensitive or private media that you may want to keep in albums or your library without moving it to a separate locked folder.
+
+That can include:
+
+- Medical photos
+- Prescription or health information
+- Credit card or financial images
+- Identity documents
+- Private family media
+- Personal records
+- Any media you want hidden from the default timeline, albums, and browsing views
+
+Instead of requiring sensitive media to live only in a separate locked folder, this fork adds a PIN-gated privacy mode.
+
+When locked mode is active, sensitive media is hidden from the normal Immich web UI. Hidden assets do not appear in the timeline, albums, or standard browsing views. A lock icon near the upload button allows an authorized user to enter the PIN and temporarily reveal hidden content.
+
+The fork uses the same PIN as Immich’s locked-folder feature.
+
+### What still works while media is hidden
+
+Hidden assets still remain part of the Immich library and can continue to participate in backend functionality such as:
+
+- Deduplication
+- Indexing
+- Job queue processing
+- Album association
+- Metadata handling
+- Admin review and repair workflows
+
+From the normal web UI, however, hidden media is not visible unless privacy mode is unlocked.
+
+> [!NOTE]
+> These controls are intended to reduce accidental exposure in the Immich UI. They are not a substitute for full-disk encryption, strong account security, network security, or proper server access controls.
+
+---
 
 ## AI and Privacy Features
-- OpenVINO (Intel iGPU) and CUDA (Nvidia GPU) machine-learning profiles for common Intel iGPU and NVIDIA home-lab setups. The ML features do fall back to CPU, but are not recommended.
-- Multi-select actions for marking owned remote assets as NSFW or safe again.
-- AI-generated image descriptions and searchable tags (alpha right now, improving later).
-- Optional NSFW detection with private review state and visible tags.
-- PIN-gated hiding for detected NSFW/sensitive assets and user-selected sensitive tags or people. Uses the same PIN as the locked folder.
-- A `/suppressed` private view for organizing hidden/sensitive content without losing album context.
-- Admin review and repair tools for generated descriptions, generated tags, and NSFW decisions.
 
-## Deduplicate Content in Multiple Accounts
-- Physical deduplication for family libraries, allowing non-master users to share exact master-account file bytes while keeping separate user assets, albums, metadata, and permissions (i.e. you and your family have the same photo, it's only stored once without affecting permissions and doesn't require partner sharing).
-- Enhanced video duplicate detection that samples multiple internal-only video frames and compares CLIP embeddings, reducing false duplicate groups caused by black frames, title cards, or intro screens while still matching different-resolution copies.
+This fork adds optional local AI and privacy workflows for users who want richer search and better control over sensitive content.
 
-## Advanced GPU (and non-GPU) Video Editing
-- Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.
-- A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
-- GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
+### Local ML acceleration
 
-## Google Photos-like Discovery
-- Ask Search adds a Google Photos-like way to search your self-hosted library in normal language while keeping the work on your Immich server.
-- Try phrases like "photos in Banff last summer", "photos from April 2024", "videos since 2020", "screenshots from last month", or "receipts from 2024".
-- The parser turns common phrases into local Immich filters for dates, relative time ranges, named months, favorites, media type, places, matched people, and Smart Search context.
-- Named people are resolved to your local Immich person filters when they can be matched, so searches like "photos of Alice in Banff" can narrow to that person instead of relying only on semantic guessing.
-- Receipt and document searches use Immich metadata/OCR search, while screenshot searches use filename metadata. This helps find invoices, forms, screenshots, and other paperwork without sending your library to a cloud photo service.
-- Usage tip: use specific place names and dates when you know them, such as "photos in Calgary from April 2024"; use broader natural language when you want Smart Search to infer visual context.
-- Usage tip: Ask Search explains which search mode and filters it used, and it warns when something is approximate, such as a person name that could not be resolved exactly.
-- This is local discovery, not Google Photos account sync. For full Google Photos exports, use Google Takeout and an import tool such as `immich-go`.
+- OpenVINO profiles for common Intel iGPU home-lab setups
+- CUDA profiles for common NVIDIA GPU setups
+- CPU fallback support when GPU acceleration is unavailable
 
-## Recently Added Media
-- Recently Added left nav function that shows the most recently uploaded media, regardless of EXIF date data.
+CPU fallback works, but GPU acceleration is strongly recommended for larger libraries or heavier ML workloads.
 
-Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for plain-language setup notes, recommended rollout steps, physical deduplication guidance, and the differences from upstream Immich.
+### Sensitive-content workflows
 
-Many thanks to the hard working people at FUTO and all contributors to Immich.
+- Multi-select actions for marking owned remote assets as sensitive or safe again
+- Optional NSFW/sensitive-content detection
+- Private review state for detected sensitive assets
+- Visible tags for review and organization
+- PIN-gated hiding for detected sensitive assets
+- PIN-gated hiding for user-selected sensitive tags or people
+- A private `/suppressed` view for organizing hidden content without losing album context
+
+### Generated descriptions and tags
+
+- AI-generated image descriptions
+- Searchable generated tags
+- Admin review tools for generated descriptions
+- Admin review tools for generated tags
+- Admin repair tools for NSFW/sensitive-content decisions
+
+Generated descriptions and tags are currently alpha-quality and expected to improve over time.
+
+---
+
+## Family-Library Physical Deduplication
+
+This fork adds physical deduplication designed for family and multi-user home libraries.
+
+The goal is simple: if multiple users upload the same original file, Immich should not have to store the same bytes multiple times.
+
+Physical deduplication allows non-master users to share exact master-account file bytes while preserving separate:
+
+- User assets
+- Albums
+- Metadata
+- Permissions
+- Ownership boundaries
+
+This is useful when family members have overlapping camera rolls, shared vacation photos, copied phone backups, or imported Google Photos archives.
+
+For example, two family members can each have the same photo in their own Immich account, but the server only stores one physical copy of the file.
+
+This does **not** require partner sharing, and it does **not** merge user libraries or permissions.
+
+---
+
+## Enhanced Video Duplicate Detection
+
+This fork improves duplicate detection for videos by sampling multiple internal-only video frames and comparing CLIP embeddings.
+
+This reduces false duplicate groups caused by:
+
+- Black frames
+- Title cards
+- Intro screens
+- Similar opening frames
+- Different-resolution copies of the same video
+
+The result is better duplicate detection for real-world video libraries, especially when users import phone videos, edited clips, social-media exports, or multiple-resolution copies.
+
+---
+
+## Non-Destructive Photo and Video Editing
+
+This fork adds non-destructive editing for photos and videos.
+
+The original upload remains untouched. Edited results are saved as Immich-managed copies or derivatives linked to the same asset workflow.
+
+### Built-in video editor
+
+The included video editor supports common Google Photos-style edits, including:
+
+- Trim
+- Crop
+- Rotate
+- Straighten
+- Mirror
+- Auto enhance
+- Stabilization
+- Color and lighting adjustments
+- Filters
+- Text overlays
+- Mute and volume controls
+- Speed changes
+- Export frame
+
+### GPU-aware rendering
+
+Video edit rendering reuses the server’s existing hardware transcoding settings when safe.
+
+When an edit requires CPU-only FFmpeg filters, rendering falls back to software processing automatically.
+
+This gives users the best available performance without making GPU support mandatory for every edit type.
+
+---
+
+## Ask Search: Google Photos-Like Local Discovery
+
+Ask Search adds a Google Photos-like way to search your self-hosted library using normal language.
+
+The goal is to make Immich easier to search without sending your photo library to a cloud photo service.
+
+Try searches like:
+
+```text
+photos in Banff last summer
+photos from April 2024
+videos since 2020
+screenshots from last month
+receipts from 2024
+photos of Alice in Calgary from April 2024
 
 <br/>
 <a href="https://immich.app">
