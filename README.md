@@ -15,7 +15,7 @@
 
 ## AJ Taylor's maintained privacy fork
 
-This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment, stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups (we know you don't want to see photos of your EX), and family-library storage tools.
+This repository is a maintained downstream fork of Immich for home-lab users who want optional ML image enrichment, enhanced RAW rendering, media-health repair tools, stronger privacy controls for NSFW, sensitive, medical, or otherwise private photo groups (we know you don't want to see photos of your EX), and family-library storage tools.
 
 Upstream Immich did not accept this local feature set *because it was "slop,"* so be cautious about using this or other forks not suitable for inclusion in the main codebase. I have maintained the fork here instead of being submitted to `immich-app/immich`. This fork is actively maintained and kept up to date with the upstream Immich project while preserving the fork-only features documented below.
 
@@ -38,6 +38,11 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 - Non-destructive photo and video editing that keeps the original upload untouched and saves the edited result as an Immich-managed copy/derivative on the same asset.
 - A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
 - GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
+
+## Enhanced RAW Support and Media Health
+- Enhanced RAW rendering is enabled by default and can be turned off in Admin > System Settings > Image. It uses embedded previews first, then falls back to LibRaw/dcraw_emu when needed so difficult RAW and .cr2 files can still generate usable previews and thumbnails.
+- Missing media utilities help admins find assets whose source files are missing or unreadable, locate same-named files inside external-library import paths, compare candidates against existing thumbnails/previews, and relink validated matches.
+- Corrupt media review scans originals for decode failures, separates unsupported RAW files from true corruption, shows timeline-style findings with thumbnails and evidence, and can move recently revalidated corrupt assets to Immich trash after PIN and typed confirmation.
 
 ## Recently Added Media
 - Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.
