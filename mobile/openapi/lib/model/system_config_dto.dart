@@ -18,6 +18,7 @@ class SystemConfigDto {
     required this.image,
     required this.job,
     required this.library_,
+    this.localFeatures,
     required this.logging,
     required this.machineLearning,
     required this.map,
@@ -46,6 +47,14 @@ class SystemConfigDto {
   SystemConfigJobDto job;
 
   SystemConfigLibraryDto library_;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  SystemConfigLocalFeaturesDto? localFeatures;
 
   SystemConfigLoggingDto logging;
 
@@ -94,6 +103,7 @@ class SystemConfigDto {
     other.image == image &&
     other.job == job &&
     other.library_ == library_ &&
+    other.localFeatures == localFeatures &&
     other.logging == logging &&
     other.machineLearning == machineLearning &&
     other.map == map &&
@@ -120,6 +130,7 @@ class SystemConfigDto {
     (image.hashCode) +
     (job.hashCode) +
     (library_.hashCode) +
+    (localFeatures == null ? 0 : localFeatures!.hashCode) +
     (logging.hashCode) +
     (machineLearning.hashCode) +
     (map.hashCode) +
@@ -139,7 +150,7 @@ class SystemConfigDto {
     (user.hashCode);
 
   @override
-  String toString() => 'SystemConfigDto[backup=$backup, ffmpeg=$ffmpeg, image=$image, job=$job, library_=$library_, logging=$logging, machineLearning=$machineLearning, map=$map, metadata=$metadata, newVersionCheck=$newVersionCheck, nightlyTasks=$nightlyTasks, notifications=$notifications, oauth=$oauth, passwordLogin=$passwordLogin, physicalDeduplication=$physicalDeduplication, reverseGeocoding=$reverseGeocoding, server=$server, storageTemplate=$storageTemplate, templates=$templates, theme=$theme, trash=$trash, user=$user]';
+  String toString() => 'SystemConfigDto[backup=$backup, ffmpeg=$ffmpeg, image=$image, job=$job, library_=$library_, localFeatures=$localFeatures, logging=$logging, machineLearning=$machineLearning, map=$map, metadata=$metadata, newVersionCheck=$newVersionCheck, nightlyTasks=$nightlyTasks, notifications=$notifications, oauth=$oauth, passwordLogin=$passwordLogin, physicalDeduplication=$physicalDeduplication, reverseGeocoding=$reverseGeocoding, server=$server, storageTemplate=$storageTemplate, templates=$templates, theme=$theme, trash=$trash, user=$user]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -148,6 +159,11 @@ class SystemConfigDto {
       json[r'image'] = this.image;
       json[r'job'] = this.job;
       json[r'library'] = this.library_;
+    if (this.localFeatures != null) {
+      json[r'localFeatures'] = this.localFeatures;
+    } else {
+    //  json[r'localFeatures'] = null;
+    }
       json[r'logging'] = this.logging;
       json[r'machineLearning'] = this.machineLearning;
       json[r'map'] = this.map;
@@ -186,6 +202,7 @@ class SystemConfigDto {
         image: SystemConfigImageDto.fromJson(json[r'image'])!,
         job: SystemConfigJobDto.fromJson(json[r'job'])!,
         library_: SystemConfigLibraryDto.fromJson(json[r'library'])!,
+        localFeatures: SystemConfigLocalFeaturesDto.fromJson(json[r'localFeatures']),
         logging: SystemConfigLoggingDto.fromJson(json[r'logging'])!,
         machineLearning: SystemConfigMachineLearningDto.fromJson(json[r'machineLearning'])!,
         map: SystemConfigMapDto.fromJson(json[r'map'])!,

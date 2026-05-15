@@ -16,6 +16,62 @@ class SearchApi {
 
   final ApiClient apiClient;
 
+  /// Ask Search
+  ///
+  /// Interpret a natural language query locally and search assets with existing search primitives.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [AskSearchDto] askSearchDto (required):
+  Future<Response> askSearchWithHttpInfo(AskSearchDto askSearchDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/search/ask';
+
+    // ignore: prefer_final_locals
+    Object? postBody = askSearchDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Ask Search
+  ///
+  /// Interpret a natural language query locally and search assets with existing search primitives.
+  ///
+  /// Parameters:
+  ///
+  /// * [AskSearchDto] askSearchDto (required):
+  Future<AskSearchResponseDto?> askSearch(AskSearchDto askSearchDto,) async {
+    final response = await askSearchWithHttpInfo(askSearchDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AskSearchResponseDto',) as AskSearchResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve assets by city
   ///
   /// Retrieve a list of assets with each asset belonging to a different city. This endpoint is used on the places pages to show a single thumbnail for each city the user has assets in.

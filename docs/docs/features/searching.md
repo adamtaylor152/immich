@@ -43,9 +43,9 @@ Ask Search accepts normal phrases such as:
 - `favorite videos since 2020`
 - `photos from April 2024`
 
-The server turns these phrases into existing Immich search filters. It can combine local Smart Search context with filters for dates, named months, relative time ranges, favorites, media type, places, OCR-backed documents and receipts, screenshots, and matched people.
+The server turns these phrases into existing Immich search filters. Smart Search-style prompts can be combined with filters for dates, named months, relative time ranges, favorites, media type, places, and matched people. Receipt, document, and screenshot prompts use metadata/OCR-oriented search instead.
 
-When a named person can be resolved to one of your Immich people, Ask Search uses the real person filter. If a person name cannot be matched, the search still runs semantically and explains that the person match is approximate.
+When a named person can be resolved to one of your Immich people, Ask Search uses the real person filter. If a person name looks like a person reference but cannot be matched, the search still runs semantically and explains that the person match is approximate.
 
 Ask Search runs against your local Immich server and your configured machine-learning setup. It is meant for discovery, not as a Google Photos account sync. For importing full Google Photos exports, use Google Takeout with an import tool such as `immich-go`.
 

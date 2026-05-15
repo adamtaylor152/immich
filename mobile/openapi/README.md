@@ -214,6 +214,7 @@ Class | Method | HTTP request | Description
 *QueuesApi* | [**getQueueJobs**](doc//QueuesApi.md#getqueuejobs) | **GET** /queues/{name}/jobs | Retrieve queue jobs
 *QueuesApi* | [**getQueues**](doc//QueuesApi.md#getqueues) | **GET** /queues | List all queues
 *QueuesApi* | [**updateQueue**](doc//QueuesApi.md#updatequeue) | **PUT** /queues/{name} | Update a queue
+*SearchApi* | [**askSearch**](doc//SearchApi.md#asksearch) | **POST** /search/ask | Ask Search
 *SearchApi* | [**getAssetsByCity**](doc//SearchApi.md#getassetsbycity) | **GET** /search/cities | Retrieve assets by city
 *SearchApi* | [**getExploreData**](doc//SearchApi.md#getexploredata) | **GET** /search/explore | Retrieve explore data
 *SearchApi* | [**getSearchSuggestions**](doc//SearchApi.md#getsearchsuggestions) | **GET** /search/suggestions | Retrieve search suggestions
@@ -343,6 +344,10 @@ Class | Method | HTTP request | Description
  - [ApiKeyCreateResponseDto](doc//ApiKeyCreateResponseDto.md)
  - [ApiKeyResponseDto](doc//ApiKeyResponseDto.md)
  - [ApiKeyUpdateDto](doc//ApiKeyUpdateDto.md)
+ - [AskSearchDto](doc//AskSearchDto.md)
+ - [AskSearchPlanDto](doc//AskSearchPlanDto.md)
+ - [AskSearchPlanDtoFilters](doc//AskSearchPlanDtoFilters.md)
+ - [AskSearchResponseDto](doc//AskSearchResponseDto.md)
  - [AssetBulkDeleteDto](doc//AssetBulkDeleteDto.md)
  - [AssetBulkUpdateDto](doc//AssetBulkUpdateDto.md)
  - [AssetBulkUploadCheckDto](doc//AssetBulkUploadCheckDto.md)
@@ -633,6 +638,8 @@ Class | Method | HTTP request | Description
  - [SystemConfigLibraryDto](doc//SystemConfigLibraryDto.md)
  - [SystemConfigLibraryScanDto](doc//SystemConfigLibraryScanDto.md)
  - [SystemConfigLibraryWatchDto](doc//SystemConfigLibraryWatchDto.md)
+ - [SystemConfigLocalFeaturesDto](doc//SystemConfigLocalFeaturesDto.md)
+ - [SystemConfigLocalFeaturesDtoAskSearch](doc//SystemConfigLocalFeaturesDtoAskSearch.md)
  - [SystemConfigLoggingDto](doc//SystemConfigLoggingDto.md)
  - [SystemConfigMachineLearningDto](doc//SystemConfigMachineLearningDto.md)
  - [SystemConfigMapDto](doc//SystemConfigMapDto.md)

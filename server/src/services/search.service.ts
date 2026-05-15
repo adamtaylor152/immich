@@ -22,7 +22,7 @@ import {
 } from 'src/dtos/search.dto';
 import { AssetOrder, AssetType, AssetVisibility, Permission } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
-import { requireElevatedPermission } from 'src/utils/access';
+import { isGranted, requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
 import { getHiddenContentQueryOptions, getPrivacyQueryOptions } from 'src/utils/hidden-content';
 import { isSmartSearchEnabled } from 'src/utils/misc';
@@ -318,7 +318,11 @@ export class SearchService extends BaseService {
     }
 
     const monthRange = this.getAskSearchMonthRange(lower);
-    if (monthRange && !relativeDateRange) {
+    const openEndedMonthRange = this.getAskSearchOpenEndedMonthRange(lower);
+    if (openEndedMonthRange && !relativeDateRange) {
+      filters.takenAfter = openEndedMonthRange.after;
+      filters.takenBefore = openEndedMonthRange.before;
+    } else if (monthRange && !relativeDateRange) {
       filters.takenAfter = monthRange.after;
       filters.takenBefore = monthRange.before;
     }
@@ -370,7 +374,7 @@ export class SearchService extends BaseService {
     const personIds = await this.resolveAskSearchPeople(auth, normalizedQuery);
     if (personIds.length > 0) {
       filters.personIds = personIds;
-    } else if (/\b(?:with|of)\s+[A-Z][\w'-]+/.test(normalizedQuery)) {
+    } else if (this.hasAskSearchPeoplePhrase(normalizedQuery)) {
       warnings.push('People names are searched semantically until Ask Search can resolve names to person IDs.');
     }
 
@@ -479,9 +483,49 @@ export class SearchService extends BaseService {
     return { after, before };
   }
 
+  private getAskSearchOpenEndedMonthRange(query: string): { after?: Date; before?: Date } | null {
+    const monthNames = [
+      'january',
+      'february',
+      'march',
+      'april',
+      'may',
+      'june',
+      'july',
+      'august',
+      'september',
+      'october',
+      'november',
+      'december',
+    ];
+    const monthPattern = monthNames.join('|');
+    const match = query.match(new RegExp(String.raw`\b(before|after|since)\s+(${monthPattern})\s+(19\d{2}|20\d{2})\b`));
+    if (!match) {
+      return null;
+    }
+
+    const month = monthNames.indexOf(match[2]);
+    const year = Number(match[3]);
+    const startOfMonth = new Date(Date.UTC(year, month, 1));
+
+    return match[1] === 'before' ? { before: startOfMonth } : { after: startOfMonth };
+  }
+
+  private hasAskSearchPeoplePhrase(query: string) {
+    return /\b(?:with|of)\s+[A-Za-z][\w'-]*/.test(query);
+  }
+
+  private canResolveAskSearchPeople(auth: AuthDto) {
+    return !auth.apiKey || isGranted({ requested: [Permission.PersonRead], current: auth.apiKey.permissions });
+  }
+
   private async resolveAskSearchPeople(auth: AuthDto, query: string): Promise<string[]> {
+    if (!this.canResolveAskSearchPeople(auth)) {
+      return [];
+    }
+
     const match = query.match(
-      /\b(?:with|of)\s+([A-Z][\w'-]*(?:\s+(?:and\s+)?[A-Z][\w'-]*)*)(?=\s+(?:in|near|around|at|last|this|from|during|before|after|since)\b|$)/,
+      /\b(?:with|of)\s+([A-Za-z][\w'-]*(?:\s+(?:and\s+)?[A-Za-z][\w'-]*)*?)(?=\s+(?:in|near|around|at|last|this|from|during|before|after|since)\b|$)/,
     );
     if (!match?.[1]) {
       return [];

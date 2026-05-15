@@ -222,6 +222,14 @@ class ApiClient {
           return ApiKeyResponseDto.fromJson(value);
         case 'ApiKeyUpdateDto':
           return ApiKeyUpdateDto.fromJson(value);
+        case 'AskSearchDto':
+          return AskSearchDto.fromJson(value);
+        case 'AskSearchPlanDto':
+          return AskSearchPlanDto.fromJson(value);
+        case 'AskSearchPlanDtoFilters':
+          return AskSearchPlanDtoFilters.fromJson(value);
+        case 'AskSearchResponseDto':
+          return AskSearchResponseDto.fromJson(value);
         case 'AssetBulkDeleteDto':
           return AssetBulkDeleteDto.fromJson(value);
         case 'AssetBulkUpdateDto':
@@ -802,6 +810,10 @@ class ApiClient {
           return SystemConfigLibraryScanDto.fromJson(value);
         case 'SystemConfigLibraryWatchDto':
           return SystemConfigLibraryWatchDto.fromJson(value);
+        case 'SystemConfigLocalFeaturesDto':
+          return SystemConfigLocalFeaturesDto.fromJson(value);
+        case 'SystemConfigLocalFeaturesDtoAskSearch':
+          return SystemConfigLocalFeaturesDtoAskSearch.fromJson(value);
         case 'SystemConfigLoggingDto':
           return SystemConfigLoggingDto.fromJson(value);
         case 'SystemConfigMachineLearningDto':

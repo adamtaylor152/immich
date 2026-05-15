@@ -40,12 +40,14 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 - GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
 
 ## Google Photos-like Discovery
-- Ask for photos in normal language, such as "photos in Banff last summer", "receipts from 2024", "videos since 2020", or "photos from last month", and the fork turns that into the right local search filters.
-- Search feels more like browsing a personal photo library and less like filling out a database form. Dates, favorites, media type, places, OCR text, screenshots, and smart-search context can be combined from one simple prompt.
-- Named people are resolved to your local Immich person filters when they can be matched, so searches like "photos of Alice in Banff" narrow to that person instead of only guessing semantically.
-- Document and receipt searches use local OCR-backed metadata, so old screenshots, forms, invoices, and travel paperwork are easier to find without sending your library to a cloud service.
-- Smart-search prompts stay local to your Immich machine-learning setup. The feature is meant to bring useful Google Photos-style discovery to a self-hosted library while keeping your media under your control.
-- The search response explains what it tried and warns when something is only approximate, such as person-name understanding before full person resolution is available.
+- Ask Search adds a Google Photos-like way to search your self-hosted library in normal language while keeping the work on your Immich server.
+- Try phrases like "photos in Banff last summer", "photos from April 2024", "videos since 2020", "screenshots from last month", or "receipts from 2024".
+- The parser turns common phrases into local Immich filters for dates, relative time ranges, named months, favorites, media type, places, matched people, and Smart Search context.
+- Named people are resolved to your local Immich person filters when they can be matched, so searches like "photos of Alice in Banff" can narrow to that person instead of relying only on semantic guessing.
+- Receipt and document searches use Immich metadata/OCR search, while screenshot searches use filename metadata. This helps find invoices, forms, screenshots, and other paperwork without sending your library to a cloud photo service.
+- Usage tip: use specific place names and dates when you know them, such as "photos in Calgary from April 2024"; use broader natural language when you want Smart Search to infer visual context.
+- Usage tip: Ask Search explains which search mode and filters it used, and it warns when something is approximate, such as a person name that could not be resolved exactly.
+- This is local discovery, not Google Photos account sync. For full Google Photos exports, use Google Takeout and an import tool such as `immich-go`.
 
 ## Recently Added Media
 - Recently Added left nav function that shows the most recently uploaded media, regardless of EXIF date data.

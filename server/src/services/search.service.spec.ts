@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { mapAsset } from 'src/dtos/asset-response.dto';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
+import { Permission } from 'src/enum';
 import { SearchService } from 'src/services/search.service';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -426,6 +427,49 @@ describe(SearchService.name, () => {
       );
     });
 
+    it('should understand open-ended named month phrases', async () => {
+      const beforeResult = await sut.askSearch(authStub.user1, { query: 'photos before April 2024' });
+
+      expect(beforeResult.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: undefined,
+          takenBefore: new Date('2024-04-01T00:00:00.000Z'),
+        }),
+      );
+      expect(mocks.search.searchSmart).toHaveBeenLastCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          takenAfter: undefined,
+          takenBefore: new Date('2024-04-01T00:00:00.000Z'),
+        }),
+      );
+
+      const afterResult = await sut.askSearch(authStub.user1, { query: 'photos after April 2024' });
+
+      expect(afterResult.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: new Date('2024-04-01T00:00:00.000Z'),
+          takenBefore: undefined,
+        }),
+      );
+      expect(mocks.search.searchSmart).toHaveBeenLastCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          takenAfter: new Date('2024-04-01T00:00:00.000Z'),
+          takenBefore: undefined,
+        }),
+      );
+
+      const sinceResult = await sut.askSearch(authStub.user1, { query: 'photos since April 2024' });
+
+      expect(sinceResult.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: new Date('2024-04-01T00:00:00.000Z'),
+          takenBefore: undefined,
+        }),
+      );
+    });
+
     it('should resolve people names into person filters when possible', async () => {
       const person = PersonFactory.create({ id: 'person-1', name: 'Alice', ownerId: authStub.user1.user.id });
       mocks.person.getByName.mockResolvedValue([person]);
@@ -442,6 +486,44 @@ describe(SearchService.name, () => {
           city: 'Banff',
         }),
       );
+    });
+
+    it('should not resolve people names for API keys without person read permission', async () => {
+      const auth = AuthFactory.from(authStub.user1.user).apiKey({ permissions: [Permission.AssetRead] }).build();
+
+      const result = await sut.askSearch(auth, { query: 'photos of Alice in Banff' });
+
+      expect(result.plan.filters).toEqual(expect.not.objectContaining({ personIds: expect.anything() }));
+      expect(result.warnings).toEqual([
+        'People names are searched semantically until Ask Search can resolve names to person IDs.',
+      ]);
+      expect(mocks.person.getByName).not.toHaveBeenCalled();
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.not.objectContaining({
+          personIds: expect.anything(),
+        }),
+      );
+    });
+
+    it('should resolve lowercase people names and warn when they cannot be resolved', async () => {
+      const person = PersonFactory.create({ id: 'person-1', name: 'Alice', ownerId: authStub.user1.user.id });
+      mocks.person.getByName.mockResolvedValueOnce([person]);
+
+      const resolvedResult = await sut.askSearch(authStub.user1, { query: 'photos of alice in Banff' });
+
+      expect(resolvedResult.warnings).toEqual([]);
+      expect(resolvedResult.plan.filters).toEqual(expect.objectContaining({ personIds: ['person-1'] }));
+      expect(mocks.person.getByName).toHaveBeenCalledWith(authStub.user1.user.id, 'alice', { withHidden: false });
+
+      mocks.person.getByName.mockResolvedValueOnce([]);
+
+      const fallbackResult = await sut.askSearch(authStub.user1, { query: 'photos of alice in Banff' });
+
+      expect(fallbackResult.plan.filters).toEqual(expect.not.objectContaining({ personIds: expect.anything() }));
+      expect(fallbackResult.warnings).toEqual([
+        'People names are searched semantically until Ask Search can resolve names to person IDs.',
+      ]);
     });
 
     it('should use OCR-backed metadata search for document-like queries', async () => {

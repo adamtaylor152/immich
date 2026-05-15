@@ -60,6 +60,7 @@
   import { t } from 'svelte-i18n';
 
   const viewport: Viewport = $state({ width: 0, height: 0 });
+  const ASK_QUERY_PARAMETER = 'ask';
   let searchResultsElement: HTMLElement | undefined = $state();
 
   // The GalleryViewer pushes it's own history state, which causes weird
@@ -73,21 +74,46 @@
   let isLoading = $state(true);
   let askQuery = $state('');
   let askResponse = $state<AskSearchResponseDto>();
+  let askNextPage = $state<number | null>(null);
   let isAskLoading = $state(false);
+  let askSearchRequestId = 0;
   let scrollY = $state(0);
   let scrollYHistory = 0;
 
   type SearchTerms = MetadataSearchDto & Pick<SmartSearchDto, 'query' | 'queryAssetId'>;
   let searchQuery = $derived(page.url.searchParams.get(QueryParameter.QUERY));
+  let askSearchQuery = $derived(page.url.searchParams.get(ASK_QUERY_PARAMETER) ?? '');
   let smartSearchEnabled = $derived(featureFlagsManager.value.smartSearch);
   let terms = $derived<SearchTerms>(searchQuery ? JSON.parse(searchQuery) : {});
   let hasSearchQuery = $derived(Object.keys(terms).length > 0);
+  let canUseAskSearch = $derived(featureFlagsManager.value.search && featureFlagsManager.value.smartSearch);
 
   $effect(() => {
     // we want this to *only* be reactive on `terms`
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     terms;
     untrack(() => handlePromiseError(onSearchQueryUpdate()));
+  });
+
+  $effect(() => {
+    // we want this to *only* be reactive on `askSearchQuery` and `hasSearchQuery`
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    askSearchQuery;
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    hasSearchQuery;
+    untrack(() => {
+      if (hasSearchQuery) {
+        return;
+      }
+
+      if (!askSearchQuery.trim()) {
+        resetAskSearch();
+        return;
+      }
+
+      askQuery = askSearchQuery;
+      handlePromiseError(runAskSearch(askSearchQuery, { force: true }));
+    });
   });
 
   $effect(() => {
@@ -138,7 +164,7 @@
     nextPage = 1;
     searchResultAssets = [];
     searchResultAlbums = [];
-    askResponse = undefined;
+    resetAskSearch(false);
     if (!hasSearchQuery) {
       isLoading = false;
       return;
@@ -291,31 +317,92 @@
     return Object.keys(obj) as (keyof T)[];
   }
 
-  async function runAskSearch() {
-    if (!askQuery.trim() || isAskLoading) {
+  function resetAskSearch(clearInput = true) {
+    askSearchRequestId++;
+    askResponse = undefined;
+    askNextPage = null;
+    isAskLoading = false;
+
+    if (clearInput) {
+      askQuery = '';
+      searchResultAssets = [];
+      searchResultAlbums = [];
+    }
+  }
+
+  async function updateAskSearchUrl(query: string) {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery || isAskLoading) {
+      return;
+    }
+
+    const url = new URL(page.url);
+    url.searchParams.delete(QueryParameter.QUERY);
+    url.searchParams.set(ASK_QUERY_PARAMETER, normalizedQuery);
+
+    if (url.href === page.url.href) {
+      await runAskSearch(normalizedQuery, { force: true });
+      return;
+    }
+
+    await goto(url, { keepFocus: true, noScroll: true });
+  }
+
+  async function runAskSearch(query = askQuery, options: { force?: boolean; append?: boolean } = {}) {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery || (isAskLoading && !options.force) || !canUseAskSearch) {
+      return;
+    }
+
+    const requestId = ++askSearchRequestId;
+    const pageToLoad = options.append ? askNextPage : 1;
+    if (!pageToLoad) {
       return;
     }
 
     isAskLoading = true;
-    askResponse = undefined;
-    searchResultAssets = [];
-    searchResultAlbums = [];
+    askQuery = normalizedQuery;
+
+    if (!options.append) {
+      askResponse = undefined;
+      askNextPage = null;
+      searchResultAssets = [];
+      searchResultAlbums = [];
+    }
 
     try {
-      const response = await askSearch({ askSearchDto: { query: askQuery, language: $lang } });
+      const response = await askSearch({ askSearchDto: { query: normalizedQuery, page: pageToLoad, language: $lang } });
+      if (requestId !== askSearchRequestId) {
+        return;
+      }
+
       askResponse = response;
-      searchResultAlbums = response.results.albums.items;
-      searchResultAssets = response.results.assets.items;
+      askNextPage = Number(response.results.assets.nextPage) || null;
+      if (options.append) {
+        searchResultAlbums.push(...response.results.albums.items);
+        searchResultAssets.push(...response.results.assets.items);
+      } else {
+        searchResultAlbums = response.results.albums.items;
+        searchResultAssets = response.results.assets.items;
+      }
     } catch (error) {
-      handleError(error, $t('loading_search_results_failed'));
+      if (requestId === askSearchRequestId) {
+        handleError(error, $t('loading_search_results_failed'));
+      }
     } finally {
-      isAskLoading = false;
+      if (requestId === askSearchRequestId) {
+        isAskLoading = false;
+      }
     }
+  }
+
+  async function loadNextAskPage() {
+    await runAskSearch(askResponse?.query ?? askQuery, { append: true });
   }
 
   function onAskSubmit(event: SubmitEvent) {
     event.preventDefault();
-    handlePromiseError(runAskSearch());
+    handlePromiseError(updateAskSearchUrl(askQuery));
   }
 
   const suggestedSearches = [
@@ -381,12 +468,16 @@
   bind:this={searchResultsElement}
 >
   <section id="search-content">
-    {#if !hasSearchQuery}
+    {#if !hasSearchQuery && canUseAskSearch}
       <div class="mx-auto mt-24 flex w-full max-w-5xl flex-col gap-8 px-6 text-gray-700 dark:text-gray-200">
         <form class="mx-auto flex w-full max-w-3xl gap-2" onsubmit={onAskSubmit}>
+          <label for="ask-search-input" class="sr-only">{$t('search_your_photos')}</label>
           <input
+            id="ask-search-input"
+            type="search"
             class="h-12 min-w-0 flex-1 rounded-full border border-gray-300 bg-white px-5 text-base outline-none focus:border-immich-primary dark:border-gray-700 dark:bg-gray-900"
             bind:value={askQuery}
+            disabled={isAskLoading}
             placeholder={$t('search_your_photos')}
           />
           <Button type="submit" disabled={isAskLoading || !askQuery.trim()}>
@@ -409,10 +500,11 @@
           {#each suggestedSearches as item (item.query)}
             <button
               type="button"
+              disabled={isAskLoading}
               class="flex min-h-28 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 text-start shadow-sm transition hover:border-immich-primary hover:text-immich-primary dark:border-gray-800 dark:bg-gray-900 dark:hover:border-immich-dark-primary dark:hover:text-immich-dark-primary"
               onclick={() => {
                 askQuery = item.query;
-                handlePromiseError(runAskSearch());
+                handlePromiseError(updateAskSearchUrl(item.query));
               }}
             >
               <Icon icon={item.icon} size="1.7em" />
@@ -429,6 +521,7 @@
             showArchiveIcon={true}
             {viewport}
             onReload={runAskSearch}
+            onIntersected={loadNextAskPage}
             slidingWindowOffset={searchResultsElement.offsetTop}
           />
         {:else if askResponse && !isAskLoading}
@@ -441,7 +534,7 @@
           </div>
         {/if}
       </div>
-    {:else if searchResultAssets.length > 0}
+    {:else if hasSearchQuery && searchResultAssets.length > 0}
       <GalleryViewer
         assets={searchResultAssets}
         assetInteraction={assetMultiSelectManager}
@@ -451,7 +544,7 @@
         onReload={onSearchQueryUpdate}
         slidingWindowOffset={searchResultsElement.offsetTop}
       />
-    {:else if !isLoading}
+    {:else if hasSearchQuery && !isLoading}
       <div class="flex min-h-[calc(66vh-11rem)] w-full place-content-center items-center dark:text-white">
         <div class="flex flex-col content-center items-center text-center">
           <Icon icon={mdiImageOffOutline} size="3.5em" />
