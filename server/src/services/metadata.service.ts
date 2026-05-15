@@ -1136,7 +1136,18 @@ export class MetadataService extends BaseService {
     const { videoStreams, audioStreams, format } = await this.mediaRepository.probe(originalPath);
     const video = videoStreams[0];
     const audio = audioStreams[0];
-    const packets = video?.timeBase ? await this.mediaRepository.probePackets(originalPath, video.index) : null;
+    let packets = null;
+    if (video?.timeBase) {
+      try {
+        packets = await this.mediaRepository.probePackets(originalPath, video.index);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+          this.logger.warn(`Skipping packet scan for ${originalPath}: ffprobe stdout maxBuffer exceeded`);
+        } else {
+          throw error;
+        }
+      }
+    }
 
     const tags: Pick<ImmichTags, 'Duration' | 'Orientation' | 'ImageWidth' | 'ImageHeight'> = {};
 
