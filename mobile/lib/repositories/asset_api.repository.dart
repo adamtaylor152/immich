@@ -50,12 +50,16 @@ class AssetApiRepository extends ApiRepository {
   }
 
   Future<void> markNsfw(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markNsfw);
+    final dto = AssetImageEnrichmentActionRequestDto(
+      action: AssetImageEnrichmentAction.markNsfw,
+    );
     await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
   }
 
   Future<void> markSafe(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markSafe);
+    final dto = AssetImageEnrichmentActionRequestDto(
+      action: AssetImageEnrichmentAction.markSafe,
+    );
     await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
   }
 

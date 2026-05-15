@@ -216,8 +216,16 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.markNsfw => MarkNsfwActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
-      ActionButtonType.markSafe => MarkSafeActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
+      ActionButtonType.markNsfw => MarkNsfwActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
+      ActionButtonType.markSafe => MarkSafeActionButton(
+        source: context.source,
+        iconOnly: iconOnly,
+        menuItem: menuItem,
+      ),
       ActionButtonType.download => DownloadActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
       ActionButtonType.trash => TrashActionButton(source: context.source, iconOnly: iconOnly, menuItem: menuItem),
       ActionButtonType.restoreTrash => RestoreActionButton(
