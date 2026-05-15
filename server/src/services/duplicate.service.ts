@@ -588,7 +588,7 @@ export class DuplicateService extends BaseService {
           data: { id },
         })),
       );
-      return duplicateAssets;
+      return [];
     }
 
     const matchingAssetIds = new Set(

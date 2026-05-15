@@ -759,7 +759,7 @@ describe(DuplicateService.name, () => {
       );
     });
 
-    it('should queue enhanced frames and fall back to embedding duplicate grouping when frames are missing', async () => {
+    it('should queue enhanced frames and defer grouping when frames are missing', async () => {
       const video = { ...hasEmbedding, type: AssetType.Video };
       const duplicate = { assetId: 'asset-2', distance: 0.01, duplicateId: null };
       mocks.assetJob.getForSearchDuplicatesJob.mockResolvedValue(video);
@@ -774,8 +774,11 @@ describe(DuplicateService.name, () => {
         { name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: video.id } },
         { name: JobName.AssetGenerateVideoDuplicateFrames, data: { id: duplicate.assetId } },
       ]);
-      expect(mocks.duplicateRepository.merge).toHaveBeenCalled();
-      expect(mocks.asset.upsertJobStatus).toHaveBeenCalled();
+      expect(mocks.duplicateRepository.merge).not.toHaveBeenCalled();
+      expect(mocks.asset.upsertJobStatus).toHaveBeenCalledWith({
+        assetId: video.id,
+        duplicatesDetectedAt: expect.any(Date),
+      });
     });
 
     it('should not group video duplicates when enhanced frames do not match', async () => {

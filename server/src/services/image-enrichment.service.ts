@@ -274,7 +274,7 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     if (!asset.previewFile) {
-      return JobStatus.Failed;
+      return JobStatus.Skipped;
     }
 
     const metadata = await this.getEnrichmentMetadata(id);
@@ -316,7 +316,7 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     if (!asset.previewFile) {
-      return JobStatus.Failed;
+      return JobStatus.Skipped;
     }
 
     const metadata = await this.getEnrichmentMetadata(id);

@@ -123,7 +123,7 @@ export class SharedLinkService extends BaseService {
   }
 
   async update(auth: AuthDto, id: string, dto: SharedLinkEditDto) {
-    await this.findOrFail(auth.user.id, id);
+    await this.findOrFail(auth.user.id, id, this.nsfwOptions(auth));
     try {
       const sharedLink = await this.sharedLinkRepository.update({
         id,
@@ -136,7 +136,7 @@ export class SharedLinkService extends BaseService {
         showExif: dto.showMetadata,
         slug: dto.slug || null,
       });
-      return mapSharedLink(sharedLink, { stripAssetMetadata: false });
+      return this.mapSharedLink(auth, sharedLink, { stripAssetMetadata: false });
     } catch (error) {
       this.handleError(error);
     }
@@ -205,19 +205,11 @@ export class SharedLinkService extends BaseService {
     }
 
     const existingAssetIds = new Set(sharedLink.assets.map((asset) => asset.id));
-    const allowedAssetIds = auth.hideNsfwAssets
-      ? await this.checkAccess({ auth, permission: Permission.AssetRead, ids: existingAssetIds })
-      : existingAssetIds;
 
     const results: AssetIdsResponseDto[] = [];
     for (const assetId of dto.assetIds) {
       if (!existingAssetIds.has(assetId)) {
         results.push({ assetId, success: false, error: AssetIdErrorReason.NOT_FOUND });
-        continue;
-      }
-
-      if (!allowedAssetIds.has(assetId)) {
-        results.push({ assetId, success: false, error: AssetIdErrorReason.NO_PERMISSION });
         continue;
       }
 
@@ -227,10 +219,7 @@ export class SharedLinkService extends BaseService {
     const removedAssetIds = results.filter(({ success }) => success).map(({ assetId }) => assetId);
     if (removedAssetIds.length > 0) {
       await this.sharedLinkAssetRepository.remove(id, removedAssetIds);
-      sharedLink.assets = sharedLink.assets.filter((asset) => !removedAssetIds.includes(asset.id));
     }
-
-    await this.sharedLinkRepository.update(sharedLink);
 
     return results;
   }

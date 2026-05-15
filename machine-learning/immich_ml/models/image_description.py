@@ -350,7 +350,7 @@ class ImageDescriptionModel(InferenceModel):
         except ImportError:
             return False
         _ = torch, transformers
-        return True
+        return bool(torch.cuda.is_available())
 
     def _torch_device(self, torch: Any) -> str:
         requested = self.device.strip()

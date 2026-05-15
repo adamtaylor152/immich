@@ -350,7 +350,7 @@ describe(SharedLinkService.name, () => {
       ]);
 
       expect(mocks.sharedLinkAsset.remove).toHaveBeenCalledWith(sharedLink.id, [asset.id]);
-      expect(mocks.sharedLink.update).toHaveBeenCalledWith(expect.objectContaining({ assets: [] }));
+      expect(mocks.sharedLink.update).not.toHaveBeenCalled();
     });
   });
 

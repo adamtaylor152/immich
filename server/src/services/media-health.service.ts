@@ -195,8 +195,12 @@ export class MediaHealthService {
         continue;
       }
 
-      await this.relinkAsset(asset, candidate.candidatePath, finding.id);
-      results.push({ id: finding.id, success: true, status: MediaHealthStatus.Relinked });
+      const relinked = await this.relinkAsset(asset, candidate.candidatePath, finding.id);
+      results.push(
+        relinked
+          ? { id: finding.id, success: true, status: MediaHealthStatus.Relinked }
+          : { id: finding.id, success: false, error: 'Asset is no longer eligible for external-library relink' },
+      );
     }
 
     return { results };
@@ -740,15 +744,19 @@ export class MediaHealthService {
     }
   }
 
-  private async relinkAsset(asset: MediaHealthAsset, candidatePath: string, healthId: string): Promise<void> {
+  private async relinkAsset(asset: MediaHealthAsset, candidatePath: string, healthId: string): Promise<boolean> {
     const stat = await this.storageRepository.stat(candidatePath);
-    await this.mediaHealthRepository.relinkExternalAsset({
+    const relinked = await this.mediaHealthRepository.relinkExternalAsset({
       assetId: asset.id,
       originalPath: path.normalize(candidatePath),
       originalFileName: path.basename(candidatePath),
       checksum: this.cryptoRepository.hashSha1(`path:${path.normalize(candidatePath)}`),
       fileModifiedAt: stat.mtime,
     });
+
+    if (!relinked) {
+      return false;
+    }
 
     await this.mediaHealthRepository.upsertFinding({
       runId: null,
@@ -768,6 +776,7 @@ export class MediaHealthService {
       { name: JobName.SidecarCheck, data: { id: asset.id, source: 'upload' } },
       { name: JobName.AssetGenerateThumbnails, data: { id: asset.id } },
     ]);
+    return true;
   }
 
   private groupCandidates(candidates: MediaHealthCandidate[]): Map<string, MediaHealthCandidate[]> {

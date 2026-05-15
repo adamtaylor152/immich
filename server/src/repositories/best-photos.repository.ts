@@ -91,23 +91,9 @@ export class BestPhotosRepository {
     ],
   })
   async getBestPhotos(options: BestPhotosQueryOptions) {
-    const items = await this.db
+    const query = this.db
       .selectFrom('asset_best_photo_score')
       .innerJoin('asset', 'asset.id', 'asset_best_photo_score.assetId')
-      .selectAll('asset')
-      .select([
-        'asset_best_photo_score.score as bestPhotoScore',
-        'asset_best_photo_score.aestheticScore as bestPhotoAestheticScore',
-        'asset_best_photo_score.technicalScore as bestPhotoTechnicalScore',
-        'asset_best_photo_score.subjectScore as bestPhotoSubjectScore',
-        'asset_best_photo_score.diversityScore as bestPhotoDiversityScore',
-        'asset_best_photo_score.scoreVersion as bestPhotoScoreVersion',
-        'asset_best_photo_score.computedAt as bestPhotoComputedAt',
-        'asset_best_photo_score.metadata as bestPhotoMetadata',
-        'asset_best_photo_score.bestFrameTimestampMs as bestPhotoBestFrameTimestampMs',
-        'asset_best_photo_score.frameScore as bestPhotoFrameScore',
-        'asset_best_photo_score.frameMetadata as bestPhotoFrameMetadata',
-      ])
       .where('asset_best_photo_score.ownerId', '=', asUuid(options.ownerId))
       .where('asset.ownerId', '=', asUuid(options.ownerId))
       .where('asset.deletedAt', 'is', null)
@@ -121,14 +107,33 @@ export class BestPhotosRepository {
         qb.where('asset.type', 'in', [sql.lit(AssetType.Image), sql.lit(AssetType.Video)]),
       )
       .$if(options.minScore !== undefined, (qb) => qb.where('asset_best_photo_score.score', '>=', options.minScore!))
-      .$call((qb) => withHiddenContentFilter(qb, options))
-      .orderBy('asset_best_photo_score.score', 'desc')
-      .orderBy('asset.fileCreatedAt', 'desc')
-      .limit(options.limit + 1)
-      .offset((options.page - 1) * options.limit)
-      .execute();
+      .$call((qb) => withHiddenContentFilter(qb, options));
 
-    return paginationHelper(items, options.limit);
+    const [{ count }, items] = await Promise.all([
+      query.select((eb) => eb.fn.countAll().as('count')).executeTakeFirstOrThrow(),
+      query
+        .selectAll('asset')
+        .select([
+          'asset_best_photo_score.score as bestPhotoScore',
+          'asset_best_photo_score.aestheticScore as bestPhotoAestheticScore',
+          'asset_best_photo_score.technicalScore as bestPhotoTechnicalScore',
+          'asset_best_photo_score.subjectScore as bestPhotoSubjectScore',
+          'asset_best_photo_score.diversityScore as bestPhotoDiversityScore',
+          'asset_best_photo_score.scoreVersion as bestPhotoScoreVersion',
+          'asset_best_photo_score.computedAt as bestPhotoComputedAt',
+          'asset_best_photo_score.metadata as bestPhotoMetadata',
+          'asset_best_photo_score.bestFrameTimestampMs as bestPhotoBestFrameTimestampMs',
+          'asset_best_photo_score.frameScore as bestPhotoFrameScore',
+          'asset_best_photo_score.frameMetadata as bestPhotoFrameMetadata',
+        ])
+        .orderBy('asset_best_photo_score.score', 'desc')
+        .orderBy('asset.fileCreatedAt', 'desc')
+        .limit(options.limit + 1)
+        .offset((options.page - 1) * options.limit)
+        .execute(),
+    ]);
+
+    return { ...paginationHelper(items, options.limit), total: Number(count) };
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })

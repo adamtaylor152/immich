@@ -31,7 +31,7 @@ describe(BestPhotosService.name, () => {
   });
 
   it('should map an empty Best Photos response', async () => {
-    bestPhotosRepository.getBestPhotos.mockResolvedValue({ hasNextPage: false, items: [] });
+    bestPhotosRepository.getBestPhotos.mockResolvedValue({ hasNextPage: false, items: [], total: 0 });
 
     await expect(
       sut.getBestPhotos(factory.auth(), { page: 1, limit: 100, includeArchived: false, includeVideos: false }),
