@@ -489,7 +489,9 @@ describe(SearchService.name, () => {
     });
 
     it('should not resolve people names for API keys without person read permission', async () => {
-      const auth = AuthFactory.from(authStub.user1.user).apiKey({ permissions: [Permission.AssetRead] }).build();
+      const auth = AuthFactory.from(authStub.user1.user)
+        .apiKey({ permissions: [Permission.AssetRead] })
+        .build();
 
       const result = await sut.askSearch(auth, { query: 'photos of Alice in Banff' });
 
