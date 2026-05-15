@@ -436,6 +436,7 @@ export enum ManualJobName {
   MemoryCleanup = 'memory-cleanup',
   MemoryCreate = 'memory-create',
   BackupDatabase = 'backup-database',
+  BestPhotosBackfill = 'best-photos-backfill',
   PhysicalDeduplicationDryRun = 'physical-deduplication-dry-run',
   PhysicalDeduplicationApply = 'physical-deduplication-apply',
 }
@@ -898,6 +899,8 @@ export enum JobName {
   AssetFileMigration = 'AssetFileMigration',
   AssetGenerateThumbnailsQueueAll = 'AssetGenerateThumbnailsQueueAll',
   AssetGenerateThumbnails = 'AssetGenerateThumbnails',
+  BestPhotosScoreQueueAll = 'BestPhotosScoreQueueAll',
+  BestPhotosScore = 'BestPhotosScore',
 
   MediaHealthScanMissing = 'MediaHealthScanMissing',
   MediaHealthLocateMissing = 'MediaHealthLocateMissing',

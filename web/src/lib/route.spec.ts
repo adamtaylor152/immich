@@ -49,6 +49,19 @@ describe('Route', () => {
     });
   });
 
+  describe(Route.bestPhotos.name, () => {
+    it('returns the best photos route', () => {
+      expect(Route.bestPhotos()).toBe('/best-photos');
+      expect(Route.bestPhotos({ page: 2, limit: 50, minScore: 0.75 })).toBe(
+        '/best-photos?page=2&limit=50&minScore=0.75',
+      );
+    });
+
+    it('returns the best photos asset route', () => {
+      expect(Route.viewBestPhotosAsset({ id: 'asset-1' })).toBe('/best-photos/photos/asset-1');
+    });
+  });
+
   describe(Route.systemSettings.name, () => {
     it('should work', () => {
       expect(Route.systemSettings()).toBe('/admin/system-settings');

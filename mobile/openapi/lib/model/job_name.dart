@@ -41,6 +41,12 @@ class JobName {
   static const assetFileMigration = JobName._(r'AssetFileMigration');
   static const assetGenerateThumbnailsQueueAll = JobName._(r'AssetGenerateThumbnailsQueueAll');
   static const assetGenerateThumbnails = JobName._(r'AssetGenerateThumbnails');
+  static const bestPhotosScoreQueueAll = JobName._(r'BestPhotosScoreQueueAll');
+  static const bestPhotosScore = JobName._(r'BestPhotosScore');
+  static const mediaHealthScanMissing = JobName._(r'MediaHealthScanMissing');
+  static const mediaHealthLocateMissing = JobName._(r'MediaHealthLocateMissing');
+  static const mediaHealthScanCorrupt = JobName._(r'MediaHealthScanCorrupt');
+  static const mediaHealthDeleteCorrupt = JobName._(r'MediaHealthDeleteCorrupt');
   static const auditTableCleanup = JobName._(r'AuditTableCleanup');
   static const databaseBackup = JobName._(r'DatabaseBackup');
   static const facialRecognitionQueueAll = JobName._(r'FacialRecognitionQueueAll');
@@ -108,6 +114,12 @@ class JobName {
     assetFileMigration,
     assetGenerateThumbnailsQueueAll,
     assetGenerateThumbnails,
+    bestPhotosScoreQueueAll,
+    bestPhotosScore,
+    mediaHealthScanMissing,
+    mediaHealthLocateMissing,
+    mediaHealthScanCorrupt,
+    mediaHealthDeleteCorrupt,
     auditTableCleanup,
     databaseBackup,
     facialRecognitionQueueAll,
@@ -210,6 +222,12 @@ class JobNameTypeTransformer {
         case r'AssetFileMigration': return JobName.assetFileMigration;
         case r'AssetGenerateThumbnailsQueueAll': return JobName.assetGenerateThumbnailsQueueAll;
         case r'AssetGenerateThumbnails': return JobName.assetGenerateThumbnails;
+        case r'BestPhotosScoreQueueAll': return JobName.bestPhotosScoreQueueAll;
+        case r'BestPhotosScore': return JobName.bestPhotosScore;
+        case r'MediaHealthScanMissing': return JobName.mediaHealthScanMissing;
+        case r'MediaHealthLocateMissing': return JobName.mediaHealthLocateMissing;
+        case r'MediaHealthScanCorrupt': return JobName.mediaHealthScanCorrupt;
+        case r'MediaHealthDeleteCorrupt': return JobName.mediaHealthDeleteCorrupt;
         case r'AuditTableCleanup': return JobName.auditTableCleanup;
         case r'DatabaseBackup': return JobName.databaseBackup;
         case r'FacialRecognitionQueueAll': return JobName.facialRecognitionQueueAll;

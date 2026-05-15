@@ -77,7 +77,7 @@ describe(JobService.name, () => {
       },
       {
         item: { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1', source: 'upload' } },
-        jobs: [JobName.SmartSearch, JobName.AssetDetectFaces, JobName.Ocr],
+        jobs: [JobName.SmartSearch, JobName.AssetDetectFaces, JobName.Ocr, JobName.BestPhotosScore],
         stub: [AssetFactory.create({ id: 'asset-1', livePhotoVideoId: newUuid() })],
       },
       {
@@ -153,6 +153,7 @@ describe(JobService.name, () => {
         { name: JobName.SmartSearch, data: { id: asset.id, source: 'upload' } },
         { name: JobName.AssetDetectFaces, data: { id: asset.id, source: 'upload' } },
         { name: JobName.Ocr, data: { id: asset.id, source: 'upload' } },
+        { name: JobName.BestPhotosScore, data: { id: asset.id, source: 'upload' } },
         { name: JobName.ImageDescription, data: { id: asset.id, source: 'upload' } },
       ]);
     });
@@ -178,6 +179,7 @@ describe(JobService.name, () => {
         { name: JobName.SmartSearch, data: { id: asset.id, source: 'upload' } },
         { name: JobName.AssetDetectFaces, data: { id: asset.id, source: 'upload' } },
         { name: JobName.Ocr, data: { id: asset.id, source: 'upload' } },
+        { name: JobName.BestPhotosScore, data: { id: asset.id, source: 'upload' } },
         { name: JobName.NsfwDetection, data: { id: asset.id, source: 'upload' } },
       ]);
     });

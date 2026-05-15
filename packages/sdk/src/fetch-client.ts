@@ -1207,6 +1207,89 @@ export type ValidateAccessTokenResponseDto = {
     /** Authentication status */
     authStatus: boolean;
 };
+export type BestPhotoScoreDto = {
+    aestheticScore: number | null;
+    bestFrameTimestampMs: number | null;
+    computedAt: string;
+    diversityScore: number | null;
+    frameMetadata: {
+        [key: string]: any;
+    } | null;
+    frameScore: number | null;
+    metadata: {
+        [key: string]: any;
+    } | null;
+    score: number;
+    scoreVersion: number;
+    subjectScore: number | null;
+    technicalScore: number | null;
+};
+export type BestPhotoAssetResponseDto = {
+    bestPhotoScore: BestPhotoScoreDto;
+    /** Base64 encoded SHA1 hash */
+    checksum: string;
+    /** The UTC timestamp when the asset was originally uploaded to Immich. */
+    createdAt: string;
+    /** Duplicate group ID */
+    duplicateId?: string | null;
+    /** Video/gif duration in milliseconds (null for static images) */
+    duration: number | null;
+    exifInfo?: ExifResponseDto;
+    /** The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken. */
+    fileCreatedAt: string;
+    /** The UTC timestamp when the file was last modified on the filesystem. This reflects the last time the physical file was changed, which may be different from when the photo was originally taken. */
+    fileModifiedAt: string;
+    /** Whether asset has metadata */
+    hasMetadata: boolean;
+    /** Asset height */
+    height: number | null;
+    /** Asset ID */
+    id: string;
+    /** Is archived */
+    isArchived: boolean;
+    /** Is edited */
+    isEdited: boolean;
+    /** Is favorite */
+    isFavorite: boolean;
+    /** Is offline */
+    isOffline: boolean;
+    /** Is trashed */
+    isTrashed: boolean;
+    /** Library ID */
+    libraryId?: string | null;
+    /** Live photo video ID */
+    livePhotoVideoId?: string | null;
+    /** The local date and time when the photo/video was taken, derived from EXIF metadata. This represents the photographer's local time regardless of timezone, stored as a timezone-agnostic timestamp. Used for timeline grouping by "local" days and months. */
+    localDateTime: string;
+    /** Original file name */
+    originalFileName: string;
+    /** Original MIME type */
+    originalMimeType?: string;
+    /** Original file path */
+    originalPath: string;
+    owner?: UserResponseDto;
+    /** Owner user ID */
+    ownerId: string;
+    people?: PersonResponseDto[];
+    /** Is resized */
+    resized?: boolean;
+    stack?: (AssetStackResponseDto) | null;
+    tags?: TagResponseDto[];
+    /** Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting. */
+    thumbhash: string | null;
+    "type": AssetTypeEnum;
+    /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
+    updatedAt: string;
+    visibility: AssetVisibility;
+    /** Asset width */
+    width: number | null;
+};
+export type BestPhotosResponseDto = {
+    count: number;
+    items: BestPhotoAssetResponseDto[];
+    nextPage: string | null;
+    total: number;
+};
 export type DownloadArchiveDto = {
     /** Asset IDs */
     assetIds: string[];
@@ -4843,6 +4926,29 @@ export function validateAccessToken(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Retrieve best photos
+ */
+export function getBestPhotos({ includeArchived, includeVideos, limit, minScore, page }: {
+    includeArchived?: boolean;
+    includeVideos?: boolean;
+    limit?: number;
+    minScore?: number;
+    page?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BestPhotosResponseDto;
+    }>(`/best-photos${QS.query(QS.explode({
+        includeArchived,
+        includeVideos,
+        limit,
+        minScore,
+        page
+    }))}`, {
+        ...opts
+    }));
+}
+/**
  * Download asset archive
  */
 export function downloadArchive({ key, slug, downloadArchiveDto }: {
@@ -7614,6 +7720,7 @@ export enum ManualJobName {
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
     BackupDatabase = "backup-database",
+    BestPhotosBackfill = "best-photos-backfill",
     PhysicalDeduplicationDryRun = "physical-deduplication-dry-run",
     PhysicalDeduplicationApply = "physical-deduplication-apply"
 }
@@ -7730,6 +7837,8 @@ export enum JobName {
     AssetFileMigration = "AssetFileMigration",
     AssetGenerateThumbnailsQueueAll = "AssetGenerateThumbnailsQueueAll",
     AssetGenerateThumbnails = "AssetGenerateThumbnails",
+    BestPhotosScoreQueueAll = "BestPhotosScoreQueueAll",
+    BestPhotosScore = "BestPhotosScore",
     MediaHealthScanMissing = "MediaHealthScanMissing",
     MediaHealthLocateMissing = "MediaHealthLocateMissing",
     MediaHealthScanCorrupt = "MediaHealthScanCorrupt",

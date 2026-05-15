@@ -31,6 +31,7 @@ It is designed for users who want to keep the Immich experience they already kno
 - Non-destructive photo and video editing
 - Natural-language local discovery
 - A “Recently Added” media view
+- A “Best Photos” view for locally ranked high-quality images
 
 This fork is actively maintained and kept up to date with upstream Immich while preserving the additional features documented below.
 
@@ -229,6 +230,35 @@ Video edit rendering reuses the server’s existing hardware transcoding setting
 When an edit requires CPU-only FFmpeg filters, rendering falls back to software processing automatically.
 
 This gives users the best available performance without making GPU support mandatory for every edit type.
+
+---
+
+## Recently Added and Best Photos
+
+This fork adds two library views for users who want faster ways to rediscover useful media without changing albums or favorites.
+
+### Recently Added
+
+Recently Added shows the newest uploads first, regardless of photo date or EXIF capture date.
+
+This is useful after large imports, phone migrations, Google Photos takeouts, or external-library updates where the files you just added may have old capture dates.
+
+### Best Photos
+
+Best Photos ranks your highest-quality image assets using local scoring from Immich-generated previews.
+
+Scores are computed and stored privately on your server. The feature does not call cloud APIs, create a physical album, duplicate files, or change favorites.
+
+The first version focuses on images and considers practical quality signals such as:
+
+- Sharpness and blur
+- Exposure and brightness sanity
+- Contrast and detail
+- Usable resolution
+- Gentle subject-presence signals where available
+- Light penalties for screenshot or document-like images
+
+Videos are not scored or used to change thumbnails in this version, but the stored score data is ready for future video-frame scoring.
 
 ---
 

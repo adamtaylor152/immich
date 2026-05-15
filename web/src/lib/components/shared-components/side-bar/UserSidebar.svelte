@@ -30,6 +30,8 @@
     mdiMapOutline,
     mdiShieldLock,
     mdiShieldLockOutline,
+    mdiStar,
+    mdiStarOutline,
     mdiTagMultipleOutline,
     mdiToolbox,
     mdiToolboxOutline,
@@ -76,6 +78,8 @@
   <NavbarGroup title={$t('library')} size="tiny" />
 
   <NavbarItem title={$t('favorites')} href={Route.favorites()} icon={mdiHeartOutline} activeIcon={mdiHeart} />
+
+  <NavbarItem title={$t('best_photos')} href={Route.bestPhotos()} icon={mdiStarOutline} activeIcon={mdiStar} />
 
   <NavbarItem
     title={$t('albums')}

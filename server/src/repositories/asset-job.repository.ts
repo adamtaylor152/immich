@@ -296,6 +296,70 @@ export class AssetJobRepository {
       .executeTakeFirst();
   }
 
+  @GenerateSql({ params: [{ force: false, scoreVersion: 1 }], stream: true })
+  streamForBestPhotosScoring(options: { force?: boolean; scoreVersion: number }) {
+    return this.db
+      .selectFrom('asset')
+      .select(['asset.id'])
+      .where('asset.type', '=', sql.lit(AssetType.Image))
+      .where('asset.status', '=', sql.lit(AssetStatus.Active))
+      .where('asset.deletedAt', 'is', null)
+      .$call(withDefaultVisibility)
+      .where((eb) =>
+        eb.exists((qb) =>
+          qb
+            .selectFrom('asset_file')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', sql.lit(AssetFileType.Preview)),
+        ),
+      )
+      .$if(!options.force, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb.not(
+              eb.exists(
+                eb.selectFrom('asset_best_photo_score').whereRef('asset_best_photo_score.assetId', '=', 'asset.id'),
+              ),
+            ),
+            eb.exists(
+              eb
+                .selectFrom('asset_best_photo_score')
+                .whereRef('asset_best_photo_score.assetId', '=', 'asset.id')
+                .where('asset_best_photo_score.scoreVersion', '<', options.scoreVersion),
+            ),
+          ]),
+        ),
+      )
+      .stream();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getForBestPhotoScoring(id: string) {
+    return this.db
+      .selectFrom('asset')
+      .select((eb) => [
+        'asset.id',
+        'asset.ownerId',
+        'asset.type',
+        'asset.status',
+        'asset.deletedAt',
+        'asset.visibility',
+        'asset.originalFileName',
+        'asset.width',
+        'asset.height',
+        withFilePath(eb, AssetFileType.Preview).as('previewFile'),
+        sql<number>`(
+          select count(*)
+          from asset_face
+          where asset_face."assetId" = asset.id
+            and asset_face."deletedAt" is null
+            and asset_face."isVisible" is true
+        )`.as('faceCount'),
+      ])
+      .where('asset.id', '=', id)
+      .executeTakeFirst();
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   getForSyncAssets(ids: string[]) {
     return this.db

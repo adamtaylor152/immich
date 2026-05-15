@@ -124,6 +124,15 @@ String parameterToString(dynamic value) {
   if (value is ManualJobName) {
     return ManualJobNameTypeTransformer().encode(value).toString();
   }
+  if (value is MediaHealthCategory) {
+    return MediaHealthCategoryTypeTransformer().encode(value).toString();
+  }
+  if (value is MediaHealthSeverity) {
+    return MediaHealthSeverityTypeTransformer().encode(value).toString();
+  }
+  if (value is MediaHealthStatus) {
+    return MediaHealthStatusTypeTransformer().encode(value).toString();
+  }
   if (value is MemorySearchOrder) {
     return MemorySearchOrderTypeTransformer().encode(value).toString();
   }

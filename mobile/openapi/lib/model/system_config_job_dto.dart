@@ -19,6 +19,7 @@ class SystemConfigJobDto {
     this.imageDescription,
     this.imageEnrichment,
     required this.library_,
+    this.mediaHealth,
     required this.metadataExtraction,
     required this.migration,
     required this.notifications,
@@ -56,6 +57,14 @@ class SystemConfigJobDto {
   JobSettingsDto? imageEnrichment;
 
   JobSettingsDto library_;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  JobSettingsDto? mediaHealth;
 
   JobSettingsDto metadataExtraction;
 
@@ -95,6 +104,7 @@ class SystemConfigJobDto {
     other.imageDescription == imageDescription &&
     other.imageEnrichment == imageEnrichment &&
     other.library_ == library_ &&
+    other.mediaHealth == mediaHealth &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
     other.notifications == notifications &&
@@ -117,6 +127,7 @@ class SystemConfigJobDto {
     (imageDescription == null ? 0 : imageDescription!.hashCode) +
     (imageEnrichment == null ? 0 : imageEnrichment!.hashCode) +
     (library_.hashCode) +
+    (mediaHealth == null ? 0 : mediaHealth!.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
     (notifications.hashCode) +
@@ -131,7 +142,7 @@ class SystemConfigJobDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
+  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, editor=$editor, faceDetection=$faceDetection, imageDescription=$imageDescription, imageEnrichment=$imageEnrichment, library_=$library_, mediaHealth=$mediaHealth, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, nsfwDetection=$nsfwDetection, ocr=$ocr, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, videoDuplicateDetection=$videoDuplicateDetection, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -149,6 +160,11 @@ class SystemConfigJobDto {
     //  json[r'imageEnrichment'] = null;
     }
       json[r'library'] = this.library_;
+    if (this.mediaHealth != null) {
+      json[r'mediaHealth'] = this.mediaHealth;
+    } else {
+    //  json[r'mediaHealth'] = null;
+    }
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
       json[r'notifications'] = this.notifications;
@@ -183,6 +199,7 @@ class SystemConfigJobDto {
         imageDescription: JobSettingsDto.fromJson(json[r'imageDescription']),
         imageEnrichment: JobSettingsDto.fromJson(json[r'imageEnrichment']),
         library_: JobSettingsDto.fromJson(json[r'library'])!,
+        mediaHealth: JobSettingsDto.fromJson(json[r'mediaHealth']),
         metadataExtraction: JobSettingsDto.fromJson(json[r'metadataExtraction'])!,
         migration: JobSettingsDto.fromJson(json[r'migration'])!,
         notifications: JobSettingsDto.fromJson(json[r'notifications'])!,

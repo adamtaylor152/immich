@@ -77,6 +77,94 @@ class ViewsApi {
     return null;
   }
 
+  /// Retrieve best photos
+  ///
+  /// Retrieve visible photo assets ranked by the locally computed Best Photos score.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [bool] includeArchived:
+  ///
+  /// * [bool] includeVideos:
+  ///
+  /// * [int] limit:
+  ///
+  /// * [num] minScore:
+  ///
+  /// * [int] page:
+  Future<Response> getBestPhotosWithHttpInfo({ bool? includeArchived, bool? includeVideos, int? limit, num? minScore, int? page, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/best-photos';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    if (includeArchived != null) {
+      queryParams.addAll(_queryParams('', 'includeArchived', includeArchived));
+    }
+    if (includeVideos != null) {
+      queryParams.addAll(_queryParams('', 'includeVideos', includeVideos));
+    }
+    if (limit != null) {
+      queryParams.addAll(_queryParams('', 'limit', limit));
+    }
+    if (minScore != null) {
+      queryParams.addAll(_queryParams('', 'minScore', minScore));
+    }
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Retrieve best photos
+  ///
+  /// Retrieve visible photo assets ranked by the locally computed Best Photos score.
+  ///
+  /// Parameters:
+  ///
+  /// * [bool] includeArchived:
+  ///
+  /// * [bool] includeVideos:
+  ///
+  /// * [int] limit:
+  ///
+  /// * [num] minScore:
+  ///
+  /// * [int] page:
+  Future<BestPhotosResponseDto?> getBestPhotos({ bool? includeArchived, bool? includeVideos, int? limit, num? minScore, int? page, }) async {
+    final response = await getBestPhotosWithHttpInfo( includeArchived: includeArchived, includeVideos: includeVideos, limit: limit, minScore: minScore, page: page, );
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'BestPhotosResponseDto',) as BestPhotosResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve unique paths
   ///
   /// Retrieve a list of unique folder paths from asset original paths.

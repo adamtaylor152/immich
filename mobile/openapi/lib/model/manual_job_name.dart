@@ -29,6 +29,7 @@ class ManualJobName {
   static const memoryCleanup = ManualJobName._(r'memory-cleanup');
   static const memoryCreate = ManualJobName._(r'memory-create');
   static const backupDatabase = ManualJobName._(r'backup-database');
+  static const bestPhotosBackfill = ManualJobName._(r'best-photos-backfill');
   static const physicalDeduplicationDryRun = ManualJobName._(r'physical-deduplication-dry-run');
   static const physicalDeduplicationApply = ManualJobName._(r'physical-deduplication-apply');
 
@@ -40,6 +41,7 @@ class ManualJobName {
     memoryCleanup,
     memoryCreate,
     backupDatabase,
+    bestPhotosBackfill,
     physicalDeduplicationDryRun,
     physicalDeduplicationApply,
   ];
@@ -86,6 +88,7 @@ class ManualJobNameTypeTransformer {
         case r'memory-cleanup': return ManualJobName.memoryCleanup;
         case r'memory-create': return ManualJobName.memoryCreate;
         case r'backup-database': return ManualJobName.backupDatabase;
+        case r'best-photos-backfill': return ManualJobName.bestPhotosBackfill;
         case r'physical-deduplication-dry-run': return ManualJobName.physicalDeduplicationDryRun;
         case r'physical-deduplication-apply': return ManualJobName.physicalDeduplicationApply;
         default:
