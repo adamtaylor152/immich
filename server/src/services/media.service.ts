@@ -653,8 +653,27 @@ export class MediaService extends BaseService {
     };
   }
 
-  private getVideoThumbnailCandidateTimestamps(format: VideoFormat) {
-    const duration = format.duration;
+  private getVideoThumbnailDurationSeconds(videoStream: VideoStreamInfo, format: VideoFormat) {
+    const durationFromFormat = format.duration;
+    const durationFromFrames =
+      videoStream.frameCount > 0 && videoStream.frameRate && videoStream.frameRate > 0
+        ? videoStream.frameCount / videoStream.frameRate
+        : null;
+
+    if (!durationFromFrames || !Number.isFinite(durationFromFrames) || durationFromFrames <= 0) {
+      return durationFromFormat;
+    }
+
+    if (!Number.isFinite(durationFromFormat) || durationFromFormat <= 0) {
+      return durationFromFrames;
+    }
+
+    const durationRatio = Math.max(durationFromFormat, durationFromFrames) / Math.min(durationFromFormat, durationFromFrames);
+    return durationRatio >= 100 ? durationFromFrames : durationFromFormat;
+  }
+
+  private getVideoThumbnailCandidateTimestamps(videoStream: VideoStreamInfo, format: VideoFormat) {
+    const duration = this.getVideoThumbnailDurationSeconds(videoStream, format);
     if (!Number.isFinite(duration) || duration <= 1) {
       return [];
     }
@@ -682,10 +701,11 @@ export class MediaService extends BaseService {
   private async pickVideoThumbnailStartTime(
     input: string,
     output: string,
+    videoStream: VideoStreamInfo,
     format: VideoFormat,
     getOptions: (timestamp: number) => TranscodeCommand,
   ) {
-    const timestamps = this.getVideoThumbnailCandidateTimestamps(format);
+    const timestamps = this.getVideoThumbnailCandidateTimestamps(videoStream, format);
     if (timestamps.length === 0) {
       return 0;
     }
@@ -747,7 +767,7 @@ export class MediaService extends BaseService {
 
     const previewConfig = { ...ffmpeg, targetResolution: image.preview.size.toString() };
     const thumbConfig = { ...ffmpeg, targetResolution: image.thumbnail.size.toString() };
-    const startTime = await this.pickVideoThumbnailStartTime(sourcePath, previewFile.path, format, (timestamp) =>
+    const startTime = await this.pickVideoThumbnailStartTime(sourcePath, previewFile.path, videoStream, format, (timestamp) =>
       ThumbnailConfig.create(previewConfig, timestamp).getCommand(
         TranscodeTarget.Video,
         videoStream,

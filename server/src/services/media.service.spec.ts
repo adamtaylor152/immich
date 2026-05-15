@@ -512,7 +512,8 @@ describe(MediaService.name, () => {
       await sut.handleGenerateThumbnails({ id: asset.id });
 
       expect(mocks.storage.mkdirSync).toHaveBeenCalledWith(expect.any(String));
-      expect(mocks.media.transcode).toHaveBeenCalledWith(
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        4,
         '/original/path.ext',
         expect.any(String),
         expect.objectContaining({
@@ -527,7 +528,7 @@ describe(MediaService.name, () => {
             '-v',
             'verbose',
             '-vf',
-            String.raw`fps=12:start_time=0:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:1440:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc`,
+            String.raw`fps=12:start_time=0.333:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:1440:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc`,
           ]),
           twoPass: false,
         }),
@@ -591,6 +592,40 @@ describe(MediaService.name, () => {
         expect.any(String),
         expect.objectContaining({
           outputOptions: expect.arrayContaining([expect.stringContaining('start_time=42')]),
+        }),
+      );
+    });
+
+    it('should ignore obviously mismatched duration units when picking video thumbnail candidates', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        ...probeStub.videoStream2160p,
+        videoStream: { ...probeStub.videoStream2160p.videoStream!, frameCount: 64_800, frameRate: 60 },
+        format: { ...probeStub.videoStream2160p.format, duration: 1_080_000_000 },
+      });
+      mocks.media.scoreThumbnailCandidate
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(80)
+        .mockResolvedValueOnce(30)
+        .mockResolvedValueOnce(20);
+
+      await sut.handleGenerateThumbnails({ id: asset.id });
+
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        2,
+        '/original/path.ext',
+        expect.stringContaining('_candidate_1'),
+        expect.objectContaining({
+          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=378')]),
+        }),
+      );
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        5,
+        '/original/path.ext',
+        expect.any(String),
+        expect.objectContaining({
+          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=378')]),
         }),
       );
     });
@@ -690,7 +725,8 @@ describe(MediaService.name, () => {
       await sut.handleGenerateThumbnails({ id: asset.id });
 
       expect(mocks.storage.mkdirSync).toHaveBeenCalledWith(expect.any(String));
-      expect(mocks.media.transcode).toHaveBeenCalledWith(
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        5,
         '/original/path.ext',
         expect.any(String),
         expect.objectContaining({
@@ -705,7 +741,7 @@ describe(MediaService.name, () => {
             '-v',
             'verbose',
             '-vf',
-            String.raw`fps=12:start_time=0:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:250:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc,tonemapx=tonemap=hable:desat=0:p=bt709:t=bt709:m=bt709:r=pc:peak=100:format=yuv420p`,
+            String.raw`fps=12:start_time=0.333:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:250:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc,tonemapx=tonemap=hable:desat=0:p=bt709:t=bt709:m=bt709:r=pc:peak=100:format=yuv420p`,
           ]),
           twoPass: false,
         }),
@@ -741,7 +777,8 @@ describe(MediaService.name, () => {
       });
       await sut.handleGenerateThumbnails({ id: asset.id });
 
-      expect(mocks.media.transcode).toHaveBeenCalledWith(
+      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
+        5,
         '/original/path.ext',
         expect.any(String),
         expect.objectContaining({
@@ -756,7 +793,7 @@ describe(MediaService.name, () => {
             '-v',
             'verbose',
             '-vf',
-            String.raw`fps=12:start_time=0:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:250:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc,tonemapx=tonemap=hable:desat=0:p=bt709:t=bt709:m=bt709:r=pc:peak=100:format=yuv420p`,
+            String.raw`fps=12:start_time=0.333:eof_action=pass:round=down,thumbnail=12,select=gt(scene\,0.1)-eq(prev_selected_n\,n)+isnan(prev_selected_n)+gt(n\,20),trim=end_frame=2,reverse,scale=-2:250:flags=lanczos+accurate_rnd+full_chroma_int:out_range=pc,tonemapx=tonemap=hable:desat=0:p=bt709:t=bt709:m=bt709:r=pc:peak=100:format=yuv420p`,
           ]),
           twoPass: false,
         }),
