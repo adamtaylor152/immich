@@ -830,7 +830,7 @@
       return '';
     }
 
-    const segments = speedSegments.toSorted((a, b) => a.startSeconds - b.startSeconds);
+    const segments = [...speedSegments].sort((a, b) => a.startSeconds - b.startSeconds);
     for (const segment of segments) {
       if (segment.endSeconds <= segment.startSeconds) {
         return $t('editor_video_speed_segment_invalid');
@@ -1388,7 +1388,7 @@
                     {$t('remove')}
                   </Button>
                 </HStack>
-                <div class="mt-3 speed-grid">
+                <div class="speed-grid mt-3">
                   {#each speedRates as rate (rate)}
                     <button
                       type="button"
@@ -1399,7 +1399,7 @@
                     </button>
                   {/each}
                 </div>
-                <div class="mt-4 time-readout">
+                <div class="time-readout mt-4">
                   <span>{formatTime(segment.startSeconds)}</span>
                   <span>{formatTime(segment.endSeconds)}</span>
                 </div>

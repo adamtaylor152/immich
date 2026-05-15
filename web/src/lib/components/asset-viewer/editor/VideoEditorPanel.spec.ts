@@ -137,7 +137,7 @@ describe('VideoEditorPanel component', () => {
                 x: 0.8,
                 y: 0.25,
                 startMs: 0,
-                endMs: 10000,
+                endMs: 10_000,
                 size: 0.06,
                 color: '#ffffff',
               },
