@@ -31,6 +31,24 @@ You can search the following types of content:
 
 <img src={require('./img/advanced-search-filters.webp').default} width="70%" title='Advanced search filters' />
 
+## Ask Search
+
+AJ Taylor's maintained fork adds a local Ask Search experience for Google Photos-like discovery without handing your media library to a cloud photo service.
+
+Ask Search accepts normal phrases such as:
+
+- `photos of Alice in Banff last summer`
+- `receipts from 2024`
+- `screenshots from last month`
+- `favorite videos since 2020`
+- `photos from April 2024`
+
+The server turns these phrases into existing Immich search filters. It can combine local Smart Search context with filters for dates, named months, relative time ranges, favorites, media type, places, OCR-backed documents and receipts, screenshots, and matched people.
+
+When a named person can be resolved to one of your Immich people, Ask Search uses the real person filter. If a person name cannot be matched, the search still runs semantically and explains that the person match is approximate.
+
+Ask Search runs against your local Immich server and your configured machine-learning setup. It is meant for discovery, not as a Google Photos account sync. For importing full Google Photos exports, use Google Takeout with an import tool such as `immich-go`.
+
 ### Full path or folder
 
 Use this mode when you know a folder name or part of the original asset path.

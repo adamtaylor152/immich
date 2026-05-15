@@ -319,11 +319,11 @@
   }
 
   const suggestedSearches = [
-    { icon: mdiAccountMultipleOutline, title: $t('people'), query: { query: 'photos of family and friends' } },
-    { icon: mdiMapMarkerOutline, title: $t('places'), query: { query: 'favorite places and trips' } },
-    { icon: mdiFileDocumentOutline, title: $t('documents'), query: { ocr: 'receipt invoice document form' } },
-    { icon: mdiCalendarHeart, title: $t('memories'), query: { isFavorite: true } },
-    { icon: mdiImageAlbum, title: $t('albums'), query: { isNotInAlbum: false } },
+    { icon: mdiAccountMultipleOutline, title: $t('people'), query: 'photos of Alice last summer' },
+    { icon: mdiMapMarkerOutline, title: $t('places'), query: 'photos in Banff from April 2024' },
+    { icon: mdiFileDocumentOutline, title: $t('documents'), query: 'receipts from last year' },
+    { icon: mdiCalendarHeart, title: $t('memories'), query: 'favorite videos since 2020' },
+    { icon: mdiImageAlbum, title: $t('albums'), query: 'screenshots from last month' },
   ];
 </script>
 
@@ -406,14 +406,19 @@
         {/if}
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {#each suggestedSearches as item}
-            <a
-              class="flex min-h-28 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-immich-primary hover:text-immich-primary dark:border-gray-800 dark:bg-gray-900 dark:hover:border-immich-dark-primary dark:hover:text-immich-dark-primary"
-              href={Route.search(item.query)}
+          {#each suggestedSearches as item (item.query)}
+            <button
+              type="button"
+              class="flex min-h-28 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 text-start shadow-sm transition hover:border-immich-primary hover:text-immich-primary dark:border-gray-800 dark:bg-gray-900 dark:hover:border-immich-dark-primary dark:hover:text-immich-dark-primary"
+              onclick={() => {
+                askQuery = item.query;
+                handlePromiseError(runAskSearch());
+              }}
             >
               <Icon icon={item.icon} size="1.7em" />
               <span class="text-base font-medium">{item.title}</span>
-            </a>
+              <span class="text-sm text-gray-500 dark:text-gray-400">{item.query}</span>
+            </button>
           {/each}
         </div>
 

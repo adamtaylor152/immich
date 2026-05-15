@@ -37,7 +37,7 @@ export class SearchService extends BaseService {
       throw new BadRequestException('Ask Search is not enabled');
     }
 
-    const plan = this.buildAskSearchPlan(dto.query, {
+    const plan = await this.buildAskSearchPlan(auth, dto.query, {
       page: dto.page,
       size: Math.min(dto.size ?? localFeatures.askSearch.maxResults, localFeatures.askSearch.maxResults),
     });
@@ -292,7 +292,7 @@ export class SearchService extends BaseService {
     };
   }
 
-  private buildAskSearchPlan(query: string, pagination: { page?: number; size: number }) {
+  private async buildAskSearchPlan(auth: AuthDto, query: string, pagination: { page?: number; size: number }) {
     const normalizedQuery = query.trim().replaceAll(/\s+/g, ' ');
     const lower = normalizedQuery.toLowerCase();
     const filters: MetadataSearchDto = { page: pagination.page ?? 1, size: pagination.size, withExif: true };
@@ -315,6 +315,12 @@ export class SearchService extends BaseService {
       const lastYear = new Date().getUTCFullYear() - 1;
       filters.takenAfter = new Date(`${lastYear}-06-01T00:00:00.000Z`);
       filters.takenBefore = new Date(`${lastYear}-08-31T23:59:59.999Z`);
+    }
+
+    const monthRange = this.getAskSearchMonthRange(lower);
+    if (monthRange && !relativeDateRange) {
+      filters.takenAfter = monthRange.after;
+      filters.takenBefore = monthRange.before;
     }
 
     const afterYear = lower.match(/\b(?:after|since)\s+(19\d{2}|20\d{2})\b/)?.[1];
@@ -349,6 +355,9 @@ export class SearchService extends BaseService {
     if (/\b(receipts?|invoices?)\b/.test(lower)) {
       mode = 'metadata';
       filters.ocr = 'receipt invoice total tax';
+    } else if (/\bscreenshots?\b/.test(lower)) {
+      mode = 'metadata';
+      filters.originalFileName = 'Screenshot';
     } else if (/\b(documents?|paperwork|forms?)\b/.test(lower)) {
       mode = 'metadata';
       filters.ocr = 'document form';
@@ -358,14 +367,17 @@ export class SearchService extends BaseService {
       warnings.push('Document categories are approximated with OCR until Document Intelligence is enabled.');
     }
 
-    if (/\b(?:with|of)\s+[A-Z][\w'-]+/.test(normalizedQuery)) {
+    const personIds = await this.resolveAskSearchPeople(auth, normalizedQuery);
+    if (personIds.length > 0) {
+      filters.personIds = personIds;
+    } else if (/\b(?:with|of)\s+[A-Z][\w'-]+/.test(normalizedQuery)) {
       warnings.push('People names are searched semantically until Ask Search can resolve names to person IDs.');
     }
 
     return { mode, normalizedQuery, filters, warnings };
   }
 
-  private describeAskSearchPlan(plan: ReturnType<SearchService['buildAskSearchPlan']>): string {
+  private describeAskSearchPlan(plan: Awaited<ReturnType<SearchService['buildAskSearchPlan']>>): string {
     const filters = Object.keys(plan.filters).filter((key) => !['page', 'size', 'withExif'].includes(key));
     const filterText = filters.length > 0 ? ` with ${filters.join(', ')} filters` : '';
     return plan.mode === 'smart'
@@ -435,5 +447,60 @@ export class SearchService extends BaseService {
     }
 
     return null;
+  }
+
+  private getAskSearchMonthRange(query: string): { after: Date; before: Date } | null {
+    const monthNames = [
+      'january',
+      'february',
+      'march',
+      'april',
+      'may',
+      'june',
+      'july',
+      'august',
+      'september',
+      'october',
+      'november',
+      'december',
+    ];
+    const monthPattern = monthNames.join('|');
+    const match = query.match(new RegExp(String.raw`\b(${monthPattern})\b(?:\s+(19\d{2}|20\d{2}))?`));
+    if (!match) {
+      return null;
+    }
+
+    const now = new Date();
+    const month = monthNames.indexOf(match[1]);
+    const year = match[2] ? Number(match[2]) : now.getUTCFullYear();
+    const after = new Date(Date.UTC(year, month, 1));
+    const before = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+
+    return { after, before };
+  }
+
+  private async resolveAskSearchPeople(auth: AuthDto, query: string): Promise<string[]> {
+    const match = query.match(
+      /\b(?:with|of)\s+([A-Z][\w'-]*(?:\s+(?:and\s+)?[A-Z][\w'-]*)*)(?=\s+(?:in|near|around|at|last|this|from|during|before|after|since)\b|$)/,
+    );
+    if (!match?.[1]) {
+      return [];
+    }
+
+    const names = match[1]
+      .split(/\s+(?:and|&)\s+|,\s*/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const people = await Promise.all(
+      names.map(async (name) => {
+        const matches = await this.personRepository.getByName(auth.user.id, name, {
+          ...getHiddenContentQueryOptions(auth),
+          withHidden: false,
+        });
+        return matches.find((person) => person.name.toLowerCase() === name.toLowerCase()) ?? matches[0];
+      }),
+    );
+
+    return people.flatMap((person) => (person ? [person.id] : []));
   }
 }

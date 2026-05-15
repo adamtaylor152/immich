@@ -4,6 +4,7 @@ import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { SearchService } from 'src/services/search.service';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { AuthFactory } from 'test/factories/auth.factory';
+import { PersonFactory } from 'test/factories/person.factory';
 import { authStub } from 'test/fixtures/auth.stub';
 import { getForAsset } from 'test/mappers';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -339,6 +340,7 @@ describe(SearchService.name, () => {
       mocks.search.searchSmart.mockResolvedValue({ hasNextPage: false, items: [] });
       mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
       mocks.machineLearning.encodeText.mockResolvedValue('[1, 2, 3]');
+      mocks.person.getByName.mockResolvedValue([]);
     });
 
     it('should answer natural language searches with smart search and structured filters', async () => {
@@ -406,6 +408,42 @@ describe(SearchService.name, () => {
       );
     });
 
+    it('should understand named month phrases', async () => {
+      const result = await sut.askSearch(authStub.user1, { query: 'photos from April 2024' });
+
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: new Date('2024-04-01T00:00:00.000Z'),
+          takenBefore: new Date('2024-04-30T23:59:59.999Z'),
+        }),
+      );
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          takenAfter: new Date('2024-04-01T00:00:00.000Z'),
+          takenBefore: new Date('2024-04-30T23:59:59.999Z'),
+        }),
+      );
+    });
+
+    it('should resolve people names into person filters when possible', async () => {
+      const person = PersonFactory.create({ id: 'person-1', name: 'Alice', ownerId: authStub.user1.user.id });
+      mocks.person.getByName.mockResolvedValue([person]);
+
+      const result = await sut.askSearch(authStub.user1, { query: 'photos of Alice in Banff' });
+
+      expect(result.warnings).toEqual([]);
+      expect(result.plan.filters).toEqual(expect.objectContaining({ personIds: ['person-1'], city: 'Banff' }));
+      expect(mocks.person.getByName).toHaveBeenCalledWith(authStub.user1.user.id, 'Alice', { withHidden: false });
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          personIds: ['person-1'],
+          city: 'Banff',
+        }),
+      );
+    });
+
     it('should use OCR-backed metadata search for document-like queries', async () => {
       const result = await sut.askSearch(authStub.user1, { query: 'receipts from 2024' });
 
@@ -421,6 +459,27 @@ describe(SearchService.name, () => {
         { page: 1, size: 100 },
         expect.objectContaining({
           ocr: 'receipt invoice total tax',
+          userIds: [authStub.user1.user.id],
+        }),
+      );
+      expect(mocks.machineLearning.encodeText).not.toHaveBeenCalled();
+    });
+
+    it('should use metadata filename search for screenshots', async () => {
+      const result = await sut.askSearch(authStub.user1, { query: 'screenshots from last year' });
+
+      expect(result.plan.mode).toBe('metadata');
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          originalFileName: 'Screenshot',
+          takenAfter: new Date(`${new Date().getUTCFullYear() - 1}-01-01T00:00:00.000Z`),
+          takenBefore: new Date(`${new Date().getUTCFullYear() - 1}-12-31T23:59:59.999Z`),
+        }),
+      );
+      expect(mocks.search.searchMetadata).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          originalFileName: 'Screenshot',
           userIds: [authStub.user1.user.id],
         }),
       );
