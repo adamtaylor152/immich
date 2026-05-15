@@ -164,7 +164,7 @@ export class AlbumService extends BaseService {
     const album = await this.findOrFail(id, auth, { withAssets: true });
 
     if (dto.albumThumbnailAssetId) {
-      const visibleAssetIds = new Set(album.assets?.map((asset) => asset.id) ?? []);
+      const visibleAssetIds = new Set(album.assets?.map((asset) => asset.id));
       if (!visibleAssetIds.has(dto.albumThumbnailAssetId)) {
         throw new BadRequestException('Invalid album thumbnail');
       }

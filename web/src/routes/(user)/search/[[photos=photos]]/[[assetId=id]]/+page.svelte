@@ -434,8 +434,7 @@
       {@const value = terms[searchKey]}
       <div class="flex place-content-center place-items-center items-stretch text-xs">
         <div
-          class="flex items-center justify-center bg-immich-primary px-4 py-2 text-white dark:bg-immich-dark-primary dark:text-black
-          rounded-s-full"
+          class="flex items-center justify-center rounded-s-full bg-immich-primary px-4 py-2 text-white dark:bg-immich-dark-primary dark:text-black"
         >
           {getHumanReadableSearchKey(searchKey as keyof SearchTerms)}
         </div>
