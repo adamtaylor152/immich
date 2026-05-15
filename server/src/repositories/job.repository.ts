@@ -87,11 +87,10 @@ export class JobRepository {
     const { bull } = this.configRepository.getEnv();
     for (const queueName of Object.values(QueueName)) {
       this.logger.debug(`Starting worker for queue: ${queueName}`);
-      this.workers[queueName] = new Worker(
-        queueName,
-        (job) => this.processJob(queueName, job),
-        { ...bull.config, concurrency: 1 },
-      );
+      this.workers[queueName] = new Worker(queueName, (job) => this.processJob(queueName, job), {
+        ...bull.config,
+        concurrency: 1,
+      });
       this.registerWorkerEvents(queueName, this.workers[queueName]);
     }
   }

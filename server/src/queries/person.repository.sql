@@ -258,6 +258,10 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'preview'
       and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
   ) as "previewPath"
 from
   "person"
@@ -265,7 +269,7 @@ from
   inner join "asset" on "asset_face"."assetId" = "asset"."id"
   left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
 where
-  "person"."id" = $1
+  "person"."id" = $2
   and "asset_face"."deletedAt" is null
 
 -- PersonRepository.reassignFace

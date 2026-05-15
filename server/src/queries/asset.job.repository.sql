@@ -408,19 +408,16 @@ select
   "asset"."id"
 from
   "asset"
+  left join "asset_video_duplicate_frame" as "frame" on "frame"."assetId" = "asset"."id"
 where
   "asset"."type" = 'VIDEO'
   and "asset"."deletedAt" is null
   and "asset"."visibility" != 'hidden'
   and "asset"."visibility" != 'locked'
-  and (
-    select
-      count(*)
-    from
-      "asset_video_duplicate_frame"
-    where
-      "assetId" = "asset"."id"
-  ) < $1
+group by
+  "asset"."id"
+having
+  count("frame"."assetId") < $1
 
 -- AssetJobRepository.getForVideoDuplicateFrameJob
 select
@@ -599,11 +596,15 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'preview'
       and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
   ) as "previewFile"
 from
   "asset"
 where
-  "asset"."id" = $1
+  "asset"."id" = $2
 
 -- AssetJobRepository.getForImageEnrichment
 select
@@ -623,12 +624,16 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'preview'
       and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
   ) as "previewFile"
 from
   "asset"
   left join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
 where
-  "asset"."id" = $1
+  "asset"."id" = $2
 
 -- AssetJobRepository.getForSyncAssets
 select
