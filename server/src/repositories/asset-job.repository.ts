@@ -211,18 +211,14 @@ export class AssetJobRepository {
   streamForVideoDuplicateFrames(options: { force?: boolean; frameCount: number }) {
     return this.db
       .selectFrom('asset')
+      .leftJoin('asset_video_duplicate_frame as frame', 'frame.assetId', 'asset.id')
       .select(['asset.id'])
       .where('asset.type', '=', sql.lit(AssetType.Video))
       .where('asset.deletedAt', 'is', null)
       .where('asset.visibility', '!=', sql.lit(AssetVisibility.Hidden))
       .where('asset.visibility', '!=', sql.lit(AssetVisibility.Locked))
-      .$if(!options.force, (qb) =>
-        qb.where(
-          sql<number>`(select count(*) from "asset_video_duplicate_frame" where "assetId" = "asset"."id")`,
-          '<',
-          options.frameCount,
-        ),
-      )
+      .groupBy('asset.id')
+      .$if(!options.force, (qb) => qb.having((eb) => eb.fn.count('frame.assetId'), '<', options.frameCount))
       .stream();
   }
 

@@ -192,7 +192,12 @@ def _openvino_device_ids(providers: list[str]) -> list[str]:
         return []
 
     try:
-        device_ids: list[str] = ort.capi._pybind_state.get_available_openvino_device_ids()
+        # Keep this resilient across onnxruntime versions where internals may change.
+        pybind_state = getattr(getattr(ort, "capi", None), "_pybind_state", None)
+        get_ids = getattr(pybind_state, "get_available_openvino_device_ids", None)
+        if not callable(get_ids):
+            return []
+        device_ids: list[str] = get_ids()
         return device_ids
     except Exception as error:
         log.warning(f"Unable to read OpenVINO device IDs: {error}")

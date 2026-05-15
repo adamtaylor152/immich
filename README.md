@@ -40,7 +40,7 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 - GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
 
 ## Recently Added Media
-- Recently Added left nav function that shows you the most recent media uploaded, regardless of its date of EXIF data.
+- Recently Added left nav function that shows the most recently uploaded media, regardless of EXIF date data.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for plain-language setup notes, recommended rollout steps, physical deduplication guidance, and the differences from upstream Immich.
 

@@ -205,9 +205,7 @@ export class SharedLinkService extends BaseService {
     }
 
     const existingAssetIds = new Set(sharedLink.assets.map((asset) => asset.id));
-    const allowedAssetIds = auth.hideNsfwAssets
-      ? await this.checkAccess({ auth, permission: Permission.AssetRead, ids: existingAssetIds })
-      : existingAssetIds;
+    const allowedAssetIds = existingAssetIds;
 
     const results: AssetIdsResponseDto[] = [];
     for (const assetId of dto.assetIds) {
@@ -227,10 +225,7 @@ export class SharedLinkService extends BaseService {
     const removedAssetIds = results.filter(({ success }) => success).map(({ assetId }) => assetId);
     if (removedAssetIds.length > 0) {
       await this.sharedLinkAssetRepository.remove(id, removedAssetIds);
-      sharedLink.assets = sharedLink.assets.filter((asset) => !removedAssetIds.includes(asset.id));
     }
-
-    await this.sharedLinkRepository.update(sharedLink);
 
     return results;
   }
