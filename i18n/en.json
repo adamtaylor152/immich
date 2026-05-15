@@ -57,6 +57,7 @@
     "authentication_settings_reenable": "To re-enable, use a <link>Server Command</link>.",
     "background_task_job": "Background Tasks",
     "backup_database": "Create Database Dump",
+    "best_photos_backfill_job": "Best Photos backfill",
     "backup_database_enable_description": "Enable database dumps",
     "backup_keep_last_amount": "Amount of previous dumps to keep",
     "backup_onboarding_1_description": "offsite copy in the cloud or at another physical location.",

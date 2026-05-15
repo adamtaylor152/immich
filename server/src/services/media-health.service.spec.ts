@@ -1,7 +1,16 @@
 import { CORRUPT_MEDIA_DELETE_CONFIRM_TEXT } from 'src/dtos/media-health.dto';
-import { AssetStatus, AssetType, JobName, JobStatus, MediaHealthCategory, MediaHealthStatus } from 'src/enum';
+import {
+  AssetStatus,
+  AssetType,
+  JobName,
+  JobStatus,
+  MediaHealthCategory,
+  MediaHealthSeverity,
+  MediaHealthStatus,
+} from 'src/enum';
 import { MediaHealthRepository } from 'src/repositories/media-health.repository';
 import { MediaHealthService } from 'src/services/media-health.service';
+import { classifyImageDecodeFailure } from 'src/utils/media-health';
 import { authStub } from 'test/fixtures/auth.stub';
 import { getMocks, ServiceMocks } from 'test/utils';
 
@@ -75,6 +84,70 @@ describe(MediaHealthService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.MediaHealthDeleteCorrupt,
         data: { ids: ['health-1'], userId: authStub.admin.user.id },
+      });
+    });
+  });
+
+  describe('handleLocateMissing', () => {
+    it('updates findings to found when locate discovers validated candidates', async () => {
+      vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([
+        {
+          id: 'health-1',
+          assetId: 'asset-1',
+          category: MediaHealthCategory.Missing,
+          originalPath: '/library/missing.jpg',
+          originalFileName: 'missing.jpg',
+          evidence: { reason: 'source_file_missing_or_unreadable' },
+          resolution: { autoRelinkable: true },
+        },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssets).mockResolvedValue([
+        {
+          id: 'asset-1',
+          originalPath: '/library/missing.jpg',
+          originalFileName: 'missing.jpg',
+          type: AssetType.Image,
+          isExternal: false,
+          libraryId: null,
+        },
+      ] as never);
+      vi.spyOn(sut as never, 'locateCandidates').mockResolvedValue([
+        {
+          status: MediaHealthStatus.Found,
+          score: 0.91,
+          evidence: { path: '/library/found.jpg' },
+          resolution: { autoRelinkable: false },
+        },
+      ]);
+
+      await expect(sut.handleLocateMissing({ runId: 'run-1', ids: ['health-1'] })).resolves.toBe(JobStatus.Success);
+
+      expect(mediaHealthRepository.replaceCandidates).toHaveBeenCalledWith('health-1', [
+        {
+          healthId: 'health-1',
+          candidatePath: '/library/found.jpg',
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 0.91,
+          evidence: { path: '/library/found.jpg' },
+          resolution: { autoRelinkable: false },
+          checkedAt: expect.any(Date),
+        },
+      ]);
+      expect(mediaHealthRepository.upsertFinding).toHaveBeenCalledWith({
+        runId: 'run-1',
+        assetId: 'asset-1',
+        category: MediaHealthCategory.Missing,
+        status: MediaHealthStatus.Found,
+        severity: MediaHealthSeverity.Warning,
+        originalPath: '/library/missing.jpg',
+        originalFileName: 'missing.jpg',
+        evidence: {
+          reason: 'source_file_missing_or_unreadable',
+          candidateCount: 1,
+          validatedCandidateCount: 1,
+        },
+        resolution: { autoRelinkable: false },
+        checkedAt: expect.any(Date),
       });
     });
   });
@@ -166,6 +239,16 @@ describe(MediaHealthService.name, () => {
       expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
         'run-1',
         expect.objectContaining({ status: 'completed', checkedAssets: 1, foundAssets: 1 }),
+      );
+    });
+  });
+
+  describe('classifyImageDecodeFailure', () => {
+    it('keeps unsupported raws out of corrupt findings after the libraw fallback fails', () => {
+      const error = new Error('Unsupported file format or not RAW file');
+
+      expect(classifyImageDecodeFailure(error, { isRaw: true, enhancedRawAttempted: true })).toBe(
+        MediaHealthStatus.UnsupportedRaw,
       );
     });
   });

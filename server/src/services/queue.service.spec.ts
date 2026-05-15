@@ -74,6 +74,7 @@ describe(QueueService.name, () => {
         [QueueName.FacialRecognition]: expected,
         [QueueName.Sidecar]: expected,
         [QueueName.Library]: expected,
+        [QueueName.MediaHealth]: expected,
         [QueueName.Notification]: expected,
         [QueueName.BackupDatabase]: expected,
         [QueueName.Ocr]: expected,
@@ -82,7 +83,6 @@ describe(QueueService.name, () => {
         [QueueName.NsfwDetection]: expected,
         [QueueName.Workflow]: expected,
         [QueueName.Editor]: expected,
-        [QueueName.MediaHealth]: expected,
       });
     });
   });
