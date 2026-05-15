@@ -49,6 +49,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -119,6 +124,11 @@ jobs:
       actions: read # To download the app artifact
       contents: write
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Generate a token
         id: generate-token
         uses: ./.github/actions/fork-workflow-token

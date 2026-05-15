@@ -16,6 +16,11 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -67,6 +72,11 @@ jobs:
       run:
         working-directory: ./server
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -99,6 +109,11 @@ jobs:
       run:
         working-directory: ./packages/cli
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -131,6 +146,11 @@ jobs:
       run:
         working-directory: ./packages/cli
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -176,6 +196,11 @@ jobs:
       run:
         working-directory: ./web
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -215,6 +240,11 @@ jobs:
       run:
         working-directory: ./web
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -244,6 +274,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -295,6 +330,11 @@ jobs:
       run:
         working-directory: ./e2e
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -328,6 +368,11 @@ jobs:
       run:
         working-directory: ./server
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -365,6 +410,11 @@ jobs:
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -445,6 +495,11 @@ jobs:
       matrix:
         runner: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -556,6 +611,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -594,6 +654,11 @@ jobs:
       run:
         working-directory: ./machine-learning
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -625,6 +690,11 @@ jobs:
       run:
         working-directory: ./.github
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -656,6 +726,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -678,6 +753,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
@@ -741,6 +821,11 @@ jobs:
       run:
         working-directory: ./server
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - id: token
         uses: ./.github/actions/fork-workflow-token
         with:
