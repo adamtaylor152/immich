@@ -34,6 +34,8 @@
   import {
     type AlbumResponseDto,
     type AssetResponseDto,
+    askSearch,
+    type AskSearchResponseDto,
     getPerson,
     getTagById,
     ImageEnrichmentFilter,
@@ -42,8 +44,18 @@
     searchSmart,
     type SmartSearchDto,
   } from '@immich/sdk';
-  import { ActionButton, CommandPaletteDefaultProvider, Icon, IconButton, LoadingSpinner } from '@immich/ui';
-  import { mdiArrowLeft, mdiDotsVertical, mdiImageOffOutline, mdiSelectAll } from '@mdi/js';
+  import { ActionButton, Button, CommandPaletteDefaultProvider, Icon, IconButton, LoadingSpinner } from '@immich/ui';
+  import {
+    mdiAccountMultipleOutline,
+    mdiArrowLeft,
+    mdiCalendarHeart,
+    mdiDotsVertical,
+    mdiFileDocumentOutline,
+    mdiImageAlbum,
+    mdiImageOffOutline,
+    mdiMapMarkerOutline,
+    mdiSelectAll,
+  } from '@mdi/js';
   import { tick, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -59,6 +71,9 @@
   let searchResultAlbums: AlbumResponseDto[] = $state([]);
   let searchResultAssets: AssetResponseDto[] = $state([]);
   let isLoading = $state(true);
+  let askQuery = $state('');
+  let askResponse = $state<AskSearchResponseDto>();
+  let isAskLoading = $state(false);
   let scrollY = $state(0);
   let scrollYHistory = 0;
 
@@ -66,6 +81,7 @@
   let searchQuery = $derived(page.url.searchParams.get(QueryParameter.QUERY));
   let smartSearchEnabled = $derived(featureFlagsManager.value.smartSearch);
   let terms = $derived<SearchTerms>(searchQuery ? JSON.parse(searchQuery) : {});
+  let hasSearchQuery = $derived(Object.keys(terms).length > 0);
 
   $effect(() => {
     // we want this to *only* be reactive on `terms`
@@ -122,6 +138,11 @@
     nextPage = 1;
     searchResultAssets = [];
     searchResultAlbums = [];
+    askResponse = undefined;
+    if (!hasSearchQuery) {
+      isLoading = false;
+      return;
+    }
     await loadNextPage(true);
   }
 
@@ -269,13 +290,48 @@
   function getObjectKeys<T extends object>(obj: T): (keyof T)[] {
     return Object.keys(obj) as (keyof T)[];
   }
+
+  async function runAskSearch() {
+    if (!askQuery.trim() || isAskLoading) {
+      return;
+    }
+
+    isAskLoading = true;
+    askResponse = undefined;
+    searchResultAssets = [];
+    searchResultAlbums = [];
+
+    try {
+      const response = await askSearch({ askSearchDto: { query: askQuery, language: $lang } });
+      askResponse = response;
+      searchResultAlbums = response.results.albums.items;
+      searchResultAssets = response.results.assets.items;
+    } catch (error) {
+      handleError(error, $t('loading_search_results_failed'));
+    } finally {
+      isAskLoading = false;
+    }
+  }
+
+  function onAskSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    handlePromiseError(runAskSearch());
+  }
+
+  const suggestedSearches = [
+    { icon: mdiAccountMultipleOutline, title: $t('people'), query: { query: 'photos of family and friends' } },
+    { icon: mdiMapMarkerOutline, title: $t('places'), query: { query: 'favorite places and trips' } },
+    { icon: mdiFileDocumentOutline, title: $t('documents'), query: { ocr: 'receipt invoice document form' } },
+    { icon: mdiCalendarHeart, title: $t('memories'), query: { isFavorite: true } },
+    { icon: mdiImageAlbum, title: $t('albums'), query: { isNotInAlbum: false } },
+  ];
 </script>
 
 <svelte:window bind:scrollY />
 
 <OnEvents {onAlbumAddAssets} />
 
-{#if terms}
+{#if hasSearchQuery}
   <section
     id="search-chips"
     class="mt-24 flex w-full flex-wrap place-content-center place-items-center gap-5 px-24 text-center"
@@ -325,7 +381,62 @@
   bind:this={searchResultsElement}
 >
   <section id="search-content">
-    {#if searchResultAssets.length > 0}
+    {#if !hasSearchQuery}
+      <div class="mx-auto mt-24 flex w-full max-w-5xl flex-col gap-8 px-6 text-gray-700 dark:text-gray-200">
+        <form class="mx-auto flex w-full max-w-3xl gap-2" onsubmit={onAskSubmit}>
+          <input
+            class="h-12 min-w-0 flex-1 rounded-full border border-gray-300 bg-white px-5 text-base outline-none focus:border-immich-primary dark:border-gray-700 dark:bg-gray-900"
+            bind:value={askQuery}
+            placeholder={$t('search_your_photos')}
+          />
+          <Button type="submit" disabled={isAskLoading || !askQuery.trim()}>
+            {isAskLoading ? $t('searching') : $t('ask')}
+          </Button>
+        </form>
+
+        {#if askResponse}
+          <div
+            class="rounded-lg border border-gray-200 bg-white p-4 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-900"
+          >
+            <p class="font-medium">{askResponse.explanation}</p>
+            {#if askResponse.warnings.length > 0}
+              <p class="mt-2 text-gray-500 dark:text-gray-400">{askResponse.warnings.join(' ')}</p>
+            {/if}
+          </div>
+        {/if}
+
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {#each suggestedSearches as item}
+            <a
+              class="flex min-h-28 flex-col justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-immich-primary hover:text-immich-primary dark:border-gray-800 dark:bg-gray-900 dark:hover:border-immich-dark-primary dark:hover:text-immich-dark-primary"
+              href={Route.search(item.query)}
+            >
+              <Icon icon={item.icon} size="1.7em" />
+              <span class="text-base font-medium">{item.title}</span>
+            </a>
+          {/each}
+        </div>
+
+        {#if askResponse && searchResultAssets.length > 0}
+          <GalleryViewer
+            assets={searchResultAssets}
+            assetInteraction={assetMultiSelectManager}
+            showArchiveIcon={true}
+            {viewport}
+            onReload={runAskSearch}
+            slidingWindowOffset={searchResultsElement.offsetTop}
+          />
+        {:else if askResponse && !isAskLoading}
+          <div class="flex min-h-56 w-full place-content-center items-center dark:text-white">
+            <div class="flex flex-col content-center items-center text-center">
+              <Icon icon={mdiImageOffOutline} size="3.5em" />
+              <p class="mt-5 text-3xl font-medium">{$t('no_results')}</p>
+              <p class="text-base font-normal">{$t('no_results_description')}</p>
+            </div>
+          </div>
+        {/if}
+      </div>
+    {:else if searchResultAssets.length > 0}
       <GalleryViewer
         assets={searchResultAssets}
         assetInteraction={assetMultiSelectManager}

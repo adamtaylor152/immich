@@ -4,6 +4,8 @@ import { AssetMapOptions, AssetResponseDto, MapAsset, mapAsset } from 'src/dtos/
 import { AuthDto } from 'src/dtos/auth.dto';
 import { mapPerson, PersonResponseDto } from 'src/dtos/person.dto';
 import {
+  AskSearchDto,
+  AskSearchResponseDto,
   LargeAssetSearchDto,
   mapPlaces,
   MetadataSearchDto,
@@ -18,7 +20,7 @@ import {
   SmartSearchDto,
   StatisticsSearchDto,
 } from 'src/dtos/search.dto';
-import { AssetOrder, AssetVisibility, Permission } from 'src/enum';
+import { AssetOrder, AssetType, AssetVisibility, Permission } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
@@ -28,6 +30,34 @@ import { isSmartSearchEnabled } from 'src/utils/misc';
 @Injectable()
 export class SearchService extends BaseService {
   private embeddingCache = new LRUMap<string, string>(100);
+
+  async askSearch(auth: AuthDto, dto: AskSearchDto): Promise<AskSearchResponseDto> {
+    const { localFeatures } = await this.getConfig({ withCache: false });
+    if (!localFeatures.askSearch.enabled) {
+      throw new BadRequestException('Ask Search is not enabled');
+    }
+
+    const plan = this.buildAskSearchPlan(dto.query, {
+      page: dto.page,
+      size: Math.min(dto.size ?? localFeatures.askSearch.maxResults, localFeatures.askSearch.maxResults),
+    });
+    const results =
+      plan.mode === 'smart'
+        ? await this.searchSmart(auth, { ...plan.filters, query: plan.normalizedQuery, language: dto.language })
+        : await this.searchMetadata(auth, plan.filters);
+
+    return {
+      query: dto.query,
+      explanation: this.describeAskSearchPlan(plan),
+      warnings: plan.warnings,
+      plan: {
+        mode: plan.mode,
+        normalizedQuery: plan.normalizedQuery,
+        filters: plan.filters,
+      },
+      results,
+    };
+  }
 
   async searchPerson(auth: AuthDto, dto: SearchPeopleDto): Promise<PersonResponseDto[]> {
     const people = await this.personRepository.getByName(auth.user.id, dto.name, {
@@ -260,5 +290,75 @@ export class SearchService extends BaseService {
         nextPage,
       },
     };
+  }
+
+  private buildAskSearchPlan(query: string, pagination: { page?: number; size: number }) {
+    const normalizedQuery = query.trim().replaceAll(/\s+/g, ' ');
+    const lower = normalizedQuery.toLowerCase();
+    const filters: MetadataSearchDto = { page: pagination.page ?? 1, size: pagination.size, withExif: true };
+    const warnings: string[] = [];
+    let mode: 'smart' | 'metadata' = 'smart';
+
+    const year = lower.match(/\b(19\d{2}|20\d{2})\b/)?.[1];
+    if (year) {
+      filters.takenAfter = new Date(`${year}-01-01T00:00:00.000Z`);
+      filters.takenBefore = new Date(`${year}-12-31T23:59:59.999Z`);
+    }
+
+    if (/\blast summer\b/.test(lower)) {
+      const lastYear = new Date().getUTCFullYear() - 1;
+      filters.takenAfter = new Date(`${lastYear}-06-01T00:00:00.000Z`);
+      filters.takenBefore = new Date(`${lastYear}-08-31T23:59:59.999Z`);
+    }
+
+    if (/\b(favorites?|starred)\b/.test(lower)) {
+      filters.isFavorite = true;
+    }
+
+    if (/\b(videos?|movies?)\b/.test(lower)) {
+      filters.type = AssetType.Video;
+    } else if (/\b(photos?|pictures?|images?)\b/.test(lower)) {
+      filters.type = AssetType.Image;
+    }
+
+    const locationMatch = lower.match(
+      /\b(?:in|near|around|at)\s+([a-z][a-z\s.'-]{2,}?)(?=\s+(?:last|this|from|during|with|of|in)\b|$)/,
+    );
+    if (locationMatch?.[1]) {
+      filters.city = this.toTitleCase(locationMatch[1].trim());
+    }
+
+    if (/\b(receipts?|invoices?)\b/.test(lower)) {
+      mode = 'metadata';
+      filters.ocr = 'receipt invoice total tax';
+    } else if (/\b(documents?|paperwork|forms?)\b/.test(lower)) {
+      mode = 'metadata';
+      filters.ocr = 'document form';
+    } else if (/\b(ids?|passports?|license|medical|legal)\b/.test(lower)) {
+      mode = 'metadata';
+      filters.ocr = lower;
+      warnings.push('Document categories are approximated with OCR until Document Intelligence is enabled.');
+    }
+
+    if (/\b(?:with|of)\s+[A-Z][\w'-]+/.test(normalizedQuery)) {
+      warnings.push('People names are searched semantically until Ask Search can resolve names to person IDs.');
+    }
+
+    return { mode, normalizedQuery, filters, warnings };
+  }
+
+  private describeAskSearchPlan(plan: ReturnType<SearchService['buildAskSearchPlan']>): string {
+    const filters = Object.keys(plan.filters).filter((key) => !['page', 'size', 'withExif'].includes(key));
+    const filterText = filters.length > 0 ? ` with ${filters.join(', ')} filters` : '';
+    return plan.mode === 'smart'
+      ? `Used local smart search${filterText}.`
+      : `Used metadata and OCR search${filterText}.`;
+  }
+
+  private toTitleCase(value: string): string {
+    return value
+      .split(/\s+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 }

@@ -252,6 +252,15 @@ const SystemConfigPhysicalDeduplicationSchema = z
   })
   .meta({ id: 'SystemConfigPhysicalDeduplicationDto' });
 
+const SystemConfigLocalFeaturesSchema = z
+  .object({
+    askSearch: z.object({
+      enabled: configBool.describe('Enable local Ask Photos-style search'),
+      maxResults: z.int().min(1).max(1000).describe('Maximum number of Ask Search results'),
+    }),
+  })
+  .meta({ id: 'SystemConfigLocalFeaturesDto' });
+
 const SystemConfigReverseGeocodingSchema = z
   .object({ enabled: configBool.describe('Enabled') })
   .meta({ id: 'SystemConfigReverseGeocodingDto' });
@@ -387,6 +396,7 @@ export const SystemConfigSchema = z
     oauth: SystemConfigOAuthSchema,
     passwordLogin: SystemConfigPasswordLoginSchema,
     physicalDeduplication: SystemConfigPhysicalDeduplicationSchema.default(defaults.physicalDeduplication),
+    localFeatures: SystemConfigLocalFeaturesSchema.default(defaults.localFeatures),
     reverseGeocoding: SystemConfigReverseGeocodingSchema,
     metadata: SystemConfigMetadataSchema,
     storageTemplate: SystemConfigStorageTemplateSchema,

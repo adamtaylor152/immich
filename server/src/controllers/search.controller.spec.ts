@@ -158,6 +158,23 @@ describe(SearchController.name, () => {
       });
     });
 
+    describe('POST /search/ask', () => {
+      it('should be an authenticated route', async () => {
+        await request(ctx.getHttpServer()).post('/search/ask').send({ query: 'photos of Alice' });
+        expect(ctx.authenticate).toHaveBeenCalled();
+      });
+
+      it('should require a query', async () => {
+        const { status, body } = await request(ctx.getHttpServer()).post('/search/ask').send({});
+        expect(status).toBe(400);
+        expect(body).toEqual(
+          errorDto.validationError([
+            { path: ['query'], message: 'Invalid input: expected string, received undefined' },
+          ]),
+        );
+      });
+    });
+
     describe('GET /search/explore', () => {
       it('should be an authenticated route', async () => {
         await request(ctx.getHttpServer()).get('/search/explore');
