@@ -89,48 +89,8 @@ export const testAssetDirInternal = '/test-assets';
 export const tempDir = tmpdir();
 export const asBearerAuth = (accessToken: string) => ({ Authorization: `Bearer ${accessToken}` });
 export const asKeyAuth = (key: string) => ({ 'x-api-key': key });
-const waitForApiReady = async (timeout = process.env.CI ? 30_000 : 10_000) => {
-  const deadline = Date.now() + timeout;
-
-  while (Date.now() < deadline) {
-    try {
-      const { status } = await request(app).get('/server-info');
-      if (status === 200) {
-        return;
-      }
-    } catch {
-      // The e2e server may still be starting up on slower runners.
-    }
-
-    await setAsyncTimeout(500);
-  }
-
-  throw new Error('Timed out waiting for API to become ready');
-};
-
-const commandNeedsApi = (args: string[]) => {
-  const [command, ...rest] = args;
-
-  if (!command) {
-    return false;
-  }
-
-  if (command === 'login') {
-    return rest.length >= 2;
-  }
-
-  return true;
-};
-
-export const immichCli = async (args: string[]) => {
-  if (commandNeedsApi(args)) {
-    await waitForApiReady();
-  }
-
-  return executeCommand('pnpm', ['exec', 'immich', '-d', `/${tempDir}/immich/`, ...args], {
-    cwd: '../packages/cli',
-  }).promise;
-};
+export const immichCli = (args: string[]) =>
+  executeCommand('pnpm', ['exec', 'immich', '-d', `/${tempDir}/immich/`, ...args], { cwd: '../packages/cli' }).promise;
 export const dockerExec = (args: string[]) =>
   executeCommand('docker', ['exec', '-i', 'immich-e2e-server', '/bin/bash', '-c', args.join(' ')]);
 export const immichAdmin = (args: string[]) => dockerExec([`immich-admin ${args.join(' ')}`]);

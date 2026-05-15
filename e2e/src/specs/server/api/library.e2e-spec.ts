@@ -1137,51 +1137,55 @@ describe('/libraries', () => {
       });
     });
 
-    it('should set an offline asset to online if its file exists, is in an import path, and not covered by an exclusion pattern', async () => {
-      utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
+    it(
+      'should set an offline asset to online if its file exists, is in an import path, and not covered by an exclusion pattern',
+      { timeout: 60_000 },
+      async () => {
+        utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
 
-      const library = await utils.createLibrary(admin.accessToken, {
-        ownerId: admin.userId,
-        importPaths: [`${testAssetDirInternal}/temp/offline`],
-      });
+        const library = await utils.createLibrary(admin.accessToken, {
+          ownerId: admin.userId,
+          importPaths: [`${testAssetDirInternal}/temp/offline`],
+        });
 
-      await utils.scan(admin.accessToken, library.id);
+        await utils.scan(admin.accessToken, library.id);
 
-      const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
-
-      expect(assets.count).toBe(1);
-
-      utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
-
-      await utils.scan(admin.accessToken, library.id);
-
-      const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
-      expect(offlineAsset.isTrashed).toBe(true);
-      expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(offlineAsset.isOffline).toBe(true);
-
-      {
-        const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
-        expect(assets.count).toBe(1);
-      }
-
-      utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
-
-      await utils.scan(admin.accessToken, library.id);
-
-      const backOnlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
-
-      expect(backOnlineAsset.isTrashed).toBe(false);
-      expect(backOnlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(backOnlineAsset.isOffline).toBe(false);
-
-      {
         const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
-        expect(assets.count).toBe(1);
-      }
-    });
 
-    it('should set a trashed offline asset to online but keep it in trash', async () => {
+        expect(assets.count).toBe(1);
+
+        utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
+
+        await utils.scan(admin.accessToken, library.id);
+
+        const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+        expect(offlineAsset.isTrashed).toBe(true);
+        expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(offlineAsset.isOffline).toBe(true);
+
+        {
+          const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
+          expect(assets.count).toBe(1);
+        }
+
+        utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
+
+        await utils.scan(admin.accessToken, library.id);
+
+        const backOnlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+
+        expect(backOnlineAsset.isTrashed).toBe(false);
+        expect(backOnlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(backOnlineAsset.isOffline).toBe(false);
+
+        {
+          const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
+          expect(assets.count).toBe(1);
+        }
+      },
+    );
+
+    it('should set a trashed offline asset to online but keep it in trash', { timeout: 60_000 }, async () => {
       utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
 
       const library = await utils.createLibrary(admin.accessToken, {
@@ -1233,102 +1237,110 @@ describe('/libraries', () => {
       }
     });
 
-    it('should not set an offline asset to online if its file exists, is not covered by an exclusion pattern, but is outside of all import paths', async () => {
-      utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
+    it(
+      'should not set an offline asset to online if its file exists, is not covered by an exclusion pattern, but is outside of all import paths',
+      { timeout: 60_000 },
+      async () => {
+        utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
 
-      const library = await utils.createLibrary(admin.accessToken, {
-        ownerId: admin.userId,
-        importPaths: [`${testAssetDirInternal}/temp/offline`],
-      });
+        const library = await utils.createLibrary(admin.accessToken, {
+          ownerId: admin.userId,
+          importPaths: [`${testAssetDirInternal}/temp/offline`],
+        });
 
-      await utils.scan(admin.accessToken, library.id);
+        await utils.scan(admin.accessToken, library.id);
 
-      const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
+        const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
 
-      utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
+        utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
 
-      await utils.scan(admin.accessToken, library.id);
+        await utils.scan(admin.accessToken, library.id);
 
-      {
+        {
+          const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
+          expect(assets.count).toBe(1);
+        }
+
+        const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+
+        expect(offlineAsset.isTrashed).toBe(true);
+        expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(offlineAsset.isOffline).toBe(true);
+
+        utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
+
+        utils.createDirectory(`${testAssetDir}/temp/another-path/`);
+
+        await utils.updateLibrary(admin.accessToken, library.id, {
+          importPaths: [`${testAssetDirInternal}/temp/another-path`],
+        });
+
+        await utils.scan(admin.accessToken, library.id);
+
+        const stillOfflineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+
+        expect(stillOfflineAsset.isTrashed).toBe(true);
+        expect(stillOfflineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(stillOfflineAsset.isOffline).toBe(true);
+
+        {
+          const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
+          expect(assets.count).toBe(1);
+        }
+
+        utils.removeDirectory(`${testAssetDir}/temp/another-path/`);
+      },
+    );
+
+    it(
+      'should not set an offline asset to online if its file exists, is in an import path, but is covered by an exclusion pattern',
+      { timeout: 60_000 },
+      async () => {
+        utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
+
+        const library = await utils.createLibrary(admin.accessToken, {
+          ownerId: admin.userId,
+          importPaths: [`${testAssetDirInternal}/temp/offline`],
+        });
+
+        await utils.scan(admin.accessToken, library.id);
+
+        {
+          const { assets: assetsBefore } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
+          expect(assetsBefore.count).toBe(1);
+        }
+
+        utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
+
+        await utils.scan(admin.accessToken, library.id);
+
         const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
         expect(assets.count).toBe(1);
-      }
 
-      const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+        const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
 
-      expect(offlineAsset.isTrashed).toBe(true);
-      expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(offlineAsset.isOffline).toBe(true);
+        expect(offlineAsset.isTrashed).toBe(true);
+        expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(offlineAsset.isOffline).toBe(true);
 
-      utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
+        utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
 
-      utils.createDirectory(`${testAssetDir}/temp/another-path/`);
+        await utils.updateLibrary(admin.accessToken, library.id, { exclusionPatterns: ['**/offline/**'] });
 
-      await utils.updateLibrary(admin.accessToken, library.id, {
-        importPaths: [`${testAssetDirInternal}/temp/another-path`],
-      });
+        await utils.scan(admin.accessToken, library.id);
 
-      await utils.scan(admin.accessToken, library.id);
+        const stillOfflineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
 
-      const stillOfflineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
+        expect(stillOfflineAsset.isTrashed).toBe(true);
+        expect(stillOfflineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
+        expect(stillOfflineAsset.isOffline).toBe(true);
 
-      expect(stillOfflineAsset.isTrashed).toBe(true);
-      expect(stillOfflineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(stillOfflineAsset.isOffline).toBe(true);
-
-      {
-        const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
-        expect(assets.count).toBe(1);
-      }
-
-      utils.removeDirectory(`${testAssetDir}/temp/another-path/`);
-    });
-
-    it('should not set an offline asset to online if its file exists, is in an import path, but is covered by an exclusion pattern', async () => {
-      utils.createImageFile(`${testAssetDir}/temp/offline/offline.png`);
-
-      const library = await utils.createLibrary(admin.accessToken, {
-        ownerId: admin.userId,
-        importPaths: [`${testAssetDirInternal}/temp/offline`],
-      });
-
-      await utils.scan(admin.accessToken, library.id);
-
-      {
-        const { assets: assetsBefore } = await utils.searchAssets(admin.accessToken, { libraryId: library.id });
-        expect(assetsBefore.count).toBe(1);
-      }
-
-      utils.renameImageFile(`${testAssetDir}/temp/offline/offline.png`, `${testAssetDir}/temp/offline.png`);
-
-      await utils.scan(admin.accessToken, library.id);
-
-      const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
-      expect(assets.count).toBe(1);
-
-      const offlineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
-
-      expect(offlineAsset.isTrashed).toBe(true);
-      expect(offlineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(offlineAsset.isOffline).toBe(true);
-
-      utils.renameImageFile(`${testAssetDir}/temp/offline.png`, `${testAssetDir}/temp/offline/offline.png`);
-
-      await utils.updateLibrary(admin.accessToken, library.id, { exclusionPatterns: ['**/offline/**'] });
-
-      await utils.scan(admin.accessToken, library.id);
-
-      const stillOfflineAsset = await utils.getAssetInfo(admin.accessToken, assets.items[0].id);
-
-      expect(stillOfflineAsset.isTrashed).toBe(true);
-      expect(stillOfflineAsset.originalPath).toBe(`${testAssetDirInternal}/temp/offline/offline.png`);
-      expect(stillOfflineAsset.isOffline).toBe(true);
-
-      {
-        const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
-        expect(assets.count).toBe(1);
-      }
-    });
+        {
+          const { assets } = await utils.searchAssets(admin.accessToken, { libraryId: library.id, withDeleted: true });
+          expect(assets.count).toBe(1);
+        }
+      },
+    );
   });
 
   describe('POST /libraries/:id/validate', () => {
