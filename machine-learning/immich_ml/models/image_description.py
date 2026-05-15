@@ -135,8 +135,13 @@ class ImageDescriptionModel(InferenceModel):
         self.acceleration = self._resolve_acceleration(self.requested_acceleration)
         self.hf_model_name = self._model_name_for_acceleration(model_name, self.acceleration)
         self.device = str(model_kwargs.get("device", "AUTO") or "AUTO")
-        self.nsfw = model_kwargs.get("nsfw")
         super().__init__(model_name, **model_kwargs)
+
+    def predict(self, *inputs: Any, **model_kwargs: Any) -> Any:
+        self.load()
+        if model_kwargs:
+            self.configure(**model_kwargs)
+        return self._predict(*inputs, nsfw=model_kwargs.get("nsfw"))
 
     def configure(self, **kwargs: Any) -> None:
         if "acceleration" in kwargs:
@@ -147,8 +152,6 @@ class ImageDescriptionModel(InferenceModel):
             device = str(kwargs["device"] or "AUTO")
             if device != self.device:
                 log.warning("Ignoring image description device change until the model is reloaded.")
-        if "nsfw" in kwargs:
-            self.nsfw = kwargs["nsfw"]
 
     def _download(self) -> None:
         snapshot_download(self.hf_model_name, cache_dir=self.cache_dir, local_dir=self.cache_dir)
@@ -169,9 +172,9 @@ class ImageDescriptionModel(InferenceModel):
 
     def _predict(self, image: Image.Image, **model_kwargs: Any) -> dict[str, Any]:
         if self.acceleration == ImageDescriptionAcceleration.CUDA:
-            return self._predict_cuda(image)
+            return self._predict_cuda(image, model_kwargs.get("nsfw"))
 
-        prompt = self._make_openvino_prompt()
+        prompt = self._make_openvino_prompt(model_kwargs.get("nsfw"))
         images = [self._to_openvino_tensor(image)]
         try:
             result = self._generate_openvino(prompt, images)
@@ -230,13 +233,13 @@ class ImageDescriptionModel(InferenceModel):
         model.eval()
         return {"model": model, "processor": processor, "device": device, "torch": torch, "torch_dtype": torch_dtype}
 
-    def _predict_cuda(self, image: Image.Image) -> dict[str, Any]:
+    def _predict_cuda(self, image: Image.Image, nsfw: Any = None) -> dict[str, Any]:
         if self.hf_model_name in FLORENCE_MODEL_NAMES:
             return self._predict_florence(image)
-        return self._predict_qwen(image)
+        return self._predict_qwen(image, nsfw)
 
-    def _predict_qwen(self, image: Image.Image) -> dict[str, Any]:
-        prompt = self._make_prompt()
+    def _predict_qwen(self, image: Image.Image, nsfw: Any = None) -> dict[str, Any]:
+        prompt = self._make_prompt(nsfw)
         session = cast(dict[str, Any], self.session)
         model = session["model"]
         processor = session["processor"]
@@ -350,7 +353,7 @@ class ImageDescriptionModel(InferenceModel):
         except ImportError:
             return False
         _ = torch, transformers
-        return True
+        return bool(torch.cuda.is_available())
 
     def _torch_device(self, torch: Any) -> str:
         requested = self.device.strip()
@@ -366,14 +369,14 @@ class ImageDescriptionModel(InferenceModel):
             return requested.lower()
         return requested
 
-    def _make_prompt(self) -> str:
+    def _make_prompt(self, nsfw: Any = None) -> str:
         prompt = IMAGE_DESCRIPTION_PROMPT
-        if isinstance(self.nsfw, dict) and self.nsfw.get("isNsfw"):
+        if isinstance(nsfw, dict) and nsfw.get("isNsfw"):
             prompt += NSFW_PROMPT_SUFFIX
         return prompt
 
-    def _make_openvino_prompt(self) -> str:
-        prompt = self._make_prompt()
+    def _make_openvino_prompt(self, nsfw: Any = None) -> str:
+        prompt = self._make_prompt(nsfw)
         if self._uses_phi_openvino_model():
             return f"{PHI_OPENVINO_IMAGE_TAG}\n{prompt}"
         if self._uses_qwen_openvino_model():

@@ -153,7 +153,7 @@
     <DetailPanelImageEnrichment
       {asset}
       {isOwner}
-      isAdmin={authManager.user.isAdmin}
+      isAdmin={authManager.authenticated && authManager.user.isAdmin}
       onAssetRefresh={(updatedAsset) => (asset = updatedAsset)}
       {onAssetSuppressed}
     />

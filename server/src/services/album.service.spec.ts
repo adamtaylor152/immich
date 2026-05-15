@@ -457,7 +457,7 @@ describe(AlbumService.name, () => {
         sut.update(AuthFactory.create(owner), album.id, { albumThumbnailAssetId: 'not-in-album' }),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(mocks.album.getAssetIds).toHaveBeenCalledWith(album.id, ['not-in-album']);
+      expect(mocks.album.getAssetIds).not.toHaveBeenCalled();
       expect(mocks.album.update).not.toHaveBeenCalled();
     });
 

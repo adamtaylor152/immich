@@ -84,6 +84,7 @@ export class UserService extends BaseService {
       key: UserMetadataKey.Preferences,
       value: getPreferencesPartial(updated),
     });
+    await this.sessionRepository.requestSyncResetForUser(auth.user.id);
 
     return mapPreferences(updated);
   }

@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { randomBytes } from 'node:crypto';
+import { AssetIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { AssetMetadataKey, SharedLinkType } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -799,7 +800,7 @@ describe(SharedLinkService.name, () => {
     await expect(sut.getMine({ user, sharedLink }, [])).resolves.toHaveProperty('assets', []);
   });
 
-  it('should remove hidden NSFW assets from individual shared links in hidden mode', async () => {
+  it('should not remove hidden NSFW assets from individual shared links in hidden mode', async () => {
     const { sut, ctx } = setup(await getKyselyDB());
 
     const { user } = await ctx.newUser();
@@ -836,13 +837,13 @@ describe(SharedLinkService.name, () => {
       }),
     ).resolves.toEqual([
       { assetId: visible.id, success: true },
-      { assetId: unreviewedNsfw.id, success: true },
+      { assetId: unreviewedNsfw.id, success: false, error: AssetIdErrorReason.NOT_FOUND },
       { assetId: tagOnly.id, success: true },
     ]);
 
     await expect(sut.get(auth, sharedLink.id)).resolves.toEqual(
       expect.objectContaining({
-        assets: [],
+        assets: [expect.objectContaining({ id: unreviewedNsfw.id })],
       }),
     );
   });

@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 env:
-  IMAGE_TAG: fork-main
-  ML_IMAGE_TAG: fork-main-openvino
+  IMAGE_TAG: fork-main-unraid
+  ML_IMAGE_TAG: fork-main-unraid-openvino
   REGISTRY: ghcr.io
   IMAGE_OWNER: adamtaylor152
   SOURCE_REF: ${{ github.ref_name }}

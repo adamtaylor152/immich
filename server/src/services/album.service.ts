@@ -160,11 +160,12 @@ export class AlbumService extends BaseService {
   async update(auth: AuthDto, id: string, dto: UpdateAlbumDto): Promise<AlbumResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [id] });
 
+    const privacyOptions = this.nsfwOptions(auth);
     const album = await this.findOrFail(id, auth, { withAssets: true });
 
     if (dto.albumThumbnailAssetId) {
-      const results = await this.albumRepository.getAssetIds(id, [dto.albumThumbnailAssetId]);
-      if (results.size === 0) {
+      const visibleAssetIds = new Set(album.assets?.map((asset) => asset.id) ?? []);
+      if (!visibleAssetIds.has(dto.albumThumbnailAssetId)) {
         throw new BadRequestException('Invalid album thumbnail');
       }
     }
@@ -181,7 +182,12 @@ export class AlbumService extends BaseService {
       auth.user.id,
     );
 
-    return mapAlbum({ ...updatedAlbum, assets: album.assets });
+    const [mappedAlbum] = await this.hideNsfwAlbumThumbnails(
+      auth,
+      [{ ...updatedAlbum, assets: album.assets }],
+      privacyOptions,
+    );
+    return mapAlbum(mappedAlbum);
   }
 
   async delete(auth: AuthDto, id: string): Promise<void> {

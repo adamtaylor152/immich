@@ -95,7 +95,7 @@ export class AssetController {
   }
 
   @Get(':id/image-enrichment')
-  @Authenticated({ permission: Permission.AssetUpdate })
+  @Authenticated({ permission: Permission.AssetRead })
   @Endpoint({
     summary: 'Get image enrichment metadata',
     description: 'Retrieve private image description, tag, and NSFW detection metadata for a specific asset.',

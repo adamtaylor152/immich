@@ -102,12 +102,12 @@ describe(AssetController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
-    it('should require asset update permission', async () => {
+    it('should require asset read permission', async () => {
       await request(ctx.getHttpServer()).get(`/assets/${factory.uuid()}/image-enrichment`);
 
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({ permission: Permission.AssetUpdate, sharedLinkRoute: false }),
+          metadata: expect.objectContaining({ permission: Permission.AssetRead, sharedLinkRoute: false }),
         }),
       );
     });
