@@ -217,6 +217,7 @@ videos since 2020
 screenshots from last month
 receipts from 2024
 photos of Alice in Calgary from April 2024
+```
 
 <br/>
 <a href="https://immich.app">
