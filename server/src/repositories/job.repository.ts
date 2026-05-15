@@ -1,7 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { ModuleRef, Reflector } from '@nestjs/core';
-import { Job, JobsOptions, Queue, Worker } from 'bullmq';
+import { Job, JobsOptions, Queue, Worker, type WorkerOptions } from 'bullmq';
 import { setTimeout } from 'node:timers/promises';
 import { JobConfig } from 'src/decorators';
 import { QueueJobResponseDto, QueueJobSearchDto } from 'src/dtos/queue.dto';
@@ -18,6 +18,8 @@ type JobMapItem = {
   handler: (job: JobOf<any>) => Promise<JobStatus>;
   label: string;
 };
+
+const DATABASE_BACKUP_LOCK_DURATION = 30 * 60_000;
 
 @Injectable()
 export class JobRepository {
@@ -90,10 +92,21 @@ export class JobRepository {
       this.workers[queueName] = new Worker(
         queueName,
         (job) => this.processJob(queueName, job),
-        { ...bull.config, concurrency: 1 },
+        this.getWorkerOptions(queueName, bull.config as WorkerOptions),
       );
       this.registerWorkerEvents(queueName, this.workers[queueName]);
     }
+  }
+
+  private getWorkerOptions(queueName: QueueName, bullConfig: WorkerOptions): WorkerOptions {
+    const workerOptions: WorkerOptions = { ...bullConfig, concurrency: 1 };
+
+    if (queueName === QueueName.BackupDatabase) {
+      workerOptions.lockDuration = DATABASE_BACKUP_LOCK_DURATION;
+      workerOptions.lockRenewTime = DATABASE_BACKUP_LOCK_DURATION / 2;
+    }
+
+    return workerOptions;
   }
 
   private async processJob(queueName: QueueName, job: Job): Promise<void> {
