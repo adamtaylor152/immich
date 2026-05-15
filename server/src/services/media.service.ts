@@ -668,7 +668,8 @@ export class MediaService extends BaseService {
       return durationFromFrames;
     }
 
-    const durationRatio = Math.max(durationFromFormat, durationFromFrames) / Math.min(durationFromFormat, durationFromFrames);
+    const durationRatio =
+      Math.max(durationFromFormat, durationFromFrames) / Math.min(durationFromFormat, durationFromFrames);
     return durationRatio >= 100 ? durationFromFrames : durationFromFormat;
   }
 
@@ -767,13 +768,18 @@ export class MediaService extends BaseService {
 
     const previewConfig = { ...ffmpeg, targetResolution: image.preview.size.toString() };
     const thumbConfig = { ...ffmpeg, targetResolution: image.thumbnail.size.toString() };
-    const startTime = await this.pickVideoThumbnailStartTime(sourcePath, previewFile.path, videoStream, format, (timestamp) =>
-      ThumbnailConfig.create(previewConfig, timestamp).getCommand(
-        TranscodeTarget.Video,
-        videoStream,
-        undefined,
-        format,
-      ),
+    const startTime = await this.pickVideoThumbnailStartTime(
+      sourcePath,
+      previewFile.path,
+      videoStream,
+      format,
+      (timestamp) =>
+        ThumbnailConfig.create(previewConfig, timestamp).getCommand(
+          TranscodeTarget.Video,
+          videoStream,
+          undefined,
+          format,
+        ),
     );
     const previewOptions = ThumbnailConfig.create(previewConfig, startTime).getCommand(
       TranscodeTarget.Video,

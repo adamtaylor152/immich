@@ -28,7 +28,6 @@ export function toColumnarFormat(assets: MockTimelineAsset[]): TimeBucketAssetRe
     ownerId: [],
     ratio: [],
     thumbhash: [],
-    createdAt: [],
     fileCreatedAt: [],
     localOffsetHours: [],
     isFavorite: [],
