@@ -366,6 +366,46 @@ describe(SearchService.name, () => {
       );
     });
 
+    it('should understand relative date phrases', async () => {
+      vitest.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
+
+      const result = await sut.askSearch(authStub.user1, { query: 'photos from last month' });
+
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: new Date('2026-04-01T00:00:00.000Z'),
+          takenBefore: new Date('2026-04-30T23:59:59.999Z'),
+        }),
+      );
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          takenAfter: new Date('2026-04-01T00:00:00.000Z'),
+          takenBefore: new Date('2026-04-30T23:59:59.999Z'),
+        }),
+      );
+    });
+
+    it('should understand open-ended year phrases', async () => {
+      const result = await sut.askSearch(authStub.user1, { query: 'videos since 2020' });
+
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          takenAfter: new Date('2020-01-01T00:00:00.000Z'),
+          takenBefore: undefined,
+          type: 'VIDEO',
+        }),
+      );
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          takenAfter: new Date('2020-01-01T00:00:00.000Z'),
+          takenBefore: undefined,
+          type: 'VIDEO',
+        }),
+      );
+    });
+
     it('should use OCR-backed metadata search for document-like queries', async () => {
       const result = await sut.askSearch(authStub.user1, { query: 'receipts from 2024' });
 

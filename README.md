@@ -39,6 +39,13 @@ I use the term NSFW generatelly to describe sensitive or private images that you
 - A built-in video editor for common Google Photos-style edits, including trim, crop, rotate, straighten, mirror, auto enhance, stabilization, color and lighting adjustments, filters, text overlays, mute/volume controls, speed changes, and export frame.
 - GPU-aware video edit rendering that reuses the server's existing hardware transcoding settings when safe, then falls back to software rendering when an edit needs CPU-only FFmpeg filters.
 
+## Google Photos-like Discovery
+- Ask for photos in normal language, such as "photos in Banff last summer", "receipts from 2024", "videos since 2020", or "photos from last month", and the fork turns that into the right local search filters.
+- Search feels more like browsing a personal photo library and less like filling out a database form. Dates, favorites, media type, places, OCR text, and smart-search context can be combined from one simple prompt.
+- Document and receipt searches use local OCR-backed metadata, so old screenshots, forms, invoices, and travel paperwork are easier to find without sending your library to a cloud service.
+- Smart-search prompts stay local to your Immich machine-learning setup. The feature is meant to bring useful Google Photos-style discovery to a self-hosted library while keeping your media under your control.
+- The search response explains what it tried and warns when something is only approximate, such as person-name understanding before full person resolution is available.
+
 ## Recently Added Media
 - Recently Added left nav function that shows the most recently uploaded media, regardless of EXIF date data.
 

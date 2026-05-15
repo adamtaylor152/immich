@@ -299,16 +299,34 @@ export class SearchService extends BaseService {
     const warnings: string[] = [];
     let mode: 'smart' | 'metadata' = 'smart';
 
+    const relativeDateRange = this.getAskSearchRelativeDateRange(lower);
+    if (relativeDateRange) {
+      filters.takenAfter = relativeDateRange.after;
+      filters.takenBefore = relativeDateRange.before;
+    }
+
     const year = lower.match(/\b(19\d{2}|20\d{2})\b/)?.[1];
-    if (year) {
+    if (year && !relativeDateRange) {
       filters.takenAfter = new Date(`${year}-01-01T00:00:00.000Z`);
       filters.takenBefore = new Date(`${year}-12-31T23:59:59.999Z`);
     }
 
-    if (/\blast summer\b/.test(lower)) {
+    if (/\blast summer\b/.test(lower) && !relativeDateRange) {
       const lastYear = new Date().getUTCFullYear() - 1;
       filters.takenAfter = new Date(`${lastYear}-06-01T00:00:00.000Z`);
       filters.takenBefore = new Date(`${lastYear}-08-31T23:59:59.999Z`);
+    }
+
+    const afterYear = lower.match(/\b(?:after|since)\s+(19\d{2}|20\d{2})\b/)?.[1];
+    if (afterYear) {
+      filters.takenAfter = new Date(`${afterYear}-01-01T00:00:00.000Z`);
+      filters.takenBefore = undefined;
+    }
+
+    const beforeYear = lower.match(/\bbefore\s+(19\d{2}|20\d{2})\b/)?.[1];
+    if (beforeYear) {
+      filters.takenAfter = undefined;
+      filters.takenBefore = new Date(`${beforeYear}-01-01T00:00:00.000Z`);
     }
 
     if (/\b(favorites?|starred)\b/.test(lower)) {
@@ -360,5 +378,62 @@ export class SearchService extends BaseService {
       .split(/\s+/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
+  }
+
+  private getAskSearchRelativeDateRange(query: string): { after: Date; before: Date } | null {
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const endOfDay = (date: Date) =>
+      new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+
+    if (/\btoday\b/.test(query)) {
+      return { after: today, before: endOfDay(today) };
+    }
+
+    if (/\byesterday\b/.test(query)) {
+      const yesterday = new Date(today);
+      yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      return { after: yesterday, before: endOfDay(yesterday) };
+    }
+
+    if (/\bthis week\b/.test(query)) {
+      const start = new Date(today);
+      start.setUTCDate(start.getUTCDate() - start.getUTCDay());
+      return { after: start, before: endOfDay(today) };
+    }
+
+    if (/\blast week\b/.test(query)) {
+      const start = new Date(today);
+      start.setUTCDate(start.getUTCDate() - start.getUTCDay() - 7);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 6);
+      return { after: start, before: endOfDay(end) };
+    }
+
+    if (/\bthis month\b/.test(query)) {
+      const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+      return { after: start, before: endOfDay(today) };
+    }
+
+    if (/\blast month\b/.test(query)) {
+      const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+      const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+      return { after: start, before: endOfDay(end) };
+    }
+
+    if (/\bthis year\b/.test(query)) {
+      const start = new Date(Date.UTC(today.getUTCFullYear(), 0, 1));
+      return { after: start, before: endOfDay(today) };
+    }
+
+    if (/\blast year\b/.test(query)) {
+      const year = today.getUTCFullYear() - 1;
+      return {
+        after: new Date(`${year}-01-01T00:00:00.000Z`),
+        before: new Date(`${year}-12-31T23:59:59.999Z`),
+      };
+    }
+
+    return null;
   }
 }
