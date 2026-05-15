@@ -1,7 +1,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
 import { ModuleRef, Reflector } from '@nestjs/core';
-import { JobsOptions, Queue, Worker } from 'bullmq';
+import { Job, JobsOptions, Queue, Worker } from 'bullmq';
 import { setTimeout } from 'node:timers/promises';
 import { JobConfig } from 'src/decorators';
 import { QueueJobResponseDto, QueueJobSearchDto } from 'src/dtos/queue.dto';
@@ -89,10 +89,34 @@ export class JobRepository {
       this.logger.debug(`Starting worker for queue: ${queueName}`);
       this.workers[queueName] = new Worker(
         queueName,
-        (job) => this.eventRepository.emit('JobRun', queueName, job as JobItem),
+        (job) => this.processJob(queueName, job),
         { ...bull.config, concurrency: 1 },
       );
+      this.registerWorkerEvents(queueName, this.workers[queueName]);
     }
+  }
+
+  private async processJob(queueName: QueueName, job: Job): Promise<void> {
+    try {
+      await this.eventRepository.emit('JobRun', queueName, job as JobItem);
+    } catch (error: Error | any) {
+      this.logger.error(`Unable to process job ${job.name} in queue ${queueName}: ${error}`, error?.stack);
+      throw error;
+    }
+  }
+
+  private registerWorkerEvents(queueName: QueueName, worker?: Worker) {
+    worker?.on('error', (error) => {
+      this.logger.error(`Queue worker error in ${queueName}: ${error}`, error?.stack);
+    });
+
+    worker?.on('failed', (job, error) => {
+      this.logger.error(`Job ${job?.name || 'unknown'} failed in queue ${queueName}: ${error}`, error?.stack);
+    });
+
+    worker?.on('stalled', (jobId, previous) => {
+      this.logger.warn(`Job ${jobId} stalled in queue ${queueName} from ${previous}`);
+    });
   }
 
   async run({ name, data }: JobItem) {
