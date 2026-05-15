@@ -59,6 +59,12 @@ const updatedConfig = Object.freeze<SystemConfig>({
     enabled: false,
     masterUserId: null,
   },
+  localFeatures: {
+    askSearch: {
+      enabled: true,
+      maxResults: 100,
+    },
+  },
   ffmpeg: {
     crf: 30,
     threads: 0,

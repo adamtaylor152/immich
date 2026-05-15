@@ -97,6 +97,23 @@ const SmartSearchSchema = BaseSearchWithResultsSchema.extend({
   page: z.int().min(1).optional().describe('Page number'),
 }).meta({ id: 'SmartSearchDto' });
 
+const AskSearchSchema = z
+  .object({
+    query: z.string().trim().min(1).describe('Natural language Ask Search query'),
+    page: z.int().min(1).optional().describe('Page number'),
+    size: z.int().min(1).max(1000).optional().describe('Number of results to return'),
+    language: z.string().optional().describe('Search language code'),
+  })
+  .meta({ id: 'AskSearchDto' });
+
+const AskSearchPlanSchema = z
+  .object({
+    mode: z.enum(['smart', 'metadata']).describe('Search mode used to answer the query'),
+    normalizedQuery: z.string().describe('Normalized query text'),
+    filters: MetadataSearchSchema.partial().describe('Structured filters applied to the search'),
+  })
+  .meta({ id: 'AskSearchPlanDto' });
+
 const SearchPlacesSchema = z
   .object({
     name: z.string().describe('Place name to search for'),
@@ -154,6 +171,7 @@ export class LargeAssetSearchDto extends createZodDto(LargeAssetSearchSchema) {}
 export class MetadataSearchDto extends createZodDto(MetadataSearchSchema) {}
 export class StatisticsSearchDto extends createZodDto(StatisticsSearchSchema) {}
 export class SmartSearchDto extends createZodDto(SmartSearchSchema) {}
+export class AskSearchDto extends createZodDto(AskSearchSchema) {}
 export class SearchPlacesDto extends createZodDto(SearchPlacesSchema) {}
 export class SearchPeopleDto extends createZodDto(SearchPeopleSchema) {}
 export class PlacesResponseDto extends createZodDto(PlacesResponseSchema) {}
@@ -210,6 +228,18 @@ const SearchResponseSchema = z
   .meta({ id: 'SearchResponseDto' });
 
 export class SearchResponseDto extends createZodDto(SearchResponseSchema) {}
+
+const AskSearchResponseSchema = z
+  .object({
+    query: z.string().describe('Original Ask Search query'),
+    explanation: z.string().describe('Short explanation of how the query was interpreted'),
+    warnings: z.array(z.string()).describe('Unsupported or ambiguous parts of the query'),
+    plan: AskSearchPlanSchema,
+    results: SearchResponseSchema,
+  })
+  .meta({ id: 'AskSearchResponseDto' });
+
+export class AskSearchResponseDto extends createZodDto(AskSearchResponseSchema) {}
 
 const SearchStatisticsResponseSchema = z
   .object({

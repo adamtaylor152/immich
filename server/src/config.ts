@@ -146,6 +146,12 @@ export type SystemConfig = {
     enabled: boolean;
     masterUserId: string | null;
   };
+  localFeatures: {
+    askSearch: {
+      enabled: boolean;
+      maxResults: number;
+    };
+  };
   storageTemplate: {
     enabled: boolean;
     hashVerificationEnabled: boolean;
@@ -367,6 +373,12 @@ export const defaults = Object.freeze<SystemConfig>({
   physicalDeduplication: {
     enabled: false,
     masterUserId: null,
+  },
+  localFeatures: {
+    askSearch: {
+      enabled: true,
+      maxResults: 100,
+    },
   },
   storageTemplate: {
     enabled: false,

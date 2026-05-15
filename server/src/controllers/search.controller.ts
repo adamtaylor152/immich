@@ -5,6 +5,8 @@ import { AssetResponseDto } from 'src/dtos/asset-response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { PersonResponseDto } from 'src/dtos/person.dto';
 import {
+  AskSearchDto,
+  AskSearchResponseDto,
   LargeAssetSearchDto,
   MetadataSearchDto,
   PlacesResponseDto,
@@ -85,6 +87,18 @@ export class SearchController {
   })
   searchSmart(@Auth() auth: AuthDto, @Body() dto: SmartSearchDto): Promise<SearchResponseDto> {
     return this.service.searchSmart(auth, dto);
+  }
+
+  @Post('ask')
+  @Authenticated({ permission: Permission.AssetRead })
+  @HttpCode(HttpStatus.OK)
+  @Endpoint({
+    summary: 'Ask Search',
+    description: 'Interpret a natural language query locally and search assets with existing search primitives.',
+    history: new HistoryBuilder().added('v2.7.0'),
+  })
+  askSearch(@Auth() auth: AuthDto, @Body() dto: AskSearchDto): Promise<AskSearchResponseDto> {
+    return this.service.askSearch(auth, dto);
   }
 
   @Get('explore')

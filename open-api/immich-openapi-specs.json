@@ -9210,6 +9210,57 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/search/ask": {
+      "post": {
+        "description": "Interpret a natural language query locally and search assets with existing search primitives.",
+        "operationId": "askSearch",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskSearchDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskSearchResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Ask Search",
+        "tags": [
+          "Search"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.0",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "asset.read"
+      }
+    },
     "/search/cities": {
       "get": {
         "description": "Retrieve a list of assets with each asset belonging to a different city. This endpoint is used on the places pages to show a single thumbnail for each city the user has assets in.",
@@ -15929,6 +15980,344 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "AskSearchDto": {
+        "properties": {
+          "language": {
+            "description": "Search language code",
+            "type": "string"
+          },
+          "page": {
+            "description": "Page number",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "Natural language Ask Search query",
+            "minLength": 1,
+            "type": "string"
+          },
+          "size": {
+            "description": "Number of results to return",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "AskSearchPlanDto": {
+        "properties": {
+          "filters": {
+            "description": "Structured filters applied to the search",
+            "properties": {
+              "albumIds": {
+                "description": "Filter by album IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "checksum": {
+                "description": "Filter by file checksum",
+                "type": "string"
+              },
+              "city": {
+                "description": "Filter by city name",
+                "nullable": true,
+                "type": "string"
+              },
+              "country": {
+                "description": "Filter by country name",
+                "nullable": true,
+                "type": "string"
+              },
+              "createdAfter": {
+                "description": "Filter by creation date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "createdBefore": {
+                "description": "Filter by creation date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "description": {
+                "description": "Filter by description text",
+                "type": "string"
+              },
+              "encodedVideoPath": {
+                "description": "Filter by encoded video file path",
+                "type": "string"
+              },
+              "id": {
+                "description": "Filter by asset ID",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              "imageEnrichment": {
+                "$ref": "#/components/schemas/ImageEnrichmentFilter"
+              },
+              "isEncoded": {
+                "description": "Filter by encoded status",
+                "type": "boolean"
+              },
+              "isFavorite": {
+                "description": "Filter by favorite status",
+                "type": "boolean"
+              },
+              "isMotion": {
+                "description": "Filter by motion photo status",
+                "type": "boolean"
+              },
+              "isNotInAlbum": {
+                "description": "Filter assets not in any album",
+                "type": "boolean"
+              },
+              "isOffline": {
+                "description": "Filter by offline status",
+                "type": "boolean"
+              },
+              "lensModel": {
+                "description": "Filter by lens model",
+                "nullable": true,
+                "type": "string"
+              },
+              "libraryId": {
+                "description": "Library ID to filter by",
+                "format": "uuid",
+                "nullable": true,
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              "make": {
+                "description": "Filter by camera make",
+                "nullable": true,
+                "type": "string"
+              },
+              "model": {
+                "description": "Filter by camera model",
+                "nullable": true,
+                "type": "string"
+              },
+              "ocr": {
+                "description": "Filter by OCR text content",
+                "type": "string"
+              },
+              "order": {
+                "$ref": "#/components/schemas/AssetOrder",
+                "default": "desc",
+                "description": "Sort order"
+              },
+              "originalFileName": {
+                "description": "Filter by original file name",
+                "type": "string"
+              },
+              "originalPath": {
+                "description": "Filter by original file path",
+                "type": "string"
+              },
+              "page": {
+                "description": "Page number",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personIds": {
+                "description": "Filter by person IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "previewPath": {
+                "description": "Filter by preview file path",
+                "type": "string"
+              },
+              "rating": {
+                "description": "Filter by rating [1-5], or null for unrated",
+                "maximum": 5,
+                "minimum": -1,
+                "nullable": true,
+                "type": "integer",
+                "x-immich-history": [
+                  {
+                    "version": "v1",
+                    "state": "Added"
+                  },
+                  {
+                    "version": "v2",
+                    "state": "Stable"
+                  },
+                  {
+                    "version": "v2.6.0",
+                    "state": "Updated",
+                    "description": "Using -1 as a rating is deprecated and will be removed in the next major version."
+                  }
+                ],
+                "x-immich-state": "Stable"
+              },
+              "size": {
+                "description": "Number of results to return",
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "state": {
+                "description": "Filter by state/province name",
+                "nullable": true,
+                "type": "string"
+              },
+              "suppressedOnly": {
+                "description": "Return only suppressed content. Requires an elevated session.",
+                "type": "boolean"
+              },
+              "tagIds": {
+                "description": "Filter by tag IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "takenAfter": {
+                "description": "Filter by taken date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "takenBefore": {
+                "description": "Filter by taken date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "thumbnailPath": {
+                "description": "Filter by thumbnail file path",
+                "type": "string"
+              },
+              "trashedAfter": {
+                "description": "Filter by trash date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "trashedBefore": {
+                "description": "Filter by trash date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/AssetTypeEnum"
+              },
+              "updatedAfter": {
+                "description": "Filter by update date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "updatedBefore": {
+                "description": "Filter by update date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "visibility": {
+                "$ref": "#/components/schemas/AssetVisibility"
+              },
+              "withDeleted": {
+                "description": "Include deleted assets",
+                "type": "boolean"
+              },
+              "withExif": {
+                "description": "Include EXIF data in response",
+                "type": "boolean"
+              },
+              "withPeople": {
+                "description": "Include people data in response",
+                "type": "boolean"
+              },
+              "withStacked": {
+                "description": "Include stacked assets",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "mode": {
+            "description": "Search mode used to answer the query",
+            "enum": [
+              "smart",
+              "metadata"
+            ],
+            "type": "string"
+          },
+          "normalizedQuery": {
+            "description": "Normalized query text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filters",
+          "mode",
+          "normalizedQuery"
+        ],
+        "type": "object"
+      },
+      "AskSearchResponseDto": {
+        "properties": {
+          "explanation": {
+            "description": "Short explanation of how the query was interpreted",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/AskSearchPlanDto"
+          },
+          "query": {
+            "description": "Original Ask Search query",
+            "type": "string"
+          },
+          "results": {
+            "$ref": "#/components/schemas/SearchResponseDto"
+          },
+          "warnings": {
+            "description": "Unsupported or ambiguous parts of the query",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "explanation",
+          "plan",
+          "query",
+          "results",
+          "warnings"
+        ],
         "type": "object"
       },
       "AssetBulkDeleteDto": {
@@ -24810,6 +25199,9 @@
           "library": {
             "$ref": "#/components/schemas/SystemConfigLibraryDto"
           },
+          "localFeatures": {
+            "$ref": "#/components/schemas/SystemConfigLocalFeaturesDto"
+          },
           "logging": {
             "$ref": "#/components/schemas/SystemConfigLoggingDto"
           },
@@ -25235,6 +25627,33 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "SystemConfigLocalFeaturesDto": {
+        "properties": {
+          "askSearch": {
+            "properties": {
+              "enabled": {
+                "description": "Enable local Ask Photos-style search",
+                "type": "boolean"
+              },
+              "maxResults": {
+                "description": "Maximum number of Ask Search results",
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "enabled",
+              "maxResults"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "askSearch"
         ],
         "type": "object"
       },

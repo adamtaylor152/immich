@@ -333,4 +333,66 @@ describe(SearchService.name, () => {
       );
     });
   });
+
+  describe('askSearch', () => {
+    beforeEach(() => {
+      mocks.search.searchSmart.mockResolvedValue({ hasNextPage: false, items: [] });
+      mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
+      mocks.machineLearning.encodeText.mockResolvedValue('[1, 2, 3]');
+    });
+
+    it('should answer natural language searches with smart search and structured filters', async () => {
+      const result = await sut.askSearch(authStub.user1, { query: 'photos of Alice in Banff last summer' });
+
+      expect(result.plan.mode).toBe('smart');
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          city: 'Banff',
+          type: 'IMAGE',
+          withExif: true,
+        }),
+      );
+      expect(result.warnings).toEqual([
+        'People names are searched semantically until Ask Search can resolve names to person IDs.',
+      ]);
+      expect(mocks.search.searchSmart).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          city: 'Banff',
+          embedding: '[1, 2, 3]',
+          query: 'photos of Alice in Banff last summer',
+          userIds: [authStub.user1.user.id],
+        }),
+      );
+    });
+
+    it('should use OCR-backed metadata search for document-like queries', async () => {
+      const result = await sut.askSearch(authStub.user1, { query: 'receipts from 2024' });
+
+      expect(result.plan.mode).toBe('metadata');
+      expect(result.plan.filters).toEqual(
+        expect.objectContaining({
+          ocr: 'receipt invoice total tax',
+          takenAfter: new Date('2024-01-01T00:00:00.000Z'),
+          takenBefore: new Date('2024-12-31T23:59:59.999Z'),
+        }),
+      );
+      expect(mocks.search.searchMetadata).toHaveBeenCalledWith(
+        { page: 1, size: 100 },
+        expect.objectContaining({
+          ocr: 'receipt invoice total tax',
+          userIds: [authStub.user1.user.id],
+        }),
+      );
+      expect(mocks.machineLearning.encodeText).not.toHaveBeenCalled();
+    });
+
+    it('should reject when Ask Search is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ localFeatures: { askSearch: { enabled: false, maxResults: 100 } } });
+
+      await expect(sut.askSearch(authStub.user1, { query: 'dogs' })).rejects.toThrowError(
+        new BadRequestException('Ask Search is not enabled'),
+      );
+    });
+  });
 });
