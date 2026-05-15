@@ -133,6 +133,18 @@ const countCallbacks: Record<string, { count: number; callback: () => void }> = 
 
 const execPromise = promisify(exec);
 
+const isTransientDatabaseError = (error: unknown) => {
+  const candidate = error as NodeJS.ErrnoException & { code?: string; message?: string };
+  const message = candidate?.message ?? '';
+  return (
+    candidate?.code === '40P01' ||
+    candidate?.code === 'ECONNREFUSED' ||
+    candidate?.code === 'ECONNRESET' ||
+    message.includes('Connection terminated unexpectedly') ||
+    message.includes('connect ECONNREFUSED')
+  );
+};
+
 const onEvent = ({ event, id }: { event: EventType; id: string }) => {
   // console.log(`Received event: ${event} [id=${id}]`);
   const set = events[event];
@@ -158,25 +170,53 @@ const onEvent = ({ event, id }: { event: EventType; id: string }) => {
 
 export const utils = {
   connectDatabase: async () => {
-    if (!client) {
-      client = new pg.Client(dbUrl);
-      client.on('end', () => (client = null));
-      client.on('error', () => (client = null));
-      await client.connect();
+    if (client) {
+      return client;
     }
 
-    return client;
+    const maxRetries = 5;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const nextClient = new pg.Client(dbUrl);
+      nextClient.on('end', () => {
+        if (client === nextClient) {
+          client = null;
+        }
+      });
+      nextClient.on('error', () => {
+        if (client === nextClient) {
+          client = null;
+        }
+      });
+
+      try {
+        await nextClient.connect();
+        client = nextClient;
+        return nextClient;
+      } catch (error) {
+        await nextClient.end().catch(() => {});
+        client = null;
+        if (attempt < maxRetries && isTransientDatabaseError(error)) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new Error('Failed to connect to database');
   },
 
   disconnectDatabase: async () => {
     if (client) {
-      await client.end();
+      const activeClient = client;
+      client = null;
+      await activeClient.end();
     }
   },
 
   resetDatabase: async (tables?: string[]) => {
-    client = await utils.connectDatabase();
-
     tables = tables || [
       // TODO e2e test for deleting a stack, since it is quite complex
       'stack',
@@ -206,15 +246,18 @@ export const utils = {
     }
 
     const query = sql.join('\n');
-    const maxRetries = 3;
+    const maxRetries = 5;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await client.query(query);
+        const activeClient = await utils.connectDatabase();
+        await activeClient.query(query);
         return;
-      } catch (error: any) {
-        if (error?.code === '40P01' && attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      } catch (error) {
+        await utils.disconnectDatabase().catch(() => {});
+        client = null;
+        if (attempt < maxRetries && isTransientDatabaseError(error)) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
           continue;
         }
         console.error('Failed to reset database', error);
