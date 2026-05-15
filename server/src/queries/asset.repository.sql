@@ -836,6 +836,10 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'encoded_video'
       and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
   ) as "encodedVideoPath",
   (
     select
@@ -846,12 +850,16 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'encoded_video'
       and "asset_file"."isEdited" = true
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $2
   ) as "editedVideoPath"
 from
   "asset"
 where
-  "asset"."id" = $1
-  and "asset"."type" = $2
+  "asset"."id" = $3
+  and "asset"."type" = $4
 
 -- AssetRepository.getForOcr
 select
