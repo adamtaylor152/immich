@@ -25,6 +25,8 @@ It is designed for users who want to keep the Immich experience they already kno
 - Optional NSFW/sensitive-content detection
 - Local AI-generated descriptions and tags
 - Family-library physical deduplication
+- Enhanced RAW support for difficult camera files
+- Media Health utilities for missing or corrupt source files
 - Better duplicate video detection
 - Non-destructive photo and video editing
 - Natural-language local discovery
@@ -127,6 +129,34 @@ CPU fallback works, but GPU acceleration is strongly recommended for larger libr
 - Admin repair tools for NSFW/sensitive-content decisions
 
 Generated descriptions and tags are currently alpha-quality and expected to improve over time.
+
+---
+
+## Enhanced RAW Support and Media Health
+
+This fork adds admin tools for libraries with RAW camera files, external-library moves, or media that may have gone missing or corrupt over time.
+
+### Enhanced RAW rendering
+
+- Admin toggle under Admin > System Settings > Image
+- Enabled by default
+- Uses embedded RAW previews first, then falls back to LibRaw/dcraw_emu when a full RAW render is needed
+- Helps difficult RAW and .cr2 files generate usable previews and thumbnails
+- Keeps unsupported RAW separate from confirmed corrupt-media findings
+
+### Missing media review
+
+- Finds assets whose source files are missing or unreadable
+- Locates same-named candidates inside external-library import paths
+- Compares candidate media against existing thumbnails or previews before relinking
+- Relinks validated external-library matches and leaves uncertain findings for review
+
+### Corrupt media review
+
+- Scans source media for decode failures
+- Shows timeline-style findings with thumbnails and error evidence
+- Moves recently revalidated corrupt assets to Immich trash only after PIN and typed confirmation
+- Separates unsupported RAW files from true corruption so they are not treated as broken originals
 
 ---
 
