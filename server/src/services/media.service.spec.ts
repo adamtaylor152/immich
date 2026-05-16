@@ -26,7 +26,7 @@ import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { PersonFactory } from 'test/factories/person.factory';
-import { probeStub } from 'test/fixtures/media.stub';
+import { probeStub, videoInfoStub } from 'test/fixtures/media.stub';
 import { personThumbnailStub } from 'test/fixtures/person.stub';
 import { systemConfigStub } from 'test/fixtures/system-config.stub';
 import { getForGenerateThumbnail } from 'test/mappers';
@@ -533,6 +533,39 @@ describe(MediaService.name, () => {
           twoPass: false,
         }),
       );
+      expect(mocks.asset.upsertFiles).toHaveBeenCalledWith([
+        {
+          assetId: asset.id,
+          type: AssetFileType.Preview,
+          path: expect.any(String),
+          isEdited: false,
+          isProgressive: false,
+          isTransparent: false,
+        },
+        {
+          assetId: asset.id,
+          type: AssetFileType.Thumbnail,
+          path: expect.any(String),
+          isEdited: false,
+          isProgressive: false,
+          isTransparent: false,
+        },
+      ]);
+    });
+
+    it('should probe video metadata when persisted video metadata is missing', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        videoStream: null,
+        format: null,
+      });
+      mocks.media.probe.mockResolvedValue(videoInfoStub.videoStream2160p);
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.media.probe).toHaveBeenCalledWith('/original/path.ext');
+      expect(mocks.media.transcode).toHaveBeenCalledWith('/original/path.ext', expect.any(String), expect.any(Object));
       expect(mocks.asset.upsertFiles).toHaveBeenCalledWith([
         {
           assetId: asset.id,

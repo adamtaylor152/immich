@@ -289,7 +289,16 @@ export class MediaService extends BaseService {
     let generated: Awaited<ReturnType<MediaService['generateImageThumbnails']>>;
     if (asset.type === AssetType.Video || asset.originalFileName.toLowerCase().endsWith('.gif')) {
       this.logger.verbose(`Thumbnail generation for video ${id} ${asset.originalPath}`);
-      if (!asset.videoStream || !asset.format) {
+      let videoStream: VideoStreamInfo | null = asset.videoStream;
+      let format: VideoFormat | null = asset.format;
+      if (!videoStream || !format) {
+        this.logger.warn(`Missing persisted video metadata for asset ${asset.id}; probing ${asset.originalPath}`);
+        const videoInfo = await this.mediaRepository.probe(asset.originalPath);
+        videoStream = videoInfo?.videoStreams[0] ?? null;
+        format = videoInfo?.format ?? null;
+      }
+
+      if (!videoStream || !format || videoStream.timeBase == null) {
         throw new Error(`Missing video metadata for asset ${asset.id}`);
       }
       generated = await this.generateVideoThumbnails(
@@ -297,8 +306,8 @@ export class MediaService extends BaseService {
           id: asset.id,
           ownerId: asset.ownerId,
           originalPath: asset.originalPath,
-          videoStream: asset.videoStream,
-          format: asset.format,
+          videoStream,
+          format,
         },
         config,
       );
