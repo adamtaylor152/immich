@@ -756,7 +756,11 @@ describe(MetadataService.name, () => {
       const asset = AssetFactory.create({ type: AssetType.Video });
       mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
       mocks.media.probe.mockResolvedValue(videoInfoStub.videoStreamHDR10);
-      mocks.media.probePackets.mockRejectedValue(Object.assign(new RangeError('stdout maxBuffer length exceeded'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }));
+      mocks.media.probePackets.mockRejectedValue(
+        Object.assign(new RangeError('stdout maxBuffer length exceeded'), {
+          code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+        }),
+      );
       mockReadTags({});
 
       await sut.handleMetadataExtraction({ id: asset.id });

@@ -377,7 +377,8 @@ export class MediaHealthService {
           assetId: asset.id,
           category: MediaHealthCategory.Missing,
           status: findingStatus,
-          severity: findingStatus === MediaHealthStatus.Missing ? MediaHealthSeverity.Critical : MediaHealthSeverity.Warning,
+          severity:
+            findingStatus === MediaHealthStatus.Missing ? MediaHealthSeverity.Critical : MediaHealthSeverity.Warning,
           originalPath: asset.originalPath,
           originalFileName: asset.originalFileName,
           evidence: {
