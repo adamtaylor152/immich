@@ -1024,7 +1024,7 @@ select
 from
   "asset"
 where
-  "asset"."deletedAt" is null
+  "asset"."status" != 'deleted'
   and not exists (
     select
       "asset_file"."id"
