@@ -260,6 +260,8 @@ export interface IDeferrableJob extends IEntityJob {
 
 export interface IMediaHealthScanJob extends IBaseJob {
   runId?: string;
+  missingRunId?: string;
+  corruptRunId?: string;
   assetIds?: string[];
 }
 

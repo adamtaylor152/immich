@@ -257,7 +257,7 @@ export class QueueService extends BaseService {
       }
 
       case QueueName.MediaHealth: {
-        return this.jobRepository.queue({ name: JobName.MediaHealthScanMissing, data: { force } });
+        return this.jobRepository.queue({ name: JobName.MediaHealthScanMissing, data: {} });
       }
 
       case QueueName.ImageDescription: {

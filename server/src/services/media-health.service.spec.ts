@@ -27,8 +27,10 @@ describe(MediaHealthService.name, () => {
       getByIds: vi.fn(),
       getAssets: vi.fn(),
       markStatus: vi.fn(),
+      markResolved: vi.fn(),
       replaceCandidates: vi.fn(),
       relinkExternalAsset: vi.fn(),
+      streamAssets: vi.fn(),
       upsertFinding: vi.fn(),
     } as unknown as MediaHealthRepository;
 
@@ -86,6 +88,95 @@ describe(MediaHealthService.name, () => {
         name: JobName.MediaHealthDeleteCorrupt,
         data: { ids: ['health-1'], userId: authStub.admin.user.id },
       });
+    });
+  });
+
+  describe('startMissingScan', () => {
+    it('queues one combined scan for missing and corrupt media', async () => {
+      vi.mocked(mediaHealthRepository.createRun)
+        .mockResolvedValueOnce({ id: 'missing-run' } as never)
+        .mockResolvedValueOnce({ id: 'corrupt-run' } as never);
+
+      await expect(sut.startMissingScan()).resolves.toEqual({ runId: 'missing-run' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.MediaHealthScanMissing,
+        data: { missingRunId: 'missing-run', corruptRunId: 'corrupt-run' },
+      });
+    });
+  });
+
+  describe('handleMissingScan', () => {
+    it('checks each asset once and records missing or corrupt findings', async () => {
+      const assets = [
+        {
+          id: 'missing-asset',
+          originalPath: '/library/missing.jpg',
+          originalFileName: 'missing.jpg',
+          type: AssetType.Image,
+          isExternal: true,
+          libraryId: 'library-1',
+        },
+        {
+          id: 'corrupt-asset',
+          originalPath: '/library/corrupt.jpg',
+          originalFileName: 'corrupt.jpg',
+          type: AssetType.Image,
+          isExternal: false,
+          libraryId: null,
+        },
+      ];
+      vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
+        (async function* () {
+          yield* assets;
+        })() as never,
+      );
+      vi.mocked(mocks.storage.checkFileExists).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      vi.spyOn(sut as never, 'validateReadableAssetIntegrity').mockResolvedValue({
+        status: MediaHealthStatus.CorruptConfirmed,
+        score: null,
+        evidence: { reason: 'image_decode_failed' },
+        resolution: { reuploadRecommended: true },
+      });
+
+      await expect(sut.handleMissingScan({ missingRunId: 'missing-run', corruptRunId: 'corrupt-run' })).resolves.toBe(
+        JobStatus.Success,
+      );
+
+      expect(mediaHealthRepository.upsertFinding).toHaveBeenCalledWith({
+        runId: 'missing-run',
+        assetId: 'missing-asset',
+        category: MediaHealthCategory.Missing,
+        status: MediaHealthStatus.Missing,
+        severity: MediaHealthSeverity.Critical,
+        originalPath: '/library/missing.jpg',
+        originalFileName: 'missing.jpg',
+        evidence: { reason: 'source_file_missing_or_unreadable' },
+        resolution: { autoRelinkable: true },
+        checkedAt: expect.any(Date),
+      });
+      expect(mediaHealthRepository.upsertFinding).toHaveBeenCalledWith({
+        runId: 'corrupt-run',
+        assetId: 'corrupt-asset',
+        category: MediaHealthCategory.Corrupt,
+        status: MediaHealthStatus.CorruptConfirmed,
+        severity: MediaHealthSeverity.Critical,
+        originalPath: '/library/corrupt.jpg',
+        originalFileName: 'corrupt.jpg',
+        evidence: { reason: 'image_decode_failed' },
+        resolution: { reuploadRecommended: true },
+        checkedAt: expect.any(Date),
+      });
+      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Corrupt, 'missing-asset');
+      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Missing, 'corrupt-asset');
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'missing-run',
+        expect.objectContaining({ status: 'completed', checkedAssets: 2, foundAssets: 1 }),
+      );
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'corrupt-run',
+        expect.objectContaining({ status: 'completed', checkedAssets: 2, foundAssets: 1 }),
+      );
     });
   });
 

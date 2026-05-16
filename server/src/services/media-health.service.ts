@@ -140,15 +140,13 @@ export class MediaHealthService {
   }
 
   async startMissingScan(): Promise<MediaHealthScanResponseDto> {
-    const run = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
-    await this.jobRepository.queue({ name: JobName.MediaHealthScanMissing, data: { runId: run.id } });
-    return { runId: run.id };
+    const { missingRunId } = await this.queueMediaHealthScan();
+    return { runId: missingRunId };
   }
 
   async startCorruptScan(): Promise<MediaHealthScanResponseDto> {
-    const run = await this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt);
-    await this.jobRepository.queue({ name: JobName.MediaHealthScanCorrupt, data: { runId: run.id } });
-    return { runId: run.id };
+    const { corruptRunId } = await this.queueMediaHealthScan();
+    return { runId: corruptRunId };
   }
 
   async locateMissing(dto: MediaHealthBulkActionDto): Promise<MediaHealthScanResponseDto> {
@@ -282,46 +280,7 @@ export class MediaHealthService {
 
   @OnJob({ name: JobName.MediaHealthScanMissing, queue: QueueName.MediaHealth })
   async handleMissingScan(job: JobOf<JobName.MediaHealthScanMissing>): Promise<JobStatus> {
-    const createdRun = job.runId ? null : await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
-    const run = job.runId ?? createdRun!.id;
-    let checkedAssets = 0;
-    let foundAssets = 0;
-
-    try {
-      for await (const asset of this.mediaHealthRepository.streamAssets({ assetIds: job.assetIds })) {
-        checkedAssets++;
-        const missing = !(await this.storageRepository.checkFileExists(asset.originalPath, constants.R_OK));
-        if (!missing) {
-          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
-          continue;
-        }
-
-        foundAssets++;
-        await this.mediaHealthRepository.upsertFinding({
-          runId: run,
-          assetId: asset.id,
-          category: MediaHealthCategory.Missing,
-          status: MediaHealthStatus.Missing,
-          severity: MediaHealthSeverity.Critical,
-          originalPath: asset.originalPath,
-          originalFileName: asset.originalFileName,
-          evidence: { reason: 'source_file_missing_or_unreadable' },
-          resolution: { autoRelinkable: !!asset.isExternal && !!asset.libraryId },
-          checkedAt: new Date(),
-        });
-      }
-
-      await this.mediaHealthRepository.finishRun(run, {
-        status: 'completed',
-        totalAssets: checkedAssets,
-        checkedAssets,
-        foundAssets,
-      });
-      return JobStatus.Success;
-    } catch (error) {
-      await this.mediaHealthRepository.finishRun(run, { status: 'failed', error: getErrorMessage(error) });
-      throw error;
-    }
+    return this.handleMediaHealthScan(job);
   }
 
   @OnJob({ name: JobName.MediaHealthLocateMissing, queue: QueueName.MediaHealth })
@@ -528,12 +487,115 @@ export class MediaHealthService {
     };
   }
 
+  private async queueMediaHealthScan(): Promise<{ missingRunId: string; corruptRunId: string }> {
+    const [missingRun, corruptRun] = await Promise.all([
+      this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
+      this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt),
+    ]);
+
+    await this.jobRepository.queue({
+      name: JobName.MediaHealthScanMissing,
+      data: { missingRunId: missingRun.id, corruptRunId: corruptRun.id },
+    });
+
+    return { missingRunId: missingRun.id, corruptRunId: corruptRun.id };
+  }
+
+  private async handleMediaHealthScan(job: JobOf<JobName.MediaHealthScanMissing>): Promise<JobStatus> {
+    const [createdMissingRun, createdCorruptRun] = await Promise.all([
+      job.missingRunId || job.runId ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
+      job.corruptRunId ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt),
+    ]);
+    const missingRunId = job.missingRunId ?? job.runId ?? createdMissingRun!.id;
+    const corruptRunId = job.corruptRunId ?? createdCorruptRun!.id;
+    let checkedAssets = 0;
+    let missingFoundAssets = 0;
+    let corruptFoundAssets = 0;
+
+    try {
+      for await (const asset of this.mediaHealthRepository.streamAssets({ assetIds: job.assetIds })) {
+        checkedAssets++;
+        const sourceExists = await this.storageRepository.checkFileExists(asset.originalPath, constants.R_OK);
+        if (!sourceExists) {
+          missingFoundAssets++;
+          await this.mediaHealthRepository.upsertFinding({
+            runId: missingRunId,
+            assetId: asset.id,
+            category: MediaHealthCategory.Missing,
+            status: MediaHealthStatus.Missing,
+            severity: MediaHealthSeverity.Critical,
+            originalPath: asset.originalPath,
+            originalFileName: asset.originalFileName,
+            evidence: { reason: 'source_file_missing_or_unreadable' },
+            resolution: { autoRelinkable: !!asset.isExternal && !!asset.libraryId },
+            checkedAt: new Date(),
+          });
+          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          continue;
+        }
+
+        await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
+        const result = await this.validateReadableAssetIntegrity(asset);
+        if (!result) {
+          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          continue;
+        }
+
+        corruptFoundAssets++;
+        await this.mediaHealthRepository.upsertFinding({
+          runId: corruptRunId,
+          assetId: asset.id,
+          category: MediaHealthCategory.Corrupt,
+          status: result.status,
+          severity:
+            result.status === MediaHealthStatus.CorruptConfirmed
+              ? MediaHealthSeverity.Critical
+              : result.status === MediaHealthStatus.UnsupportedRaw
+                ? MediaHealthSeverity.Info
+                : MediaHealthSeverity.Warning,
+          originalPath: asset.originalPath,
+          originalFileName: asset.originalFileName,
+          evidence: result.evidence,
+          resolution: result.resolution,
+          checkedAt: new Date(),
+        });
+      }
+
+      await Promise.all([
+        this.mediaHealthRepository.finishRun(missingRunId, {
+          status: 'completed',
+          totalAssets: checkedAssets,
+          checkedAssets,
+          foundAssets: missingFoundAssets,
+        }),
+        this.mediaHealthRepository.finishRun(corruptRunId, {
+          status: 'completed',
+          totalAssets: checkedAssets,
+          checkedAssets,
+          foundAssets: corruptFoundAssets,
+        }),
+      ]);
+      return JobStatus.Success;
+    } catch (error) {
+      const update = { status: 'failed' as const, error: getErrorMessage(error) };
+      await Promise.all([
+        this.mediaHealthRepository.finishRun(missingRunId, update),
+        this.mediaHealthRepository.finishRun(corruptRunId, update),
+      ]);
+      throw error;
+    }
+  }
+
   private async validateAssetIntegrity(asset: MediaHealthAsset): Promise<CandidateValidation | null> {
     const sourceExists = await this.storageRepository.checkFileExists(asset.originalPath, constants.R_OK);
     if (!sourceExists) {
       return null;
     }
 
+    return this.validateReadableAssetIntegrity(asset);
+  }
+
+  private async validateReadableAssetIntegrity(asset: MediaHealthAsset): Promise<CandidateValidation | null> {
     return asset.type === AssetType.Video ? this.validateVideo(asset) : this.validateImage(asset);
   }
 

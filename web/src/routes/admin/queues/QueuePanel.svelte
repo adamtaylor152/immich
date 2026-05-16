@@ -64,6 +64,9 @@
       missingText: $t('missing'),
       disabled: !featureFlags.duplicateDetection,
     },
+    [QueueName.MediaHealth]: {
+      missingText: $t('scan'),
+    },
     [QueueName.FaceDetection]: {
       allText: $t('reset'),
       refreshText: $t('refresh'),
