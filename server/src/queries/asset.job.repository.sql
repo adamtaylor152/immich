@@ -78,7 +78,6 @@ from
   "asset"
 where
   "asset"."id" = $2::uuid
-  and "asset"."deletedAt" is null
 limit
   $3
 
