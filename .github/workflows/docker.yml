@@ -188,6 +188,7 @@ jobs:
       dockerhub-push: ${{ github.event_name == 'release' }}
       build-args: |
         DEVICE=cpu
+        MISE_GITHUB_TOKEN=${{ github.token }}
 
   latest-server:
     name: Tag Server Latest
