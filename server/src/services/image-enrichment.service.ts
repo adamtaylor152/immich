@@ -128,7 +128,7 @@ const normalizeTag = (tag: string) =>
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
-    await this.requireAccess({ auth, permission: Permission.AssetRead, ids: [id] });
+    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
 
     const metadata = await this.getEnrichmentMetadata(id);
     return this.toResponse(id, metadata);

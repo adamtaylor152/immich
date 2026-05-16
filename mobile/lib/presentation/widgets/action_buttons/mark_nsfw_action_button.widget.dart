@@ -2,11 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/enums.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/base_action_button.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/action.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
+import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
+
+bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
+  if (source != ActionSource.timeline) {
+    return true;
+  }
+
+  final ownerId = ref.watch(currentUserProvider.select((user) => user?.id));
+  if (ownerId == null) {
+    return false;
+  }
+
+  final selectedAssets = ref.watch(multiSelectProvider.select((state) => state.selectedAssets));
+  return selectedAssets.whereType<RemoteAsset>().any((asset) => asset.ownerId == ownerId);
+}
 
 Future<void> performMarkNsfwAction(
   BuildContext context,
@@ -53,6 +69,10 @@ class MarkNsfwActionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!_hasOwnedRemoteAssets(ref, source)) {
+      return const SizedBox.shrink();
+    }
+
     return BaseActionButton(
       maxWidth: 115.0,
       iconData: Icons.visibility_off_outlined,
@@ -109,6 +129,10 @@ class MarkSafeActionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!_hasOwnedRemoteAssets(ref, source)) {
+      return const SizedBox.shrink();
+    }
+
     return BaseActionButton(
       maxWidth: 115.0,
       iconData: Icons.visibility_outlined,

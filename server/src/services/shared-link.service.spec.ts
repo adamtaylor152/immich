@@ -259,6 +259,22 @@ describe(SharedLinkService.name, () => {
         allowDownload: false,
       });
     });
+
+    it('should refetch an updated shared link with hidden content filters', async () => {
+      const auth = { ...authStub.user1, hideNsfwAssets: true };
+      const sharedLink = SharedLinkFactory.create();
+      mocks.sharedLink.get.mockResolvedValue(getForSharedLink(sharedLink));
+      mocks.sharedLink.update.mockResolvedValue(getForSharedLink(sharedLink));
+
+      await sut.update(auth, sharedLinkStub.valid.id, { allowDownload: false });
+
+      expect(mocks.sharedLink.get).toHaveBeenNthCalledWith(1, auth.user.id, sharedLinkStub.valid.id, {
+        excludeNsfw: true,
+      });
+      expect(mocks.sharedLink.get).toHaveBeenNthCalledWith(2, auth.user.id, sharedLinkStub.valid.id, {
+        excludeNsfw: true,
+      });
+    });
   });
 
   describe('remove', () => {

@@ -123,9 +123,10 @@ export class SharedLinkService extends BaseService {
   }
 
   async update(auth: AuthDto, id: string, dto: SharedLinkEditDto) {
-    await this.findOrFail(auth.user.id, id, this.nsfwOptions(auth));
+    const nsfwOptions = this.nsfwOptions(auth);
+    await this.findOrFail(auth.user.id, id, nsfwOptions);
     try {
-      const sharedLink = await this.sharedLinkRepository.update({
+      const updatedSharedLink = await this.sharedLinkRepository.update({
         id,
         userId: auth.user.id,
         description: dto.description,
@@ -136,6 +137,7 @@ export class SharedLinkService extends BaseService {
         showExif: dto.showMetadata,
         slug: dto.slug || null,
       });
+      const sharedLink = nsfwOptions ? await this.findOrFail(auth.user.id, id, nsfwOptions) : updatedSharedLink;
       return this.mapSharedLink(auth, sharedLink, { stripAssetMetadata: false });
     } catch (error) {
       this.handleError(error);

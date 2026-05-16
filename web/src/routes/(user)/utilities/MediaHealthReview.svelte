@@ -59,10 +59,12 @@
   const selectableIds = $derived(allItems.map((item) => item.id));
   const allSelected = $derived(selectableIds.length > 0 && selectedIds.length === selectableIds.length);
   const hasFindings = $derived(mediaHealth.total > 0);
-  const selectedDeleteCount = $derived(
-    allItems.filter((item) => selectedIds.includes(item.id) && item.status === MediaHealthStatus.CorruptConfirmed)
-      .length,
+  const selectedDeleteIds = $derived(
+    allItems
+      .filter((item) => selectedIds.includes(item.id) && item.status === MediaHealthStatus.CorruptConfirmed)
+      .map((item) => item.id),
   );
+  const selectedDeleteCount = $derived(selectedDeleteIds.length);
 
   const statusOptions = $derived(
     isMissing
@@ -155,7 +157,7 @@
       () =>
         deleteCorrupt({
           mediaHealthDeleteCorruptDto: {
-            ids: selectedIds,
+            ids: selectedDeleteIds,
             confirmText: DELETE_CONFIRM_TEXT,
           },
         }),

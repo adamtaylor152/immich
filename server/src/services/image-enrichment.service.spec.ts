@@ -83,6 +83,21 @@ describe(ImageEnrichmentService.name, () => {
     ]);
   });
 
+  it('should require asset update access when reading private enrichment metadata', async () => {
+    mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    mocks.asset.getMetadataByKey.mockResolvedValue({ value: {} } as never);
+
+    await expect(sut.getAssetEnrichment(authStub.user1, assetId)).resolves.toMatchObject({ assetId });
+
+    expect(mocks.access.asset.checkOwnerAccess).toHaveBeenCalledWith(
+      authStub.user1.user.id,
+      new Set([assetId]),
+      authStub.user1.session?.hasElevatedPermission,
+    );
+    expect(mocks.access.asset.checkAlbumAccess).not.toHaveBeenCalled();
+    expect(mocks.access.asset.checkPartnerAccess).not.toHaveBeenCalled();
+  });
+
   it('should skip NSFW backfill when NSFW detection is disabled', async () => {
     mocks.systemMetadata.get.mockResolvedValue({
       machineLearning: { enabled: true, nsfwDetection: { enabled: false }, imageDescription: { enabled: true } },
