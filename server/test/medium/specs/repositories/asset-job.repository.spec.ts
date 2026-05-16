@@ -40,6 +40,22 @@ beforeAll(async () => {
 });
 
 describe(AssetJobRepository.name, () => {
+  describe('streamForSidecar', () => {
+    it('should skip soft-deleted assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: deleted } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.softDeleteAsset(deleted.id);
+
+      const queued = await consume(sut.streamForSidecar(true));
+      const queuedIds = queued.map(({ id }) => id);
+
+      expect(queuedIds).toContain(visible.id);
+      expect(queuedIds).not.toContain(deleted.id);
+    });
+  });
+
   describe('streamForThumbnailJob', () => {
     it('should work', async () => {
       const { sut } = setup();

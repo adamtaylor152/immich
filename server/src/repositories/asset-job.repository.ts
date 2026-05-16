@@ -533,7 +533,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .select(['asset.id'])
-      .where('asset.status', '!=', sql.lit(AssetStatus.Deleted))
+      .where('asset.deletedAt', 'is', null)
       .$if(!force, (qb) =>
         qb.where((eb) =>
           eb.not(
