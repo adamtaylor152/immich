@@ -54,6 +54,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .where('asset.id', '=', asUuid(id))
+      .where('asset.deletedAt', 'is', null)
       .select(['id', 'ownerId', 'originalPath', 'physicalOriginalFileId'])
       .select((eb) => withFiles(eb, AssetFileType.Sidecar))
       .limit(1)
@@ -533,6 +534,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .select(['asset.id'])
+      .where('asset.deletedAt', 'is', null)
       .$if(!force, (qb) =>
         qb.where((eb) =>
           eb.not(

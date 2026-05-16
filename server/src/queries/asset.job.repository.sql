@@ -78,6 +78,7 @@ from
   "asset"
 where
   "asset"."id" = $2::uuid
+  and "asset"."deletedAt" is null
 limit
   $3
 
@@ -1024,7 +1025,8 @@ select
 from
   "asset"
 where
-  not exists (
+  "asset"."deletedAt" is null
+  and not exists (
     select
       "asset_file"."id"
     from
