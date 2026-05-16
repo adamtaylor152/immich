@@ -128,7 +128,10 @@ describe(MediaHealthService.name, () => {
       ];
       vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
         (async function* () {
-          yield* assets;
+          for (const asset of assets) {
+            await Promise.resolve();
+            yield asset;
+          }
         })() as never,
       );
       vi.mocked(mocks.storage.checkFileExists).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
