@@ -28,6 +28,7 @@ describe(MediaHealthService.name, () => {
       getAssets: vi.fn(),
       markStatus: vi.fn(),
       replaceCandidates: vi.fn(),
+      relinkExternalAsset: vi.fn(),
       upsertFinding: vi.fn(),
     } as unknown as MediaHealthRepository;
 

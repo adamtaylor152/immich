@@ -291,8 +291,8 @@ export class MediaHealthRepository {
     originalFileName: string;
     checksum: Buffer;
     fileModifiedAt: Date;
-  }): Promise<void> {
-    await this.db
+  }): Promise<boolean> {
+    const result = await this.db
       .updateTable('asset')
       .set({
         originalPath: options.originalPath,
@@ -308,5 +308,7 @@ export class MediaHealthRepository {
       .where('isExternal', '=', true)
       .where('libraryId', 'is not', null)
       .execute();
+
+    return Number(result[0]?.numUpdatedRows ?? 0) > 0;
   }
 }
