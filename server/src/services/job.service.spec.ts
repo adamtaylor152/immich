@@ -77,7 +77,13 @@ describe(JobService.name, () => {
       },
       {
         item: { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1', source: 'upload' } },
-        jobs: [JobName.SmartSearch, JobName.AssetDetectFaces, JobName.Ocr, JobName.BestPhotosScore],
+        jobs: [
+          JobName.SmartSearch,
+          JobName.AssetDetectFaces,
+          JobName.Ocr,
+          JobName.BestPhotosScore,
+          JobName.ImageDescription,
+        ],
         stub: [AssetFactory.create({ id: 'asset-1', livePhotoVideoId: newUuid() })],
       },
       {
