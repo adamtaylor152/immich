@@ -1,0 +1,74 @@
+// Curated CLIP zero-shot label vocabulary. Each label is encoded via the
+// configured CLIP text encoder and compared against asset embeddings to
+// auto-apply tags. Keep the vocabulary controlled (no synonyms; pick the
+// most common surface form) so tags are consistent and search-friendly.
+//
+// The label is wrapped in a CLIP zero-shot prompt at encode time
+// (see CLIP_ZERO_SHOT_PROMPT below) and the bare label is what gets
+// attached to assets as a tag value.
+//
+// Initial seed (~250 labels) covers scenes, common objects, animals,
+// food, activities, transport, and weather. Operators can extend this
+// list; embeddings are recomputed on next model load.
+export const CLIP_ZERO_SHOT_PROMPT = (label: string) => `a photo of ${label}`;
+
+export const CLIP_ZERO_SHOT_LABELS: readonly string[] = [
+  // Scenes / environments
+  'beach', 'forest', 'mountain', 'desert', 'river', 'lake', 'ocean', 'waterfall',
+  'park', 'garden', 'backyard', 'farm', 'field', 'meadow', 'jungle', 'cave',
+  'snow', 'cliff', 'valley', 'canyon', 'island', 'reef', 'volcano', 'hill',
+  'city street', 'skyline', 'bridge', 'tunnel', 'highway', 'parking lot',
+  'airport', 'train station', 'subway', 'harbor', 'marina', 'pier', 'lighthouse',
+  'church', 'temple', 'mosque', 'cathedral', 'palace', 'castle', 'monument',
+  'museum', 'library', 'theater', 'stadium', 'amphitheater', 'amusement park',
+  'restaurant', 'cafe', 'bar', 'kitchen', 'living room', 'bedroom', 'bathroom',
+  'office', 'classroom', 'gym', 'hospital', 'shop', 'grocery store', 'mall',
+  'hotel room', 'garage', 'attic', 'basement', 'rooftop', 'balcony',
+  'sunset', 'sunrise', 'night sky', 'fog', 'storm', 'rainbow',
+  // Animals
+  'dog', 'cat', 'kitten', 'puppy', 'horse', 'cow', 'sheep', 'goat', 'pig',
+  'chicken', 'duck', 'goose', 'rabbit', 'hamster', 'turtle', 'lizard', 'snake',
+  'fish', 'shark', 'dolphin', 'whale', 'jellyfish', 'octopus', 'crab', 'lobster',
+  'bird', 'eagle', 'owl', 'parrot', 'penguin', 'flamingo', 'peacock', 'swan',
+  'butterfly', 'bee', 'spider', 'ant', 'beetle', 'dragonfly',
+  'lion', 'tiger', 'bear', 'wolf', 'fox', 'deer', 'elk', 'moose', 'elephant',
+  'giraffe', 'zebra', 'kangaroo', 'koala', 'monkey', 'gorilla', 'panda',
+  // Plants / nature close-ups
+  'flower', 'rose', 'tulip', 'sunflower', 'daisy', 'orchid', 'cherry blossom',
+  'tree', 'palm tree', 'pine tree', 'autumn leaves', 'bamboo', 'cactus',
+  'mushroom', 'grass', 'moss', 'fern', 'lily pad',
+  // Food / drink
+  'pizza', 'burger', 'sandwich', 'sushi', 'pasta', 'salad', 'soup', 'steak',
+  'fried rice', 'noodles', 'tacos', 'ramen', 'curry', 'dumplings', 'bread',
+  'cake', 'cupcake', 'donut', 'ice cream', 'cookies', 'chocolate', 'pancakes',
+  'waffle', 'fruit', 'apple', 'banana', 'orange', 'strawberry', 'watermelon',
+  'avocado', 'tomato', 'mushrooms on plate', 'cheese plate', 'breakfast',
+  'coffee', 'tea', 'wine', 'beer', 'cocktail', 'smoothie', 'milkshake',
+  // People / activities
+  'family portrait', 'wedding', 'birthday party', 'graduation', 'concert',
+  'crowd', 'protest', 'parade', 'sporting event', 'festival', 'meeting',
+  'selfie', 'group photo', 'baby', 'child', 'teenager',
+  'hiking', 'climbing', 'skiing', 'snowboarding', 'surfing', 'swimming',
+  'running', 'cycling', 'yoga', 'dancing', 'playing music', 'reading',
+  'cooking', 'gardening', 'painting', 'drawing', 'fishing', 'sailing',
+  'kayaking', 'camping', 'picnic', 'barbecue',
+  // Transport
+  'car', 'sports car', 'pickup truck', 'bus', 'motorcycle', 'bicycle', 'scooter',
+  'train', 'tram', 'airplane', 'helicopter', 'boat', 'sailboat', 'cruise ship',
+  'ferry', 'rocket', 'hot air balloon', 'submarine',
+  // Indoor objects
+  'computer', 'laptop', 'smartphone', 'television', 'camera', 'headphones',
+  'book', 'newspaper', 'guitar', 'piano', 'drums', 'violin',
+  'chair', 'sofa', 'bed', 'desk', 'lamp', 'mirror', 'fireplace', 'bookshelf',
+  'painting on wall', 'clock', 'plant in pot',
+  // Sports
+  'soccer', 'basketball', 'baseball', 'tennis', 'golf', 'football', 'rugby',
+  'martial arts', 'boxing', 'skating', 'skateboarding',
+  // Misc / events
+  'fireworks', 'christmas tree', 'pumpkin', 'jack-o-lantern', 'easter eggs',
+  'tattoo', 'graffiti', 'street art', 'neon sign', 'fire', 'candle',
+  // Categories useful for memories
+  'pet portrait', 'food close-up', 'screenshot', 'document', 'whiteboard',
+  'aerial view', 'drone shot', 'underwater', 'black and white photo',
+  'long exposure', 'macro photography', 'portrait photography', 'landscape photography',
+];

@@ -5,11 +5,20 @@ import { OnEvent, OnJob } from 'src/decorators';
 import { AssetVisibility, DatabaseLock, ImmichWorker, JobName, JobStatus, QueueName } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
+import { ZeroShotTaggingService } from 'src/services/zero-shot-tagging.service';
 import { JobItem, JobOf } from 'src/types';
 import { getCLIPModelInfo, isSmartSearchEnabled } from 'src/utils/misc';
 
 @Injectable()
 export class SmartInfoService extends BaseService {
+  private get zeroShotTaggingService(): ZeroShotTaggingService {
+    // Constructed lazily via BaseService.create so we reuse the same repo
+    // singletons without threading a new dep through BaseService's ctor.
+    this.zeroShotTaggingServiceInstance ??= BaseService.create(ZeroShotTaggingService, this);
+    return this.zeroShotTaggingServiceInstance;
+  }
+  private zeroShotTaggingServiceInstance?: ZeroShotTaggingService;
+
   @OnEvent({ name: 'ConfigInit', workers: [ImmichWorker.Microservices] })
   async onConfigInit({ newConfig }: ArgOf<'ConfigInit'>) {
     await this.init(newConfig);
@@ -126,6 +135,7 @@ export class SmartInfoService extends BaseService {
     }
 
     await this.searchRepository.upsert(asset.id, embedding);
+    await this.zeroShotTaggingService.tagAsset(asset.id, asset.ownerId, embedding);
 
     return JobStatus.Success;
   }

@@ -63,6 +63,11 @@ export type SystemConfig = {
     clip: {
       enabled: boolean;
       modelName: string;
+      zeroShotTagging: {
+        enabled: boolean;
+        minSimilarity: number;
+        maxTags: number;
+      };
     };
     duplicateDetection: {
       enabled: boolean;
@@ -295,6 +300,11 @@ export const defaults = Object.freeze<SystemConfig>({
     clip: {
       enabled: true,
       modelName: 'ViT-B-16-SigLIP-384__webli',
+      zeroShotTagging: {
+        enabled: true,
+        minSimilarity: 0.25,
+        maxTags: 6,
+      },
     },
     duplicateDetection: {
       enabled: true,

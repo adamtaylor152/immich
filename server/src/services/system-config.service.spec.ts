@@ -109,6 +109,11 @@ const updatedConfig = Object.freeze<SystemConfig>({
     clip: {
       enabled: true,
       modelName: 'ViT-B-16-SigLIP-384__webli',
+      zeroShotTagging: {
+        enabled: true,
+        minSimilarity: 0.25,
+        maxTags: 6,
+      },
     },
     duplicateDetection: {
       enabled: true,
