@@ -6,7 +6,13 @@ import { AssetStatus, AssetType, AssetVisibility, ImageEnrichmentFilter, VectorI
 import { probes } from 'src/repositories/database.repository';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
-import { anyUuid, searchAssetBuilder, withExifInner, withHiddenContentFilter } from 'src/utils/database';
+import {
+  anyUuid,
+  searchAssetBuilder,
+  tokenizeForSearch,
+  withExifInner,
+  withHiddenContentFilter,
+} from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { paginationHelper } from 'src/utils/pagination';
 import { isValidInteger } from 'src/validation';
@@ -79,6 +85,12 @@ export interface SearchExifOptions {
 export interface SearchEmbeddingOptions {
   embedding: string;
   userIds: string[];
+  /**
+   * Optional raw text query. When present, smart search blends OCR
+   * trigram similarity into the rank so text-in-image queries
+   * (signs, receipts, screenshots) surface alongside CLIP matches.
+   */
+  query?: string;
 }
 
 export interface SearchOcrOptions {
@@ -143,6 +155,12 @@ export type OcrSearchOptions = SearchDateOptions & SearchOcrOptions;
 export type LargeAssetSearchOptions = AssetSearchOptions & { minFileSize?: number };
 
 type SearchSuggestionPrivacyOptions = HiddenContentQueryOptions;
+
+// Bonus weight subtracted from CLIP cosine distance when an asset's OCR text
+// matches the smart-search query. Value chosen so a perfect OCR match (1.0)
+// shifts an asset ahead of CLIP rivals within ~0.15 of its cosine distance,
+// without letting OCR-only matches dominate purely visual matches.
+const OCR_FUSION_WEIGHT = 0.15;
 
 export interface FaceEmbeddingSearch extends SearchEmbeddingOptions {
   hasPerson?: boolean;
@@ -293,10 +311,24 @@ export class SearchRepository {
 
     return this.db.transaction().execute(async (trx) => {
       await sql`set local vchordrq.probes = ${sql.lit(probes[VectorIndex.Clip])}`.execute(trx);
-      const items = await searchAssetBuilder(trx, options)
+      const text = options.query?.trim();
+      const ocrText = text ? tokenizeForSearch(text).join(' ') : null;
+      // CLIP cosine distance is the primary signal. When a raw text query is
+      // available, subtract a bounded OCR trigram-similarity bonus so assets
+      // whose OCR text matches the query rise alongside visual matches.
+      // <=> returns [0, 2]; (1 - <->>>) returns [0, 1] when there is an
+      // ocr_search row, NULL otherwise.
+      const orderExpr = ocrText
+        ? sql`(smart_search.embedding <=> ${options.embedding}) - ${OCR_FUSION_WEIGHT} * coalesce(1 - (f_unaccent(ocr_search.text) <->>> f_unaccent(${ocrText})), 0)`
+        : sql`smart_search.embedding <=> ${options.embedding}`;
+      let qb = searchAssetBuilder(trx, options)
         .selectAll('asset')
-        .innerJoin('smart_search', 'asset.id', 'smart_search.assetId')
-        .orderBy(sql`smart_search.embedding <=> ${options.embedding}`)
+        .innerJoin('smart_search', 'asset.id', 'smart_search.assetId');
+      if (ocrText) {
+        qb = qb.leftJoin('ocr_search', 'asset.id', 'ocr_search.assetId');
+      }
+      const items = await qb
+        .orderBy(orderExpr)
         .limit(pagination.size + 1)
         .offset((pagination.page - 1) * pagination.size)
         .execute();
