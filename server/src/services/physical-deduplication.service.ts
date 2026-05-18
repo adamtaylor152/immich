@@ -110,6 +110,18 @@ export class PhysicalDeduplicationService extends BaseService {
           continue;
         }
 
+        // Refuse to unlink the duplicate's only on-disk copy if the master file
+        // is not actually present on disk. (checksum, fileSize) matched in the
+        // DB does not guarantee the master file still exists — e.g. a prior
+        // dedup run failed half-way, or the master was moved by an admin.
+        if (!(await this.storageRepository.checkFileExists(physicalFile.path))) {
+          this.logger.warn(
+            `Physical deduplication: master file missing on disk for ${physicalFile.path}; refusing to delete duplicate ${candidate.originalPath}`,
+          );
+          summary.skippedMissingMaster++;
+          continue;
+        }
+
         if (candidate.physicalOriginalFileId !== physicalFile.id) {
           const pathToDelete = candidate.originalPath === physicalFile.path ? undefined : candidate.originalPath;
           await this.migrateSidecarFile(candidate.id, candidate.ownerId, candidate.originalPath);
@@ -170,6 +182,17 @@ export class PhysicalDeduplicationService extends BaseService {
         masterFile.path,
       );
       if (!masterPhysicalFile) {
+        continue;
+      }
+
+      // Same on-disk verification as for originals — refuse to unlink the
+      // duplicate's generated file if the master generated file isn't actually
+      // present. Generated files are regeneratable, but deleting both copies
+      // and forcing a regeneration race is still worse than skipping.
+      if (!(await this.storageRepository.checkFileExists(masterPhysicalFile.path))) {
+        this.logger.warn(
+          `Physical deduplication: master generated file missing on disk at ${masterPhysicalFile.path}; refusing to delete duplicate ${duplicateFile.path}`,
+        );
         continue;
       }
 

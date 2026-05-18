@@ -219,10 +219,15 @@ export class WorkflowExecutionService extends BaseService {
         throw new UnauthorizedException('Invalid token: missing userId');
       }
 
+      // Synthesized plugin auth always denies access to suppressed content.
+      // Without this, host functions like albumAddAssets would let a plugin
+      // move an owner's NSFW/hidden asset into a shared album, bypassing the
+      // per-job workflow eligibility gate.
       return {
         user: {
           id: jwt.userId,
         },
+        hideNsfwAssets: true,
       } as AuthDto;
     } catch (error) {
       this.logger.error('Token validation failed:', error);
@@ -234,22 +239,43 @@ export class WorkflowExecutionService extends BaseService {
     return this.cryptoRepository.signJwt({ userId }, this.jwtSecret);
   }
 
-  @OnEvent({ name: 'AssetCreate' })
-  async onAssetCreate({ asset }: ArgOf<'AssetCreate'>) {
-    const dto = { ownerId: asset.ownerId, trigger: WorkflowTrigger.AssetCreate };
+  /**
+   * Workflows trigger off `AssetMetadataExtracted` rather than `AssetCreate`.
+   * `AssetCreate` fires before metadata extraction and (when NSFW detection is
+   * configured) before classification. Triggering at extraction time avoids a
+   * fail-open window where a freshly-uploaded NSFW asset could reach plugins
+   * before its `asset_metadata.MlEnrichment` row exists.
+   */
+  @OnEvent({ name: 'AssetMetadataExtracted' })
+  async onAssetMetadataExtracted({ assetId, userId }: ArgOf<'AssetMetadataExtracted'>) {
+    const dto = { ownerId: userId, trigger: WorkflowTrigger.AssetCreate };
     const items = await this.workflowRepository.search(dto);
+    if (items.length === 0) {
+      return;
+    }
+
+    // Compute eligibility once per asset rather than once per (workflow × asset).
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const requireEnrichment = machineLearning.nsfwDetection.enabled;
+    if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
+      return;
+    }
+
     await this.jobRepository.queueAll(
       items.map((workflow) => ({
         name: JobName.WorkflowAssetCreate,
-        data: { workflowId: workflow.id, assetId: asset.id },
+        data: { workflowId: workflow.id, assetId },
       })),
     );
   }
 
   @OnJob({ name: JobName.WorkflowAssetCreate, queue: QueueName.Workflow })
   async handleAssetCreate({ workflowId, assetId }: JobOf<JobName.WorkflowAssetCreate>) {
-    if (!(await this.workflowRepository.isWorkflowEligible(assetId))) {
-      // Skip NSFW, hidden, locked, or deleted assets — fork privacy guarantee.
+    // Re-verify eligibility at job-run time — state may have changed between
+    // emit (`onAssetMetadataExtracted`) and execution (e.g. user marked NSFW).
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const requireEnrichment = machineLearning.nsfwDetection.enabled;
+    if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
       return JobStatus.Skipped;
     }
 
@@ -259,24 +285,34 @@ export class WorkflowExecutionService extends BaseService {
           return {
             read: async () => {
               const asset = await this.workflowRepository.getForAssetV1(assetId);
+              // Kysely returns timestamp columns from `jsonObjectFrom` as ISO strings,
+              // but the SDK declares them as Date. The runtime contract is fine for
+              // plugin authors (Date constructors accept ISO strings); this cast just
+              // bridges the type mismatch in upstream's `AssetV1` declaration.
               return {
-                data: { asset } as any,
+                data: { asset } as WorkflowEventData<typeof type>,
                 authUserId: asset.ownerId,
               };
             },
             write: async (changes) => {
-              if (changes.asset) {
-                // visibility is intentionally NOT writable — preventing plugins from un-hiding NSFW/locked assets.
-                await this.assetRepository.update({
-                  id: assetId,
-                  ..._.omitBy(
-                    {
-                      isFavorite: changes.asset?.isFavorite,
-                    },
-                    _.isUndefined,
-                  ),
-                });
+              if (!changes.asset) {
+                return;
               }
+              // Explicit allow-list of writable fields. Adding a new key here is
+              // a deliberate decision — never spread `changes.asset` directly.
+              // In particular, `visibility`, `status`, and `deletedAt` MUST NOT
+              // be writable, since that would let plugins un-hide Hidden/Locked
+              // assets or resurrect trashed ones.
+              const update = _.omitBy(
+                {
+                  isFavorite: changes.asset.isFavorite,
+                },
+                _.isUndefined,
+              );
+              if (_.isEmpty(update)) {
+                return;
+              }
+              await this.assetRepository.update({ id: assetId, ...update });
             },
           } satisfies ExecuteOptions<typeof type>;
         }

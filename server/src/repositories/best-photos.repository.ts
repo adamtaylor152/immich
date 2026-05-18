@@ -131,7 +131,7 @@ export class BestPhotosRepository {
     return { ...paginationHelper(items, options.limit), total: Number(count) };
   }
 
-  @GenerateSql({ params: [DummyValue.UUID] })
+  @GenerateSql({ params: [[DummyValue.UUID]] })
   async deleteForAssets(assetIds: string[]): Promise<void> {
     await this.db.deleteFrom('asset_best_photo_score').where('assetId', '=', anyUuid(assetIds)).execute();
   }
