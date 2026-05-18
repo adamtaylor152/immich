@@ -238,6 +238,76 @@ or split into "always-applied" (NSFW-derived, no cap) and "capped"
 
 ---
 
+## P3d — NSFW privacy gaps in sync, shared links, notifications, person
+
+**Summary.** The fork has explicit NSFW-privacy commits for map markers
+(`9ab65954d`), duplicate activity (`9ab65954d`), shared-link contexts
+(`633707b2c`), and sync privacy (`117352d28`). Test coverage exists for some
+but not all surfaces. The May 2026 review found **no NSFW assertions** in:
+
+- **Sync delta for partner/shared timeline.** A regression that drops the
+  NSFW filter from the partner sync payload would silently leak suppressed
+  asset IDs cross-account.
+- **Shared link asset listing.** `getById` on a shared link could surface
+  NSFW assets the owner has marked hidden.
+- **Notification "memory" / "on this day".** Scheduled memory notifications
+  could include NSFW assets in their thumbnail set.
+- **Person face thumbnail selection.** Without an explicit filter, a
+  person's representative thumbnail can be picked from their NSFW assets.
+
+**Why deferred.** Medium tests, need a live Postgres.
+
+**What to do.** Add four medium-test specs, all HIGH priority (privacy
+correctness):
+
+| File | Test |
+|---|---|
+| `server/src/services/sync.service.spec.ts` | `excludes NSFW asset ids from partner/shared sync payloads` |
+| `server/src/services/shared-link.service.spec.ts` | `getById omits NSFW assets from shared link asset set` |
+| `server/src/services/notification.service.spec.ts` | `does not surface NSFW assets in scheduled memory notifications` |
+| `server/src/services/person.service.spec.ts` | `does not select NSFW asset as person thumbnail` |
+
+Each should: seed a Timeline asset + a paired `asset_metadata.MlEnrichment`
+NSFW row for the same owner, exercise the service endpoint, assert the NSFW
+asset is *not* in the returned set.
+
+**Pointers.** Existing fork NSFW privacy commits — `9ab65954d`, `1fe292cfb`,
+`633707b2c`, `117352d28`, `7c6d85773` — touch these surfaces; the tests they
+ship cover map markers + duplicates but not the four above.
+
+---
+
+## P3e — Additional service test gaps (medium priority)
+
+Smaller coverage holes that aren't load-bearing on privacy but would catch
+real regressions:
+
+**Image enrichment review controls** ([server/src/services/image-enrichment.service.ts:148-213](server/src/services/image-enrichment.service.ts:148)):
+- `marked-nsfw` review writes review metadata, sets `isNsfw=true`, creates
+  nsfw_asset row, sets `reviewedBy`
+- Re-reviewing replaces prior `reviewedAt`/`reviewedBy`
+- Auto-`accepted` review is overwritable by manual `marked-safe`
+- Detection failure leaves no stale review object / no nsfw_asset row
+
+**Media health additional cases** ([server/src/services/media-health.service.ts](server/src/services/media-health.service.ts)):
+- `dismiss` clears finding without affecting asset
+- `relinkMissing` rejects candidate path that fails validation
+- Partial failure: one asset throws during scan, others still recorded
+- Combined missing+corrupt scan finishes corrupt run when missing run errors mid-batch
+
+**Web fork features** (HIGH priority for best-photos NSFW filter):
+- `web/src/routes/(user)/best-photos/+page.ts` loader filters out NSFW/hidden
+  assets from the feed
+- Ask-search service forwards query + respects NSFW filter flag
+- Mobile-nav advanced-search slider binds + emits
+
+**Mobile NSFW actions** ([mobile/lib/presentation/widgets/action_buttons/mark_nsfw_action_button.widget.dart](mobile/lib/presentation/widgets/action_buttons/mark_nsfw_action_button.widget.dart)):
+- Tapping invokes `ActionService.markNsfw` with current selection
+- `markNsfw` posts to `/nsfw` with selected asset ids + updates local store
+- `markSafe` inverse path removes asset from NSFW set
+
+---
+
 ## P8 — Ask-search: silent empty results for unresolvable locations
 
 **Summary.** [`search.service.ts:355-356`](server/src/services/search.service.ts:355)
@@ -251,6 +321,32 @@ so the UI can surface "Couldn't find a place matching 'my hometown' — showing
 unfiltered results" or similar.
 
 **Pointers.** [server/src/services/search.service.ts:355](server/src/services/search.service.ts:355).
+
+---
+
+## P9 — Minor cleanups (LOW priority, bundle as one chore PR)
+
+Four small items called out by the review that don't warrant individual
+tracking but should be picked up next time someone is in the area:
+
+- **Magic constant** at [server/src/services/best-photos.service.ts:118](server/src/services/best-photos.service.ts:118):
+  `Math.min(asset.faceCount, 3) * 0.08` — the 3-face cap and 0.08 weight
+  are undocumented. Extract to named constants or add an explanatory comment.
+
+- **Non-null assertion** at [server/src/services/media-health.service.ts:289](server/src/services/media-health.service.ts:289)
+  (`createdRun!.id`). If `createRun` returns null (DB error) AND `job.runId`
+  is undefined, the `!` throws confusingly. Either narrow to an explicit
+  error or change `createRun` to throw on failure.
+
+- **Log noise** at [server/src/services/physical-deduplication.service.ts:33](server/src/services/physical-deduplication.service.ts:33):
+  logs `WARN` level for the "feature disabled" path. This is normal
+  configuration state, not an anomaly — should be `debug`.
+
+- **Hash caching** at [server/src/services/physical-deduplication.service.ts:229](server/src/services/physical-deduplication.service.ts:229):
+  `hashFile` is streamed (good) but not cached. If the same canonical file
+  is processed twice in one migration run there's no in-memory dedupe.
+  Low impact unless full re-runs are common; add a `Map<path, hash>` if it
+  shows up in profiling.
 
 ---
 
