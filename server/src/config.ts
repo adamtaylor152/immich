@@ -321,7 +321,7 @@ export const defaults = Object.freeze<SystemConfig>({
       maxResolution: 736,
     },
     imageDescription: {
-      enabled: false,
+      enabled: true,
       acceleration: MachineLearningHardwareAcceleration.Auto,
       modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
       fallbackModelName: 'microsoft/Florence-2-base-ft',

@@ -142,7 +142,7 @@ describe(ServerService.name, () => {
         oauth: false,
         oauthAutoLaunch: false,
         ocr: true,
-        imageDescription: false,
+        imageDescription: true,
         nsfwDetection: false,
         passwordLogin: true,
         physicalDeduplication: false,
