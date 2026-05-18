@@ -141,6 +141,14 @@ export class ImageEnrichmentService extends BaseService {
   ): Promise<AssetImageEnrichmentResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
 
+    return this.databaseRepository.withAssetMetadataLock(id, () => this.updateAssetEnrichmentLocked(auth, id, dto));
+  }
+
+  private async updateAssetEnrichmentLocked(
+    auth: AuthDto,
+    id: string,
+    dto: AssetImageEnrichmentActionRequestDto,
+  ): Promise<AssetImageEnrichmentResponseDto> {
     const asset = await this.assetRepository.getById(id, { exifInfo: true, tags: true });
     if (!asset) {
       throw new BadRequestException('Asset not found');
@@ -277,30 +285,35 @@ export class ImageEnrichmentService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    const metadata = await this.getEnrichmentMetadata(id);
-    try {
-      const result = await this.detectAndStoreNsfw(id, asset.previewFile, machineLearning.nsfwDetection, metadata);
-      const changed = await this.applyNsfwTags(id, asset.ownerId, result, metadata);
+    // Serialize against concurrent reviewer actions (MarkSafe / MarkNsfw /
+    // AcceptNsfwResult) and against parallel description jobs on the same
+    // asset_metadata blob.
+    return this.databaseRepository.withAssetMetadataLock(id, async () => {
+      const metadata = await this.getEnrichmentMetadata(id);
+      try {
+        const result = await this.detectAndStoreNsfw(id, asset.previewFile!, machineLearning.nsfwDetection, metadata);
+        const changed = await this.applyNsfwTags(id, asset.ownerId, result, metadata);
 
-      if (changed.metadata) {
+        if (changed.metadata) {
+          await this.saveEnrichmentMetadata(id, metadata);
+        }
+
+        if (changed.visible) {
+          await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
+        }
+
+        return JobStatus.Success;
+      } catch (error) {
+        metadata.nsfwDetection = {
+          status: 'failed',
+          modelName: machineLearning.nsfwDetection.modelName,
+          updatedAt: new Date().toISOString(),
+          error: getErrorMessage(error),
+        };
         await this.saveEnrichmentMetadata(id, metadata);
+        return JobStatus.Failed;
       }
-
-      if (changed.visible) {
-        await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
-      }
-
-      return JobStatus.Success;
-    } catch (error) {
-      metadata.nsfwDetection = {
-        status: 'failed',
-        modelName: machineLearning.nsfwDetection.modelName,
-        updatedAt: new Date().toISOString(),
-        error: getErrorMessage(error),
-      };
-      await this.saveEnrichmentMetadata(id, metadata);
-      return JobStatus.Failed;
-    }
+    });
   }
 
   @OnJob({ name: JobName.ImageDescription, queue: QueueName.ImageDescription })
@@ -319,62 +332,65 @@ export class ImageEnrichmentService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    const metadata = await this.getEnrichmentMetadata(id);
+    // Serialize against reviewer actions and NSFW detection on the same asset_metadata blob.
+    return this.databaseRepository.withAssetMetadataLock(id, async () => {
+      const metadata = await this.getEnrichmentMetadata(id);
 
-    try {
-      const nsfw = isNsfwDetectionEnabled(machineLearning)
-        ? await this.ensureNsfw(id, asset.previewFile, metadata)
-        : this.getStoredNsfw(metadata);
-      const previousDescription =
-        metadata.description?.status === 'success' && metadata.description.appliedDescriptionHash
-          ? metadata.description.result.description
-          : undefined;
-      const previousTagValues =
-        metadata.description?.status === 'success' ? (metadata.description.appliedTagValues ?? []) : [];
-      const result = await this.machineLearningRepository.describeImage(
-        asset.previewFile,
-        machineLearning.imageDescription,
-        nsfw,
-      );
+      try {
+        const nsfw = isNsfwDetectionEnabled(machineLearning)
+          ? await this.ensureNsfw(id, asset.previewFile!, metadata)
+          : this.getStoredNsfw(metadata);
+        const previousDescription =
+          metadata.description?.status === 'success' && metadata.description.appliedDescriptionHash
+            ? metadata.description.result.description
+            : undefined;
+        const previousTagValues =
+          metadata.description?.status === 'success' ? (metadata.description.appliedTagValues ?? []) : [];
+        const result = await this.machineLearningRepository.describeImage(
+          asset.previewFile!,
+          machineLearning.imageDescription,
+          nsfw,
+        );
 
-      metadata.description = {
-        status: 'success',
-        modelName: machineLearning.imageDescription.modelName,
-        updatedAt: new Date().toISOString(),
-        result,
-      };
-      await this.saveEnrichmentMetadata(id, metadata);
-
-      const changed = await this.applyVisibleMetadata({
-        id,
-        ownerId: asset.ownerId,
-        existingDescription: asset.description ?? '',
-        result,
-        nsfw,
-        metadata,
-        previousDescription,
-        previousTagValues,
-      });
-
-      if (changed.metadata) {
+        metadata.description = {
+          status: 'success',
+          modelName: machineLearning.imageDescription.modelName,
+          updatedAt: new Date().toISOString(),
+          result,
+        };
         await this.saveEnrichmentMetadata(id, metadata);
-      }
 
-      if (changed.visible) {
-        await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
-      }
+        const changed = await this.applyVisibleMetadata({
+          id,
+          ownerId: asset.ownerId,
+          existingDescription: asset.description ?? '',
+          result,
+          nsfw,
+          metadata,
+          previousDescription,
+          previousTagValues,
+        });
 
-      return JobStatus.Success;
-    } catch (error) {
-      metadata.description = {
-        status: 'failed',
-        modelName: machineLearning.imageDescription.modelName,
-        updatedAt: new Date().toISOString(),
-        error: getErrorMessage(error),
-      };
-      await this.saveEnrichmentMetadata(id, metadata);
-      return JobStatus.Failed;
-    }
+        if (changed.metadata) {
+          await this.saveEnrichmentMetadata(id, metadata);
+        }
+
+        if (changed.visible) {
+          await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
+        }
+
+        return JobStatus.Success;
+      } catch (error) {
+        metadata.description = {
+          status: 'failed',
+          modelName: machineLearning.imageDescription.modelName,
+          updatedAt: new Date().toISOString(),
+          error: getErrorMessage(error),
+        };
+        await this.saveEnrichmentMetadata(id, metadata);
+        return JobStatus.Failed;
+      }
+    });
   }
 
   private toResponse(id: string, metadata: EnrichmentMetadata): AssetImageEnrichmentResponseDto {

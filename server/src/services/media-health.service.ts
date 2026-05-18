@@ -293,6 +293,27 @@ export class MediaHealthService {
     let checkedAssets = 0;
     let foundAssets = 0;
 
+    // Walk each library exactly once and build a basename→paths index covering
+    // every missing asset in that library. Per-finding `locateCandidates` then
+    // does an O(1) Map lookup instead of re-traversing the import paths.
+    const libraryIndexes = new Map<string, Map<string, string[]>>();
+    const basenamesByLibrary = new Map<string, Set<string>>();
+    for (const finding of findings) {
+      if (finding.category !== MediaHealthCategory.Missing) {
+        continue;
+      }
+      const asset = assetsById.get(finding.assetId);
+      if (!asset?.isExternal || !asset.libraryId) {
+        continue;
+      }
+      const set = basenamesByLibrary.get(asset.libraryId) ?? new Set<string>();
+      set.add(asset.originalFileName);
+      basenamesByLibrary.set(asset.libraryId, set);
+    }
+    for (const [libraryId, basenames] of basenamesByLibrary) {
+      libraryIndexes.set(libraryId, await this.buildLibraryCandidateIndex(libraryId, basenames));
+    }
+
     try {
       for (const finding of findings) {
         if (finding.category !== MediaHealthCategory.Missing) {
@@ -305,7 +326,10 @@ export class MediaHealthService {
           continue;
         }
 
-        const candidates = await this.locateCandidates(asset);
+        const candidates = await this.locateCandidates(
+          asset,
+          asset.libraryId ? libraryIndexes.get(asset.libraryId) : undefined,
+        );
         if (candidates.some(({ status }) => status === MediaHealthStatus.Found)) {
           foundAssets++;
         }
@@ -372,13 +396,28 @@ export class MediaHealthService {
     const run = job.runId ?? createdRun!.id;
     let checkedAssets = 0;
     let foundAssets = 0;
+    // Buffer healthy-asset resolutions and flush in batches. On large rescans
+    // (millions of assets, mostly healthy) doing one UPDATE per asset inside
+    // the streaming loop dominates the DB cost; batching collapses that.
+    const RESOLVE_BATCH = 500;
+    const resolveBuffer: string[] = [];
+    const flushResolved = async () => {
+      if (resolveBuffer.length === 0) {
+        return;
+      }
+      await this.mediaHealthRepository.markResolvedMany(MediaHealthCategory.Corrupt, resolveBuffer);
+      resolveBuffer.length = 0;
+    };
 
     try {
       for await (const asset of this.mediaHealthRepository.streamAssets({ assetIds: job.assetIds })) {
         checkedAssets++;
         const result = await this.validateAssetIntegrity(asset);
         if (!result) {
-          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          resolveBuffer.push(asset.id);
+          if (resolveBuffer.length >= RESOLVE_BATCH) {
+            await flushResolved();
+          }
           continue;
         }
 
@@ -402,6 +441,8 @@ export class MediaHealthService {
         });
       }
 
+      await flushResolved();
+
       await this.mediaHealthRepository.finishRun(run, {
         status: 'completed',
         totalAssets: checkedAssets,
@@ -410,6 +451,7 @@ export class MediaHealthService {
       });
       return JobStatus.Success;
     } catch (error) {
+      await flushResolved();
       await this.mediaHealthRepository.finishRun(run, { status: 'failed', error: getErrorMessage(error) });
       throw error;
     }
@@ -720,33 +762,82 @@ export class MediaHealthService {
     });
   }
 
-  private async locateCandidates(asset: MediaHealthAsset): Promise<CandidateValidation[]> {
+  private async locateCandidates(
+    asset: MediaHealthAsset,
+    libraryIndex?: Map<string, string[]>,
+  ): Promise<CandidateValidation[]> {
     if (!asset.isExternal || !asset.libraryId) {
       return [];
     }
 
+    const candidatePaths = libraryIndex
+      ? (libraryIndex.get(asset.originalFileName) ?? [])
+      : await this.collectCandidatePathsForAsset(asset);
+
+    const results: CandidateValidation[] = [];
+    for (const candidatePath of candidatePaths) {
+      if (candidatePath === asset.originalPath) {
+        continue;
+      }
+      results.push(await this.validateMissingCandidate(asset, candidatePath));
+    }
+    return results;
+  }
+
+  /** Walk the asset's library importPaths once and return matching basenames. Used when we
+   *  don't have a precomputed index (e.g., single-finding path).
+   */
+  private async collectCandidatePathsForAsset(asset: MediaHealthAsset): Promise<string[]> {
+    if (!asset.libraryId) {
+      return [];
+    }
     const library = await this.libraryRepository.get(asset.libraryId);
     if (!library) {
       return [];
     }
-
-    const results: CandidateValidation[] = [];
+    const out: string[] = [];
     for await (const batch of this.storageRepository.walk({
       pathsToCrawl: library.importPaths,
       exclusionPatterns: library.exclusionPatterns,
       includeHidden: false,
       take: 500,
     })) {
-      for (const candidatePath of batch) {
-        if (path.basename(candidatePath) !== asset.originalFileName || candidatePath === asset.originalPath) {
-          continue;
+      for (const p of batch) {
+        if (path.basename(p) === asset.originalFileName) {
+          out.push(p);
         }
-
-        results.push(await this.validateMissingCandidate(asset, candidatePath));
       }
     }
+    return out;
+  }
 
-    return results;
+  /** Walk a library once and build a basename→paths index for all findings in that library. */
+  private async buildLibraryCandidateIndex(libraryId: string, basenames: Set<string>): Promise<Map<string, string[]>> {
+    const index = new Map<string, string[]>();
+    const library = await this.libraryRepository.get(libraryId);
+    if (!library) {
+      return index;
+    }
+    for await (const batch of this.storageRepository.walk({
+      pathsToCrawl: library.importPaths,
+      exclusionPatterns: library.exclusionPatterns,
+      includeHidden: false,
+      take: 500,
+    })) {
+      for (const p of batch) {
+        const base = path.basename(p);
+        if (!basenames.has(base)) {
+          continue;
+        }
+        const existing = index.get(base);
+        if (existing) {
+          existing.push(p);
+        } else {
+          index.set(base, [p]);
+        }
+      }
+    }
+    return index;
   }
 
   private async validateMissingCandidate(asset: MediaHealthAsset, candidatePath: string): Promise<CandidateValidation> {

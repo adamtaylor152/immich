@@ -470,6 +470,25 @@ export class DatabaseRepository {
     await this.asyncLock.acquire(DatabaseLock[lock], () => {});
   }
 
+  /**
+   * Per-asset advisory lock. Serializes concurrent read-modify-write of
+   * `asset_metadata` blobs so two jobs (e.g. background NSFW detection and a
+   * user review action) can't clobber each other. Uses a single dedicated lock
+   * class (the negative number namespace) and the lower 32 bits of the UUID's
+   * hashtext for the key, so it doesn't collide with the integer DatabaseLock
+   * enum values above.
+   */
+  async withAssetMetadataLock<R>(assetId: string, callback: () => Promise<R>): Promise<R> {
+    return this.db.connection().execute(async (connection) => {
+      await sql`SELECT pg_advisory_lock(-1, hashtext(${assetId})::int)`.execute(connection);
+      try {
+        return await callback();
+      } finally {
+        await sql`SELECT pg_advisory_unlock(-1, hashtext(${assetId})::int)`.execute(connection);
+      }
+    });
+  }
+
   private async acquireLock(lock: DatabaseLock, connection: Kysely<DB>): Promise<void> {
     await sql`SELECT pg_advisory_lock(${lock})`.execute(connection);
   }
