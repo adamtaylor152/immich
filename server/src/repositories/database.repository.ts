@@ -28,7 +28,7 @@ import { isValidInteger } from 'src/validation';
 
 export let cachedVectorExtension: VectorExtension | undefined;
 
-const CLIP_TABLES = ['smart_search', 'asset_video_duplicate_frame'] as const;
+const CLIP_TABLES = ['smart_search', 'smart_search_description', 'asset_video_duplicate_frame'] as const;
 
 export async function getVectorExtension(runner: Kysely<DB>): Promise<VectorExtension> {
   if (cachedVectorExtension) {
@@ -330,6 +330,9 @@ export class DatabaseRepository {
       if (tables.includes('smart_search')) {
         await sql`drop index if exists clip_index`.execute(trx);
       }
+      if (tables.includes('smart_search_description')) {
+        await sql`drop index if exists clip_description_index`.execute(trx);
+      }
       for (const table of tables) {
         const constraint = `${table}_dim_size_constraint`;
         await trx.schema
@@ -343,6 +346,17 @@ export class DatabaseRepository {
           .raw(vectorIndexQuery({ vectorExtension, table: 'smart_search', indexName: VectorIndex.Clip }))
           .execute(trx);
       }
+      if (tables.includes('smart_search_description')) {
+        await sql
+          .raw(
+            vectorIndexQuery({
+              vectorExtension,
+              table: 'smart_search_description',
+              indexName: 'clip_description_index',
+            }),
+          )
+          .execute(trx);
+      }
     });
     probes[VectorIndex.Clip] = 1;
 
@@ -352,7 +366,9 @@ export class DatabaseRepository {
   }
 
   async deleteAllSearchEmbeddings(): Promise<void> {
-    await sql`truncate ${sql.table('smart_search')}, ${sql.table('asset_video_duplicate_frame')}`.execute(this.db);
+    await sql`truncate ${sql.table('smart_search')}, ${sql.table('smart_search_description')}, ${sql.table('asset_video_duplicate_frame')}`.execute(
+      this.db,
+    );
   }
 
   private targetListCount(count: number) {

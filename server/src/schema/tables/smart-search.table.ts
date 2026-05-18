@@ -13,6 +13,6 @@ export class SmartSearchTable {
   @ForeignKeyColumn(() => AssetTable, { onDelete: 'CASCADE', primary: true })
   assetId!: string;
 
-  @Column({ type: 'vector', length: 512, storage: 'external', synchronize: false })
+  @Column({ type: 'vector', length: 768, storage: 'external', synchronize: false })
   embedding!: string;
 }

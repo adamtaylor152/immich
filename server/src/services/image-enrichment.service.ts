@@ -28,7 +28,7 @@ import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
-import { isImageDescriptionEnabled, isNsfwDetectionEnabled } from 'src/utils/misc';
+import { isImageDescriptionEnabled, isNsfwDetectionEnabled, isSmartSearchEnabled } from 'src/utils/misc';
 import { upsertTags } from 'src/utils/tag';
 
 type EnrichmentReview = {
@@ -360,6 +360,10 @@ export class ImageEnrichmentService extends BaseService {
         };
         await this.saveEnrichmentMetadata(id, metadata);
 
+        if (isSmartSearchEnabled(machineLearning)) {
+          await this.upsertDescriptionEmbedding(id, result.description, machineLearning.clip);
+        }
+
         const changed = await this.applyVisibleMetadata({
           id,
           ownerId: asset.ownerId,
@@ -598,6 +602,31 @@ export class ImageEnrichmentService extends BaseService {
     };
     await this.saveEnrichmentMetadata(id, metadata);
     return result;
+  }
+
+  // Encodes the freshly generated description through CLIP's text encoder
+  // and persists the result alongside the visual embedding. Smart search
+  // blends this in so an asset can match a query via what the VLM said
+  // about it, not only via what the visual encoder saw. Failures are
+  // logged but never fail the enrichment job.
+  private async upsertDescriptionEmbedding(
+    assetId: string,
+    description: string,
+    clipConfig: { modelName: string },
+  ): Promise<void> {
+    const text = description?.trim();
+    if (!text) {
+      await this.searchRepository.deleteDescriptionEmbedding(assetId).catch((error) => {
+        this.logger.warn(`Failed to clear description embedding for asset ${assetId}: ${getErrorMessage(error)}`);
+      });
+      return;
+    }
+    try {
+      const embedding = await this.machineLearningRepository.encodeText(text, { modelName: clipConfig.modelName });
+      await this.searchRepository.upsertDescriptionEmbedding(assetId, embedding);
+    } catch (error) {
+      this.logger.warn(`Failed to embed description for asset ${assetId}: ${getErrorMessage(error)}`);
+    }
   }
 
   private getStoredNsfw(metadata: EnrichmentMetadata) {

@@ -163,6 +163,11 @@ type SearchSuggestionPrivacyOptions = HiddenContentQueryOptions;
 // distance, without letting text-only matches dominate visual matches.
 const OCR_FUSION_WEIGHT = 0.15;
 const DESCRIPTION_FUSION_WEIGHT = 0.1;
+// Best-of-both retrieval: when an asset has a CLIP-text embedding of its
+// description, use the smaller of (visual cosine, description-text cosine).
+// This lets the VLM's understanding of an image surface matches the visual
+// encoder missed, without ever making the rank worse.
+const DESCRIPTION_EMBEDDING_WEIGHT = 0.5;
 
 export interface FaceEmbeddingSearch extends SearchEmbeddingOptions {
   hasPerson?: boolean;
@@ -322,9 +327,21 @@ export class SearchRepository {
       // clashing with conditional joins inside searchAssetBuilder.
       // <=> returns [0, 2]; (1 - <->>>) returns [0, 1] when the sidecar row
       // exists, NULL otherwise.
+      const visualDistance = sql`(smart_search.embedding <=> ${options.embedding})`;
+      // Visual distance vs. (description-text embedding distance scaled toward
+      // visual). Take the smaller, so a strong description match can rescue
+      // a weak visual one, but never penalizes the rank. NULL distance (no
+      // description embedding yet) drops out of the LEAST.
+      const blendedClipDistance = sql`least(
+        ${visualDistance},
+        coalesce(
+          ${DESCRIPTION_EMBEDDING_WEIGHT} * (select embedding <=> ${options.embedding} from smart_search_description where "assetId" = asset.id),
+          ${visualDistance}
+        )
+      )`;
       const orderExpr = fusionText
         ? sql`
-            (smart_search.embedding <=> ${options.embedding})
+            ${blendedClipDistance}
             - ${OCR_FUSION_WEIGHT} * coalesce(
                 1 - (f_unaccent((select text from ocr_search where "assetId" = asset.id)) <->>> f_unaccent(${fusionText})),
                 0
@@ -334,7 +351,7 @@ export class SearchRepository {
                 0
               )
           `
-        : sql`smart_search.embedding <=> ${options.embedding}`;
+        : blendedClipDistance;
       const items = await searchAssetBuilder(trx, options)
         .selectAll('asset')
         .innerJoin('smart_search', 'asset.id', 'smart_search.assetId')
@@ -486,6 +503,18 @@ export class SearchRepository {
       .values({ assetId, embedding })
       .onConflict((oc) => oc.column('assetId').doUpdateSet((eb) => ({ embedding: eb.ref('excluded.embedding') })))
       .execute();
+  }
+
+  async upsertDescriptionEmbedding(assetId: string, embedding: string): Promise<void> {
+    await this.db
+      .insertInto('smart_search_description')
+      .values({ assetId, embedding })
+      .onConflict((oc) => oc.column('assetId').doUpdateSet((eb) => ({ embedding: eb.ref('excluded.embedding') })))
+      .execute();
+  }
+
+  async deleteDescriptionEmbedding(assetId: string): Promise<void> {
+    await this.db.deleteFrom('smart_search_description').where('assetId', '=', assetId).execute();
   }
 
   async getCountries(userIds: string[], options: SearchSuggestionPrivacyOptions = {}): Promise<string[]> {
