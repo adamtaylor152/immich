@@ -715,7 +715,10 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .$if(!!options.description, (qb) =>
       qb
         .innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId')
-        .where(sql`f_unaccent(asset_exif.description)`, 'ilike', sql`'%' || f_unaccent(${options.description}) || '%'`),
+        .where(
+          () =>
+            sql`f_unaccent(asset_exif.description) %>> f_unaccent(${tokenizeForSearch(options.description!).join(' ')})`,
+        ),
     )
     .$if(!!options.imageEnrichment, (qb) => withImageEnrichmentFilter(qb, options.imageEnrichment!))
     .$if(!!options.ocr, (qb) =>
