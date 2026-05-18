@@ -156,11 +156,13 @@ export type LargeAssetSearchOptions = AssetSearchOptions & { minFileSize?: numbe
 
 type SearchSuggestionPrivacyOptions = HiddenContentQueryOptions;
 
-// Bonus weight subtracted from CLIP cosine distance when an asset's OCR text
-// matches the smart-search query. Value chosen so a perfect OCR match (1.0)
-// shifts an asset ahead of CLIP rivals within ~0.15 of its cosine distance,
-// without letting OCR-only matches dominate purely visual matches.
+// Weighted hybrid-search bonuses subtracted from CLIP cosine distance when an
+// asset's text sidecars match the smart-search query. CLIP distance is in
+// [0, 2]; each bonus is in [0, weight]. Weights are tuned so a perfect text
+// match shifts an asset ahead of CLIP rivals within ~0.15-0.25 of cosine
+// distance, without letting text-only matches dominate visual matches.
 const OCR_FUSION_WEIGHT = 0.15;
+const DESCRIPTION_FUSION_WEIGHT = 0.1;
 
 export interface FaceEmbeddingSearch extends SearchEmbeddingOptions {
   hasPerson?: boolean;
@@ -312,22 +314,30 @@ export class SearchRepository {
     return this.db.transaction().execute(async (trx) => {
       await sql`set local vchordrq.probes = ${sql.lit(probes[VectorIndex.Clip])}`.execute(trx);
       const text = options.query?.trim();
-      const ocrText = text ? tokenizeForSearch(text).join(' ') : null;
+      const fusionText = text ? tokenizeForSearch(text).join(' ') : null;
       // CLIP cosine distance is the primary signal. When a raw text query is
-      // available, subtract a bounded OCR trigram-similarity bonus so assets
-      // whose OCR text matches the query rise alongside visual matches.
-      // <=> returns [0, 2]; (1 - <->>>) returns [0, 1] when there is an
-      // ocr_search row, NULL otherwise.
-      const orderExpr = ocrText
-        ? sql`(smart_search.embedding <=> ${options.embedding}) - ${OCR_FUSION_WEIGHT} * coalesce(1 - (f_unaccent(ocr_search.text) <->>> f_unaccent(${ocrText})), 0)`
+      // available, subtract bounded trigram-similarity bonuses from text
+      // sidecars (OCR + description) so text-aware matches surface alongside
+      // visual matches. Scalar subqueries are used instead of joins to avoid
+      // clashing with conditional joins inside searchAssetBuilder.
+      // <=> returns [0, 2]; (1 - <->>>) returns [0, 1] when the sidecar row
+      // exists, NULL otherwise.
+      const orderExpr = fusionText
+        ? sql`
+            (smart_search.embedding <=> ${options.embedding})
+            - ${OCR_FUSION_WEIGHT} * coalesce(
+                1 - (f_unaccent((select text from ocr_search where "assetId" = asset.id)) <->>> f_unaccent(${fusionText})),
+                0
+              )
+            - ${DESCRIPTION_FUSION_WEIGHT} * coalesce(
+                1 - (f_unaccent((select description from asset_exif where "assetId" = asset.id)) <->>> f_unaccent(${fusionText})),
+                0
+              )
+          `
         : sql`smart_search.embedding <=> ${options.embedding}`;
-      let qb = searchAssetBuilder(trx, options)
+      const items = await searchAssetBuilder(trx, options)
         .selectAll('asset')
-        .innerJoin('smart_search', 'asset.id', 'smart_search.assetId');
-      if (ocrText) {
-        qb = qb.leftJoin('ocr_search', 'asset.id', 'ocr_search.assetId');
-      }
-      const items = await qb
+        .innerJoin('smart_search', 'asset.id', 'smart_search.assetId')
         .orderBy(orderExpr)
         .limit(pagination.size + 1)
         .offset((pagination.page - 1) * pagination.size)
