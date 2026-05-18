@@ -92,7 +92,7 @@ class JobName {
   static const imageDescription = JobName._(r'ImageDescription');
   static const nsfwDetectionQueueAll = JobName._(r'NsfwDetectionQueueAll');
   static const nsfwDetection = JobName._(r'NsfwDetection');
-  static const workflowRun = JobName._(r'WorkflowRun');
+  static const workflowAssetCreate = JobName._(r'WorkflowAssetCreate');
 
   /// List of all possible values in this [enum][JobName].
   static const values = <JobName>[
@@ -165,7 +165,7 @@ class JobName {
     imageDescription,
     nsfwDetectionQueueAll,
     nsfwDetection,
-    workflowRun,
+    workflowAssetCreate,
   ];
 
   static JobName? fromJson(dynamic value) => JobNameTypeTransformer().decode(value);
@@ -273,7 +273,7 @@ class JobNameTypeTransformer {
         case r'ImageDescription': return JobName.imageDescription;
         case r'NsfwDetectionQueueAll': return JobName.nsfwDetectionQueueAll;
         case r'NsfwDetection': return JobName.nsfwDetection;
-        case r'WorkflowRun': return JobName.workflowRun;
+        case r'WorkflowAssetCreate': return JobName.workflowAssetCreate;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
