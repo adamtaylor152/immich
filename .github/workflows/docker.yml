@@ -37,8 +37,7 @@ jobs:
               - 'machine-learning/**'
           force-filters: |
             - '.github/workflows/docker.yml'
-            - '.github/workflows/multi-runner-build.yml'
-            - '.github/actions/image-build'
+            - '.github/workflows/local-multi-runner-build.yml'
           force-events: 'workflow_dispatch,release'
 
   retag_ml:
@@ -128,7 +127,7 @@ jobs:
           - device: rknn
             suffixes: '-rknn'
             platforms: linux/arm64
-    uses: immich-app/devtools/.github/workflows/multi-runner-build.yml@5813c7c4f7016c748ae7ac5d5f684846649d4d20 # multi-runner-build-workflow-v2.4.0
+    uses: ./.github/workflows/local-multi-runner-build.yml
     permissions:
       contents: read
       actions: read
@@ -150,7 +149,7 @@ jobs:
     name: Build and Push ML (rocm)
     needs: pre-job
     if: ${{ fromJSON(needs.pre-job.outputs.should_run).machine-learning == true && github.repository == 'immich-app/immich' }}
-    uses: immich-app/devtools/.github/workflows/multi-runner-build.yml@61a0fc2b41524edcc7c9fffb8bb178e6b0ccf21d # multi-runner-build-workflow-v2.3.0
+    uses: ./.github/workflows/local-multi-runner-build.yml
     permissions:
       contents: read
       actions: read
@@ -173,7 +172,7 @@ jobs:
     name: Build and Push Server
     needs: pre-job
     if: ${{ fromJSON(needs.pre-job.outputs.should_run).server == true }}
-    uses: immich-app/devtools/.github/workflows/multi-runner-build.yml@5813c7c4f7016c748ae7ac5d5f684846649d4d20 # multi-runner-build-workflow-v2.4.0
+    uses: ./.github/workflows/local-multi-runner-build.yml
     permissions:
       contents: read
       actions: read
@@ -181,6 +180,7 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      MISE_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
       image: immich-server
       context: .
@@ -188,7 +188,6 @@ jobs:
       dockerhub-push: ${{ github.event_name == 'release' }}
       build-args: |
         DEVICE=cpu
-        MISE_GITHUB_TOKEN=${{ github.token }}
 
   latest-server:
     name: Tag Server Latest

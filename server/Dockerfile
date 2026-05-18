@@ -53,12 +53,6 @@ RUN --mount=type=cache,id=pnpm-cli,target=/buildcache/pnpm-store \
 FROM builder AS plugins
 
 ARG TARGETPLATFORM
-# TODO(security): the GitHub Actions pipeline currently passes MISE_GITHUB_TOKEN as a
-# build-arg via the reusable workflow immich-app/devtools/multi-runner-build.yml.
-# Build-args are baked into image history; once the reusable workflow exposes a
-# build-secrets input, drop this ARG and rely solely on the BuildKit secret mount
-# below (--mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN).
-ARG MISE_GITHUB_TOKEN
 
 COPY --from=ghcr.io/jdx/mise:2026.3.12@sha256:0210678cbf58413806531a27adb2c7daf1c37238e56e8f7ea381d73521571775 /usr/local/bin/mise /usr/local/bin/mise
 
@@ -67,8 +61,8 @@ COPY ./packages/plugins/mise.toml ./packages/plugins/
 ENV MISE_TRUSTED_CONFIG_PATHS=/usr/src/app/packages/plugins/mise.toml
 ENV MISE_DATA_DIR=/buildcache/mise
 RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
-  --mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN_SECRET \
-  MISE_GITHUB_TOKEN="${MISE_GITHUB_TOKEN_SECRET:-$MISE_GITHUB_TOKEN}" mise install --cd packages/plugins
+  --mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN \
+  mise install --cd packages/plugins
 
 COPY ./packages/plugins ./packages/plugins/
 # Build plugins
