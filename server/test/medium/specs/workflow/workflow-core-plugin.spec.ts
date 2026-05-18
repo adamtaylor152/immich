@@ -2,7 +2,7 @@ import { WorkflowStepConfig } from '@immich/plugin-sdk';
 import { Kysely } from 'kysely';
 import { readFileSync } from 'node:fs';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
-import { AssetVisibility, LogLevel, WorkflowTrigger } from 'src/enum';
+import { AssetVisibility, JobStatus, LogLevel, WorkflowTrigger } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -185,7 +185,12 @@ describe('core plugin', () => {
       });
     });
 
-    it('should unlock an asset', async () => {
+    it('should refuse to unlock a Locked asset (fork privacy gate)', async () => {
+      // Fork policy: the workflow eligibility gate (isWorkflowEligible) filters
+      // out Locked assets so plugins can never observe them. Upstream's
+      // assetLock(inverse: true) method therefore has no asset to transition
+      // and the job exits as Skipped without modifying the row. This is a
+      // deliberate divergence from upstream's behavior — see FORK_FOLLOWUPS.md.
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
 
@@ -195,10 +200,12 @@ describe('core plugin', () => {
         steps: [{ method: 'immich-plugin-core#assetLock', config: { inverse: true } }],
       });
 
-      await expect(ctx.sut.handleAssetCreate({ workflowId: workflow.id, assetId: asset.id })).resolves.toBeUndefined();
+      await expect(ctx.sut.handleAssetCreate({ workflowId: workflow.id, assetId: asset.id })).resolves.toBe(
+        JobStatus.Skipped,
+      );
 
       await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toMatchObject({
-        visibility: AssetVisibility.Timeline,
+        visibility: AssetVisibility.Locked,
       });
     });
   });

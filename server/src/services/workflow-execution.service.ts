@@ -292,12 +292,17 @@ export class WorkflowExecutionService extends BaseService {
               }
               // Explicit allow-list of writable fields. Adding a new key here is
               // a deliberate decision — never spread `changes.asset` directly.
-              // In particular, `visibility`, `status`, and `deletedAt` MUST NOT
-              // be writable, since that would let plugins un-hide Hidden/Locked
-              // assets or resurrect trashed ones.
+              // `visibility` is writable so upstream's core plugin
+              // archive/unarchive/lock methods continue to work; un-hiding
+              // Hidden/Locked assets is prevented by the read-side eligibility
+              // gate (`isWorkflowEligible`), which never lets a plugin observe
+              // such an asset in the first place. `status` and `deletedAt`
+              // MUST stay out — those would let a plugin resurrect a trashed
+              // asset.
               const update = _.omitBy(
                 {
                   isFavorite: changes.asset.isFavorite,
+                  visibility: changes.asset.visibility,
                 },
                 _.isUndefined,
               );

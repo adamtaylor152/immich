@@ -285,8 +285,10 @@ passes — included here only so future reviewers know not to re-surface them.
   `AssetMetadataExtracted`)
 - Plugin `albumAddAssets` host-function bypass (synthesized AuthDto sets
   `hideNsfwAssets: true`)
-- Plugins writing `visibility` to un-hide assets (explicit allow-list,
-  `isFavorite` only)
+- Plugins writing `visibility` to un-hide assets — the explicit allow-list
+  permits `visibility` writes (so upstream's archive/lock plugin methods
+  still work) but the read-side `isWorkflowEligible` gate prevents Hidden/
+  Locked assets from ever reaching a plugin, closing the un-hide path
 - Physical-dedup orphaning duplicates when the master file is missing on disk
   (`storageRepository.checkFileExists` guard)
 - Defensive: every workflow trigger now routes through `execute()` which runs
