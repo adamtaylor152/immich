@@ -51,6 +51,10 @@ class WorkflowTestContext extends MediumTestContext<WorkflowExecutionService> {
     mockData.resourcePaths.corePlugin = '../packages/plugin-core';
     mockData.plugins.external.allow = false;
     this.getMock(ConfigRepository).getEnv.mockReturnValue(mockData);
+    // `BaseService.getConfig` calls `SystemMetadataRepository.get(SystemConfig)`
+    // and merges over defaults. Returning null makes the merge a no-op so the
+    // workflow handler sees the default machineLearning config.
+    this.getMock(SystemMetadataRepository).get.mockResolvedValue(null);
     this.get(LoggingRepository).setLogLevel(LogLevel.Verbose);
 
     await this.sut.onPluginSync();
