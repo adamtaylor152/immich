@@ -76,9 +76,20 @@ exposed genitals, bare buttocks, sexual activity, sex toy, restraint, bondage, e
 uncertain around NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.
 """
 
+# Curated VLM presets for `imageDescription.modelName`.
+# - The first column is the model name an admin sets in config; on OpenVINO it
+#   transparently resolves to the pre-quantized int4/int8 build below.
+# - CUDA installs use the HF model name directly (left column).
+#
+# Supported families (loader compatibility): Qwen2.5-VL, Phi-3-vision,
+# Phi-3.5-vision, Florence-2. Models outside these families will not load.
 OPENVINO_MODEL_ALIASES = {
+    # Phi family
+    "microsoft/Phi-3-vision-128k-instruct": "OpenVINO/Phi-3-vision-128k-instruct-int4-ov",
     "microsoft/Phi-3.5-vision-instruct": "OpenVINO/Phi-3.5-vision-instruct-int4-ov",
+    # Qwen2.5-VL family (size scales quality and VRAM)
     "Qwen/Qwen2.5-VL-3B-Instruct": "llmware/qwen2.5-vl-3b-ov",
+    "Qwen/Qwen2.5-VL-7B-Instruct": "llmware/qwen2.5-vl-7b-ov",
 }
 DEFAULT_OPENVINO_MAX_IMAGE_EDGE = 512
 PHI_OPENVINO_IMAGE_TAG = "<|image_1|>"
