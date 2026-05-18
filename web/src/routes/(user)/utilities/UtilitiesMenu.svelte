@@ -12,6 +12,7 @@
     mdiImageSizeSelectLarge,
     mdiImageBrokenVariant,
     mdiLinkEdit,
+    mdiStateMachine,
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
@@ -25,7 +26,7 @@
           { href: Route.corruptMediaUtility(), icon: mdiImageBrokenVariant, label: $t('review_corrupt_media') },
         ]
       : []),
-    // { href: Route.workflows(), icon: mdiStateMachine, label: $t('workflows') },
+    { href: Route.workflows(), icon: mdiStateMachine, label: $t('workflows') },
   ]);
 </script>
 

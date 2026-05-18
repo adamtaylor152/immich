@@ -329,7 +329,7 @@ export const getMocks = () => {
     partner: automock(PartnerRepository, { strict: false }),
     person: automock(PersonRepository, { strict: false }),
     physicalFile: automock(PhysicalFileRepository, { strict: false }),
-    plugin: automock(PluginRepository, { strict: true }),
+    plugin: automock(PluginRepository, { strict: true, args: [databaseMock, loggerMock] }),
     process: automock(ProcessRepository),
     search: automock(SearchRepository, { strict: false }),
     // eslint-disable-next-line no-sparse-arrays

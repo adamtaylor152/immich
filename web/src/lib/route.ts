@@ -153,8 +153,8 @@ export const Route = {
   corruptMediaUtility: (params?: { status?: MediaHealthStatus }) => '/utilities/corrupt-media' + asQueryString(params),
 
   // workflows
-  workflows: () => '/utilities/workflows',
-  viewWorkflow: ({ id }: { id: string }) => `/utilities/workflows/${id}`,
+  workflows: () => '/workflows',
+  viewWorkflow: ({ id }: { id: string }) => `/workflows/${id}`,
 
   // queues
   queues: () => '/admin/queues',
