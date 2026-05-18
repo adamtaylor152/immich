@@ -101,12 +101,150 @@ describe(MediaHealthService.name, () => {
 
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.MediaHealthScanMissing,
-        data: { missingRunId: 'missing-run', corruptRunId: 'corrupt-run' },
+        data: { missingRunId: 'missing-run', corruptRunId: 'corrupt-run', force: undefined },
+      });
+    });
+
+    it('marks both runs failed when queueing the scan throws', async () => {
+      vi.mocked(mediaHealthRepository.createRun)
+        .mockResolvedValueOnce({ id: 'missing-run' } as never)
+        .mockResolvedValueOnce({ id: 'corrupt-run' } as never);
+      vi.mocked(mocks.job.queue).mockRejectedValueOnce(new Error('queue down'));
+
+      await expect(sut.startMissingScan()).rejects.toThrow('queue down');
+
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'missing-run',
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'corrupt-run',
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+  });
+
+  describe('startCorruptScan', () => {
+    it('returns the corrupt run id from the queued scan', async () => {
+      vi.mocked(mediaHealthRepository.createRun)
+        .mockResolvedValueOnce({ id: 'missing-run' } as never)
+        .mockResolvedValueOnce({ id: 'corrupt-run' } as never);
+
+      await expect(sut.startCorruptScan()).resolves.toEqual({ runId: 'corrupt-run' });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.MediaHealthScanMissing,
+        data: { missingRunId: 'missing-run', corruptRunId: 'corrupt-run', force: undefined },
       });
     });
   });
 
   describe('handleMissingScan', () => {
+    it.each([
+      [MediaHealthStatus.CorruptConfirmed, MediaHealthSeverity.Critical],
+      [MediaHealthStatus.UnsupportedRaw, MediaHealthSeverity.Info],
+      [MediaHealthStatus.CorruptSuspect, MediaHealthSeverity.Warning],
+    ])('maps integrity status %s to severity %s', async (status, severity) => {
+      vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
+        (async function* () {
+          await Promise.resolve();
+          yield {
+            id: 'asset-x',
+            originalPath: '/library/x.jpg',
+            originalFileName: 'x.jpg',
+            type: AssetType.Image,
+            isExternal: false,
+            libraryId: null,
+          };
+        })() as never,
+      );
+      vi.mocked(mocks.storage.checkFileExists).mockResolvedValue(true);
+      vi.spyOn(sut as never, 'validateReadableAssetIntegrity').mockResolvedValue({
+        status,
+        score: null,
+        evidence: {},
+        resolution: {},
+      });
+
+      await expect(sut.handleMissingScan({ missingRunId: 'm', corruptRunId: 'c' })).resolves.toBe(JobStatus.Success);
+
+      expect(mediaHealthRepository.upsertFinding).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'c', status, severity }),
+      );
+    });
+
+    it('marks both categories resolved when an asset is healthy and never records a finding', async () => {
+      vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
+        (async function* () {
+          await Promise.resolve();
+          yield {
+            id: 'healthy-asset',
+            originalPath: '/library/healthy.jpg',
+            originalFileName: 'healthy.jpg',
+            type: AssetType.Image,
+            isExternal: false,
+            libraryId: null,
+          };
+        })() as never,
+      );
+      vi.mocked(mocks.storage.checkFileExists).mockResolvedValue(true);
+      vi.spyOn(sut as never, 'validateReadableAssetIntegrity').mockResolvedValue(null);
+
+      await expect(sut.handleMissingScan({ missingRunId: 'm', corruptRunId: 'c' })).resolves.toBe(JobStatus.Success);
+
+      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Missing, 'healthy-asset');
+      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Corrupt, 'healthy-asset');
+      expect(mediaHealthRepository.upsertFinding).not.toHaveBeenCalled();
+    });
+
+    it('continues finishing the second run when the first finishRun rejects on failure', async () => {
+      vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
+        // eslint-disable-next-line require-yield
+        (async function* () {
+          await Promise.resolve();
+          throw new Error('stream blew up');
+        })() as never,
+      );
+      vi.mocked(mediaHealthRepository.finishRun)
+        .mockRejectedValueOnce(new Error('missing finish failed'))
+        .mockResolvedValueOnce(undefined as never);
+
+      await expect(sut.handleMissingScan({ missingRunId: 'm', corruptRunId: 'c' })).rejects.toThrow('stream blew up');
+
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledTimes(2);
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith('m', expect.objectContaining({ status: 'failed' }));
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith('c', expect.objectContaining({ status: 'failed' }));
+    });
+
+    it('runs only the missing-asset check for legacy runId-only jobs', async () => {
+      vi.mocked(mediaHealthRepository.streamAssets).mockReturnValue(
+        (async function* () {
+          await Promise.resolve();
+          yield {
+            id: 'asset-1',
+            originalPath: '/library/file.jpg',
+            originalFileName: 'file.jpg',
+            type: AssetType.Image,
+            isExternal: false,
+            libraryId: null,
+          };
+        })() as never,
+      );
+      vi.mocked(mocks.storage.checkFileExists).mockResolvedValue(true);
+      const validateSpy = vi.spyOn(sut as never, 'validateReadableAssetIntegrity');
+
+      await expect(sut.handleMissingScan({ runId: 'legacy-run' })).resolves.toBe(JobStatus.Success);
+
+      expect(mediaHealthRepository.createRun).not.toHaveBeenCalled();
+      expect(validateSpy).not.toHaveBeenCalled();
+      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Missing, 'asset-1');
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledTimes(1);
+      expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
+        'legacy-run',
+        expect.objectContaining({ status: 'completed' }),
+      );
+    });
+
     it('checks each asset once and records missing or corrupt findings', async () => {
       const assets = [
         {

@@ -65,6 +65,7 @@
       disabled: !featureFlags.duplicateDetection,
     },
     [QueueName.MediaHealth]: {
+      allText: $t('all'),
       missingText: $t('scan'),
     },
     [QueueName.FaceDetection]: {

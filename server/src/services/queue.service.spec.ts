@@ -228,7 +228,7 @@ describe(QueueService.name, () => {
 
       await sut.runCommandLegacy(QueueName.MediaHealth, { command: QueueCommand.Start, force: false });
 
-      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.MediaHealthScanMissing, data: {} });
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.MediaHealthScanMissing, data: { force: false } });
     });
 
     it('should handle a start NSFW detection command', async () => {

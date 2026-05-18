@@ -8,6 +8,10 @@ import request from 'supertest';
 import { utimes } from 'utimes';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+// ARM runners hit queue backpressure on live photo upload — see commit 6bdce709c
+const IS_ARM = process.arch === 'arm64';
+const XMP_SWITCH_TIMEOUT = IS_ARM ? 60_000 : 10_000;
+
 describe('/libraries', () => {
   let admin: LoginResponseDto;
   let user: LoginResponseDto;
@@ -1107,7 +1111,7 @@ describe('/libraries', () => {
         rmSync(`${testAssetDir}/temp/xmp`, { recursive: true, force: true });
       });
 
-      it('should switch from using file.xmp to file metadata', { timeout: 60_000 }, async () => {
+      it('should switch from using file.xmp to file metadata', { timeout: XMP_SWITCH_TIMEOUT }, async () => {
         const library = await utils.createLibrary(admin.accessToken, {
           ownerId: admin.userId,
           importPaths: [`${testAssetDirInternal}/temp/xmp`],

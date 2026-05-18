@@ -560,6 +560,7 @@ describe(MediaService.name, () => {
         videoStream: null,
         format: null,
       });
+      mocks.storage.checkFileExists.mockResolvedValue(true);
       mocks.media.probe.mockResolvedValue(videoInfoStub.videoStream2160p);
 
       await expect(sut.handleGenerateThumbnails({ id: asset.id })).resolves.toBe(JobStatus.Success);
@@ -584,6 +585,57 @@ describe(MediaService.name, () => {
           isTransparent: false,
         },
       ]);
+    });
+
+    it('should throw "Missing video metadata" when probe returns no video streams', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        videoStream: null,
+        format: null,
+      });
+      mocks.storage.checkFileExists.mockResolvedValue(true);
+      mocks.media.probe.mockResolvedValue({ videoStreams: [], audioStreams: [], format: {} } as any);
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).rejects.toThrow(
+        `Missing video metadata for asset ${asset.id}`,
+      );
+      expect(mocks.media.transcode).not.toHaveBeenCalled();
+    });
+
+    it('should wrap probe failures with a descriptive error preserving the cause', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        videoStream: null,
+        format: null,
+      });
+      mocks.storage.checkFileExists.mockResolvedValue(true);
+      const probeError = new Error('ffprobe exited with code 1');
+      mocks.media.probe.mockRejectedValue(probeError);
+
+      const promise = sut.handleGenerateThumbnails({ id: asset.id });
+      await expect(promise).rejects.toThrow(
+        `Failed to probe video metadata for asset ${asset.id}: ffprobe exited with code 1`,
+      );
+      await expect(promise).rejects.toMatchObject({ cause: probeError });
+      expect(mocks.media.transcode).not.toHaveBeenCalled();
+    });
+
+    it('should throw an "original file missing" error before probing when the file does not exist', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        videoStream: null,
+        format: null,
+      });
+      mocks.storage.checkFileExists.mockResolvedValue(false);
+
+      await expect(sut.handleGenerateThumbnails({ id: asset.id })).rejects.toThrow(
+        `Cannot probe video metadata for asset ${asset.id}: original file missing at /original/path.ext`,
+      );
+      expect(mocks.media.probe).not.toHaveBeenCalled();
+      expect(mocks.media.transcode).not.toHaveBeenCalled();
     });
 
     it('should score multiple video thumbnail candidates and render the best timestamp', async () => {

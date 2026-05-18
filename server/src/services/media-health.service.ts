@@ -139,13 +139,13 @@ export class MediaHealthService {
     return { buckets: [...buckets.values()], total: findings.length, run: run ? this.mapRun(run) : null };
   }
 
-  async startMissingScan(): Promise<MediaHealthScanResponseDto> {
-    const { missingRunId } = await this.queueMediaHealthScan();
+  async startMissingScan(force?: boolean): Promise<MediaHealthScanResponseDto> {
+    const { missingRunId } = await this.queueMediaHealthScan(force);
     return { runId: missingRunId };
   }
 
-  async startCorruptScan(): Promise<MediaHealthScanResponseDto> {
-    const { corruptRunId } = await this.queueMediaHealthScan();
+  async startCorruptScan(force?: boolean): Promise<MediaHealthScanResponseDto> {
+    const { corruptRunId } = await this.queueMediaHealthScan(force);
     return { runId: corruptRunId };
   }
 
@@ -487,27 +487,44 @@ export class MediaHealthService {
     };
   }
 
-  private async queueMediaHealthScan(): Promise<{ missingRunId: string; corruptRunId: string }> {
+  private async queueMediaHealthScan(force?: boolean): Promise<{ missingRunId: string; corruptRunId: string }> {
     const [missingRun, corruptRun] = await Promise.all([
       this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
       this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt),
     ]);
 
-    await this.jobRepository.queue({
-      name: JobName.MediaHealthScanMissing,
-      data: { missingRunId: missingRun.id, corruptRunId: corruptRun.id },
-    });
+    try {
+      await this.jobRepository.queue({
+        name: JobName.MediaHealthScanMissing,
+        data: { missingRunId: missingRun.id, corruptRunId: corruptRun.id, force },
+      });
+    } catch (error) {
+      const failure = { status: 'failed' as const, error: getErrorMessage(error) };
+      const results = await Promise.allSettled([
+        this.mediaHealthRepository.finishRun(missingRun.id, failure),
+        this.mediaHealthRepository.finishRun(corruptRun.id, failure),
+      ]);
+      for (const settled of results) {
+        if (settled.status === 'rejected') {
+          this.logger.warn(`Failed to mark orphaned media health run as failed: ${getErrorMessage(settled.reason)}`);
+        }
+      }
+      throw error;
+    }
 
     return { missingRunId: missingRun.id, corruptRunId: corruptRun.id };
   }
 
   private async handleMediaHealthScan(job: JobOf<JobName.MediaHealthScanMissing>): Promise<JobStatus> {
+    const hasMissingRun = job.missingRunId || job.runId;
+    const isLegacyMissingOnly = !job.missingRunId && !!job.runId && !job.corruptRunId;
+    const includeCorrupt = !isLegacyMissingOnly;
     const [createdMissingRun, createdCorruptRun] = await Promise.all([
-      job.missingRunId || job.runId ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
-      job.corruptRunId ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt),
+      hasMissingRun ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
+      includeCorrupt && !job.corruptRunId ? this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt) : null,
     ]);
     const missingRunId = job.missingRunId ?? job.runId ?? createdMissingRun!.id;
-    const corruptRunId = job.corruptRunId ?? createdCorruptRun!.id;
+    const corruptRunId = includeCorrupt ? (job.corruptRunId ?? createdCorruptRun!.id) : null;
     let checkedAssets = 0;
     let missingFoundAssets = 0;
     let corruptFoundAssets = 0;
@@ -530,11 +547,16 @@ export class MediaHealthService {
             resolution: { autoRelinkable: !!asset.isExternal && !!asset.libraryId },
             checkedAt: new Date(),
           });
-          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          if (corruptRunId) {
+            await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          }
           continue;
         }
 
         await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
+        if (!corruptRunId) {
+          continue;
+        }
         const result = await this.validateReadableAssetIntegrity(asset);
         if (!result) {
           await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
@@ -561,27 +583,38 @@ export class MediaHealthService {
         });
       }
 
-      await Promise.all([
+      const finishCalls = [
         this.mediaHealthRepository.finishRun(missingRunId, {
           status: 'completed',
           totalAssets: checkedAssets,
           checkedAssets,
           foundAssets: missingFoundAssets,
         }),
-        this.mediaHealthRepository.finishRun(corruptRunId, {
-          status: 'completed',
-          totalAssets: checkedAssets,
-          checkedAssets,
-          foundAssets: corruptFoundAssets,
-        }),
-      ]);
+      ];
+      if (corruptRunId) {
+        finishCalls.push(
+          this.mediaHealthRepository.finishRun(corruptRunId, {
+            status: 'completed',
+            totalAssets: checkedAssets,
+            checkedAssets,
+            foundAssets: corruptFoundAssets,
+          }),
+        );
+      }
+      await Promise.all(finishCalls);
       return JobStatus.Success;
     } catch (error) {
       const update = { status: 'failed' as const, error: getErrorMessage(error) };
-      await Promise.all([
-        this.mediaHealthRepository.finishRun(missingRunId, update),
-        this.mediaHealthRepository.finishRun(corruptRunId, update),
-      ]);
+      const failCalls = [this.mediaHealthRepository.finishRun(missingRunId, update)];
+      if (corruptRunId) {
+        failCalls.push(this.mediaHealthRepository.finishRun(corruptRunId, update));
+      }
+      const settled = await Promise.allSettled(failCalls);
+      for (const result of settled) {
+        if (result.status === 'rejected') {
+          this.logger.warn(`Failed to mark media health run as failed: ${getErrorMessage(result.reason)}`);
+        }
+      }
       throw error;
     }
   }

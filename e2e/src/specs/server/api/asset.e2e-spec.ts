@@ -24,6 +24,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const locationAssetFilepath = `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`;
 const ratingAssetFilepath = `${testAssetDir}/metadata/rating/mongolels.jpg`;
 
+// ARM runners hit queue backpressure on live photo upload — see commit 6bdce709c
+const IS_ARM = process.arch === 'arm64';
+const LIVE_PHOTO_TIMEOUT = IS_ARM ? 60_000 : 10_000;
+
 const readTags = async (bytes: Buffer, filename: string) => {
   const filepath = join(tempDir, filename);
   await writeFile(filepath, bytes);
@@ -587,14 +591,14 @@ describe('/asset', () => {
       }
     });
 
-    it('should clean up live photos', { timeout: 60_000 }, async () => {
+    it('should clean up live photos', { timeout: LIVE_PHOTO_TIMEOUT }, async () => {
       const { id: motionId } = await utils.createAsset(admin.accessToken, {
         assetData: { filename: 'test.mp4', bytes: makeRandomImage() },
       });
       const { id: photoId } = await utils.createAsset(admin.accessToken, { livePhotoVideoId: motionId });
 
-      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: photoId, timeout: 60_000 });
-      await utils.waitForWebsocketEvent({ event: 'assetHidden', id: motionId, timeout: 60_000 });
+      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: photoId, timeout: LIVE_PHOTO_TIMEOUT });
+      await utils.waitForWebsocketEvent({ event: 'assetHidden', id: motionId, timeout: LIVE_PHOTO_TIMEOUT });
 
       const asset = await utils.getAssetInfo(admin.accessToken, photoId);
       expect(asset.livePhotoVideoId).toBe(motionId);
@@ -605,20 +609,20 @@ describe('/asset', () => {
         .set('Authorization', `Bearer ${admin.accessToken}`);
       expect(status).toBe(204);
 
-      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: photoId, timeout: 60_000 });
-      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: motionId, timeout: 60_000 });
+      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: photoId, timeout: LIVE_PHOTO_TIMEOUT });
+      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: motionId, timeout: LIVE_PHOTO_TIMEOUT });
     });
 
-    it('should not delete a shared motion asset', { timeout: 60_000 }, async () => {
+    it('should not delete a shared motion asset', { timeout: LIVE_PHOTO_TIMEOUT }, async () => {
       const { id: motionId } = await utils.createAsset(admin.accessToken, {
         assetData: { filename: 'test.mp4', bytes: makeRandomImage() },
       });
       const { id: asset1 } = await utils.createAsset(admin.accessToken, { livePhotoVideoId: motionId });
       const { id: asset2 } = await utils.createAsset(admin.accessToken, { livePhotoVideoId: motionId });
 
-      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: asset1, timeout: 60_000 });
-      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: asset2, timeout: 60_000 });
-      await utils.waitForWebsocketEvent({ event: 'assetHidden', id: motionId, timeout: 60_000 });
+      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: asset1, timeout: LIVE_PHOTO_TIMEOUT });
+      await utils.waitForWebsocketEvent({ event: 'assetUpload', id: asset2, timeout: LIVE_PHOTO_TIMEOUT });
+      await utils.waitForWebsocketEvent({ event: 'assetHidden', id: motionId, timeout: LIVE_PHOTO_TIMEOUT });
 
       const asset = await utils.getAssetInfo(admin.accessToken, asset1);
       expect(asset.livePhotoVideoId).toBe(motionId);
@@ -629,7 +633,7 @@ describe('/asset', () => {
         .set('Authorization', `Bearer ${admin.accessToken}`);
       expect(status).toBe(204);
 
-      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: asset1, timeout: 60_000 });
+      await utils.waitForWebsocketEvent({ event: 'assetDelete', id: asset1, timeout: LIVE_PHOTO_TIMEOUT });
       await utils.waitForQueueFinish(admin.accessToken, 'backgroundTask');
 
       await expect(utils.getAssetInfo(admin.accessToken, motionId)).resolves.toMatchObject({ id: motionId });

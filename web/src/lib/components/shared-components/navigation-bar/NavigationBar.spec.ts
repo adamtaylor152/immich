@@ -1,5 +1,6 @@
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import SearchFilterModal from '$lib/modals/SearchFilterModal.svelte';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import NavigationBar from './NavigationBar.svelte';
@@ -19,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   sidebarStore: {
     isOpen: false,
     toggle: vi.fn(),
+  },
+  modalManager: {
+    open: vi.fn().mockReturnValue({ onClose: Promise.resolve(undefined) }),
   },
 }));
 
@@ -63,6 +67,7 @@ vi.mock('@immich/ui', async () => {
     Icon,
     IconButton,
     Logo: Icon,
+    modalManager: mocks.modalManager,
   };
 });
 
@@ -122,5 +127,15 @@ describe('NavigationBar', () => {
 
     expect(optionsButton).toBeInstanceOf(HTMLButtonElement);
     expect(screen.getByRole('button', { name: 'show_search_options' })).toBeInstanceOf(HTMLButtonElement);
+  });
+
+  it('opens the search filter modal when the slider button is clicked', async () => {
+    render(NavigationBar);
+    const optionsButton = screen.getByRole('button', { name: 'show_search_options' });
+
+    await fireEvent.click(optionsButton);
+
+    expect(mocks.modalManager.open).toHaveBeenCalledTimes(1);
+    expect(mocks.modalManager.open).toHaveBeenCalledWith(SearchFilterModal, { searchQuery: {} });
   });
 });

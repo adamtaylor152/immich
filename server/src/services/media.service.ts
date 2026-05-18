@@ -293,7 +293,21 @@ export class MediaService extends BaseService {
       let format: VideoFormat | null = asset.format;
       if (!videoStream || !format) {
         this.logger.warn(`Missing persisted video metadata for asset ${asset.id}; probing ${asset.originalPath}`);
-        const videoInfo = await this.mediaRepository.probe(asset.originalPath);
+        const exists = await this.storageRepository.checkFileExists(asset.originalPath);
+        if (!exists) {
+          throw new Error(
+            `Cannot probe video metadata for asset ${asset.id}: original file missing at ${asset.originalPath}`,
+          );
+        }
+        let videoInfo;
+        try {
+          videoInfo = await this.mediaRepository.probe(asset.originalPath);
+        } catch (error) {
+          throw new Error(
+            `Failed to probe video metadata for asset ${asset.id}: ${(error as Error).message}`,
+            { cause: error },
+          );
+        }
         videoStream = videoInfo?.videoStreams[0] ?? null;
         format = videoInfo?.format ?? null;
       }

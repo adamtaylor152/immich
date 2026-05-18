@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetFileType, AssetMetadataKey, AssetType, AssetVisibility } from 'src/enum';
+import { AssetFileType, AssetMetadataKey, AssetStatus, AssetType, AssetVisibility } from 'src/enum';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
@@ -41,17 +41,24 @@ beforeAll(async () => {
 
 describe(AssetJobRepository.name, () => {
   describe('streamForSidecar', () => {
-    it('should skip soft-deleted assets', async () => {
+    it('should include trashed assets but skip pending-delete assets', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { asset: visible } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: trashed } = await ctx.newAsset({ ownerId: user.id });
       const { asset: deleted } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.softDeleteAsset(deleted.id);
+      await ctx.softDeleteAsset(trashed.id);
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ status: AssetStatus.Deleted, deletedAt: new Date() })
+        .where('id', '=', deleted.id)
+        .execute();
 
       const queued = await consume(sut.streamForSidecar(true));
       const queuedIds = queued.map(({ id }) => id);
 
       expect(queuedIds).toContain(visible.id);
+      expect(queuedIds).toContain(trashed.id);
       expect(queuedIds).not.toContain(deleted.id);
     });
   });
