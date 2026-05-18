@@ -230,7 +230,7 @@ describe(DuplicateService.name, () => {
           enabled: true,
           clip: {
             enabled: true,
-            modelName: 'ViT-B-32__openai',
+            modelName: 'ViT-B-16-SigLIP-384__webli',
           },
           duplicateDetection: {
             enabled: true,
@@ -319,7 +319,7 @@ describe(DuplicateService.name, () => {
             enabled: true,
             clip: {
               enabled: true,
-              modelName: 'ViT-B-32__openai',
+              modelName: 'ViT-B-16-SigLIP-384__webli',
             },
             duplicateDetection: {
               enabled: true,

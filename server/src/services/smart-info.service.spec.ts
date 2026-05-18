@@ -183,7 +183,7 @@ describe(SmartInfoService.name, () => {
 
       expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.SmartSearch, data: { id: asset.id } }]);
       expect(mocks.assetJob.streamForEncodeClip).toHaveBeenCalledWith(true);
-      expect(mocks.database.setDimensionSize).toHaveBeenCalledExactlyOnceWith(512);
+      expect(mocks.database.setDimensionSize).toHaveBeenCalledExactlyOnceWith(768);
     });
   });
 
@@ -216,7 +216,7 @@ describe(SmartInfoService.name, () => {
 
       expect(mocks.machineLearning.encodeImage).toHaveBeenCalledWith(
         asset.files[0].path,
-        expect.objectContaining({ modelName: 'ViT-B-32__openai' }),
+        expect.objectContaining({ modelName: 'ViT-B-16-SigLIP-384__webli' }),
       );
       expect(mocks.search.upsert).toHaveBeenCalledWith(asset.id, '[0.01, 0.02, 0.03]');
     });
@@ -253,7 +253,7 @@ describe(SmartInfoService.name, () => {
       expect(mocks.database.wait).toHaveBeenCalledWith(512);
       expect(mocks.machineLearning.encodeImage).toHaveBeenCalledWith(
         asset.files[0].path,
-        expect.objectContaining({ modelName: 'ViT-B-32__openai' }),
+        expect.objectContaining({ modelName: 'ViT-B-16-SigLIP-384__webli' }),
       );
       expect(mocks.search.upsert).toHaveBeenCalledWith(asset.id, '[0.01, 0.02, 0.03]');
     });

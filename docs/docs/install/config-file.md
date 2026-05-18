@@ -125,7 +125,7 @@ The default configuration looks like this:
     },
     "clip": {
       "enabled": true,
-      "modelName": "ViT-B-32__openai"
+      "modelName": "ViT-B-16-SigLIP-384__webli"
     },
     "duplicateDetection": {
       "enabled": true,
