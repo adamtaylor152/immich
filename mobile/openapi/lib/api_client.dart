@@ -982,6 +982,8 @@ class ApiClient {
           return WorkflowTypeTypeTransformer().decode(value);
         case 'WorkflowUpdateDto':
           return WorkflowUpdateDto.fromJson(value);
+        case 'ZeroShotTaggingConfig':
+          return ZeroShotTaggingConfig.fromJson(value);
         default:
           dynamic match;
           if (value is List && (match = _regList.firstMatch(targetType)?.group(1)) != null) {

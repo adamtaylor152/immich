@@ -469,6 +469,7 @@ part 'model/workflow_trigger.dart';
 part 'model/workflow_trigger_response_dto.dart';
 part 'model/workflow_type.dart';
 part 'model/workflow_update_dto.dart';
+part 'model/zero_shot_tagging_config.dart';
 
 
 /// An [ApiClient] instance that uses the default values obtained from

@@ -2802,11 +2802,20 @@ export type MachineLearningAvailabilityChecksDto = {
     interval: number;
     timeout: number;
 };
+export type ZeroShotTaggingConfig = {
+    /** Whether zero-shot auto-tagging is enabled */
+    enabled: boolean;
+    /** Maximum number of zero-shot tags applied per asset */
+    maxTags: number;
+    /** Cosine similarity above which a label is applied as a tag */
+    minSimilarity: number;
+};
 export type ClipConfig = {
     /** Whether the task is enabled */
     enabled: boolean;
     /** Name of the model to use */
     modelName: string;
+    zeroShotTagging: ZeroShotTaggingConfig;
 };
 export type DuplicateDetectionConfig = {
     /** Whether the task is enabled */

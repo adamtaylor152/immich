@@ -303,10 +303,9 @@ export class MediaService extends BaseService {
         try {
           videoInfo = await this.mediaRepository.probe(asset.originalPath);
         } catch (error) {
-          throw new Error(
-            `Failed to probe video metadata for asset ${asset.id}: ${(error as Error).message}`,
-            { cause: error },
-          );
+          throw new Error(`Failed to probe video metadata for asset ${asset.id}: ${(error as Error).message}`, {
+            cause: error,
+          });
         }
         videoStream = videoInfo?.videoStreams[0] ?? null;
         format = videoInfo?.format ?? null;

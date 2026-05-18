@@ -734,6 +734,7 @@ Class | Method | HTTP request | Description
  - [WorkflowTriggerResponseDto](doc//WorkflowTriggerResponseDto.md)
  - [WorkflowType](doc//WorkflowType.md)
  - [WorkflowUpdateDto](doc//WorkflowUpdateDto.md)
+ - [ZeroShotTaggingConfig](doc//ZeroShotTaggingConfig.md)
 
 
 ## Documentation For Authorization

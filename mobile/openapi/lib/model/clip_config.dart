@@ -15,6 +15,7 @@ class CLIPConfig {
   CLIPConfig({
     required this.enabled,
     required this.modelName,
+    required this.zeroShotTagging,
   });
 
   /// Whether the task is enabled
@@ -23,24 +24,29 @@ class CLIPConfig {
   /// Name of the model to use
   String modelName;
 
+  ZeroShotTaggingConfig zeroShotTagging;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is CLIPConfig &&
     other.enabled == enabled &&
-    other.modelName == modelName;
+    other.modelName == modelName &&
+    other.zeroShotTagging == zeroShotTagging;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (enabled.hashCode) +
-    (modelName.hashCode);
+    (modelName.hashCode) +
+    (zeroShotTagging.hashCode);
 
   @override
-  String toString() => 'CLIPConfig[enabled=$enabled, modelName=$modelName]';
+  String toString() => 'CLIPConfig[enabled=$enabled, modelName=$modelName, zeroShotTagging=$zeroShotTagging]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'enabled'] = this.enabled;
       json[r'modelName'] = this.modelName;
+      json[r'zeroShotTagging'] = this.zeroShotTagging;
     return json;
   }
 
@@ -55,6 +61,7 @@ class CLIPConfig {
       return CLIPConfig(
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         modelName: mapValueOfType<String>(json, r'modelName')!,
+        zeroShotTagging: ZeroShotTaggingConfig.fromJson(json[r'zeroShotTagging'])!,
       );
     }
     return null;
@@ -104,6 +111,7 @@ class CLIPConfig {
   static const requiredKeys = <String>{
     'enabled',
     'modelName',
+    'zeroShotTagging',
   };
 }
 

@@ -519,6 +519,7 @@ where
 select
   "asset"."id",
   "asset"."visibility",
+  "asset"."ownerId",
   (
     select
       coalesce(json_agg(agg), '[]')

@@ -18826,11 +18826,15 @@
           "modelName": {
             "description": "Name of the model to use",
             "type": "string"
+          },
+          "zeroShotTagging": {
+            "$ref": "#/components/schemas/ZeroShotTaggingConfig"
           }
         },
         "required": [
           "enabled",
-          "modelName"
+          "modelName",
+          "zeroShotTagging"
         ],
         "type": "object"
       },
@@ -26786,13 +26790,13 @@
           "imageDescription": {
             "$ref": "#/components/schemas/JobSettingsDto",
             "default": {
-              "concurrency": 1
+              "concurrency": 2
             }
           },
           "imageEnrichment": {
             "$ref": "#/components/schemas/JobSettingsDto",
             "default": {
-              "concurrency": 1
+              "concurrency": 2
             }
           },
           "library": {
@@ -26801,7 +26805,7 @@
           "mediaHealth": {
             "$ref": "#/components/schemas/JobSettingsDto",
             "default": {
-              "concurrency": 1
+              "concurrency": 2
             }
           },
           "metadataExtraction": {
@@ -26816,7 +26820,7 @@
           "nsfwDetection": {
             "$ref": "#/components/schemas/JobSettingsDto",
             "default": {
-              "concurrency": 1
+              "concurrency": 2
             }
           },
           "ocr": {
@@ -26974,7 +26978,7 @@
             "default": {
               "acceleration": "auto",
               "device": "AUTO",
-              "enabled": false,
+              "enabled": true,
               "fallbackModelName": "microsoft/Florence-2-base-ft",
               "modelName": "Qwen/Qwen2.5-VL-3B-Instruct"
             }
@@ -29037,6 +29041,33 @@
             "description": "Workflow trigger type"
           }
         },
+        "type": "object"
+      },
+      "ZeroShotTaggingConfig": {
+        "properties": {
+          "enabled": {
+            "description": "Whether zero-shot auto-tagging is enabled",
+            "type": "boolean"
+          },
+          "maxTags": {
+            "description": "Maximum number of zero-shot tags applied per asset",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minSimilarity": {
+            "description": "Cosine similarity above which a label is applied as a tag",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "maxTags",
+          "minSimilarity"
+        ],
         "type": "object"
       }
     }

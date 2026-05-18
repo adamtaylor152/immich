@@ -366,9 +366,7 @@ export class SearchService extends BaseService {
       const firstWord = phrase.split(/\s+/, 1)[0];
       const LOCATION_STOP_WORDS = new Set(['my', 'the', 'our', 'a', 'an', 'this', 'that', 'some', 'any']);
       if (LOCATION_STOP_WORDS.has(firstWord)) {
-        warnings.push(
-          `Couldn't resolve "${phrase}" to a known location — showing results without a location filter.`,
-        );
+        warnings.push(`Couldn't resolve "${phrase}" to a known location — showing results without a location filter.`);
       } else {
         filters.city = this.toTitleCase(phrase);
       }

@@ -90,11 +90,24 @@ where
   and "asset"."isFavorite" = $5
   and "asset"."deletedAt" is null
 order by
-  smart_search.embedding <=> $6
+  least(
+    (smart_search.embedding <=> $6),
+    coalesce(
+      $7 * (
+        select
+          embedding <=> $8
+        from
+          smart_search_description
+        where
+          "assetId" = asset.id
+      ),
+      (smart_search.embedding <=> $9)
+    )
+  )
 limit
-  $7
+  $10
 offset
-  $8
+  $11
 commit
 
 -- SearchRepository.getEmbedding

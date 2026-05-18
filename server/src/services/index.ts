@@ -34,7 +34,6 @@ import { ServerService } from 'src/services/server.service';
 import { SessionService } from 'src/services/session.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
 import { SmartInfoService } from 'src/services/smart-info.service';
-import { ZeroShotTaggingService } from 'src/services/zero-shot-tagging.service';
 import { StackService } from 'src/services/stack.service';
 import { StorageTemplateService } from 'src/services/storage-template.service';
 import { StorageService } from 'src/services/storage.service';
@@ -51,6 +50,7 @@ import { VersionService } from 'src/services/version.service';
 import { ViewService } from 'src/services/view.service';
 import { WorkflowExecutionService } from 'src/services/workflow-execution.service';
 import { WorkflowService } from 'src/services/workflow.service';
+import { ZeroShotTaggingService } from 'src/services/zero-shot-tagging.service';
 
 export const services = [
   ApiKeyService,
