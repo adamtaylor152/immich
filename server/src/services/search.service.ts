@@ -353,7 +353,19 @@ export class SearchService extends BaseService {
       /\b(?:in|near|around|at)\s+([a-z][a-z\s.'-]{2,}?)(?=\s+(?:last|this|from|during|with|of|in)\b|$)/,
     );
     if (locationMatch?.[1]) {
-      filters.city = this.toTitleCase(locationMatch[1].trim());
+      const phrase = locationMatch[1].trim();
+      // Possessive / generic referents ("my hometown", "the beach", "our place")
+      // are not real city names. Forcing them through a strict city filter just
+      // returns zero results with no signal to the user. Skip and warn instead.
+      const firstWord = phrase.split(/\s+/, 1)[0];
+      const LOCATION_STOP_WORDS = new Set(['my', 'the', 'our', 'a', 'an', 'this', 'that', 'some', 'any']);
+      if (LOCATION_STOP_WORDS.has(firstWord)) {
+        warnings.push(
+          `Couldn't resolve "${phrase}" to a known location — showing results without a location filter.`,
+        );
+      } else {
+        filters.city = this.toTitleCase(phrase);
+      }
     }
 
     if (/\b(receipts?|invoices?)\b/.test(lower)) {

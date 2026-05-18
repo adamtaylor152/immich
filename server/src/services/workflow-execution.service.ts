@@ -271,15 +271,7 @@ export class WorkflowExecutionService extends BaseService {
 
   @OnJob({ name: JobName.WorkflowAssetCreate, queue: QueueName.Workflow })
   async handleAssetCreate({ workflowId, assetId }: JobOf<JobName.WorkflowAssetCreate>) {
-    // Re-verify eligibility at job-run time — state may have changed between
-    // emit (`onAssetMetadataExtracted`) and execution (e.g. user marked NSFW).
-    const { machineLearning } = await this.getConfig({ withCache: true });
-    const requireEnrichment = machineLearning.nsfwDetection.enabled;
-    if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
-      return JobStatus.Skipped;
-    }
-
-    await this.execute(workflowId, (type) => {
+    return this.execute(workflowId, [assetId], (type) => {
       switch (type) {
         case WorkflowType.AssetV1: {
           return {
@@ -320,13 +312,29 @@ export class WorkflowExecutionService extends BaseService {
     });
   }
 
+  /**
+   * Central choke point for every workflow trigger handler. Any new
+   * `WorkflowTrigger` value with an `@OnJob` handler MUST route through here,
+   * passing the set of asset ids whose data will be exposed to the plugin.
+   * The privacy gate (`isWorkflowEligible`) runs once per asset before any
+   * read/write callback is invoked, so individual handlers can't forget it.
+   */
   private async execute<T extends WorkflowType>(
     workflowId: string,
+    assetIds: string[],
     getHandler: (type: T) => ExecuteOptions<T> | undefined,
-  ) {
+  ): Promise<JobStatus | undefined> {
     const workflow = await this.workflowRepository.getForWorkflowRun(workflowId);
     if (!workflow) {
       return;
+    }
+
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const requireEnrichment = machineLearning.nsfwDetection.enabled;
+    for (const assetId of assetIds) {
+      if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
+        return JobStatus.Skipped;
+      }
     }
 
     // TODO infer from steps

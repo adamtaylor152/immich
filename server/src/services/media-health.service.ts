@@ -285,8 +285,11 @@ export class MediaHealthService {
 
   @OnJob({ name: JobName.MediaHealthLocateMissing, queue: QueueName.MediaHealth })
   async handleLocateMissing(job: JobOf<JobName.MediaHealthLocateMissing>): Promise<JobStatus> {
-    const createdRun = job.runId ? null : await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
-    const run = job.runId ?? createdRun!.id;
+    let run = job.runId;
+    if (!run) {
+      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
+      run = created.id;
+    }
     const findings = await this.mediaHealthRepository.getByIds(job.ids ?? []);
     const assets = await this.mediaHealthRepository.getAssets(findings.map(({ assetId }) => assetId));
     const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
@@ -392,8 +395,11 @@ export class MediaHealthService {
 
   @OnJob({ name: JobName.MediaHealthScanCorrupt, queue: QueueName.MediaHealth })
   async handleCorruptScan(job: JobOf<JobName.MediaHealthScanCorrupt>): Promise<JobStatus> {
-    const createdRun = job.runId ? null : await this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt);
-    const run = job.runId ?? createdRun!.id;
+    let run = job.runId;
+    if (!run) {
+      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt);
+      run = created.id;
+    }
     let checkedAssets = 0;
     let foundAssets = 0;
     // Buffer healthy-asset resolutions and flush in batches. On large rescans

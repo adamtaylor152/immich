@@ -30,7 +30,7 @@ export class PhysicalDeduplicationService extends BaseService {
   async handleDryRun(_: JobOf<JobName.PhysicalDeduplicationMigrationDryRun>): Promise<JobStatus> {
     const { physicalDeduplication } = await this.getConfig({ withCache: true });
     if (!physicalDeduplication.enabled || !physicalDeduplication.masterUserId) {
-      this.logger.warn('Physical deduplication dry run skipped: feature is disabled or no master user is configured');
+      this.logger.debug('Physical deduplication dry run skipped: feature is disabled or no master user is configured');
       return JobStatus.Skipped;
     }
 
@@ -46,7 +46,7 @@ export class PhysicalDeduplicationService extends BaseService {
   async handleApply(_: JobOf<JobName.PhysicalDeduplicationMigrationApply>): Promise<JobStatus> {
     const { physicalDeduplication } = await this.getConfig({ withCache: true });
     if (!physicalDeduplication.enabled || !physicalDeduplication.masterUserId) {
-      this.logger.warn('Physical deduplication apply skipped: feature is disabled or no master user is configured');
+      this.logger.debug('Physical deduplication apply skipped: feature is disabled or no master user is configured');
       return JobStatus.Skipped;
     }
 

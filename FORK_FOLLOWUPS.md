@@ -152,35 +152,6 @@ for the harness pattern.
 
 ---
 
-## P4 — Defensive: new `WorkflowTrigger` values must call `isWorkflowEligible`
-
-**Summary.** Today only `WorkflowTrigger.AssetCreate` has a job handler. The
-enum already declares `PersonRecognized` (wired to `AssetPersonV1`) and
-upstream may add more. The privacy gate is per-handler, not type-system
-enforced — a new trigger handler that forgets to call `isWorkflowEligible`
-would silently leak Hidden/Locked/NSFW assets.
-
-**Why deferred.** No handler exists yet, and the right enforcement mechanism
-(static analysis vs runtime assertion vs unit test) depends on what upstream's
-handler looks like.
-
-**What to do.** Options, pick one when the next handler lands:
-1. A unit-level architecture test that uses the TypeScript AST to find every
-   `@OnJob({ name: JobName.Workflow* })` handler and assert each one calls
-   `workflowRepository.isWorkflowEligible`.
-2. Factor the eligibility check into a guard inside `execute()` so all
-   trigger paths funnel through it.
-3. A runtime warning at startup that scans `WorkflowTrigger` enum members and
-   asserts a corresponding `OnJob` exists, with a check that the handler's
-   AST references `isWorkflowEligible`.
-
-**Pointers.** [server/src/enum.ts:1279-1282](server/src/enum.ts:1279)
-(`WorkflowTrigger`), [server/src/services/workflow-execution.service.ts:281](server/src/services/workflow-execution.service.ts:281)
-(`execute`), [server/src/utils/workflow.ts:5-6](server/src/utils/workflow.ts:5)
-(trigger → event-data type mapping).
-
----
-
 ## P5 — Plugin SDK: declared `visibility` / `status` / `deletedAt` fields
 
 **Summary.** [`AssetV1`](packages/plugin-sdk/src/types.ts) declares
@@ -220,21 +191,6 @@ divergence pain on every upstream bump, or requires a deliberate upstream PR.
 
 **Pointers.** [server/src/services/best-photos.service.ts:102](server/src/services/best-photos.service.ts:102),
 [:144](server/src/services/best-photos.service.ts:144).
-
----
-
-## P7 — Image enrichment: 24-tag truncation drops NSFW tags
-
-**Summary.** [`image-enrichment.service.ts:766`](server/src/services/image-enrichment.service.ts:766)
-builds a tag Set then `[...tags].slice(0, 24)`. NSFW tags appended later
-(around line 749-754) can fall outside the 24-slot budget if `result.tags`
-already filled it — silently dropping the most privacy-relevant tags.
-
-**What to do.** Reserve budget for NSFW tags by prepending them to the Set,
-or split into "always-applied" (NSFW-derived, no cap) and "capped"
-(description-derived, 24 slot limit) buckets.
-
-**Pointers.** [server/src/services/image-enrichment.service.ts:749-766](server/src/services/image-enrichment.service.ts:749).
 
 ---
 
@@ -308,70 +264,53 @@ real regressions:
 
 ---
 
-## P8 — Ask-search: silent empty results for unresolvable locations
+## P9 — Hash caching (LOW)
 
-**Summary.** [`search.service.ts:355-356`](server/src/services/search.service.ts:355)
-extracts location phrases like `"in my hometown"` and title-cases them into a
-strict `filters.city = "My Hometown"` match. If the phrase doesn't resolve to
-a known city, the query returns zero results with no user feedback.
-
-**What to do.** When a location filter is derived from a phrase that doesn't
-match any known location, push a `warnings: [...]` entry on the response DTO
-so the UI can surface "Couldn't find a place matching 'my hometown' — showing
-unfiltered results" or similar.
-
-**Pointers.** [server/src/services/search.service.ts:355](server/src/services/search.service.ts:355).
-
----
-
-## P9 — Minor cleanups (LOW priority, bundle as one chore PR)
-
-Four small items called out by the review that don't warrant individual
-tracking but should be picked up next time someone is in the area:
-
-- **Magic constant** at [server/src/services/best-photos.service.ts:118](server/src/services/best-photos.service.ts:118):
-  `Math.min(asset.faceCount, 3) * 0.08` — the 3-face cap and 0.08 weight
-  are undocumented. Extract to named constants or add an explanatory comment.
-
-- **Non-null assertion** at [server/src/services/media-health.service.ts:289](server/src/services/media-health.service.ts:289)
-  (`createdRun!.id`). If `createRun` returns null (DB error) AND `job.runId`
-  is undefined, the `!` throws confusingly. Either narrow to an explicit
-  error or change `createRun` to throw on failure.
-
-- **Log noise** at [server/src/services/physical-deduplication.service.ts:33](server/src/services/physical-deduplication.service.ts:33):
-  logs `WARN` level for the "feature disabled" path. This is normal
-  configuration state, not an anomaly — should be `debug`.
-
-- **Hash caching** at [server/src/services/physical-deduplication.service.ts:229](server/src/services/physical-deduplication.service.ts:229):
-  `hashFile` is streamed (good) but not cached. If the same canonical file
-  is processed twice in one migration run there's no in-memory dedupe.
-  Low impact unless full re-runs are common; add a `Map<path, hash>` if it
-  shows up in profiling.
+**Summary.** [`physical-deduplication.service.ts:229`](server/src/services/physical-deduplication.service.ts:229)
+streams `hashFile` (good) but doesn't cache results. If the same canonical
+file is processed twice in one migration run, there's no in-memory dedupe.
+Low impact unless full re-runs are common; add a `Map<path, hash>` if it
+shows up in profiling. Left here rather than fixed because real-world impact
+is unclear without profiling data.
 
 ---
 
 ## Status of resolved items
 
 For reference, the following review findings *were* fixed in the hardening
-pass — included here only so future reviewers know not to re-surface them.
-See commits `b99720a54`, `2601fc311`, `708573eb7`.
+passes — included here only so future reviewers know not to re-surface them.
 
+**Privacy & data-loss** (`b99720a54`, `2601fc311`):
 - Workflow plugins receiving NSFW/hidden assets (gate + emit moved to
   `AssetMetadataExtracted`)
 - Plugin `albumAddAssets` host-function bypass (synthesized AuthDto sets
   `hideNsfwAssets: true`)
 - Plugins writing `visibility` to un-hide assets (explicit allow-list,
   `isFavorite` only)
-- Duplicate `'asset.isFavorite'` in `workflowAssetV1` column list
-- `pnpm run check` failing on cold clone (server `check` script now builds
-  `@immich/plugin-sdk` first)
 - Physical-dedup orphaning duplicates when the master file is missing on disk
   (`storageRepository.checkFileExists` guard)
+- Defensive: every workflow trigger now routes through `execute()` which runs
+  `isWorkflowEligible` per-asset — new triggers can't forget the gate
+
+**Performance** (`708573eb7`):
 - `image-enrichment` read-modify-write race (`withAssetMetadataLock`)
 - Media-health corrupt-scan per-asset UPDATE round-trips (batched
   `markResolvedMany`)
 - Media-health O(N·M) library traversal in `handleLocateMissing` (cached
   basename→paths index)
 - ML queue concurrency=1 backfill bottleneck (bumped to 2)
+
+**Correctness & cleanup** (this round + earlier):
+- Duplicate `'asset.isFavorite'` in `workflowAssetV1` column list
+- `pnpm run check` failing on cold clone (server `check` script now builds
+  `@immich/plugin-sdk` first)
 - `BestPhotosRepository.deleteForAssets` `@GenerateSql` decorator declaring
   scalar instead of array (`[[DummyValue.UUID]]`)
+- Image enrichment 24-tag truncation could drop NSFW/medical tags — required
+  tags now reserve budget before description tags
+- Ask-search silent empty results — possessive/generic phrases ("my hometown",
+  "the beach") now emit a warning instead of forcing a no-match city filter
+- Best-photos magic constants extracted to `FACE_COUNT_CAP` / `PER_FACE_WEIGHT`
+- Media-health non-null assertions on `createdRun!.id` rewritten as explicit
+  branches
+- Physical-dedup "feature disabled" log noise demoted from WARN to debug

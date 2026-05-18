@@ -26,6 +26,14 @@ const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, v
 const isScreenshotLike = (fileName: string) =>
   /\b(screen ?shot|screen capture|scan|document|receipt|invoice)\b/i.test(fileName);
 
+// Subject-score heuristic constants. The aim is a mild bump for assets with
+// recognizable subjects (faces) without letting a single group photo dominate
+// the leaderboard. Three faces is the inflection point where additional faces
+// stop adding signal — beyond that we're usually in "crowd" territory which
+// doesn't make for a good "best photo".
+const FACE_COUNT_CAP = 3;
+const PER_FACE_WEIGHT = 0.08;
+
 @Injectable()
 export class BestPhotosService {
   constructor(
@@ -115,7 +123,7 @@ export class BestPhotosService {
     const screenshotPenalty = isScreenshotLike(asset.originalFileName) ? 0.2 : 0;
 
     const technicalScore = clamp(normalizedThumbnailScore * 0.75 + resolutionScore * 0.25 - tinyPenalty);
-    const subjectScore = clamp(0.5 + Math.min(asset.faceCount, 3) * 0.08 - screenshotPenalty);
+    const subjectScore = clamp(0.5 + Math.min(asset.faceCount, FACE_COUNT_CAP) * PER_FACE_WEIGHT - screenshotPenalty);
     const aestheticScore = clamp(normalizedThumbnailScore * 0.85 + subjectScore * 0.15 - screenshotPenalty);
     const diversityScore = 0.5;
 

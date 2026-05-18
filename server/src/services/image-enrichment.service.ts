@@ -752,34 +752,45 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult, metadata?: EnrichmentMetadata) {
-    const tags = new Set<string>();
+    // Privacy-derived tags always apply, regardless of the 24-tag truncation
+    // budget. The model's free-form tag list is variable-quality and may
+    // legitimately span many topics, but NSFW and medical classifications are
+    // load-bearing for fork filtering — dropping them silently would
+    // misclassify an asset.
+    const required = new Set<string>();
     const effectiveNsfw = metadata ? this.getEffectiveNsfw(metadata) : nsfw?.isNsfw;
-
-    for (const tag of result.tags ?? []) {
-      const normalized = normalizeTag(tag);
-      if (normalized && (effectiveNsfw || !this.isNsfwTag(normalized))) {
-        tags.add(normalized);
-      }
-    }
 
     if (effectiveNsfw) {
       const effectiveNsfwResult = nsfw?.isNsfw ? nsfw : this.getDescriptionNsfwResult(result);
       for (const tag of this.getNsfwTags(effectiveNsfwResult)) {
-        tags.add(tag);
+        required.add(tag);
       }
     }
 
     if (result.medical?.is_medical_likely) {
-      tags.add('medical');
+      required.add('medical');
       for (const indicator of result.medical.indicators) {
         const normalized = normalizeTag(indicator);
         if (normalized) {
-          tags.add(normalized);
+          required.add(normalized);
         }
       }
     }
 
-    return [...tags].slice(0, 24);
+    const TAG_BUDGET = 24;
+    const remaining = Math.max(0, TAG_BUDGET - required.size);
+    const optional = new Set<string>();
+    for (const tag of result.tags ?? []) {
+      if (optional.size >= remaining) {
+        break;
+      }
+      const normalized = normalizeTag(tag);
+      if (normalized && !required.has(normalized) && (effectiveNsfw || !this.isNsfwTag(normalized))) {
+        optional.add(normalized);
+      }
+    }
+
+    return [...required, ...optional];
   }
 
   private isNsfwTag(tag: string) {
