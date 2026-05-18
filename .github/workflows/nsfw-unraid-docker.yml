@@ -60,12 +60,13 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+          secrets: |
+            mise_github_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
             BUILD_ID=${{ github.run_id }}
             BUILD_IMAGE=unraid-docker
             BUILD_SOURCE_REF=${{ env.SOURCE_REF }}
             BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
-            MISE_GITHUB_TOKEN=${{ github.token }}
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
     if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}

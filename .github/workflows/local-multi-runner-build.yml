@@ -1,0 +1,302 @@
+name: 'Local multi-runner container image build'
+
+# Vendored from immich-app/devtools/.github/workflows/multi-runner-build.yml@v2.4.0
+# (5813c7c4f7016c748ae7ac5d5f684846649d4d20) and immich-app/devtools/actions/image-build@v0.1.7
+# (259f3f8e3ca1d04dd6164171126f8bce36c8223a). Local copy adds MISE_GITHUB_TOKEN
+# as a BuildKit secret so the Dockerfile can consume it via --mount=type=secret
+# instead of an ARG (which would leak into image history).
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: 'Name of the image'
+        type: string
+        required: true
+      context:
+        description: 'Path to build context'
+        type: string
+        required: true
+      dockerfile:
+        description: 'Path to Dockerfile'
+        type: string
+        required: true
+      suffixes:
+        description: 'Comma-separated list of suffixes to append to the image tag'
+        type: string
+        default: ''
+      dockerhub-push:
+        description: 'Push to Docker Hub'
+        type: boolean
+        default: false
+      build-args:
+        description: 'Docker build arguments'
+        type: string
+        required: false
+      platforms:
+        description: 'Platforms to build for'
+        type: string
+      runner-mapping:
+        description: 'Mapping from platforms to runners'
+        type: string
+      target:
+        description: 'Sets the target stage to build'
+        type: string
+      release-tag-type:
+        description: 'The type of release tag to use, either git-tag or semver'
+        type: string
+        default: 'semver'
+    secrets:
+      GITHUB_APP_TOKEN:
+        required: false
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+      MISE_GITHUB_TOKEN:
+        required: false
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
+  DOCKERHUB_IMAGE: altran1502/${{ inputs.image }}
+
+jobs:
+  matrix:
+    name: 'Generate matrix'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      key: ${{ steps.artifact-key.outputs.base }}
+    steps:
+      - name: Generate build matrix
+        id: matrix
+        shell: bash
+        env:
+          PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
+        run: |
+          matrix=$(jq -R -c \
+            --argjson runner_mapping "${RUNNER_MAPPING}" \
+            'split(",") | map({platform: ., runner: $runner_mapping[.]})' \
+            <<< "${PLATFORMS}")
+          echo "matrix=${matrix}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Determine artifact key
+        id: artifact-key
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image }}
+          SUFFIXES: ${{ inputs.suffixes }}
+        run: |
+          suffix_key=$(echo "$SUFFIXES" | tr ',' '-')
+          base="${IMAGE}${suffix_key}-digests"
+          echo "base=${base}" | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    needs: matrix
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          token: ${{ secrets.GITHUB_APP_TOKEN || github.token }}
+
+      - name: Prepare
+        id: prepare
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_APP_TOKEN || github.token }}
+
+      - name: Generate cache key suffix
+        id: cache-key-suffix
+        shell: bash
+        env:
+          REF: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            echo "suffix=pr-${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          else
+            # shellcheck disable=SC2001  # character class needs sed, not bash parameter expansion
+            SUFFIX=$(echo "${REF}" | sed 's/[^a-zA-Z0-9]/-/g')
+            echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate cache target
+        id: cache-target
+        shell: bash
+        env:
+          BUILD_ARGS: ${{ inputs.build-args }}
+          IMAGE: ${{ env.GHCR_IMAGE }}
+          SUFFIX: ${{ steps.cache-key-suffix.outputs.suffix }}
+          PLATFORM_PAIR: ${{ steps.prepare.outputs.platform-pair }}
+          IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          HASH=$(sha256sum <<< "${BUILD_ARGS}" | cut -d' ' -f1)
+          CACHE_KEY="${PLATFORM_PAIR}-${HASH}"
+          echo "cache-key-base=${CACHE_KEY}" >> "$GITHUB_OUTPUT"
+          if [[ "${IS_FORK_PR}" == "true" ]]; then
+            echo "cache-to=type=local,dest=/tmp/discard,ignore-error=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-to=type=registry,ref=${IMAGE}-build-cache:${CACHE_KEY}-${SUFFIX},mode=max,compression=zstd" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate docker image tags
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: 'true'
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-to: ${{ steps.cache-target.outputs.cache-to }}
+          cache-from: |
+            type=registry,ref=${{ env.GHCR_IMAGE }}-build-cache:${{ steps.cache-target.outputs.cache-key-base }}-${{ steps.cache-key-suffix.outputs.suffix }}
+            type=registry,ref=${{ env.GHCR_IMAGE }}-build-cache:${{ steps.cache-target.outputs.cache-key-base }}-main
+          outputs: type=image,"name=${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=${{ !github.event.pull_request.head.repo.fork }}
+          target: ${{ inputs.target }}
+          secrets: |
+            mise_github_token=${{ secrets.MISE_GITHUB_TOKEN }}
+          build-args: |
+            BUILD_ID=${{ github.run_id }}
+            BUILD_IMAGE=${{ github.event_name == 'release' && github.ref_name || steps.meta.outputs.tags }}
+            BUILD_SOURCE_REF=${{ github.ref_name }}
+            BUILD_SOURCE_COMMIT=${{ github.sha }}
+            ${{ inputs.build-args }}
+
+      - name: Export digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TEMP_DIR: ${{ runner.temp }}
+        run: |
+          mkdir -p "${TEMP_DIR}/digests"
+          touch "${TEMP_DIR}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ${{ needs.matrix.outputs.key }}-${{ steps.cache-target.outputs.cache-key-base }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [matrix, build]
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: ${{ needs.matrix.outputs.key }}-*
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_APP_TOKEN || github.token }}
+
+      - name: Login to Docker Hub
+        if: ${{ inputs.dockerhub-push }}
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_APP_TOKEN || github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Generate docker image tags
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: 'true'
+        with:
+          flavor: |
+            latest=false
+          images: |
+            name=${{ env.GHCR_IMAGE }}
+            name=${{ env.DOCKERHUB_IMAGE }},enable=${{ inputs.dockerhub-push }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long,prefix=commit-
+            type=semver,pattern=v{{version}},enabled=${{ inputs.release-tag-type == 'semver' }}
+            type=semver,pattern=v{{major}},enabled=${{ inputs.release-tag-type == 'semver' }}
+            type=ref,event=tag,enabled=${{ inputs.release-tag-type == 'git-tag' }}
+            type=raw,value=release,enable=${{ github.event_name == 'release' }}
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          SUFFIXES: ${{ inputs.suffixes }}
+          GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+        shell: uv run --script {0}
+        run: |
+          # /// script
+          # requires-python = ">=3.11"
+          # dependencies = [
+          #     "python-on-whales>=0.80.0",
+          # ]
+          # ///
+
+          from python_on_whales import docker
+          import json
+          import os
+
+          docker_args = {"annotations": {}, "tags": [], "sources": []}
+
+          metadata_json = json.loads(os.environ.get("DOCKER_METADATA_OUTPUT_JSON", "{}"))
+
+          annotations = metadata_json.get("annotations", [])
+          for annotation in annotations:
+            annotation = annotation.replace("manifest:", "index:")
+            key, value = annotation.split("=", 1)
+            docker_args["annotations"][key] = value
+
+          tags = metadata_json.get("tags", [])
+          suffixes = os.environ.get("SUFFIXES", "").split(",")
+          print(f"{suffixes=}")
+          for suffix in suffixes:
+            for tag in tags:
+              docker_args["tags"].append(f"{tag}{suffix}")
+
+          ghcr_image = os.environ['GHCR_IMAGE']
+          digests = os.listdir(".")
+          docker_args["sources"] = [f"{ghcr_image}@sha256:{digest}" for digest in digests]
+
+          print(json.dumps(docker_args))
+          docker.buildx.imagetools.create(**docker_args)

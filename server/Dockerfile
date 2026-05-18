@@ -64,6 +64,7 @@ ENV MISE_TRUSTED_CONFIG_PATHS=/app/mise.toml
 ENV MISE_DATA_DIR=/buildcache/mise
 ENV MISE_DISABLE_TOOLS=flutter
 RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
+  --mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN \
   mise install
 
 COPY ./packages/plugin-core ./packages/plugin-core/
