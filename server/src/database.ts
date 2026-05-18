@@ -331,7 +331,6 @@ export const columns = {
     'asset.isFavorite',
     'asset.isExternal',
     'asset.isEdited',
-    'asset.isFavorite',
   ],
   assetFiles: [
     'asset_file.id',

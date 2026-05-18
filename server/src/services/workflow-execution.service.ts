@@ -247,8 +247,13 @@ export class WorkflowExecutionService extends BaseService {
   }
 
   @OnJob({ name: JobName.WorkflowAssetCreate, queue: QueueName.Workflow })
-  handleAssetCreate({ workflowId, assetId }: JobOf<JobName.WorkflowAssetCreate>) {
-    return this.execute(workflowId, (type) => {
+  async handleAssetCreate({ workflowId, assetId }: JobOf<JobName.WorkflowAssetCreate>) {
+    if (!(await this.workflowRepository.isWorkflowEligible(assetId))) {
+      // Skip NSFW, hidden, locked, or deleted assets — fork privacy guarantee.
+      return JobStatus.Skipped;
+    }
+
+    await this.execute(workflowId, (type) => {
       switch (type) {
         case WorkflowType.AssetV1: {
           return {
@@ -261,12 +266,12 @@ export class WorkflowExecutionService extends BaseService {
             },
             write: async (changes) => {
               if (changes.asset) {
+                // visibility is intentionally NOT writable — preventing plugins from un-hiding NSFW/locked assets.
                 await this.assetRepository.update({
                   id: assetId,
                   ..._.omitBy(
                     {
                       isFavorite: changes.asset?.isFavorite,
-                      visibility: changes.asset?.visibility,
                     },
                     _.isUndefined,
                   ),

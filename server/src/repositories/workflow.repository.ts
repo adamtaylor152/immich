@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, Updateable } from 'kysely';
+import { Insertable, Kysely, Updateable, sql } from 'kysely';
 import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { WorkflowSearchDto } from 'src/dtos/workflow.dto';
+import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
 import { WorkflowStepTable } from 'src/schema/tables/workflow-step.table';
 import { WorkflowTable } from 'src/schema/tables/workflow.table';
+import { nsfwAssetIdExists } from 'src/utils/database';
 
 export type WorkflowStepUpsert = Omit<Insertable<WorkflowStepTable>, 'workflowId' | 'order'>;
 
@@ -128,6 +130,25 @@ export class WorkflowRepository {
   @GenerateSql({ params: [DummyValue.UUID] })
   async delete(id: string) {
     await this.db.deleteFrom('workflow').where('id', '=', id).execute();
+  }
+
+  async isWorkflowEligible(assetId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('asset')
+      .select(['asset.visibility', sql<boolean>`${nsfwAssetIdExists(sql.ref('asset.id'))}`.as('isNsfw')])
+      .where('asset.id', '=', assetId)
+      .where('asset.deletedAt', 'is', null)
+      .executeTakeFirst();
+
+    if (!row) {
+      return false;
+    }
+
+    if (row.visibility === AssetVisibility.Hidden || row.visibility === AssetVisibility.Locked) {
+      return false;
+    }
+
+    return !row.isNsfw;
   }
 
   getForAssetV1(assetId: string) {

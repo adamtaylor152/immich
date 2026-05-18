@@ -20,7 +20,7 @@
     "start:debug": "nest start --debug 0.0.0.0:9230 --watch --",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings 0",
     "lint:fix": "pnpm run lint --fix",
-    "check": "tsc --noEmit",
+    "check": "pnpm --filter @immich/plugin-sdk build && tsc --noEmit",
     "check:code": "pnpm run format && pnpm run lint && pnpm run check",
     "check:all": "pnpm run check:code && pnpm run test:cov",
     "test": "vitest --config test/vitest.config.mjs",
