@@ -28,6 +28,7 @@ describe(MediaHealthService.name, () => {
       getAssets: vi.fn(),
       markStatus: vi.fn(),
       markResolved: vi.fn(),
+      markResolvedCategories: vi.fn(),
       replaceCandidates: vi.fn(),
       relinkExternalAsset: vi.fn(),
       streamAssets: vi.fn(),
@@ -192,8 +193,11 @@ describe(MediaHealthService.name, () => {
 
       await expect(sut.handleMissingScan({ missingRunId: 'm', corruptRunId: 'c' })).resolves.toBe(JobStatus.Success);
 
-      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Missing, 'healthy-asset');
-      expect(mediaHealthRepository.markResolved).toHaveBeenCalledWith(MediaHealthCategory.Corrupt, 'healthy-asset');
+      expect(mediaHealthRepository.markResolvedCategories).toHaveBeenCalledWith(
+        [MediaHealthCategory.Missing, MediaHealthCategory.Corrupt],
+        'healthy-asset',
+      );
+      expect(mediaHealthRepository.markResolved).not.toHaveBeenCalled();
       expect(mediaHealthRepository.upsertFinding).not.toHaveBeenCalled();
     });
 

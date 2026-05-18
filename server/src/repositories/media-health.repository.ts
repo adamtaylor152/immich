@@ -171,6 +171,18 @@ export class MediaHealthRepository {
       .execute();
   }
 
+  async markResolvedCategories(categories: MediaHealthCategory[], assetId: string): Promise<void> {
+    if (categories.length === 0) {
+      return;
+    }
+    await this.db
+      .updateTable('asset_health')
+      .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt: new Date() })
+      .where('category', 'in', categories)
+      .where('assetId', '=', asUuid(assetId))
+      .execute();
+  }
+
   async markDismissed(ids: string[]): Promise<void> {
     if (ids.length === 0) {
       return;

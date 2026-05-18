@@ -553,15 +553,19 @@ export class MediaHealthService {
           continue;
         }
 
-        await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
         if (!corruptRunId) {
+          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
           continue;
         }
         const result = await this.validateReadableAssetIntegrity(asset);
         if (!result) {
-          await this.mediaHealthRepository.markResolved(MediaHealthCategory.Corrupt, asset.id);
+          await this.mediaHealthRepository.markResolvedCategories(
+            [MediaHealthCategory.Missing, MediaHealthCategory.Corrupt],
+            asset.id,
+          );
           continue;
         }
+        await this.mediaHealthRepository.markResolved(MediaHealthCategory.Missing, asset.id);
 
         corruptFoundAssets++;
         await this.mediaHealthRepository.upsertFinding({
