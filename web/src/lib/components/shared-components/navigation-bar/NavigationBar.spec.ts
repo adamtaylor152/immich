@@ -115,4 +115,12 @@ describe('NavigationBar', () => {
     expect(searchButton).toBeInstanceOf(HTMLButtonElement);
     expect(screen.getByRole('button', { name: 'go_to_search' })).toHaveAttribute('href', '/search');
   });
+
+  it('exposes a slider button to open advanced search options on mobile', () => {
+    const { container } = render(NavigationBar);
+    const optionsButton = container.querySelector('#search-options-button');
+
+    expect(optionsButton).toBeInstanceOf(HTMLButtonElement);
+    expect(screen.getByRole('button', { name: 'show_search_options' })).toBeInstanceOf(HTMLButtonElement);
+  });
 });
