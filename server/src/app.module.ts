@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Inject, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, MiddlewareConsumer, Module, NestModule, OnModuleDestroy, OnModuleInit, RequestMethod } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { ClsModule } from 'nestjs-cls';
@@ -19,6 +19,8 @@ import { AuthGuard } from 'src/middleware/auth.guard';
 import { ErrorInterceptor } from 'src/middleware/error.interceptor';
 import { FileUploadInterceptor } from 'src/middleware/file-upload.interceptor';
 import { GlobalExceptionFilter } from 'src/middleware/global-exception.filter';
+import { ImmichGoCompatInterceptor } from 'src/middleware/immich-go-compat.interceptor';
+import { ImmichGoUploadCompatMiddleware } from 'src/middleware/immich-go-upload-compat.middleware';
 import { LoggingInterceptor } from 'src/middleware/logging.interceptor';
 import { repositories } from 'src/repositories';
 import { AppRepository } from 'src/repositories/app.repository';
@@ -45,12 +47,20 @@ const common = [...repositories, ...services, GlobalExceptionFilter];
 const commonMiddleware = [
   { provide: APP_FILTER, useClass: GlobalExceptionFilter },
   { provide: APP_PIPE, useClass: ZodValidationPipe },
+  // Fork-only: must register before ZodSerializerInterceptor so the response
+  // unwinds through it last, after serialization. See immich-go-compat.interceptor.ts.
+  { provide: APP_INTERCEPTOR, useClass: ImmichGoCompatInterceptor },
   { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
   { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
   { provide: APP_INTERCEPTOR, useClass: ErrorInterceptor },
 ];
 
-const apiMiddleware = [FileUploadInterceptor, ...commonMiddleware, { provide: APP_GUARD, useClass: AuthGuard }];
+const apiMiddleware = [
+  FileUploadInterceptor,
+  ImmichGoUploadCompatMiddleware,
+  ...commonMiddleware,
+  { provide: APP_GUARD, useClass: AuthGuard },
+];
 
 const configRepository = new ConfigRepository();
 const { bull, cls, database, otel } = configRepository.getEnv();
@@ -106,7 +116,13 @@ export class BaseModule implements OnModuleInit, OnModuleDestroy {
   controllers: [...controllers],
   providers: [...common, ...apiMiddleware, { provide: IWorker, useValue: ImmichWorker.Api }],
 })
-export class ApiModule extends BaseModule {}
+export class ApiModule extends BaseModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(ImmichGoUploadCompatMiddleware)
+      .forRoutes({ path: 'assets', method: RequestMethod.POST });
+  }
+}
 
 @Module({
   imports: [...commonImports],
