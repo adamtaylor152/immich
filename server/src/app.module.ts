@@ -1,5 +1,13 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Inject, MiddlewareConsumer, Module, NestModule, OnModuleDestroy, OnModuleInit, RequestMethod } from '@nestjs/common';
+import {
+  Inject,
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  OnModuleDestroy,
+  OnModuleInit,
+  RequestMethod,
+} from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { ClsModule } from 'nestjs-cls';
@@ -118,9 +126,7 @@ export class BaseModule implements OnModuleInit, OnModuleDestroy {
 })
 export class ApiModule extends BaseModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(ImmichGoUploadCompatMiddleware)
-      .forRoutes({ path: 'assets', method: RequestMethod.POST });
+    consumer.apply(ImmichGoUploadCompatMiddleware).forRoutes({ path: 'assets', method: RequestMethod.POST });
   }
 }
 
