@@ -500,7 +500,7 @@ describe(AssetMediaService.name, () => {
       mocks.asset.create.mockRejectedValue(error);
 
       await expect(sut.uploadAsset({ ...authStub.user1, hideNsfwAssets: true }, createDto, file)).resolves.toEqual({
-        id: '',
+        id: '00000000-0000-0000-0000-000000000000',
         status: AssetMediaStatus.DUPLICATE,
       });
 

@@ -313,7 +313,11 @@ export class AssetMediaService extends BaseService {
       if (!duplicateId) {
         if (auth.hideNsfwAssets) {
           this.logger.debug('Duplicate asset upload rejected while existing asset is hidden by NSFW privacy mode');
-          return { status: AssetMediaStatus.DUPLICATE, id: '' };
+          // Return a nil UUID rather than an empty string so clients that
+          // strictly type the asset id (e.g. immich-go's AssetResponse.ID)
+          // don't crash. The real duplicate id is still withheld, preserving
+          // the NSFW privacy guarantee.
+          return { status: AssetMediaStatus.DUPLICATE, id: '00000000-0000-0000-0000-000000000000' };
         }
 
         this.logger.error(`Error locating duplicate for checksum constraint`);
