@@ -8,7 +8,11 @@ import { NextFunction, Request, Response } from 'express';
 // Matches Go's default User-Agent because immich-go does not set a custom
 // one. See immich-go-compat.interceptor.ts for the full rationale.
 const LEGACY_USER_AGENT = /^(immich-go|Go-http-client)\//i;
-const HMS_FORMAT = /^(\d+):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
+// Fractional seconds may have any number of digits — immich-go sends 6
+// (microsecond precision, e.g. "00:00:00.000000"); the old Immich web/mobile
+// contract used 3 (millisecond precision). Accept any digit count and pad
+// or truncate to milliseconds.
+const HMS_FORMAT = /^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$/;
 
 function hmsStringToMilliseconds(input: string): number | null {
   const match = HMS_FORMAT.exec(input);

@@ -48,6 +48,18 @@ describe('ImmichGoUploadCompatMiddleware', () => {
       expect(body.duration).toBe(1500);
     });
 
+    it('handles microsecond fractional digits (immich-go default)', () => {
+      const body: Record<string, unknown> = { duration: '00:00:00.000000' };
+      run('Go-http-client/1.1', body);
+      expect(body.duration).toBe(0);
+    });
+
+    it('truncates fractional seconds beyond 3 digits to milliseconds', () => {
+      const body: Record<string, unknown> = { duration: '00:00:01.234567' };
+      run('Go-http-client/1.1', body);
+      expect(body.duration).toBe(1234);
+    });
+
     it('handles hour values greater than 23', () => {
       const body: Record<string, unknown> = { duration: '25:30:15.999' };
       run('immich-go/0.24.0', body);
