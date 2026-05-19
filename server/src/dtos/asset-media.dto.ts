@@ -35,10 +35,27 @@ export enum UploadFieldName {
   PROFILE_DATA = 'file',
 }
 
+// Fork-only: legacy clients (immich-go, pre-3.0 mobile) send `duration` as an
+// `hh:mm:ss[.SSSSSS]` string instead of integer milliseconds. Convert that
+// shape here so the rest of the chain (.int().min(0)) sees a number.
+const hmsToMillisecondsPreprocess = (value: unknown) => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const match = /^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(value);
+  if (!match) {
+    return value;
+  }
+  const milli = match[4] ? Number(match[4].padEnd(3, '0').slice(0, 3)) : 0;
+  return Number(match[1]) * 3_600_000 + Number(match[2]) * 60_000 + Number(match[3]) * 1000 + milli;
+};
+
 const AssetMediaBaseSchema = z.object({
   fileCreatedAt: isoDatetimeToDate.describe('File creation date'),
   fileModifiedAt: isoDatetimeToDate.describe('File modification date'),
-  duration: z.coerce.number().int().min(0).optional().describe('Duration in milliseconds (for videos)'),
+  duration: z
+    .preprocess(hmsToMillisecondsPreprocess, z.coerce.number().int().min(0).optional())
+    .describe('Duration in milliseconds (for videos)'),
   filename: z.string().optional().describe('Filename'),
   /** The properties below are added to correctly generate the API docs and client SDKs. Validation should be handled in the controller. */
   [UploadFieldName.ASSET_DATA]: z.any().describe('Asset file data').meta({ type: 'string', format: 'binary' }),

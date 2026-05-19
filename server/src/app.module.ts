@@ -1,13 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import {
-  Inject,
-  MiddlewareConsumer,
-  Module,
-  NestModule,
-  OnModuleDestroy,
-  OnModuleInit,
-  RequestMethod,
-} from '@nestjs/common';
+import { Inject, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { ClsModule } from 'nestjs-cls';
@@ -28,7 +20,6 @@ import { ErrorInterceptor } from 'src/middleware/error.interceptor';
 import { FileUploadInterceptor } from 'src/middleware/file-upload.interceptor';
 import { GlobalExceptionFilter } from 'src/middleware/global-exception.filter';
 import { ImmichGoCompatInterceptor } from 'src/middleware/immich-go-compat.interceptor';
-import { ImmichGoUploadCompatMiddleware } from 'src/middleware/immich-go-upload-compat.middleware';
 import { LoggingInterceptor } from 'src/middleware/logging.interceptor';
 import { repositories } from 'src/repositories';
 import { AppRepository } from 'src/repositories/app.repository';
@@ -63,12 +54,7 @@ const commonMiddleware = [
   { provide: APP_INTERCEPTOR, useClass: ErrorInterceptor },
 ];
 
-const apiMiddleware = [
-  FileUploadInterceptor,
-  ImmichGoUploadCompatMiddleware,
-  ...commonMiddleware,
-  { provide: APP_GUARD, useClass: AuthGuard },
-];
+const apiMiddleware = [FileUploadInterceptor, ...commonMiddleware, { provide: APP_GUARD, useClass: AuthGuard }];
 
 const configRepository = new ConfigRepository();
 const { bull, cls, database, otel } = configRepository.getEnv();
@@ -124,11 +110,7 @@ export class BaseModule implements OnModuleInit, OnModuleDestroy {
   controllers: [...controllers],
   providers: [...common, ...apiMiddleware, { provide: IWorker, useValue: ImmichWorker.Api }],
 })
-export class ApiModule extends BaseModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(ImmichGoUploadCompatMiddleware).forRoutes({ path: 'assets', method: RequestMethod.POST });
-  }
-}
+export class ApiModule extends BaseModule {}
 
 @Module({
   imports: [...commonImports],
