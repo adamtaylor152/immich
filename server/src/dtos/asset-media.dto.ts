@@ -54,7 +54,8 @@ const AssetMediaBaseSchema = z.object({
   fileCreatedAt: isoDatetimeToDate.describe('File creation date'),
   fileModifiedAt: isoDatetimeToDate.describe('File modification date'),
   duration: z
-    .preprocess(hmsToMillisecondsPreprocess, z.coerce.number().int().min(0).optional())
+    .preprocess(hmsToMillisecondsPreprocess, z.coerce.number().int().min(0))
+    .optional()
     .describe('Duration in milliseconds (for videos)'),
   filename: z.string().optional().describe('Filename'),
   /** The properties below are added to correctly generate the API docs and client SDKs. Validation should be handled in the controller. */
