@@ -5,8 +5,14 @@ import { Observable, map } from 'rxjs';
 // Fork-only compatibility shim for legacy immich-go clients that predate
 // upstream PR #28003 (duration → integer ms). Converts response `duration`
 // fields back to the pre-3.0 `hh:mm:ss.SSS` string format when the request
-// User-Agent identifies as immich-go.
-const LEGACY_USER_AGENT = /^immich-go\//i;
+// looks like it comes from immich-go.
+//
+// immich-go does not set a custom User-Agent (see simulot/immich-go's
+// immich/client.go), so it sends Go's default `Go-http-client/1.1`. We also
+// match `immich-go/*` in case a future release adds an explicit UA. Other
+// Go HTTP clients hitting this fork will also receive the legacy format —
+// acceptable for a self-hosted fork where this is the deliberate behavior.
+const LEGACY_USER_AGENT = /^(immich-go|Go-http-client)\//i;
 
 function millisecondsToHmsString(ms: number): string {
   const total = Math.max(0, Math.floor(ms));

@@ -4,7 +4,10 @@ import { NextFunction, Request, Response } from 'express';
 // Counterpart to ImmichGoCompatInterceptor: converts `duration` on incoming
 // asset upload bodies from the legacy `hh:mm:ss.SSS` string format to the
 // integer milliseconds format the post-#28003 zod schema expects.
-const LEGACY_USER_AGENT = /^immich-go\//i;
+//
+// Matches Go's default User-Agent because immich-go does not set a custom
+// one. See immich-go-compat.interceptor.ts for the full rationale.
+const LEGACY_USER_AGENT = /^(immich-go|Go-http-client)\//i;
 const HMS_FORMAT = /^(\d+):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
 
 function hmsStringToMilliseconds(input: string): number | null {

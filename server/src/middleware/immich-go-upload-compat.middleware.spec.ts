@@ -82,5 +82,11 @@ describe('ImmichGoUploadCompatMiddleware', () => {
       run('Immich-Go/0.24.0', body);
       expect(body.duration).toBe(1000);
     });
+
+    it("matches Go's default HTTP client User-Agent", () => {
+      const body: Record<string, unknown> = { duration: '00:00:01.000' };
+      run('Go-http-client/1.1', body);
+      expect(body.duration).toBe(1000);
+    });
   });
 });

@@ -84,6 +84,11 @@ describe('ImmichGoCompatInterceptor', () => {
       expect((result as { duration: string }).duration).toBe('00:00:01.000');
     });
 
+    it("matches Go's default HTTP client User-Agent (immich-go does not set a custom one)", async () => {
+      const result = await run(interceptor, 'Go-http-client/1.1', { duration: 1000 });
+      expect((result as { duration: string }).duration).toBe('00:00:01.000');
+    });
+
     it('leaves unrelated fields untouched', async () => {
       const body = { id: 'a', duration: 5000, originalFileName: 'video.mp4', height: 1080 };
       const result = await run(interceptor, 'immich-go/0.24.0', body);
