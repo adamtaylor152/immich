@@ -384,7 +384,7 @@ describe(AssetService.name, () => {
 
       await expect(
         sut.uploadAsset(hiddenAuth, uploadDto, mediumFactory.uploadFile({ checksum: unreviewedNsfw.checksum })),
-      ).resolves.toEqual({ id: '', status: AssetMediaStatus.DUPLICATE });
+      ).resolves.toEqual({ id: '00000000-0000-0000-0000-000000000000', status: AssetMediaStatus.DUPLICATE });
     });
   });
 
