@@ -1,6 +1,9 @@
 import json
 import os
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from random import randint
@@ -412,6 +415,45 @@ class TestImageDescriptionModel:
         assert gpu_session.calls == 1
         assert cpu_session.calls == 1
         assert model.device == "CPU"
+
+    def test_serializes_concurrent_openvino_generates(self, monkeypatch: MonkeyPatch) -> None:
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                self.data = data
+
+        result_text = SimpleNamespace(
+            texts=[json.dumps({"description": "A room.", "tags": ["room"]})]
+        )
+
+        in_flight = 0
+        max_in_flight = 0
+        lock = threading.Lock()
+
+        def generate(*args: Any, **kwargs: Any) -> Any:
+            nonlocal in_flight, max_in_flight
+            with lock:
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+            time.sleep(0.05)
+            with lock:
+                in_flight -= 1
+            return result_text
+
+        session = SimpleNamespace(generate=generate)
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+        monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+
+        model = ImageDescriptionModel(
+            "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=session
+        )
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(model.predict, image) for _ in range(4)]
+            results = [future.result() for future in futures]
+
+        assert max_in_flight == 1
+        assert all(result["description"] == "A room." for result in results)
 
 
 @pytest.mark.usefixtures("ort_session")
