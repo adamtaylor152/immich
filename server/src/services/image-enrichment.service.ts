@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Insertable } from 'kysely';
+import { Insertable, Kysely } from 'kysely';
 import { createHash } from 'node:crypto';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { OnJob } from 'src/decorators';
@@ -19,11 +19,8 @@ import {
   Permission,
   QueueName,
 } from 'src/enum';
-import {
-  ImageDescriptionResult,
-  NsfwDetectionOptions,
-  NsfwDetectionResult,
-} from 'src/repositories/machine-learning.repository';
+import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
+import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
@@ -116,6 +113,16 @@ const withoutGeneratedDescriptionBlocks = (description: string, generatedDescrip
     .trim();
 };
 
+const copyAppliedFields = <T extends Record<string, unknown>>(target: T, source: T, keys: Array<keyof T>) => {
+  for (const key of keys) {
+    if (source[key] === undefined) {
+      delete target[key];
+    } else {
+      target[key] = source[key];
+    }
+  }
+};
+
 const normalizeTag = (tag: string) =>
   tag
     .toLowerCase()
@@ -128,7 +135,7 @@ const normalizeTag = (tag: string) =>
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
-    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
+    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
 
     const metadata = await this.getEnrichmentMetadata(id);
     return this.toResponse(id, metadata);
@@ -139,72 +146,84 @@ export class ImageEnrichmentService extends BaseService {
     id: string,
     dto: AssetImageEnrichmentActionRequestDto,
   ): Promise<AssetImageEnrichmentResponseDto> {
-    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
+    await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
 
-    return this.databaseRepository.withAssetMetadataLock(id, () => this.updateAssetEnrichmentLocked(auth, id, dto));
-  }
-
-  private async updateAssetEnrichmentLocked(
-    auth: AuthDto,
-    id: string,
-    dto: AssetImageEnrichmentActionRequestDto,
-  ): Promise<AssetImageEnrichmentResponseDto> {
     const asset = await this.assetRepository.getById(id, { exifInfo: true, tags: true });
     if (!asset) {
       throw new BadRequestException('Asset not found');
     }
 
-    const metadata = await this.getEnrichmentMetadata(id);
+    // Queue-only actions don't touch asset_metadata — no lock needed.
+    if (dto.action === AssetImageEnrichmentAction.RerunImageDescription) {
+      await this.jobRepository.queue({ name: JobName.ImageDescription, data: { id } });
+      return this.toResponse(id, await this.getEnrichmentMetadata(id));
+    }
+    if (dto.action === AssetImageEnrichmentAction.RerunNsfwDetection) {
+      await this.jobRepository.queue({ name: JobName.NsfwDetection, data: { id } });
+      return this.toResponse(id, await this.getEnrichmentMetadata(id));
+    }
 
+    // Phase 1 (under per-asset advisory lock): read metadata, mutate the
+    // review/clear fields, persist. Kept narrow so the transaction's
+    // connection isn't held while tag application or job queueing runs —
+    // those would compete for the same pool and deadlock under parallel
+    // bulk-mark actions.
+    const metadata = await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+      const m = await this.getEnrichmentMetadata(id, trx);
+
+      switch (dto.action) {
+        case AssetImageEnrichmentAction.AcceptNsfwResult: {
+          const nsfw = this.ensureManualNsfwMetadata(m, this.getEffectiveNsfw(m) ?? false);
+          nsfw.review = this.getReview(auth, 'accepted', this.getEffectiveNsfw(m) ?? false);
+          break;
+        }
+        case AssetImageEnrichmentAction.MarkNsfw: {
+          const nsfw = this.ensureManualNsfwMetadata(m, true);
+          nsfw.review = this.getReview(auth, 'marked-nsfw', true);
+          break;
+        }
+        case AssetImageEnrichmentAction.MarkSafe: {
+          const nsfw = this.ensureManualNsfwMetadata(m, false);
+          nsfw.review = this.getReview(auth, 'marked-safe', false);
+          break;
+        }
+        case AssetImageEnrichmentAction.ClearGeneratedDescription:
+        case AssetImageEnrichmentAction.ClearGeneratedTags: {
+          // These actions only delete derived fields; the side-effect phase
+          // below performs the deletion and persists the result.
+          break;
+        }
+      }
+
+      await this.saveEnrichmentMetadata(id, m, trx);
+      return m;
+    });
+
+    // Phase 2 (no lock): tag application + finalize. These are idempotent on
+    // their applied-hash bookkeeping, so the brief unlocked window between
+    // phases is safe even under concurrent reviewer/detection writes.
+    let changed: { visible: boolean; metadata: boolean };
     switch (dto.action) {
-      case AssetImageEnrichmentAction.RerunImageDescription: {
-        await this.jobRepository.queue({ name: JobName.ImageDescription, data: { id } });
-        break;
-      }
-
-      case AssetImageEnrichmentAction.RerunNsfwDetection: {
-        await this.jobRepository.queue({ name: JobName.NsfwDetection, data: { id } });
-        break;
-      }
-
       case AssetImageEnrichmentAction.AcceptNsfwResult: {
-        const nsfw = this.ensureManualNsfwMetadata(metadata, this.getEffectiveNsfw(metadata) ?? false);
-        nsfw.review = this.getReview(auth, 'accepted', this.getEffectiveNsfw(metadata) ?? false);
-        await this.saveEnrichmentMetadata(id, metadata);
-
-        const changed = nsfw.review.isNsfw
+        changed = metadata.nsfwDetection?.review?.isNsfw
           ? await this.applyNsfwTags(id, asset.ownerId, this.getStoredNsfw(metadata)!, metadata)
           : await this.clearAppliedNsfwTags(id, asset.ownerId, metadata);
-        await this.finalizeRepair(id, changed, metadata);
         break;
       }
-
       case AssetImageEnrichmentAction.MarkNsfw: {
-        const nsfw = this.ensureManualNsfwMetadata(metadata, true);
-        nsfw.review = this.getReview(auth, 'marked-nsfw', true);
-        await this.saveEnrichmentMetadata(id, metadata);
-        const changed = await this.applyNsfwTags(id, asset.ownerId, this.getStoredNsfw(metadata)!, metadata);
-        await this.finalizeRepair(id, changed, metadata);
+        changed = await this.applyNsfwTags(id, asset.ownerId, this.getStoredNsfw(metadata)!, metadata);
         break;
       }
-
       case AssetImageEnrichmentAction.MarkSafe: {
-        const nsfw = this.ensureManualNsfwMetadata(metadata, false);
-        nsfw.review = this.getReview(auth, 'marked-safe', false);
-        await this.saveEnrichmentMetadata(id, metadata);
-        const changed = await this.clearAppliedNsfwTags(id, asset.ownerId, metadata);
-        await this.finalizeRepair(id, changed, metadata);
+        changed = await this.clearAppliedNsfwTags(id, asset.ownerId, metadata);
         break;
       }
-
       case AssetImageEnrichmentAction.ClearGeneratedDescription: {
-        const changed = await this.clearGeneratedDescription(id, asset.exifInfo?.description ?? '', metadata);
-        await this.finalizeRepair(id, changed, metadata);
+        changed = await this.clearGeneratedDescription(id, asset.exifInfo?.description ?? '', metadata);
         break;
       }
-
       case AssetImageEnrichmentAction.ClearGeneratedTags: {
-        const changed = await this.clearGeneratedTags(id, asset.ownerId, this.getStoredGeneratedTags(metadata));
+        changed = await this.clearGeneratedTags(id, asset.ownerId, this.getStoredGeneratedTags(metadata));
         if (metadata.description?.status === 'success') {
           delete metadata.description.appliedTagHash;
           delete metadata.description.appliedTagValues;
@@ -215,10 +234,14 @@ export class ImageEnrichmentService extends BaseService {
           delete metadata.nsfwDetection.appliedTagValues;
           changed.metadata = true;
         }
-        await this.finalizeRepair(id, changed, metadata);
         break;
       }
+      default: {
+        changed = { visible: false, metadata: false };
+      }
     }
+
+    await this.finalizeRepair(id, changed, metadata);
 
     return this.toResponse(id, await this.getEnrichmentMetadata(id));
   }
@@ -285,35 +308,54 @@ export class ImageEnrichmentService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    // Serialize against concurrent reviewer actions (MarkSafe / MarkNsfw /
-    // AcceptNsfwResult) and against parallel description jobs on the same
-    // asset_metadata blob.
-    return this.databaseRepository.withAssetMetadataLock(id, async () => {
-      const metadata = await this.getEnrichmentMetadata(id);
-      try {
-        const result = await this.detectAndStoreNsfw(id, asset.previewFile!, machineLearning.nsfwDetection, metadata);
-        const changed = await this.applyNsfwTags(id, asset.ownerId, result, metadata);
-
-        if (changed.metadata) {
-          await this.saveEnrichmentMetadata(id, metadata);
-        }
-
-        if (changed.visible) {
-          await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
-        }
-
-        return JobStatus.Success;
-      } catch (error) {
-        metadata.nsfwDetection = {
+    // ML inference runs outside the per-asset lock — it can take hundreds of
+    // ms and would otherwise hold the transaction's connection long enough to
+    // starve the pool under parallel jobs.
+    let result: NsfwDetectionResult;
+    try {
+      result = await this.machineLearningRepository.detectNsfw(asset.previewFile!, machineLearning.nsfwDetection);
+    } catch (error) {
+      await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+        const m = await this.getEnrichmentMetadata(id, trx);
+        m.nsfwDetection = {
           status: 'failed',
           modelName: machineLearning.nsfwDetection.modelName,
           updatedAt: new Date().toISOString(),
           error: getErrorMessage(error),
         };
-        await this.saveEnrichmentMetadata(id, metadata);
-        return JobStatus.Failed;
-      }
+        await this.saveEnrichmentMetadata(id, m, trx);
+      });
+      return JobStatus.Failed;
+    }
+
+    // Serialize the RMW of the metadata blob against concurrent reviewer
+    // actions and parallel description jobs. Side effects (tag application,
+    // sidecar queueing) run afterwards on the regular pool.
+    const metadata = await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+      const m = await this.getEnrichmentMetadata(id, trx);
+      const appliedTagHash = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagHash : undefined;
+      const appliedTagValues = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagValues : undefined;
+      m.nsfwDetection = {
+        status: 'success',
+        modelName: machineLearning.nsfwDetection.modelName,
+        updatedAt: new Date().toISOString(),
+        result,
+        appliedTagHash,
+        appliedTagValues,
+      };
+      await this.saveEnrichmentMetadata(id, m, trx);
+      return m;
     });
+
+    const changed = await this.applyNsfwTags(id, asset.ownerId, result, metadata);
+    if (changed.metadata) {
+      await this.persistAppliedBookkeeping(id, metadata);
+    }
+    if (changed.visible) {
+      await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
+    }
+
+    return JobStatus.Success;
   }
 
   @OnJob({ name: JobName.ImageDescription, queue: QueueName.ImageDescription })
@@ -332,69 +374,113 @@ export class ImageEnrichmentService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    // Serialize against reviewer actions and NSFW detection on the same asset_metadata blob.
-    return this.databaseRepository.withAssetMetadataLock(id, async () => {
-      const metadata = await this.getEnrichmentMetadata(id);
+    // Snapshot the metadata to decide whether NSFW inference is needed; the
+    // canonical read happens again inside the lock when we persist.
+    const snapshot = await this.getEnrichmentMetadata(id);
 
+    let nsfw = this.getStoredNsfw(snapshot);
+    let nsfwIsFresh = false;
+    if (!nsfw && isNsfwDetectionEnabled(machineLearning)) {
       try {
-        const nsfw = isNsfwDetectionEnabled(machineLearning)
-          ? await this.ensureNsfw(id, asset.previewFile!, metadata)
-          : this.getStoredNsfw(metadata);
-        const previousDescription =
-          metadata.description?.status === 'success' && metadata.description.appliedDescriptionHash
-            ? metadata.description.result.description
-            : undefined;
-        const previousTagValues =
-          metadata.description?.status === 'success' ? (metadata.description.appliedTagValues ?? []) : [];
-        const result = await this.machineLearningRepository.describeImage(
-          asset.previewFile!,
-          machineLearning.imageDescription,
-          nsfw,
-        );
-
-        metadata.description = {
-          status: 'success',
-          modelName: machineLearning.imageDescription.modelName,
-          updatedAt: new Date().toISOString(),
-          result,
-        };
-        await this.saveEnrichmentMetadata(id, metadata);
-
-        if (isSmartSearchEnabled(machineLearning)) {
-          await this.upsertDescriptionEmbedding(id, result.description, machineLearning.clip);
-        }
-
-        const changed = await this.applyVisibleMetadata({
-          id,
-          ownerId: asset.ownerId,
-          existingDescription: asset.description ?? '',
-          result,
-          nsfw,
-          metadata,
-          previousDescription,
-          previousTagValues,
-        });
-
-        if (changed.metadata) {
-          await this.saveEnrichmentMetadata(id, metadata);
-        }
-
-        if (changed.visible) {
-          await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
-        }
-
-        return JobStatus.Success;
+        nsfw = await this.machineLearningRepository.detectNsfw(asset.previewFile!, machineLearning.nsfwDetection);
+        nsfwIsFresh = true;
       } catch (error) {
-        metadata.description = {
+        // NSFW failure is non-fatal for description; persist the failed
+        // detection status alongside whatever description result we get.
+        await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+          const m = await this.getEnrichmentMetadata(id, trx);
+          m.nsfwDetection = {
+            status: 'failed',
+            modelName: machineLearning.nsfwDetection.modelName,
+            updatedAt: new Date().toISOString(),
+            error: getErrorMessage(error),
+          };
+          await this.saveEnrichmentMetadata(id, m, trx);
+        });
+        nsfw = undefined;
+      }
+    }
+
+    let result: ImageDescriptionResult;
+    try {
+      result = await this.machineLearningRepository.describeImage(
+        asset.previewFile!,
+        machineLearning.imageDescription,
+        nsfw,
+      );
+    } catch (error) {
+      await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+        const m = await this.getEnrichmentMetadata(id, trx);
+        m.description = {
           status: 'failed',
           modelName: machineLearning.imageDescription.modelName,
           updatedAt: new Date().toISOString(),
           error: getErrorMessage(error),
         };
-        await this.saveEnrichmentMetadata(id, metadata);
-        return JobStatus.Failed;
-      }
+        await this.saveEnrichmentMetadata(id, m, trx);
+      });
+      return JobStatus.Failed;
+    }
+
+    // Phase: serialize the RMW so reviewer / NSFW writes can't clobber the
+    // description (and vice versa). ML inference is already done above.
+    const { metadata, previousDescription, previousTagValues } = await this.databaseRepository.withAssetMetadataLock(
+      id,
+      async (trx) => {
+        const m = await this.getEnrichmentMetadata(id, trx);
+        const previousDescription =
+          m.description?.status === 'success' && m.description.appliedDescriptionHash
+            ? m.description.result.description
+            : undefined;
+        const previousTagValues = m.description?.status === 'success' ? (m.description.appliedTagValues ?? []) : [];
+
+        if (nsfwIsFresh && nsfw && !this.getStoredNsfw(m)) {
+          const appliedTagHash = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagHash : undefined;
+          const appliedTagValues = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagValues : undefined;
+          m.nsfwDetection = {
+            status: 'success',
+            modelName: machineLearning.nsfwDetection.modelName,
+            updatedAt: new Date().toISOString(),
+            result: nsfw,
+            appliedTagHash,
+            appliedTagValues,
+          };
+        }
+
+        m.description = {
+          status: 'success',
+          modelName: machineLearning.imageDescription.modelName,
+          updatedAt: new Date().toISOString(),
+          result,
+        };
+        await this.saveEnrichmentMetadata(id, m, trx);
+        return { metadata: m, previousDescription, previousTagValues };
+      },
+    );
+
+    if (isSmartSearchEnabled(machineLearning)) {
+      await this.upsertDescriptionEmbedding(id, result.description, machineLearning.clip);
+    }
+
+    const changed = await this.applyVisibleMetadata({
+      id,
+      ownerId: asset.ownerId,
+      existingDescription: asset.description ?? '',
+      result,
+      nsfw,
+      metadata,
+      previousDescription,
+      previousTagValues,
     });
+
+    if (changed.metadata) {
+      await this.persistAppliedBookkeeping(id, metadata);
+    }
+    if (changed.visible) {
+      await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
+    }
+
+    return JobStatus.Success;
   }
 
   private toResponse(id: string, metadata: EnrichmentMetadata): AssetImageEnrichmentResponseDto {
@@ -467,12 +553,44 @@ export class ImageEnrichmentService extends BaseService {
     metadata: EnrichmentMetadata,
   ) {
     if (changed.metadata) {
-      await this.saveEnrichmentMetadata(id, metadata);
+      await this.persistAppliedBookkeeping(id, metadata);
     }
 
     if (changed.visible) {
       await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
     }
+  }
+
+  /**
+   * Re-lock and merge only the tag-application bookkeeping fields
+   * (`appliedDescriptionHash`, `appliedTagHash`, `appliedTagValues`) from an
+   * in-memory snapshot into the freshly-read metadata, then persist.
+   *
+   * Tag application and ML inference happen outside the per-asset lock to
+   * keep the lock window short. Naively saving the post-side-effect snapshot
+   * would clobber any concurrent writes to other JSON keys (e.g. a reviewer
+   * setting `nsfwDetection.review` between phases). This helper preserves
+   * those concurrent writes while still recording the bookkeeping deltas the
+   * caller computed.
+   */
+  private async persistAppliedBookkeeping(id: string, snapshot: EnrichmentMetadata) {
+    await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+      const m = await this.getEnrichmentMetadata(id, trx);
+
+      if (m.description?.status === 'success' && snapshot.description?.status === 'success') {
+        copyAppliedFields(m.description, snapshot.description, [
+          'appliedDescriptionHash',
+          'appliedTagHash',
+          'appliedTagValues',
+        ]);
+      }
+
+      if (m.nsfwDetection?.status === 'success' && snapshot.nsfwDetection?.status === 'success') {
+        copyAppliedFields(m.nsfwDetection, snapshot.nsfwDetection, ['appliedTagHash', 'appliedTagValues']);
+      }
+
+      await this.saveEnrichmentMetadata(id, m, trx);
+    });
   }
 
   private ensureManualNsfwMetadata(metadata: EnrichmentMetadata, isNsfw: boolean): NsfwEnrichmentTask {
@@ -571,39 +689,6 @@ export class ImageEnrichmentService extends BaseService {
     return { visible, metadata: false };
   }
 
-  private async ensureNsfw(id: string, previewFile: string, metadata: EnrichmentMetadata) {
-    const stored = this.getStoredNsfw(metadata);
-    if (stored) {
-      return stored;
-    }
-
-    const { machineLearning } = await this.getConfig({ withCache: true });
-    return this.detectAndStoreNsfw(id, previewFile, machineLearning.nsfwDetection, metadata);
-  }
-
-  private async detectAndStoreNsfw(
-    id: string,
-    previewFile: string,
-    config: NsfwDetectionOptions,
-    metadata: EnrichmentMetadata,
-  ) {
-    const result = await this.machineLearningRepository.detectNsfw(previewFile, config);
-    const appliedTagHash =
-      metadata.nsfwDetection?.status === 'success' ? metadata.nsfwDetection.appliedTagHash : undefined;
-    const appliedTagValues =
-      metadata.nsfwDetection?.status === 'success' ? metadata.nsfwDetection.appliedTagValues : undefined;
-    metadata.nsfwDetection = {
-      status: 'success',
-      modelName: config.modelName,
-      updatedAt: new Date().toISOString(),
-      result,
-      appliedTagHash,
-      appliedTagValues,
-    };
-    await this.saveEnrichmentMetadata(id, metadata);
-    return result;
-  }
-
   // Encodes the freshly generated description through CLIP's text encoder
   // and persists the result alongside the visual embedding. Smart search
   // blends this in so an asset can match a query via what the VLM said
@@ -656,15 +741,17 @@ export class ImageEnrichmentService extends BaseService {
     );
   }
 
-  private async getEnrichmentMetadata(id: string): Promise<EnrichmentMetadata> {
-    const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment);
+  private async getEnrichmentMetadata(id: string, kysely?: Kysely<DB>): Promise<EnrichmentMetadata> {
+    const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
     return isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
   }
 
-  private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata) {
-    await this.assetRepository.upsertMetadata(id, [
-      { key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> },
-    ]);
+  private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {
+    await this.assetRepository.upsertMetadata(
+      id,
+      [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
+      kysely,
+    );
   }
 
   private async applyVisibleMetadata({

@@ -493,15 +493,21 @@ export class DatabaseRepository {
    * class (the negative number namespace) and the lower 32 bits of the UUID's
    * hashtext for the key, so it doesn't collide with the integer DatabaseLock
    * enum values above.
+   *
+   * The lock is acquired via `pg_advisory_xact_lock` inside a transaction so
+   * it auto-releases on commit/rollback. The transaction object is passed to
+   * the callback — callers must do their lock-protected reads/writes through
+   * it (otherwise those queries run on different pooled connections and
+   * can deadlock once N parallel callers exhaust the pool with held locks).
+   * Side effects that don't need to be atomic with the metadata RMW (tag
+   * application, job queueing, ML inference) should be performed outside the
+   * callback to keep the lock window — and therefore the held connection —
+   * as short as possible.
    */
-  async withAssetMetadataLock<R>(assetId: string, callback: () => Promise<R>): Promise<R> {
-    return this.db.connection().execute(async (connection) => {
-      await sql`SELECT pg_advisory_lock(-1, hashtext(${assetId})::int)`.execute(connection);
-      try {
-        return await callback();
-      } finally {
-        await sql`SELECT pg_advisory_unlock(-1, hashtext(${assetId})::int)`.execute(connection);
-      }
+  async withAssetMetadataLock<R>(assetId: string, callback: (kysely: Kysely<DB>) => Promise<R>): Promise<R> {
+    return this.db.transaction().execute(async (trx) => {
+      await sql`SELECT pg_advisory_xact_lock(-1, hashtext(${assetId})::int)`.execute(trx);
+      return callback(trx);
     });
   }
 
