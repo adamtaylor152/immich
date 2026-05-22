@@ -151,8 +151,8 @@
           menuItem
           onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
         />
-        <MarkNsfwAction menuItem onMark={() => timelineManager.refresh()} />
-        <MarkNsfwAction menuItem markSafe onMark={() => timelineManager.refresh()} />
+        <MarkNsfwAction menuItem />
+        <MarkNsfwAction menuItem markSafe />
         {#if authManager.preferences.tags.enabled}
           <TagAction menuItem />
         {/if}

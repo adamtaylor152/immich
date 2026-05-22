@@ -115,6 +115,7 @@ export class TimelineManager extends VirtualScrollManager {
     this.#unsubscribes.push(
       eventManager.on({
         AssetUpdate: (asset: AssetResponseDto) => this.#updateAssets([toTimelineAsset(asset)]),
+        AssetsMarkNsfw: (ids: string[]) => this.removeAssets(ids),
         SessionAccessChanged: () => void this.refresh(),
       }),
     );
