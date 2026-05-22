@@ -20,19 +20,11 @@ bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
     return false;
   }
 
-  final selectedAssets = ref.watch(
-    multiSelectProvider.select((state) => state.selectedAssets),
-  );
-  return selectedAssets.whereType<RemoteAsset>().any(
-    (asset) => asset.ownerId == ownerId,
-  );
+  final selectedAssets = ref.watch(multiSelectProvider.select((state) => state.selectedAssets));
+  return selectedAssets.whereType<RemoteAsset>().any((asset) => asset.ownerId == ownerId);
 }
 
-Future<void> performMarkNsfwAction(
-  BuildContext context,
-  WidgetRef ref, {
-  required ActionSource source,
-}) async {
+Future<void> performMarkNsfwAction(BuildContext context, WidgetRef ref, {required ActionSource source}) async {
   if (!context.mounted) {
     return;
   }
@@ -42,17 +34,12 @@ Future<void> performMarkNsfwAction(
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_nsfw_action_prompt'.t(
-    context: context,
-    args: {'count': result.count.toString()},
-  );
+  final successMessage = 'mark_nsfw_action_prompt'.t(context: context, args: {'count': result.count.toString()});
 
   if (context.mounted) {
     ImmichToast.show(
       context: context,
-      msg: result.success
-          ? successMessage
-          : 'scaffold_body_error_occurred'.t(context: context),
+      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
       gravity: ToastGravity.BOTTOM,
       toastType: result.success ? ToastType.success : ToastType.error,
     );
@@ -64,12 +51,7 @@ class MarkNsfwActionButton extends ConsumerWidget {
   final bool iconOnly;
   final bool menuItem;
 
-  const MarkNsfwActionButton({
-    super.key,
-    required this.source,
-    this.iconOnly = false,
-    this.menuItem = false,
-  });
+  const MarkNsfwActionButton({super.key, required this.source, this.iconOnly = false, this.menuItem = false});
 
   Future<void> _onTap(BuildContext context, WidgetRef ref) async {
     await performMarkNsfwAction(context, ref, source: source);
@@ -92,11 +74,7 @@ class MarkNsfwActionButton extends ConsumerWidget {
   }
 }
 
-Future<void> performMarkSafeAction(
-  BuildContext context,
-  WidgetRef ref, {
-  required ActionSource source,
-}) async {
+Future<void> performMarkSafeAction(BuildContext context, WidgetRef ref, {required ActionSource source}) async {
   if (!context.mounted) {
     return;
   }
@@ -106,17 +84,12 @@ Future<void> performMarkSafeAction(
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_safe_action_prompt'.t(
-    context: context,
-    args: {'count': result.count.toString()},
-  );
+  final successMessage = 'mark_safe_action_prompt'.t(context: context, args: {'count': result.count.toString()});
 
   if (context.mounted) {
     ImmichToast.show(
       context: context,
-      msg: result.success
-          ? successMessage
-          : 'scaffold_body_error_occurred'.t(context: context),
+      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
       gravity: ToastGravity.BOTTOM,
       toastType: result.success ? ToastType.success : ToastType.error,
     );
@@ -128,12 +101,7 @@ class MarkSafeActionButton extends ConsumerWidget {
   final bool iconOnly;
   final bool menuItem;
 
-  const MarkSafeActionButton({
-    super.key,
-    required this.source,
-    this.iconOnly = false,
-    this.menuItem = false,
-  });
+  const MarkSafeActionButton({super.key, required this.source, this.iconOnly = false, this.menuItem = false});
 
   Future<void> _onTap(BuildContext context, WidgetRef ref) async {
     await performMarkSafeAction(context, ref, source: source);
