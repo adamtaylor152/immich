@@ -20,10 +20,7 @@ import {
   QueueName,
 } from 'src/enum';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
-import {
-  DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG,
-  ImageDescriptionPromptAssembler,
-} from 'src/services/prompt-assembler.service';
+import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
@@ -410,7 +407,7 @@ export class ImageEnrichmentService extends BaseService {
     let result: ImageDescriptionResult;
     try {
       const { prompt } = this.promptAssembler.build({
-        config: DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG, // PR 3 will replace with SystemConfig read
+        config: machineLearning.imageDescription.prompt,
         knownPersons: [], // PR 5 will populate from face data
       });
       result = await this.machineLearningRepository.describeImage(

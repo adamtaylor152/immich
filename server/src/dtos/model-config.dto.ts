@@ -90,12 +90,47 @@ export const OcrConfigSchema = ModelConfigSchema.extend({
     .describe('Minimum confidence score for text recognition'),
 }).meta({ id: 'OcrConfig' });
 
+const IdentityInjectionSchema = z.object({
+  enabled: z.boolean().default(true),
+  maxNames: z.int().min(1).max(20).default(5),
+  minFaceConfidence: z.number().meta({ format: 'double' }).min(0).max(1).default(0.7),
+}).meta({ id: 'IdentityInjectionConfig' });
+
+const AdvancedPromptSchema = z.object({
+  enabled: z.boolean().default(false),
+  rawPromptTemplate: z.string().default(''),
+  placeholderValidation: z.enum(['strict', 'warn']).default('strict'),
+}).meta({ id: 'AdvancedPromptConfig' });
+
+export const ImageDescriptionPromptSchema = z.object({
+  style: z.enum(['terse', 'balanced', 'rich']).default('balanced'),
+  sentenceCountTarget: z.int().min(1).max(6).default(3),
+  lookFor: z.array(z.string()).default([]),
+  customVocabulary: z.array(z.string()).default([]),
+  nsfwIndicators: z.array(z.string()).default([
+    'adult-nudity', 'bare-buttocks', 'bondage', 'explicit', 'exposed-genitals',
+    'naked', 'nsfw', 'nudity', 'restraint', 'sex-toy', 'sexual-activity',
+  ]),
+  medicalIndicators: z.array(z.string()).default([
+    'bandage', 'cast', 'crutches', 'exam-table', 'hospital', 'iv-line',
+    'lab-result', 'medical', 'medical-monitor', 'medical-paperwork', 'mobility-aid',
+    'pill-organizer', 'prescription', 'syringe', 'ultrasound', 'wheelchair',
+    'wound', 'x-ray',
+  ]),
+  forbiddenInferences: z.array(z.string()).default([
+    'diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability',
+  ]),
+  identityInjection: IdentityInjectionSchema.default({ enabled: true, maxNames: 5, minFaceConfidence: 0.7 }),
+  advanced: AdvancedPromptSchema.default({ enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' }),
+}).meta({ id: 'ImageDescriptionPromptConfig' });
+
 export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
   acceleration: MachineLearningHardwareAccelerationSchema.default(MachineLearningHardwareAcceleration.Auto).describe(
     'Hardware acceleration backend to use',
   ),
   fallbackModelName: z.string().describe('Name of the fallback model to use'),
   device: z.string().describe('Hardware device to use'),
+  prompt: ImageDescriptionPromptSchema.default(ImageDescriptionPromptSchema.parse({})),
 }).meta({ id: 'ImageDescriptionConfig' });
 
 export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({

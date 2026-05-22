@@ -1,20 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { z } from 'zod';
+import { ImageDescriptionPromptSchema } from 'src/dtos/model-config.dto';
 
-export interface ImageDescriptionPromptConfig {
-  style: 'terse' | 'balanced' | 'rich';
-  sentenceCountTarget: number;
-  lookFor: string[];
-  customVocabulary: string[];
-  nsfwIndicators: string[];
-  medicalIndicators: string[];
-  forbiddenInferences: string[];
-  identityInjection: { enabled: boolean; maxNames: number; minFaceConfidence: number };
-  advanced: {
-    enabled: boolean;
-    rawPromptTemplate: string;
-    placeholderValidation: 'strict' | 'warn';
-  };
-}
+export type ImageDescriptionPromptConfig = z.infer<typeof ImageDescriptionPromptSchema>;
 
 export interface KnownPerson {
   name: string;
@@ -27,49 +15,6 @@ export interface AssembledPrompt {
   expectedSchemaVersion: string;
   warnings: string[];
 }
-
-export const DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG: ImageDescriptionPromptConfig = {
-  style: 'balanced',
-  sentenceCountTarget: 3,
-  lookFor: [],
-  customVocabulary: [],
-  nsfwIndicators: [
-    'adult-nudity',
-    'bare-buttocks',
-    'bondage',
-    'explicit',
-    'exposed-genitals',
-    'naked',
-    'nsfw',
-    'nudity',
-    'restraint',
-    'sex-toy',
-    'sexual-activity',
-  ],
-  medicalIndicators: [
-    'bandage',
-    'cast',
-    'crutches',
-    'exam-table',
-    'hospital',
-    'iv-line',
-    'lab-result',
-    'medical',
-    'medical-monitor',
-    'medical-paperwork',
-    'mobility-aid',
-    'pill-organizer',
-    'prescription',
-    'syringe',
-    'ultrasound',
-    'wheelchair',
-    'wound',
-    'x-ray',
-  ],
-  forbiddenInferences: ['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'],
-  identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.7 },
-  advanced: { enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' },
-};
 
 const SCHEMA_VERSION = '2026-05-22';
 
