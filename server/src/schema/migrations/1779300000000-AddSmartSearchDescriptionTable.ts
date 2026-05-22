@@ -5,8 +5,8 @@ export async function up(db: Kysely<any>): Promise<void> {
     CREATE TABLE "smart_search_description" (
       "assetId" uuid NOT NULL,
       "embedding" vector(768) NOT NULL,
-      CONSTRAINT "PK_smart_search_description" PRIMARY KEY ("assetId"),
-      CONSTRAINT "FK_smart_search_description_asset"
+      CONSTRAINT "smart_search_description_pkey" PRIMARY KEY ("assetId"),
+      CONSTRAINT "smart_search_description_assetId_fkey"
         FOREIGN KEY ("assetId") REFERENCES "asset" ("id")
         ON DELETE CASCADE
     );
