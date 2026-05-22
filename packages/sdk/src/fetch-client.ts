@@ -2407,6 +2407,8 @@ export type ServerFeaturesDto = {
     map: boolean;
     /** Whether NSFW detection is enabled */
     nsfwDetection: boolean;
+    /** Whether NSFW-tagged assets are hidden from non-elevated library views */
+    nsfwHiding: boolean;
     /** Whether OAuth is enabled */
     oauth: boolean;
     /** Whether OAuth auto-launch is enabled */

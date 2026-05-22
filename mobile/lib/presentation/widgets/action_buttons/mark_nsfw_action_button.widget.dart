@@ -29,7 +29,9 @@ Future<void> performMarkNsfwAction(
   WidgetRef ref, {
   required ActionSource source,
 }) async {
-  if (!context.mounted) return;
+  if (!context.mounted) {
+    return;
+  }
 
   final result = await ref.read(actionProvider.notifier).markNsfw(source);
   if (result.success) {
@@ -89,7 +91,9 @@ Future<void> performMarkSafeAction(
   WidgetRef ref, {
   required ActionSource source,
 }) async {
-  if (!context.mounted) return;
+  if (!context.mounted) {
+    return;
+  }
 
   final result = await ref.read(actionProvider.notifier).markSafe(source);
   if (result.success) {

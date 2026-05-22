@@ -23566,6 +23566,10 @@
             "description": "Whether NSFW detection is enabled",
             "type": "boolean"
           },
+          "nsfwHiding": {
+            "description": "Whether NSFW-tagged assets are hidden from non-elevated library views",
+            "type": "boolean"
+          },
           "oauth": {
             "description": "Whether OAuth is enabled",
             "type": "boolean"
@@ -23616,6 +23620,7 @@
           "importFaces",
           "map",
           "nsfwDetection",
+          "nsfwHiding",
           "oauth",
           "oauthAutoLaunch",
           "ocr",
