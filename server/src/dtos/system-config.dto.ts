@@ -157,7 +157,7 @@ const SmartAlbumKindSchema = z.object({
   tagTriggers: z.array(z.string()).describe('Tags that mark an asset as belonging to this album'),
   clipQueries: z.array(z.string()).describe('CLIP query phrases used when no tag trigger matches'),
   threshold: z.number().meta({ format: 'double' }).min(0).max(1).describe('CLIP similarity threshold'),
-});
+}).meta({ id: 'SmartAlbumKindConfig' });
 
 const SystemConfigSmartAlbumsSchema = z.object({
   enabled: configBool.describe('Master smart-album enabled toggle'),
