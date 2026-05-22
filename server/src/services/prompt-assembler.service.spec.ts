@@ -1,5 +1,5 @@
-import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
 import type { ImageDescriptionPromptConfig } from 'src/services/prompt-assembler.service';
+import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
 import { describe, expect, it } from 'vitest';
 
 const baseConfig = (overrides: Partial<ImageDescriptionPromptConfig> = {}): ImageDescriptionPromptConfig => ({

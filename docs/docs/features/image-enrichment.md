@@ -110,14 +110,14 @@ Description and tag generation has two hardware profiles in the admin machine-le
 - `Intel iGPU (OpenVINO)` uses OpenVINO GenAI and maps the admin-facing `Qwen/Qwen2.5-VL-3B-Instruct` setting to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model.
 - `NVIDIA GPU (CUDA)` uses Transformers/PyTorch with the CUDA machine-learning image.
 
-| Use case                                                | Model name                          |
-| ------------------------------------------------------- | ----------------------------------- |
-| Highest quality descriptions and tags (large GPU/iGPU)  | `Qwen/Qwen2.5-VL-7B-Instruct`       |
-| Higher quality descriptions and tags (default)          | `Qwen/Qwen2.5-VL-3B-Instruct`       |
-| Lightweight Phi alternative (smaller, faster on iGPU)   | `microsoft/Phi-3.5-vision-instruct` |
+| Use case                                                | Model name                             |
+| ------------------------------------------------------- | -------------------------------------- |
+| Highest quality descriptions and tags (large GPU/iGPU)  | `Qwen/Qwen2.5-VL-7B-Instruct`          |
+| Higher quality descriptions and tags (default)          | `Qwen/Qwen2.5-VL-3B-Instruct`          |
+| Lightweight Phi alternative (smaller, faster on iGPU)   | `microsoft/Phi-3.5-vision-instruct`    |
 | Older Phi build (smaller still)                         | `microsoft/Phi-3-vision-128k-instruct` |
-| Caption-only fallback (very low resource, CPU-friendly) | `microsoft/Florence-2-base-ft`      |
-| Caption-only fallback, larger Florence                  | `microsoft/Florence-2-large-ft`     |
+| Caption-only fallback (very low resource, CPU-friendly) | `microsoft/Florence-2-base-ft`         |
+| Caption-only fallback, larger Florence                  | `microsoft/Florence-2-large-ft`        |
 
 On OpenVINO, the Phi and Qwen entries above resolve transparently to pre-quantized int4 builds; on CUDA they use the original HF weights. Only the Qwen2.5-VL, Phi-3/3.5-vision, and Florence-2 families are loadable — other model names will fail at load time.
 

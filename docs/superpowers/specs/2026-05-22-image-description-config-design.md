@@ -19,7 +19,7 @@ Additionally, Immich has no Google-Photos-style smart collections (Travel, Docum
 - Inject Immich's named-face data — i.e. faces a user has manually named in Immich's face-recognition UI — into descriptions so they become identity-aware. The system never invents or auto-infers names; it only surfaces names already curated by users.
 - Ship a curated set of built-in smart auto-albums that consume tags + CLIP signal.
 - Keep the existing JSON-schema contract intact so the NSFW/medical post-processing pipeline doesn't break.
-- System-wide configuration (not per-user) for prompt and triggers; smart-album *contents* are per-user.
+- System-wide configuration (not per-user) for prompt and triggers; smart-album _contents_ are per-user.
 
 ## Non-Goals (v1)
 
@@ -98,14 +98,14 @@ Defaults preserve current behavior: prompt config defaults reproduce the hard-co
 
 Default smart-album triggers:
 
-| Kind         | Default tag triggers                                                                | Default CLIP queries                                  |
-| ------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Travel       | airport, beach, mountain, landmark, hotel, passport, suitcase, tourist              | "vacation travel landscape", "tourist destination"    |
-| Documents    | receipt, document, invoice, paperwork, scan, id-card                                | "paper document", "receipt or invoice"                |
-| Screenshots  | screenshot, ui, screen-capture, user-interface                                      | "phone or computer screenshot"                        |
-| Food         | food, meal, dish, restaurant, plate, cooking                                        | "plated food meal", "restaurant dish"                 |
-| Pets         | pet, dog, cat, puppy, kitten                                                        | "domestic pet animal"                                 |
-| Nature       | nature, forest, mountain, ocean, sunset, wildlife, flower                           | "natural landscape", "wildlife"                       |
+| Kind        | Default tag triggers                                                   | Default CLIP queries                               |
+| ----------- | ---------------------------------------------------------------------- | -------------------------------------------------- |
+| Travel      | airport, beach, mountain, landmark, hotel, passport, suitcase, tourist | "vacation travel landscape", "tourist destination" |
+| Documents   | receipt, document, invoice, paperwork, scan, id-card                   | "paper document", "receipt or invoice"             |
+| Screenshots | screenshot, ui, screen-capture, user-interface                         | "phone or computer screenshot"                     |
+| Food        | food, meal, dish, restaurant, plate, cooking                           | "plated food meal", "restaurant dish"              |
+| Pets        | pet, dog, cat, puppy, kitten                                           | "domestic pet animal"                              |
+| Nature      | nature, forest, mountain, ocean, sunset, wildlife, flower              | "natural landscape", "wildlife"                    |
 
 Default threshold: 0.28 (cosine similarity on CLIP embeddings). Tunable per album.
 
@@ -214,10 +214,12 @@ Triggering:
 ### 5. ML repository / Python changes
 
 `server/src/repositories/machine-learning.repository.ts:325` `describeImage` gains:
+
 - `prompt: string` parameter (the assembled prompt)
 - `vocabulary?: string[]` parameter (for downstream tag normalization)
 
 Python `machine-learning/immich_ml/models/image_description.py`:
+
 - `_make_prompt` accepts an `external_prompt: str | None`. When provided, uses it verbatim; otherwise falls back to the hard-coded `IMAGE_DESCRIPTION_PROMPT` (preserves backward compatibility).
 - Florence-2 path keeps its current task-based behavior. When config has `prompt.*` overrides set AND Florence is the active model, server skips prompt assembly and shows a UI notice indicating customization is inactive.
 
@@ -226,11 +228,13 @@ Python `machine-learning/immich_ml/models/image_description.py`:
 Tabbed expansion of the existing Machine Learning settings card under Admin → Settings → Machine Learning.
 
 **Tab 1: Model**
+
 - Existing model fields (acceleration, modelName, fallbackModelName, device).
 - Inline guidance copy per model option (quality / speed tradeoffs).
 - Warning banner when Florence-2 is selected, explaining prompt customization is inactive.
 
 **Tab 2: Prompt & Vocabulary**
+
 - Style radio (terse / balanced / rich) with sample preview.
 - Sentence count target input (1–6).
 - "Look for" chip input, pre-populated with common categories.
@@ -240,17 +244,19 @@ Tabbed expansion of the existing Machine Learning settings card under Admin → 
 - Advanced: raw prompt accordion. When expanded, a textarea prefilled with the assembled prompt, placeholder reference panel (`{names}`, `{schema}`, `{vocabulary}`, `{style_hint}`), validation mode toggle, live preview against a sample asset.
 
 **Tab 3: Smart Albums**
+
 - Master enabled toggle.
 - One card per built-in kind: enable toggle, album name, tag-triggers chip input, CLIP queries chip input (with "Test query" button showing top-10 matches), threshold slider, reset button.
 - "Re-evaluate all assets against current rules" button (matching only, not re-description).
 
 **Tab 4: Status & Regeneration**
+
 - Stats panel (total assets, with descriptions, pending, last config change).
 - "Re-queue all descriptions" button → cost-estimate modal.
 - Per-album re-evaluation buttons.
 - "Re-queue later" banner appears when config has changed since last full re-queue.
 
-Save behavior: on save, server diffs old vs new config. If `prompt.*` or `imageDescription.modelName` changed, the cost-estimate modal is shown *before* committing.
+Save behavior: on save, server diffs old vs new config. If `prompt.*` or `imageDescription.modelName` changed, the cost-estimate modal is shown _before_ committing.
 
 ### 7. Cost-estimate modal
 
@@ -280,29 +286,29 @@ Triggered on save when description-affecting config changed. Shows:
 
 ## Testing strategy
 
-| Layer                              | Coverage                                                                                                                                | Location                                                                       |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Python ML                          | external prompt parameter accepted; fallback to bundled constant; Florence path ignores prompt gracefully                                | `machine-learning/test_main.py`                  |
-| Prompt assembler                   | all structured-field permutations; advanced-mode `{schema}` validation; identity hint formatting for 0/1/many known persons             | `server/src/services/prompt-assembler.service.spec.ts` (new)                   |
-| Identity post-validator            | hallucinated names stripped; unambiguous substitution; multi-person ambiguity flagged; no fabrication                                   | `server/src/services/identity-post-validator.service.spec.ts` (new)            |
-| Smart album service                | tag triggers; CLIP threshold; exclusions; removal on re-description; idempotency                                                        | `server/src/services/smart-album.service.spec.ts` (new)                        |
-| Image-enrichment integration       | end-to-end: config change → cost estimate → re-queue → ML call with assembled prompt → result validation → tags → smart album updates    | extend `server/src/services/image-enrichment.service.spec.ts`                  |
-| Regeneration job                   | resumability across restart; configVersion mid-flight handling; lock contention with manual review                                       | new spec file                                                                  |
-| Medium tests                       | real DB, real config, mocked ML. Migrations, smart album population end-to-end, re-evaluation job                                       | `server/test/medium/specs/smart-album.spec.ts` (new)                           |
-| Web                                | tabbed UI rendering; structured-field validation; advanced-editor warnings; cost-estimate modal shows on prompt change; smart album test-query | extend existing files under `web/src/lib/components/admin-page/settings/machine-learning/` |
+| Layer                        | Coverage                                                                                                                                       | Location                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Python ML                    | external prompt parameter accepted; fallback to bundled constant; Florence path ignores prompt gracefully                                      | `machine-learning/test_main.py`                                                            |
+| Prompt assembler             | all structured-field permutations; advanced-mode `{schema}` validation; identity hint formatting for 0/1/many known persons                    | `server/src/services/prompt-assembler.service.spec.ts` (new)                               |
+| Identity post-validator      | hallucinated names stripped; unambiguous substitution; multi-person ambiguity flagged; no fabrication                                          | `server/src/services/identity-post-validator.service.spec.ts` (new)                        |
+| Smart album service          | tag triggers; CLIP threshold; exclusions; removal on re-description; idempotency                                                               | `server/src/services/smart-album.service.spec.ts` (new)                                    |
+| Image-enrichment integration | end-to-end: config change → cost estimate → re-queue → ML call with assembled prompt → result validation → tags → smart album updates          | extend `server/src/services/image-enrichment.service.spec.ts`                              |
+| Regeneration job             | resumability across restart; configVersion mid-flight handling; lock contention with manual review                                             | new spec file                                                                              |
+| Medium tests                 | real DB, real config, mocked ML. Migrations, smart album population end-to-end, re-evaluation job                                              | `server/test/medium/specs/smart-album.spec.ts` (new)                                       |
+| Web                          | tabbed UI rendering; structured-field validation; advanced-editor warnings; cost-estimate modal shows on prompt change; smart album test-query | extend existing files under `web/src/lib/components/admin-page/settings/machine-learning/` |
 
 ## Rollout phasing
 
-| PR  | Scope                                                                                                          | Risk   |
-| --- | -------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Python: external prompt parameter, backward-compatible default                                                 | Low    |
-| 2   | Server: prompt assembler service + plumb new param through ML repo. Still uses hard-coded prompt content       | Low    |
-| 3   | Config schema additions + structured-field assembly. Defaults reproduce current prompt verbatim                | Low    |
-| 4   | Admin UI tabs 1 + 2 (Model + Prompt & Vocabulary). Cost-estimate modal. Re-queue jobs with `configVersion`     | Medium |
-| 5   | Identity injection (server-side face lookup + post-validator)                                                  | Medium |
-| 6   | Schema migrations + `smart_album` tables + `SmartAlbumService` populating from descriptions. No UI yet         | Medium |
-| 7   | Admin UI tab 3 (Smart Albums) + bulk re-evaluation job + frontend smart-album browsing entry points            | Medium |
-| 8   | Admin UI tab 4 (Status & Regeneration) + persistent "re-queue later" banner                                    | Low    |
+| PR  | Scope                                                                                                      | Risk   |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Python: external prompt parameter, backward-compatible default                                             | Low    |
+| 2   | Server: prompt assembler service + plumb new param through ML repo. Still uses hard-coded prompt content   | Low    |
+| 3   | Config schema additions + structured-field assembly. Defaults reproduce current prompt verbatim            | Low    |
+| 4   | Admin UI tabs 1 + 2 (Model + Prompt & Vocabulary). Cost-estimate modal. Re-queue jobs with `configVersion` | Medium |
+| 5   | Identity injection (server-side face lookup + post-validator)                                              | Medium |
+| 6   | Schema migrations + `smart_album` tables + `SmartAlbumService` populating from descriptions. No UI yet     | Medium |
+| 7   | Admin UI tab 3 (Smart Albums) + bulk re-evaluation job + frontend smart-album browsing entry points        | Medium |
+| 8   | Admin UI tab 4 (Status & Regeneration) + persistent "re-queue later" banner                                | Low    |
 
 ## Open questions
 

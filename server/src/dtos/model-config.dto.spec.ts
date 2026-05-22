@@ -67,20 +67,38 @@ describe('ImageDescriptionConfigSchema', () => {
   });
 
   it('clamps sentenceCountTarget min/max', () => {
-    expect(() => ImageDescriptionConfigSchema.parse({
-      enabled: true, modelName: 'x', fallbackModelName: 'y', acceleration: 'auto', device: 'AUTO',
-      prompt: { sentenceCountTarget: 0 },
-    } as any)).toThrow();
-    expect(() => ImageDescriptionConfigSchema.parse({
-      enabled: true, modelName: 'x', fallbackModelName: 'y', acceleration: 'auto', device: 'AUTO',
-      prompt: { sentenceCountTarget: 99 },
-    } as any)).toThrow();
+    expect(() =>
+      ImageDescriptionConfigSchema.parse({
+        enabled: true,
+        modelName: 'x',
+        fallbackModelName: 'y',
+        acceleration: 'auto',
+        device: 'AUTO',
+        prompt: { sentenceCountTarget: 0 },
+      } as any),
+    ).toThrow();
+    expect(() =>
+      ImageDescriptionConfigSchema.parse({
+        enabled: true,
+        modelName: 'x',
+        fallbackModelName: 'y',
+        acceleration: 'auto',
+        device: 'AUTO',
+        prompt: { sentenceCountTarget: 99 },
+      } as any),
+    ).toThrow();
   });
 
   it('clamps identity confidence to [0,1]', () => {
-    expect(() => ImageDescriptionConfigSchema.parse({
-      enabled: true, modelName: 'x', fallbackModelName: 'y', acceleration: 'auto', device: 'AUTO',
-      prompt: { identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 1.5 } },
-    } as any)).toThrow();
+    expect(() =>
+      ImageDescriptionConfigSchema.parse({
+        enabled: true,
+        modelName: 'x',
+        fallbackModelName: 'y',
+        acceleration: 'auto',
+        device: 'AUTO',
+        prompt: { identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 1.5 } },
+      } as any),
+    ).toThrow();
   });
 });

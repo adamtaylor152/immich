@@ -17,10 +17,12 @@
 ## File Structure
 
 **Python ML (PR 1):**
+
 - Modify: `machine-learning/immich_ml/models/image_description.py` — `_predict`, `_make_prompt`, `_make_openvino_prompt` accept external prompt.
 - Modify: `machine-learning/test_main.py` — extend `TestImageDescriptionModel` with external-prompt tests.
 
 **Server core (PRs 2, 3, 5, 6):**
+
 - Create: `server/src/services/prompt-assembler.service.ts` — assembles prompt from config + known persons.
 - Create: `server/src/services/prompt-assembler.service.spec.ts`
 - Create: `server/src/services/identity-post-validator.service.ts` — strips hallucinated names, substitutes when unambiguous.
@@ -35,16 +37,19 @@
 - Modify: `server/src/config.ts` — extend `SystemConfig` type + defaults.
 
 **Schema (PR 6):**
+
 - Create: `server/src/schema/migrations/<timestamp>-CreateSmartAlbumTables.ts`
 - Create: `server/src/schema/tables/smart-album.table.ts`
 - Create: `server/src/schema/tables/smart-album-asset.table.ts`
 - Create: `server/src/schema/tables/smart-album-exclusion.table.ts`
 
 **Jobs (PRs 4, 7):**
+
 - Create: `server/src/jobs/requeue-descriptions.job.ts`
 - Create: `server/src/jobs/reevaluate-smart-albums.job.ts`
 
 **Web admin (PRs 4, 7, 8):**
+
 - Modify: `web/src/routes/admin/system-settings/MachineLearningSettings.svelte` — restructure into tabs.
 - Create: `web/src/lib/components/admin-settings/PromptVocabularyTab.svelte`
 - Create: `web/src/lib/components/admin-settings/SmartAlbumsTab.svelte`
@@ -60,6 +65,7 @@
 ### Task 1.1: Add failing tests for external-prompt acceptance
 
 **Files:**
+
 - Test: `machine-learning/test_main.py` (extend `TestImageDescriptionModel` class around line 180)
 
 - [ ] **Step 1: Read existing TestImageDescriptionModel to understand the testing pattern**
@@ -102,6 +108,7 @@ Expected: 3 FAILED with `TypeError: _make_prompt() got an unexpected keyword arg
 ### Task 1.2: Implement external_prompt parameter
 
 **Files:**
+
 - Modify: `machine-learning/immich_ml/models/image_description.py:383-395`
 
 - [ ] **Step 1: Update `_make_prompt`**
@@ -198,6 +205,7 @@ Expected: all tests PASS (the existing ~20 tests + the 3 new ones).
 ### Task 1.3: Add Florence-path test to confirm `external_prompt` is ignored gracefully
 
 **Files:**
+
 - Test: `machine-learning/test_main.py`
 
 - [ ] **Step 1: Add test**
@@ -252,6 +260,7 @@ EOF
 ### Task 2.1: Add failing tests for `PromptAssembler.build`
 
 **Files:**
+
 - Test: `server/src/services/prompt-assembler.service.spec.ts` (create)
 
 - [ ] **Step 1: Write the test file**
@@ -399,6 +408,7 @@ Expected: all FAIL with `Cannot find module 'src/services/prompt-assembler.servi
 ### Task 2.2: Implement `ImageDescriptionPromptAssembler`
 
 **Files:**
+
 - Create: `server/src/services/prompt-assembler.service.ts`
 
 - [ ] **Step 1: Write the service**
@@ -497,10 +507,7 @@ export class ImageDescriptionPromptAssembler {
     return { prompt: sections.join('\n\n'), expectedSchemaVersion: SCHEMA_VERSION, warnings: [] };
   }
 
-  private buildFromTemplate(
-    config: ImageDescriptionPromptConfig,
-    knownPersons: KnownPerson[],
-  ): AssembledPrompt {
+  private buildFromTemplate(config: ImageDescriptionPromptConfig, knownPersons: KnownPerson[]): AssembledPrompt {
     const template = config.advanced.rawPromptTemplate;
     const warnings: string[] = [];
 
@@ -612,6 +619,7 @@ git commit -m "feat(server): add ImageDescriptionPromptAssembler service"
 ### Task 2.3: Plumb `prompt` through `describeImage`
 
 **Files:**
+
 - Modify: `server/src/repositories/machine-learning.repository.ts:325-365`
 
 - [ ] **Step 1: Update the request payload type**
@@ -678,12 +686,7 @@ const { prompt } = this.promptAssembler.build({
   knownPersons: [], // PR 5 will populate this from face data
 });
 
-result = await this.machineLearningRepository.describeImage(
-  imagePath,
-  machineLearning.imageDescription,
-  nsfw,
-  prompt,
-);
+result = await this.machineLearningRepository.describeImage(imagePath, machineLearning.imageDescription, nsfw, prompt);
 ```
 
 - [ ] **Step 3: Update existing image-enrichment spec to cover the new arg**
@@ -732,6 +735,7 @@ Expected: zero errors.
 ### Task 3.1: Failing test for default config shape
 
 **Files:**
+
 - Test: `server/src/dtos/model-config.dto.spec.ts` (create or extend if exists)
 
 - [ ] **Step 1: Check if a spec file exists**
@@ -803,44 +807,78 @@ Expected: FAIL — `prompt` field unknown.
 ### Task 3.2: Extend `ImageDescriptionConfigSchema`
 
 **Files:**
+
 - Modify: `server/src/dtos/model-config.dto.ts:93-99`
 
 - [ ] **Step 1: Add the prompt sub-schemas above `ImageDescriptionConfigSchema`**
 
 ```typescript
-const IdentityInjectionSchema = z.object({
-  enabled: z.boolean().default(true),
-  maxNames: z.int().min(1).max(20).default(5),
-  minFaceConfidence: z.number().meta({ format: 'double' }).min(0).max(1).default(0.7),
-}).meta({ id: 'IdentityInjectionConfig' });
+const IdentityInjectionSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    maxNames: z.int().min(1).max(20).default(5),
+    minFaceConfidence: z.number().meta({ format: 'double' }).min(0).max(1).default(0.7),
+  })
+  .meta({ id: 'IdentityInjectionConfig' });
 
-const AdvancedPromptSchema = z.object({
-  enabled: z.boolean().default(false),
-  rawPromptTemplate: z.string().default(''),
-  placeholderValidation: z.enum(['strict', 'warn']).default('strict'),
-}).meta({ id: 'AdvancedPromptConfig' });
+const AdvancedPromptSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    rawPromptTemplate: z.string().default(''),
+    placeholderValidation: z.enum(['strict', 'warn']).default('strict'),
+  })
+  .meta({ id: 'AdvancedPromptConfig' });
 
-export const ImageDescriptionPromptSchema = z.object({
-  style: z.enum(['terse', 'balanced', 'rich']).default('balanced'),
-  sentenceCountTarget: z.int().min(1).max(6).default(3),
-  lookFor: z.array(z.string()).default([]),
-  customVocabulary: z.array(z.string()).default([]),
-  nsfwIndicators: z.array(z.string()).default([
-    'adult-nudity', 'bare-buttocks', 'bondage', 'explicit', 'exposed-genitals',
-    'naked', 'nsfw', 'nudity', 'restraint', 'sex-toy', 'sexual-activity',
-  ]),
-  medicalIndicators: z.array(z.string()).default([
-    'bandage', 'cast', 'crutches', 'exam-table', 'hospital', 'iv-line',
-    'lab-result', 'medical', 'medical-monitor', 'medical-paperwork', 'mobility-aid',
-    'pill-organizer', 'prescription', 'syringe', 'ultrasound', 'wheelchair',
-    'wound', 'x-ray',
-  ]),
-  forbiddenInferences: z.array(z.string()).default([
-    'diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability',
-  ]),
-  identityInjection: IdentityInjectionSchema.default({ enabled: true, maxNames: 5, minFaceConfidence: 0.7 }),
-  advanced: AdvancedPromptSchema.default({ enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' }),
-}).meta({ id: 'ImageDescriptionPromptConfig' });
+export const ImageDescriptionPromptSchema = z
+  .object({
+    style: z.enum(['terse', 'balanced', 'rich']).default('balanced'),
+    sentenceCountTarget: z.int().min(1).max(6).default(3),
+    lookFor: z.array(z.string()).default([]),
+    customVocabulary: z.array(z.string()).default([]),
+    nsfwIndicators: z
+      .array(z.string())
+      .default([
+        'adult-nudity',
+        'bare-buttocks',
+        'bondage',
+        'explicit',
+        'exposed-genitals',
+        'naked',
+        'nsfw',
+        'nudity',
+        'restraint',
+        'sex-toy',
+        'sexual-activity',
+      ]),
+    medicalIndicators: z
+      .array(z.string())
+      .default([
+        'bandage',
+        'cast',
+        'crutches',
+        'exam-table',
+        'hospital',
+        'iv-line',
+        'lab-result',
+        'medical',
+        'medical-monitor',
+        'medical-paperwork',
+        'mobility-aid',
+        'pill-organizer',
+        'prescription',
+        'syringe',
+        'ultrasound',
+        'wheelchair',
+        'wound',
+        'x-ray',
+      ]),
+    forbiddenInferences: z
+      .array(z.string())
+      .default(['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability']),
+    identityInjection: IdentityInjectionSchema.default({ enabled: true, maxNames: 5, minFaceConfidence: 0.7 }),
+    advanced: AdvancedPromptSchema.default({ enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' }),
+  })
+  .meta({ id: 'ImageDescriptionPromptConfig' });
 
 export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
   acceleration: MachineLearningHardwareAccelerationSchema.default(MachineLearningHardwareAcceleration.Auto).describe(
@@ -860,6 +898,7 @@ Expected: PASS.
 ### Task 3.3: Add `smartAlbums` block to system config
 
 **Files:**
+
 - Modify: `server/src/dtos/system-config.dto.ts`
 - Modify: `server/src/config.ts:96` (extend the `SystemConfig` type and defaults)
 
@@ -876,17 +915,19 @@ const SmartAlbumKindSchema = z.object({
   threshold: z.number().meta({ format: 'double' }).min(0).max(1).describe('CLIP similarity threshold'),
 });
 
-const SystemConfigSmartAlbumsSchema = z.object({
-  enabled: configBool.describe('Master smart-album enabled toggle'),
-  builtIn: z.object({
-    travel: SmartAlbumKindSchema,
-    documents: SmartAlbumKindSchema,
-    screenshots: SmartAlbumKindSchema,
-    food: SmartAlbumKindSchema,
-    pets: SmartAlbumKindSchema,
-    nature: SmartAlbumKindSchema,
-  }),
-}).meta({ id: 'SystemConfigSmartAlbumsDto' });
+const SystemConfigSmartAlbumsSchema = z
+  .object({
+    enabled: configBool.describe('Master smart-album enabled toggle'),
+    builtIn: z.object({
+      travel: SmartAlbumKindSchema,
+      documents: SmartAlbumKindSchema,
+      screenshots: SmartAlbumKindSchema,
+      food: SmartAlbumKindSchema,
+      pets: SmartAlbumKindSchema,
+      nature: SmartAlbumKindSchema,
+    }),
+  })
+  .meta({ id: 'SystemConfigSmartAlbumsDto' });
 ```
 
 Then add `smartAlbums: SystemConfigSmartAlbumsSchema.default(defaults.smartAlbums)` to the main `SystemConfigDto` object.
@@ -1009,6 +1050,7 @@ git commit -m "feat(server): add prompt + smartAlbums config schemas"
 ### Task 4.1: Add `configVersion` to per-asset description metadata
 
 **Files:**
+
 - Modify: `server/src/services/image-enrichment.service.ts` — where description result is persisted to metadata.
 
 - [ ] **Step 1: Grep for the persistence call**
@@ -1038,6 +1080,7 @@ git commit -m "feat(server): record configVersion on description metadata"
 ### Task 4.2: `RequeueDescriptionsJob`
 
 **Files:**
+
 - Create: `server/src/jobs/requeue-descriptions.job.ts`
 - Test: `server/src/jobs/requeue-descriptions.job.spec.ts`
 
@@ -1061,7 +1104,9 @@ describe('RequeueDescriptionsJob', () => {
   beforeEach(() => {
     assetRepo = {
       streamAssetIdsForDescriptionRequeue: vi.fn().mockImplementation(async function* () {
-        yield 'a1'; yield 'a2'; yield 'a3';
+        yield 'a1';
+        yield 'a2';
+        yield 'a3';
       }),
     };
     jobRepo = { queueImageDescription: vi.fn().mockResolvedValue(undefined) };
@@ -1099,7 +1144,10 @@ interface JobRepoLike {
 export class RequeueDescriptionsJob {
   private inFlightConfigVersions = new Set<number>();
 
-  constructor(private assetRepo: AssetRepoLike, private jobRepo: JobRepoLike) {}
+  constructor(
+    private assetRepo: AssetRepoLike,
+    private jobRepo: JobRepoLike,
+  ) {}
 
   async run({ configVersion }: { configVersion: number }): Promise<void> {
     if (this.inFlightConfigVersions.has(configVersion)) return;
@@ -1144,6 +1192,7 @@ git commit -m "feat(server): add RequeueDescriptionsJob for batch re-description
 ### Task 4.3: Cost-estimate endpoint
 
 **Files:**
+
 - Modify: `server/src/services/system-config.service.ts` (or wherever admin endpoints live) — add `estimateRequeueCost`.
 - Modify: `server/src/controllers/system-config.controller.ts` — expose endpoint.
 
@@ -1212,10 +1261,11 @@ git commit -m "feat(server): add description re-queue cost estimate endpoint"
 ### Task 4.4: Restructure `MachineLearningSettings.svelte` into tabs
 
 **Files:**
+
 - Modify: `web/src/routes/admin/system-settings/MachineLearningSettings.svelte`
 - Create: `web/src/lib/components/admin-settings/PromptVocabularyTab.svelte`
 
-**Note:** Read the current `MachineLearningSettings.svelte` carefully (614 lines) — it has multiple sections beyond image description (CLIP, facial recognition, OCR, NSFW). Image description is one of several. The tab structure proposed here is *only* for the image-description card and its new sub-settings. Other settings remain as-is.
+**Note:** Read the current `MachineLearningSettings.svelte` carefully (614 lines) — it has multiple sections beyond image description (CLIP, facial recognition, OCR, NSFW). Image description is one of several. The tab structure proposed here is _only_ for the image-description card and its new sub-settings. Other settings remain as-is.
 
 - [ ] **Step 1: Identify the image-description section in the current file**
 
@@ -1414,6 +1464,7 @@ git commit -m "feat(web): admin UI tabs for image description prompt + cost-esti
 ### Task 5.1: Failing tests for `IdentityPostValidator`
 
 **Files:**
+
 - Test: `server/src/services/identity-post-validator.service.spec.ts`
 
 - [ ] **Step 1: Write the spec**
@@ -1465,6 +1516,7 @@ Expected: FAIL — module not found.
 ### Task 5.2: Implement `IdentityPostValidator`
 
 **Files:**
+
 - Create: `server/src/services/identity-post-validator.service.ts`
 
 - [ ] **Step 1: Implement**
@@ -1473,13 +1525,14 @@ Expected: FAIL — module not found.
 import { Injectable } from '@nestjs/common';
 import type { KnownPerson } from 'src/services/prompt-assembler.service';
 
-const GENERIC_PERSON_PATTERNS = [
-  /\ba (young |older )?(boy|girl|man|woman|child|teenager|baby)\b/gi,
-];
+const GENERIC_PERSON_PATTERNS = [/\ba (young |older )?(boy|girl|man|woman|child|teenager|baby)\b/gi];
 
 @Injectable()
 export class IdentityPostValidator {
-  validate(description: string, knownPersons: KnownPerson[]): {
+  validate(
+    description: string,
+    knownPersons: KnownPerson[],
+  ): {
     description: string;
     flags: { hallucinatedNames?: string[]; ambiguousReferences?: string[] };
   } {
@@ -1527,6 +1580,7 @@ Expected: PASS.
 ### Task 5.3: Wire face lookup into `image-enrichment.service.ts`
 
 **Files:**
+
 - Modify: `server/src/services/image-enrichment.service.ts:400-420` area (where `describeImage` is called)
 
 - [ ] **Step 1: Find the face/person repo**
@@ -1544,10 +1598,10 @@ const faces = await this.personRepository.getNamedFacesForAsset(asset.id);
 const knownPersons = faces.map((f) => ({
   name: f.personName,
   faceConfidence: f.confidence ?? 1.0,
-  boxCenter: [
-    (f.boxX1 + f.boxX2) / 2 / asset.exifInfo.width,
-    (f.boxY1 + f.boxY2) / 2 / asset.exifInfo.height,
-  ] as [number, number],
+  boxCenter: [(f.boxX1 + f.boxX2) / 2 / asset.exifInfo.width, (f.boxY1 + f.boxY2) / 2 / asset.exifInfo.height] as [
+    number,
+    number,
+  ],
 }));
 
 const { prompt } = this.promptAssembler.build({
@@ -1555,12 +1609,7 @@ const { prompt } = this.promptAssembler.build({
   knownPersons,
 });
 
-result = await this.machineLearningRepository.describeImage(
-  imagePath,
-  machineLearning.imageDescription,
-  nsfw,
-  prompt,
-);
+result = await this.machineLearningRepository.describeImage(imagePath, machineLearning.imageDescription, nsfw, prompt);
 
 const validated = this.identityPostValidator.validate(result.description, knownPersons);
 result = { ...result, description: validated.description };
@@ -1606,6 +1655,7 @@ git commit -m "feat(server): inject named faces into description prompt and post
 ### Task 6.1: Kysely migration
 
 **Files:**
+
 - Create: `server/src/schema/migrations/<timestamp>-CreateSmartAlbumTables.ts`
 - Create: `server/src/schema/tables/smart-album.table.ts`
 - Create: `server/src/schema/tables/smart-album-asset.table.ts`
@@ -1682,6 +1732,7 @@ git commit -m "feat(server): migrations + tables for smart albums"
 ### Task 6.2: `SmartAlbumService`
 
 **Files:**
+
 - Create: `server/src/services/smart-album.service.ts`
 - Create: `server/src/services/smart-album.service.spec.ts`
 - Create: `server/src/repositories/smart-album.repository.ts`
@@ -1696,7 +1747,13 @@ const config = {
   enabled: true,
   builtIn: {
     travel: { enabled: true, name: 'Travel', tagTriggers: ['beach'], clipQueries: ['vacation'], threshold: 0.3 },
-    documents: { enabled: true, name: 'Docs', tagTriggers: ['receipt'], clipQueries: ['paper document'], threshold: 0.3 },
+    documents: {
+      enabled: true,
+      name: 'Docs',
+      tagTriggers: ['receipt'],
+      clipQueries: ['paper document'],
+      threshold: 0.3,
+    },
     screenshots: { enabled: false, name: 'Screenshots', tagTriggers: [], clipQueries: [], threshold: 0.3 },
     food: { enabled: false, name: 'Food', tagTriggers: [], clipQueries: [], threshold: 0.3 },
     pets: { enabled: false, name: 'Pets', tagTriggers: [], clipQueries: [], threshold: 0.3 },
@@ -1724,7 +1781,7 @@ describe('SmartAlbumService', () => {
   });
 
   it('adds asset to travel when tag matches', async () => {
-    await service.evaluate({ assetId: 'a1', ownerId: 'u1', tags: ['beach','sunset'] });
+    await service.evaluate({ assetId: 'a1', ownerId: 'u1', tags: ['beach', 'sunset'] });
     expect(repo.addAssetToSmartAlbum).toHaveBeenCalledWith('sa1', 'a1', 'tag');
   });
 
@@ -1766,12 +1823,20 @@ describe('SmartAlbumService', () => {
 ```typescript
 import { Injectable } from '@nestjs/common';
 
-interface EvaluateInput { assetId: string; ownerId: string; tags: string[] }
+interface EvaluateInput {
+  assetId: string;
+  ownerId: string;
+  tags: string[];
+}
 type Kind = 'travel' | 'documents' | 'screenshots' | 'food' | 'pets' | 'nature';
 
 @Injectable()
 export class SmartAlbumService {
-  constructor(private repo: any, private clipRepo: any, private configService: any) {}
+  constructor(
+    private repo: any,
+    private clipRepo: any,
+    private configService: any,
+  ) {}
 
   async evaluate(input: EvaluateInput): Promise<void> {
     const { smartAlbums } = await this.configService.getConfig();
@@ -1798,7 +1863,11 @@ export class SmartAlbumService {
       }
 
       if (tagHit || clipHit) {
-        await this.repo.addAssetToSmartAlbum(albumId, input.assetId, tagHit && clipHit ? 'both' : tagHit ? 'tag' : 'clip');
+        await this.repo.addAssetToSmartAlbum(
+          albumId,
+          input.assetId,
+          tagHit && clipHit ? 'both' : tagHit ? 'tag' : 'clip',
+        );
         matchedKinds.add(kind);
       }
     }
@@ -1841,11 +1910,13 @@ git commit -m "feat(server): smart-album evaluation triggered by description com
 ### Task 6.3: Medium-test smart album end-to-end
 
 **Files:**
+
 - Create: `server/test/medium/specs/smart-album.spec.ts`
 
 - [ ] **Step 1: Write end-to-end test**
 
 Following existing medium-test patterns in `server/test/medium/specs/`, create a test that:
+
 1. Inserts a user, an asset with tags `['beach','sunset']`, and a config with smart-albums enabled.
 2. Calls `SmartAlbumService.evaluate`.
 3. Asserts a `smart_album_asset` row exists for the travel album.
@@ -1873,6 +1944,7 @@ git commit -m "test(server): medium-test for smart-album end-to-end"
 ### Task 7.1: `ReevaluateSmartAlbumsJob`
 
 **Files:**
+
 - Create: `server/src/jobs/reevaluate-smart-albums.job.ts`
 - Create: `server/src/jobs/reevaluate-smart-albums.job.spec.ts`
 
@@ -1883,7 +1955,10 @@ Mirror the structure of `RequeueDescriptionsJob` but call `SmartAlbumService.eva
 ```typescript
 @Injectable()
 export class ReevaluateSmartAlbumsJob {
-  constructor(private assetRepo: any, private smartAlbumService: SmartAlbumService) {}
+  constructor(
+    private assetRepo: any,
+    private smartAlbumService: SmartAlbumService,
+  ) {}
 
   async run(): Promise<void> {
     for await (const { assetId, ownerId, tags } of this.assetRepo.streamAssetsForSmartAlbumReevaluation()) {
@@ -1908,6 +1983,7 @@ git commit -m "feat(server): reevaluate smart albums job and endpoint"
 ### Task 7.2: `SmartAlbumsTab.svelte`
 
 **Files:**
+
 - Create: `web/src/lib/components/admin-settings/SmartAlbumsTab.svelte`
 
 - [ ] **Step 1: Implement**
@@ -1974,6 +2050,7 @@ git commit -m "feat(web): smart albums admin tab + test-CLIP-query endpoint"
 ### Task 7.3: User-facing "exclude from smart album" action
 
 **Files:**
+
 - Modify: an asset-detail or album-asset Svelte component where right-click / overflow menu actions live.
 - Modify: `server/src/controllers/album.controller.ts` (or smart-album controller) — add endpoint.
 - Modify: `server/src/repositories/smart-album.repository.ts` — add `excludeAsset`.
@@ -2023,6 +2100,7 @@ git commit -m "feat: user can exclude asset from smart album"
 ### Task 8.1: `StatusRegenerationTab.svelte`
 
 **Files:**
+
 - Create: `web/src/lib/components/admin-settings/StatusRegenerationTab.svelte`
 
 - [ ] **Step 1: Implement**
@@ -2052,11 +2130,12 @@ git commit -m "feat: user can exclude asset from smart album"
 ### Task 8.2: Pending re-queue banner
 
 **Files:**
+
 - Modify: `web/src/routes/admin/system-settings/MachineLearningSettings.svelte`
 
 - [ ] **Step 1: Read `pendingRequeueAt` from config**
 
-If `config.machineLearning.imageDescription.pendingRequeueAt` is set and not yet acted on, render a banner at the top of the page: *"Config changed at {timestamp}. {N} assets queued for re-description. [Re-queue now]"*.
+If `config.machineLearning.imageDescription.pendingRequeueAt` is set and not yet acted on, render a banner at the top of the page: _"Config changed at {timestamp}. {N} assets queued for re-description. [Re-queue now]"_.
 
 - [ ] **Step 2: Add `pendingRequeueAt` to config**
 
@@ -2097,6 +2176,7 @@ Expected: all PASS.
 
 Run: `make dev` (or whatever the dev command is — check `Makefile`).
 Manually verify:
+
 - Admin → ML settings shows four tabs.
 - Editing the prompt style triggers the cost-estimate modal on save.
 - A re-queued asset gets a fresh description with the new prompt.
@@ -2115,4 +2195,4 @@ This is a large plan covering an 8-PR feature. Quirks worth flagging for the exe
 - **PR-6 ON CONFLICT DO NOTHING** is the key idempotency mechanism — make sure the repo uses it on `smart_album_asset` insert.
 - **PR-7's `testCLIPQuery` endpoint** can lean on Immich's existing smart-search infrastructure (which already does CLIP cosine-similarity queries). Don't reinvent.
 - **The cost-estimate modal in PR-4** depends on `rollingAvgSeconds` job stats. If that telemetry doesn't yet exist in Immich, fall back to a static estimate constant for v1 and add a TODO to measure.
-- **Florence-2 detection** in the admin UI: when admin selects a Florence model, the Prompt & Vocabulary tab should show a banner: *"Florence-2 models don't support prompt customization. Switch to a Qwen or Phi model to use these options."* Add this in PR 4.
+- **Florence-2 detection** in the admin UI: when admin selects a Florence model, the Prompt & Vocabulary tab should show a banner: _"Florence-2 models don't support prompt customization. Switch to a Qwen or Phi model to use these options."_ Add this in PR 4.

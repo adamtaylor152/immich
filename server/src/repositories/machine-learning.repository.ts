@@ -370,7 +370,10 @@ export class MachineLearningRepository {
       this.logger.warn(
         `Image description model '${modelName}' failed; retrying with fallback model '${fallbackModelName}'`,
       );
-      const fallbackResponse = await this.predict<ImageDescriptionResponse>({ imagePath }, buildRequest(fallbackModelName));
+      const fallbackResponse = await this.predict<ImageDescriptionResponse>(
+        { imagePath },
+        buildRequest(fallbackModelName),
+      );
       return fallbackResponse[ModelTask.IMAGE_DESCRIPTION];
     }
   }

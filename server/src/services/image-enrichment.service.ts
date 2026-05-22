@@ -20,10 +20,10 @@ import {
   QueueName,
 } from 'src/enum';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
-import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
+import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
 import { isImageDescriptionEnabled, isNsfwDetectionEnabled, isSmartSearchEnabled } from 'src/utils/misc';

@@ -2847,6 +2847,42 @@ export type FacialRecognitionConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type AdvancedPromptConfig = {
+    /** Use a raw prompt template instead of the structured fields */
+    enabled?: boolean;
+    /** Whether missing {schema} placeholder fails save (strict) or warns (warn) */
+    placeholderValidation?: PlaceholderValidation;
+    /** Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders */
+    rawPromptTemplate?: string;
+};
+export type IdentityInjectionConfig = {
+    /** Inject named-face data into description prompts */
+    enabled?: boolean;
+    /** Maximum named persons to inject into a single prompt */
+    maxNames?: number;
+    /** Minimum face-recognition confidence required to inject a name */
+    minFaceConfidence?: number;
+};
+export type ImageDescriptionPromptConfig = {
+    /** Advanced raw-prompt-editor configuration */
+    advanced?: AdvancedPromptConfig;
+    /** Tag values the model should prefer when applicable */
+    customVocabulary?: string[];
+    /** Categories the model must not infer (diagnoses, medications, etc.) */
+    forbiddenInferences?: string[];
+    /** Named-face injection configuration */
+    identityInjection?: IdentityInjectionConfig;
+    /** Additional categories the model should note when visibly supported (brands, sports equipment, etc.) */
+    lookFor?: string[];
+    /** Allow-list of medical indicator terms permitted in the description */
+    medicalIndicators?: string[];
+    /** Allow-list of explicit NSFW indicator terms permitted in the description */
+    nsfwIndicators?: string[];
+    /** Target number of sentences in the description */
+    sentenceCountTarget?: number;
+    /** Description verbosity preset */
+    style?: Style;
+};
 export type ImageDescriptionConfig = {
     /** Hardware acceleration backend to use */
     acceleration?: MachineLearningHardwareAcceleration;
@@ -2858,6 +2894,7 @@ export type ImageDescriptionConfig = {
     fallbackModelName: string;
     /** Name of the model to use */
     modelName: string;
+    prompt?: ImageDescriptionPromptConfig;
 };
 export type NsfwDetectionConfig = {
     /** Hardware device to use */
@@ -2997,6 +3034,30 @@ export type SystemConfigServerDto = {
     /** Public users */
     publicUsers: boolean;
 };
+export type SmartAlbumKindConfig = {
+    /** CLIP query phrases used when no tag trigger matches */
+    clipQueries: string[];
+    /** Whether this smart album is active */
+    enabled: boolean;
+    /** User-visible album name */
+    name: string;
+    /** Tags that mark an asset as belonging to this album */
+    tagTriggers: string[];
+    /** CLIP similarity threshold */
+    threshold: number;
+};
+export type SystemConfigSmartAlbumsDto = {
+    builtIn: {
+        documents: SmartAlbumKindConfig;
+        food: SmartAlbumKindConfig;
+        nature: SmartAlbumKindConfig;
+        pets: SmartAlbumKindConfig;
+        screenshots: SmartAlbumKindConfig;
+        travel: SmartAlbumKindConfig;
+    };
+    /** Master smart-album enabled toggle */
+    enabled: boolean;
+};
 export type SystemConfigStorageTemplateDto = {
     /** Enabled */
     enabled: boolean;
@@ -3049,6 +3110,7 @@ export type SystemConfigDto = {
     physicalDeduplication?: SystemConfigPhysicalDeduplicationDto;
     reverseGeocoding: SystemConfigReverseGeocodingDto;
     server: SystemConfigServerDto;
+    smartAlbums?: SystemConfigSmartAlbumsDto;
     storageTemplate: SystemConfigStorageTemplateDto;
     templates: SystemConfigTemplatesDto;
     theme: SystemConfigThemeDto;
@@ -8090,6 +8152,15 @@ export enum MachineLearningHardwareAcceleration {
     Auto = "auto",
     Openvino = "openvino",
     Cuda = "cuda"
+}
+export enum PlaceholderValidation {
+    Strict = "strict",
+    Warn = "warn"
+}
+export enum Style {
+    Terse = "terse",
+    Balanced = "balanced",
+    Rich = "rich"
 }
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
