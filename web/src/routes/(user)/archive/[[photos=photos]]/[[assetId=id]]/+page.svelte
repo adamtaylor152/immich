@@ -7,6 +7,7 @@
   import DeleteAssets from '$lib/components/timeline/actions/DeleteAssetsAction.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
   import FavoriteAction from '$lib/components/timeline/actions/FavoriteAction.svelte';
+  import MarkNsfwAction from '$lib/components/timeline/actions/MarkNsfwAction.svelte';
   import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
@@ -75,6 +76,10 @@
     />
     <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')}>
       <DownloadAction menuItem />
+      {#if assetMultiSelectManager.ownedAssets.length > 0}
+        <MarkNsfwAction menuItem />
+        <MarkNsfwAction menuItem markSafe />
+      {/if}
       <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
       <DeleteAssets menuItem onAssetDelete={(assetIds) => timelineManager.removeAssets(assetIds)} />
     </ButtonContextMenu>

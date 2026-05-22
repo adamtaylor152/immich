@@ -84,6 +84,20 @@ describe('AssetViewerNavBar component', () => {
       expect(getByRole('menuitem', { name: 'mark_safe' })).toBeInTheDocument();
     });
 
+    it('shows NSFW review actions for a full-size owned video', () => {
+      const ownerId = 'id-of-the-user';
+      const user = userAdminFactory.build({ id: ownerId });
+      const asset = assetFactory.build({ ownerId, isTrashed: false, type: AssetTypeEnum.Video });
+      authManager.setUser(user);
+
+      const preferences = preferencesFactory.build({ cast: { gCastEnabled: false } });
+      authManager.setPreferences(preferences);
+
+      const { getByRole } = renderWithTooltips(AssetViewerNavBar, { asset, ...additionalProps });
+      expect(getByRole('menuitem', { name: 'mark_nsfw' })).toBeInTheDocument();
+      expect(getByRole('menuitem', { name: 'mark_safe' })).toBeInTheDocument();
+    });
+
     it('shows the editor action for a full-size owned video even when client metadata is missing', async () => {
       const ownerId = 'id-of-the-user';
       const user = userAdminFactory.build({ id: ownerId });

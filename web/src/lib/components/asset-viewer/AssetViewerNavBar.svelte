@@ -211,7 +211,7 @@
           <SetVisibilityAction asset={toTimelineAsset(asset)} {onAction} {preAction} />
         {/if}
 
-        {#if asset.type === AssetTypeEnum.Image && !asset.isTrashed && isOwner}
+        {#if !asset.isTrashed && isOwner}
           <MarkNsfwAction menuItem assetIds={[asset.id]} clearSelection={false} />
           <MarkNsfwAction menuItem markSafe assetIds={[asset.id]} clearSelection={false} />
         {/if}
