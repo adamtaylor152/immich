@@ -41,8 +41,6 @@ export async function up(db: Kysely<any>): Promise<void> {
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
-  await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_idx_asset_exif_description_trigram';`.execute(db);
-
   await sql`
     DO $$
     BEGIN
