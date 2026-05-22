@@ -424,12 +424,16 @@ class TestImageDescriptionModel:
         assert prompt == IMAGE_DESCRIPTION_PROMPT
 
     def test_make_prompt_external_ignores_nsfw_suffix(self) -> None:
-        # When the server supplies an external prompt, the server is responsible for
-        # including any NSFW conditional content. The Python side does not append
-        # NSFW_PROMPT_SUFFIX on top of an external prompt.
         model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
         prompt = model._make_prompt(nsfw={"isNsfw": True}, external_prompt="CUSTOM")
         assert prompt == "CUSTOM"
+
+    def test_make_prompt_empty_external_returns_empty(self) -> None:
+        # Empty string is a valid (if unusual) caller-provided prompt; it must NOT
+        # fall through to the default IMAGE_DESCRIPTION_PROMPT.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt="")
+        assert prompt == ""
 
     def test_florence_ignores_external_prompt(self, monkeypatch: MonkeyPatch) -> None:
         model = ImageDescriptionModel("microsoft/Florence-2-base", acceleration="cuda")
@@ -440,6 +444,19 @@ class TestImageDescriptionModel:
         )
         result = model._predict_cuda(image=None, nsfw=None, external_prompt="THIS SHOULD BE IGNORED")
         assert result["description"] == "florence output"
+
+    def test_predict_propagates_external_prompt_via_kwargs(self, monkeypatch: MonkeyPatch) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        captured: dict[str, Any] = {}
+        monkeypatch.setattr(ImageDescriptionModel, "load", lambda self: None)
+
+        def fake_predict(self: ImageDescriptionModel, *inputs: Any, **kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {"description": "stub"}
+
+        monkeypatch.setattr(ImageDescriptionModel, "_predict", fake_predict)
+        model.predict("image", external_prompt="HELLO FROM SERVER", nsfw=None)
+        assert captured.get("external_prompt") == "HELLO FROM SERVER"
 
 
 @pytest.mark.usefixtures("ort_session")

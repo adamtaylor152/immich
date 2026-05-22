@@ -388,9 +388,11 @@ class ImageDescriptionModel(InferenceModel):
         return requested
 
     def _make_prompt(self, nsfw: Any = None, external_prompt: str | None = None) -> str:
-        if external_prompt:
+        if external_prompt is not None:
             # Server-assembled prompt; server is responsible for including any
-            # NSFW conditional content and structured fields.
+            # NSFW conditional content and structured fields. Any string
+            # (including "") is treated as caller-provided; only None falls
+            # back to the bundled default.
             return external_prompt
         prompt = IMAGE_DESCRIPTION_PROMPT
         if isinstance(nsfw, dict) and nsfw.get("isNsfw"):
