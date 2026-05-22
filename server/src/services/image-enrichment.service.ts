@@ -422,13 +422,11 @@ export class ImageEnrichmentService extends BaseService {
           m.description?.status === 'success' && m.description.appliedDescriptionHash
             ? m.description.result.description
             : undefined;
-        const previousTagValues =
-          m.description?.status === 'success' ? (m.description.appliedTagValues ?? []) : [];
+        const previousTagValues = m.description?.status === 'success' ? (m.description.appliedTagValues ?? []) : [];
 
         if (nsfwIsFresh && nsfw && !this.getStoredNsfw(m)) {
           const appliedTagHash = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagHash : undefined;
-          const appliedTagValues =
-            m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagValues : undefined;
+          const appliedTagValues = m.nsfwDetection?.status === 'success' ? m.nsfwDetection.appliedTagValues : undefined;
           m.nsfwDetection = {
             status: 'success',
             modelName: machineLearning.nsfwDetection.modelName,
