@@ -73,6 +73,8 @@ export const DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG: ImageDescriptionPromptConf
 
 const SCHEMA_VERSION = '2026-05-22';
 
+// KEEP IN SYNC WITH: machine-learning/immich_ml/models/image_description.py
+// (the JSON schema portion of IMAGE_DESCRIPTION_PROMPT)
 const JSON_SCHEMA_BLOCK = `Return valid JSON with this schema:
 
 {
@@ -186,8 +188,7 @@ export class ImageDescriptionPromptAssembler {
       case 'rich': {
         return `Write ${config.sentenceCountTarget} factual sentences. Capture mood, season or time-of-day when visibly supported, subject, activity, environment, notable objects, and relationships between people.`;
       }
-      case 'balanced':
-      default: {
+      case 'balanced': {
         return `Write ${config.sentenceCountTarget} factual sentences capturing subject, activity, environment, and notable objects.`;
       }
     }

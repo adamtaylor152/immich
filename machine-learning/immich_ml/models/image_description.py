@@ -14,6 +14,7 @@ from immich_ml.config import log
 from immich_ml.models.base import InferenceModel
 from immich_ml.schemas import ImageDescriptionAcceleration, ModelTask, ModelType
 
+# KEEP IN SYNC WITH: server/src/services/prompt-assembler.service.ts (JSON_SCHEMA_BLOCK)
 IMAGE_DESCRIPTION_PROMPT = """You are generating a concise searchable image record from computer vision outputs.
 
 Use only visible evidence from the image. If estimating age, use broad apparent age groups only,
