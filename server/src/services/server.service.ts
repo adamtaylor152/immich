@@ -24,6 +24,7 @@ import {
   isFacialRecognitionEnabled,
   isImageDescriptionEnabled,
   isNsfwDetectionEnabled,
+  isNsfwHidingEnabled,
   isOcrEnabled,
   isSmartSearchEnabled,
 } from 'src/utils/misc';
@@ -119,6 +120,7 @@ export class ServerService extends BaseService {
       email: notifications.smtp.enabled,
       imageDescription: isImageDescriptionEnabled(machineLearning),
       nsfwDetection: isNsfwDetectionEnabled(machineLearning),
+      nsfwHiding: isNsfwHidingEnabled(machineLearning),
       physicalDeduplication: physicalDeduplication.enabled,
     };
   }

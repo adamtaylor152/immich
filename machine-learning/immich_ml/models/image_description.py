@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any, cast
 
@@ -147,6 +148,7 @@ class ImageDescriptionModel(InferenceModel):
         self.acceleration = self._resolve_acceleration(self.requested_acceleration)
         self.hf_model_name = self._model_name_for_acceleration(model_name, self.acceleration)
         self.device = str(model_kwargs.get("device", "AUTO") or "AUTO")
+        self._openvino_lock = threading.Lock()
         super().__init__(model_name, **model_kwargs)
 
     def predict(self, *inputs: Any, **model_kwargs: Any) -> Any:
@@ -197,29 +199,32 @@ class ImageDescriptionModel(InferenceModel):
         try:
             result = self._generate_openvino(prompt, images)
         except RuntimeError as error:
-            if not self._should_retry_openvino_on_cpu(error):
+            if not self._is_openvino_dimension_error(error):
                 raise
-            log.warning(
-                "OpenVINO image description failed on device "
-                f"'{self.device}' with '{error}'. Retrying image description on CPU."
-            )
-            self.session = self._load_openvino("CPU")
-            self.device = "CPU"
+            with self._openvino_lock:
+                if self.device.upper() != "CPU":
+                    log.warning(
+                        "OpenVINO image description failed on device "
+                        f"'{self.device}' with '{error}'. Retrying image description on CPU."
+                    )
+                    self.session = self._load_openvino("CPU")
+                    self.device = "CPU"
             result = self._generate_openvino(prompt, images)
 
         text = self._result_text(result)
         return self._normalize_response(text)
 
     def _generate_openvino(self, prompt: str, images: list[Any]) -> Any:
-        session = cast(Any, self.session)
-        return session.generate(
-            prompt,
-            images=images,
-            generation_config=self._generation_config(),
-        )
+        with self._openvino_lock:
+            session = cast(Any, self.session)
+            return session.generate(
+                prompt,
+                images=images,
+                generation_config=self._generation_config(),
+            )
 
-    def _should_retry_openvino_on_cpu(self, error: RuntimeError) -> bool:
-        return self.device.upper() != "CPU" and "accessing out-of-range dimension" in str(error).lower()
+    def _is_openvino_dimension_error(self, error: RuntimeError) -> bool:
+        return "accessing out-of-range dimension" in str(error).lower()
 
     def _load_cuda(self) -> dict[str, Any]:
         try:

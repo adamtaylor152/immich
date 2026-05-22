@@ -1,6 +1,7 @@
 <script lang="ts">
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import { AssetImageEnrichmentAction, updateAssetImageEnrichment } from '@immich/sdk';
   import { IconButton, toastManager } from '@immich/ui';
@@ -41,6 +42,10 @@
           }),
         ),
       );
+
+      if (action === AssetImageEnrichmentAction.MarkNsfw) {
+        eventManager.emit('AssetsMarkNsfw', ids);
+      }
 
       await onMark?.(ids, action);
 

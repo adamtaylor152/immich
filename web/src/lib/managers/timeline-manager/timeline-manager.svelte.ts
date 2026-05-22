@@ -4,6 +4,7 @@ import { SvelteDate, SvelteSet } from 'svelte/reactivity';
 import { VirtualScrollManager } from '$lib/managers/VirtualScrollManager/VirtualScrollManager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { eventManager } from '$lib/managers/event-manager.svelte';
+import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import { GroupInsertionCache } from '$lib/managers/timeline-manager/group-insertion-cache.svelte';
 import { updateTimelineMonthViewportProximity } from '$lib/managers/timeline-manager/internal/intersection-support.svelte';
 import { updateGeometry } from '$lib/managers/timeline-manager/internal/layout-support.svelte';
@@ -115,6 +116,7 @@ export class TimelineManager extends VirtualScrollManager {
     this.#unsubscribes.push(
       eventManager.on({
         AssetUpdate: (asset: AssetResponseDto) => this.#updateAssets([toTimelineAsset(asset)]),
+        AssetsMarkNsfw: (ids: string[]) => this.#handleMarkNsfw(ids),
         SessionAccessChanged: () => void this.refresh(),
       }),
     );
@@ -481,6 +483,16 @@ export class TimelineManager extends VirtualScrollManager {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const result = this.#runAssetCallback(new Set(ids), () => ({ remove: true }));
     return [...result.notUpdated];
+  }
+
+  // Only remove locally when the server would actually hide the asset from this
+  // view. That means NSFW hiding is enabled globally AND this view isn't the
+  // suppressed/review view (which exists to surface hidden assets).
+  #handleMarkNsfw(ids: string[]) {
+    if (!featureFlagsManager.value.nsfwHiding || this.#options.suppressedOnly) {
+      return;
+    }
+    this.removeAssets(ids);
   }
 
   protected upsertSegmentForAsset(asset: TimelineAsset) {
