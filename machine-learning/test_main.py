@@ -421,12 +421,16 @@ class TestImageDescriptionModel:
             def __init__(self, data: np.ndarray) -> None:
                 self.data = data
 
+        two_threads_have_failed_on_gpu = threading.Event()
+
         class GpuSession:
             def __init__(self) -> None:
                 self.calls = 0
 
             def generate(self, *args: Any, **kwargs: Any) -> Any:
                 self.calls += 1
+                if self.calls >= 2:
+                    two_threads_have_failed_on_gpu.set()
                 raise RuntimeError("Accessing out-of-range dimension")
 
         cpu_result = SimpleNamespace(
@@ -444,9 +448,20 @@ class TestImageDescriptionModel:
         gpu_session = GpuSession()
         cpu_session = CpuSession()
 
+        # Force the race window open: hold every retry-decision until at least two
+        # threads have failed on the GPU session. Without this gate the first thread
+        # can complete the entire swap before any sibling reaches the retry path,
+        # and the test would pass without exercising the race the fix targets.
+        original_dim_check = ImageDescriptionModel._is_openvino_dimension_error
+
+        def gated_dim_check(self: ImageDescriptionModel, error: RuntimeError) -> bool:
+            assert two_threads_have_failed_on_gpu.wait(timeout=2)
+            return original_dim_check(self, error)
+
         monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
         monkeypatch.setattr(ImageDescriptionModel, "_load_openvino", lambda self, device: cpu_session)
         monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+        monkeypatch.setattr(ImageDescriptionModel, "_is_openvino_dimension_error", gated_dim_check)
 
         model = ImageDescriptionModel(
             "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=gpu_session
@@ -459,7 +474,7 @@ class TestImageDescriptionModel:
 
         assert all(result["description"] == "A room." for result in results)
         assert model.device == "CPU"
-        assert gpu_session.calls + cpu_session.calls >= 8
+        assert gpu_session.calls >= 2
 
     def test_serializes_concurrent_openvino_generates(self, monkeypatch: MonkeyPatch) -> None:
         class Tensor:
