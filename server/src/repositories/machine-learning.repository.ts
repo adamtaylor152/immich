@@ -326,12 +326,18 @@ export class MachineLearningRepository {
     imagePath: string,
     { modelName, acceleration, fallbackModelName, device }: ImageDescriptionOptions,
     nsfw?: NsfwDetectionResult,
+    prompt?: string,
   ) {
-    const request = {
+    const buildRequest = (effectiveModelName: string) => ({
       [ModelTask.IMAGE_DESCRIPTION]: {
-        [ModelType.VISUAL]: { modelName, options: { acceleration, device, nsfw } },
+        [ModelType.VISUAL]: {
+          modelName: effectiveModelName,
+          options: { acceleration, device, nsfw, external_prompt: prompt },
+        },
       },
-    };
+    });
+
+    const request = buildRequest(modelName);
 
     try {
       const response = await this.predict<ImageDescriptionResponse>({ imagePath }, request);
@@ -354,13 +360,8 @@ export class MachineLearningRepository {
       this.logger.warn(
         `Image description model '${modelName}' failed; retrying with fallback model '${fallbackModelName}'`,
       );
-      const fallbackRequest = {
-        [ModelTask.IMAGE_DESCRIPTION]: {
-          [ModelType.VISUAL]: { modelName: fallbackModelName, options: { acceleration, device, nsfw } },
-        },
-      };
-      const response = await this.predict<ImageDescriptionResponse>({ imagePath }, fallbackRequest);
-      return response[ModelTask.IMAGE_DESCRIPTION];
+      const fallbackResponse = await this.predict<ImageDescriptionResponse>({ imagePath }, buildRequest(fallbackModelName));
+      return fallbackResponse[ModelTask.IMAGE_DESCRIPTION];
     }
   }
 

@@ -20,6 +20,10 @@ import {
   QueueName,
 } from 'src/enum';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
+import {
+  DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG,
+  ImageDescriptionPromptAssembler,
+} from 'src/services/prompt-assembler.service';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
@@ -134,6 +138,8 @@ const normalizeTag = (tag: string) =>
 
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
+  private readonly promptAssembler = new ImageDescriptionPromptAssembler();
+
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
 
@@ -403,10 +409,15 @@ export class ImageEnrichmentService extends BaseService {
 
     let result: ImageDescriptionResult;
     try {
+      const { prompt } = this.promptAssembler.build({
+        config: DEFAULT_IMAGE_DESCRIPTION_PROMPT_CONFIG, // PR 3 will replace with SystemConfig read
+        knownPersons: [], // PR 5 will populate from face data
+      });
       result = await this.machineLearningRepository.describeImage(
         asset.previewFile!,
         machineLearning.imageDescription,
         nsfw,
+        prompt,
       );
     } catch (error) {
       await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
