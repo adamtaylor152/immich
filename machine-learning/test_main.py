@@ -416,6 +416,51 @@ class TestImageDescriptionModel:
         assert cpu_session.calls == 1
         assert model.device == "CPU"
 
+    def test_concurrent_cpu_fallback_does_not_spuriously_raise(self, monkeypatch: MonkeyPatch) -> None:
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                self.data = data
+
+        class GpuSession:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def generate(self, *args: Any, **kwargs: Any) -> Any:
+                self.calls += 1
+                raise RuntimeError("Accessing out-of-range dimension")
+
+        cpu_result = SimpleNamespace(
+            texts=[json.dumps({"description": "A room.", "tags": ["room"]})]
+        )
+
+        class CpuSession:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def generate(self, *args: Any, **kwargs: Any) -> Any:
+                self.calls += 1
+                return cpu_result
+
+        gpu_session = GpuSession()
+        cpu_session = CpuSession()
+
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+        monkeypatch.setattr(ImageDescriptionModel, "_load_openvino", lambda self, device: cpu_session)
+        monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+
+        model = ImageDescriptionModel(
+            "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=gpu_session
+        )
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(model.predict, image) for _ in range(8)]
+            results = [future.result() for future in futures]
+
+        assert all(result["description"] == "A room." for result in results)
+        assert model.device == "CPU"
+        assert gpu_session.calls + cpu_session.calls >= 8
+
     def test_serializes_concurrent_openvino_generates(self, monkeypatch: MonkeyPatch) -> None:
         class Tensor:
             def __init__(self, data: np.ndarray) -> None:

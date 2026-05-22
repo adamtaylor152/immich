@@ -192,15 +192,16 @@ class ImageDescriptionModel(InferenceModel):
         try:
             result = self._generate_openvino(prompt, images)
         except RuntimeError as error:
-            if not self._should_retry_openvino_on_cpu(error):
+            if not self._is_openvino_dimension_error(error):
                 raise
-            log.warning(
-                "OpenVINO image description failed on device "
-                f"'{self.device}' with '{error}'. Retrying image description on CPU."
-            )
             with self._openvino_lock:
-                self.session = self._load_openvino("CPU")
-                self.device = "CPU"
+                if self.device.upper() != "CPU":
+                    log.warning(
+                        "OpenVINO image description failed on device "
+                        f"'{self.device}' with '{error}'. Retrying image description on CPU."
+                    )
+                    self.session = self._load_openvino("CPU")
+                    self.device = "CPU"
             result = self._generate_openvino(prompt, images)
 
         text = self._result_text(result)
@@ -215,8 +216,8 @@ class ImageDescriptionModel(InferenceModel):
                 generation_config=self._generation_config(),
             )
 
-    def _should_retry_openvino_on_cpu(self, error: RuntimeError) -> bool:
-        return self.device.upper() != "CPU" and "accessing out-of-range dimension" in str(error).lower()
+    def _is_openvino_dimension_error(self, error: RuntimeError) -> bool:
+        return "accessing out-of-range dimension" in str(error).lower()
 
     def _load_cuda(self) -> dict[str, Any]:
         try:
