@@ -27,7 +27,7 @@ from immich_ml.models.clip.textual import MClipTextualEncoder, OpenClipTextualEn
 from immich_ml.models.clip.visual import OpenClipVisualEncoder
 from immich_ml.models.facial_recognition.detection import FaceDetector
 from immich_ml.models.facial_recognition.recognition import FaceRecognizer
-from immich_ml.models.image_description import ImageDescriptionModel
+from immich_ml.models.image_description import IMAGE_DESCRIPTION_PROMPT, ImageDescriptionModel
 from immich_ml.models.ocr.detection import TextDetector
 from immich_ml.models.ocr.recognition import TextRecognizer
 from immich_ml.models.ocr.schemas import OcrOptions
@@ -412,6 +412,34 @@ class TestImageDescriptionModel:
         assert gpu_session.calls == 1
         assert cpu_session.calls == 1
         assert model.device == "CPU"
+
+    def test_make_prompt_uses_external_when_provided(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt="CUSTOM PROMPT FROM SERVER")
+        assert prompt == "CUSTOM PROMPT FROM SERVER"
+
+    def test_make_prompt_falls_back_to_constant_when_external_missing(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt=None)
+        assert prompt == IMAGE_DESCRIPTION_PROMPT
+
+    def test_make_prompt_external_ignores_nsfw_suffix(self) -> None:
+        # When the server supplies an external prompt, the server is responsible for
+        # including any NSFW conditional content. The Python side does not append
+        # NSFW_PROMPT_SUFFIX on top of an external prompt.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw={"isNsfw": True}, external_prompt="CUSTOM")
+        assert prompt == "CUSTOM"
+
+    def test_florence_ignores_external_prompt(self, monkeypatch: MonkeyPatch) -> None:
+        model = ImageDescriptionModel("microsoft/Florence-2-base", acceleration="cuda")
+        monkeypatch.setattr(
+            ImageDescriptionModel,
+            "_predict_florence",
+            lambda self, image: {"description": "florence output", "tags": []},
+        )
+        result = model._predict_cuda(image=None, nsfw=None, external_prompt="THIS SHOULD BE IGNORED")
+        assert result["description"] == "florence output"
 
 
 @pytest.mark.usefixtures("ort_session")
