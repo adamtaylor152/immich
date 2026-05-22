@@ -64,23 +64,32 @@ export class ImageDescriptionPromptAssembler {
       return this.buildFromTemplate(config, knownPersons, nsfw);
     }
 
-    const sections: string[] = [];
-    sections.push(this.roleLine());
+    const sections: string[] = [this.roleLine()];
 
     const identityHint = this.identityHint(config, knownPersons);
-    if (identityHint) sections.push(identityHint);
+    if (identityHint) {
+      sections.push(identityHint);
+    }
 
     sections.push(this.styleHint(config));
 
-    if (config.lookFor.length > 0) sections.push(this.lookForHint(config.lookFor));
-    if (config.customVocabulary.length > 0) sections.push(this.vocabularyHint(config.customVocabulary));
+    if (config.lookFor.length > 0) {
+      sections.push(this.lookForHint(config.lookFor));
+    }
+    if (config.customVocabulary.length > 0) {
+      sections.push(this.vocabularyHint(config.customVocabulary));
+    }
 
-    sections.push(JSON_SCHEMA_BLOCK);
-    sections.push(this.safetyRules(config.nsfwIndicators));
-    sections.push(this.medicalRules(config.medicalIndicators, config.forbiddenInferences));
-    sections.push(this.standardRules());
+    sections.push(
+      JSON_SCHEMA_BLOCK,
+      this.safetyRules(config.nsfwIndicators),
+      this.medicalRules(config.medicalIndicators, config.forbiddenInferences),
+      this.standardRules(),
+    );
 
-    if (nsfw?.isNsfw) sections.push(this.nsfwReinforcement(config.nsfwIndicators));
+    if (nsfw?.isNsfw) {
+      sections.push(this.nsfwReinforcement(config.nsfwIndicators));
+    }
 
     return { prompt: sections.join('\n\n'), expectedSchemaVersion: SCHEMA_VERSION, warnings: [] };
   }
@@ -110,7 +119,9 @@ export class ImageDescriptionPromptAssembler {
       .replaceAll('{style_hint}', styleHint)
       .replaceAll('{vocabulary}', vocabulary);
 
-    if (nsfw?.isNsfw) prompt = `${prompt}\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
+    if (nsfw?.isNsfw) {
+      prompt = `${prompt}\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
+    }
 
     return { prompt, expectedSchemaVersion: SCHEMA_VERSION, warnings };
   }
@@ -120,11 +131,15 @@ export class ImageDescriptionPromptAssembler {
   }
 
   private identityHint(config: ImageDescriptionPromptConfig, persons: KnownPerson[]): string | null {
-    if (!config.identityInjection.enabled) return null;
+    if (!config.identityInjection.enabled) {
+      return null;
+    }
     const eligible = persons
       .filter((p) => p.faceConfidence >= config.identityInjection.minFaceConfidence)
       .slice(0, config.identityInjection.maxNames);
-    if (eligible.length === 0) return null;
+    if (eligible.length === 0) {
+      return null;
+    }
     const lines = eligible.map((p) => `- ${p.name} (${this.positionLabel(p.boxCenter)})`);
     return `Known people detected in this image (use these names when describing them; do not invent names):\n${lines.join('\n')}`;
   }
@@ -133,7 +148,9 @@ export class ImageDescriptionPromptAssembler {
     const [x, y] = box;
     const col = x < 1 / 3 ? 'left' : x < 2 / 3 ? 'center' : 'right';
     const row = y < 1 / 3 ? 'top' : y < 2 / 3 ? 'middle' : 'bottom';
-    if (row === 'middle' && col === 'center') return 'center';
+    if (row === 'middle' && col === 'center') {
+      return 'center';
+    }
     return `${row}-${col}`;
   }
 
