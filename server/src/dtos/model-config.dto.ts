@@ -181,10 +181,10 @@ export const ImageDescriptionPromptSchema = z
       .array(z.string())
       .default(['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'])
       .describe('Categories the model must not infer (diagnoses, medications, etc.)'),
-    identityInjection: IdentityInjectionSchema.default(IdentityInjectionSchema.parse({})).describe(
+    identityInjection: IdentityInjectionSchema.default(() => IdentityInjectionSchema.parse({})).describe(
       'Named-face injection configuration',
     ),
-    advanced: AdvancedPromptSchema.default(AdvancedPromptSchema.parse({})).describe(
+    advanced: AdvancedPromptSchema.default(() => AdvancedPromptSchema.parse({})).describe(
       'Advanced raw-prompt-editor configuration',
     ),
   })
@@ -196,7 +196,7 @@ export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
   ),
   fallbackModelName: z.string().describe('Name of the fallback model to use'),
   device: z.string().describe('Hardware device to use'),
-  prompt: ImageDescriptionPromptSchema.default(ImageDescriptionPromptSchema.parse({})),
+  prompt: ImageDescriptionPromptSchema.default(() => ImageDescriptionPromptSchema.parse({})),
 }).meta({ id: 'ImageDescriptionConfig' });
 
 export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({
