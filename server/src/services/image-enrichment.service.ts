@@ -409,6 +409,7 @@ export class ImageEnrichmentService extends BaseService {
       const { prompt } = this.promptAssembler.build({
         config: machineLearning.imageDescription.prompt,
         knownPersons: [], // PR 5 will populate from face data
+        nsfw: nsfw ? { isNsfw: nsfw.isNsfw } : null,
       });
       result = await this.machineLearningRepository.describeImage(
         asset.previewFile!,

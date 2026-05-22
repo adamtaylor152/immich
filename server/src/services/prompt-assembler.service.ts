@@ -53,11 +53,15 @@ const JSON_SCHEMA_BLOCK = `Return valid JSON with this schema:
 
 @Injectable()
 export class ImageDescriptionPromptAssembler {
-  build(input: { config: ImageDescriptionPromptConfig; knownPersons: KnownPerson[] }): AssembledPrompt {
-    const { config, knownPersons } = input;
+  build(input: {
+    config: ImageDescriptionPromptConfig;
+    knownPersons: KnownPerson[];
+    nsfw?: { isNsfw: boolean } | null;
+  }): AssembledPrompt {
+    const { config, knownPersons, nsfw } = input;
 
     if (config.advanced.enabled) {
-      return this.buildFromTemplate(config, knownPersons);
+      return this.buildFromTemplate(config, knownPersons, nsfw);
     }
 
     const sections: string[] = [];
@@ -76,10 +80,16 @@ export class ImageDescriptionPromptAssembler {
     sections.push(this.medicalRules(config.medicalIndicators, config.forbiddenInferences));
     sections.push(this.standardRules());
 
+    if (nsfw?.isNsfw) sections.push(this.nsfwReinforcement(config.nsfwIndicators));
+
     return { prompt: sections.join('\n\n'), expectedSchemaVersion: SCHEMA_VERSION, warnings: [] };
   }
 
-  private buildFromTemplate(config: ImageDescriptionPromptConfig, knownPersons: KnownPerson[]): AssembledPrompt {
+  private buildFromTemplate(
+    config: ImageDescriptionPromptConfig,
+    knownPersons: KnownPerson[],
+    nsfw?: { isNsfw: boolean } | null,
+  ): AssembledPrompt {
     const template = config.advanced.rawPromptTemplate;
     const warnings: string[] = [];
 
@@ -94,11 +104,13 @@ export class ImageDescriptionPromptAssembler {
     const styleHint = this.styleHint(config);
     const vocabulary = config.customVocabulary.length > 0 ? this.vocabularyHint(config.customVocabulary) : '';
 
-    const prompt = template
+    let prompt = template
       .replaceAll('{names}', names)
       .replaceAll('{schema}', JSON_SCHEMA_BLOCK)
       .replaceAll('{style_hint}', styleHint)
       .replaceAll('{vocabulary}', vocabulary);
+
+    if (nsfw?.isNsfw) prompt = `${prompt}\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
 
     return { prompt, expectedSchemaVersion: SCHEMA_VERSION, warnings };
   }
@@ -153,6 +165,10 @@ export class ImageDescriptionPromptAssembler {
 
   private medicalRules(indicators: string[], forbidden: string[]): string {
     return `If visible evidence supports a medical context, describe visible items such as ${indicators.join(', ')}. Do not infer ${forbidden.join(', ')} unless plainly visible as generic text or objects.`;
+  }
+
+  private nsfwReinforcement(indicators: string[]): string {
+    return `The dedicated NSFW classifier flagged this image. Re-check the image visually. If visible evidence supports it, include specific factual NSFW reasons in the description, tags, and safety.indicators, such as ${indicators.join(', ')}. If apparent age is uncertain around NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.`;
   }
 
   private standardRules(): string {

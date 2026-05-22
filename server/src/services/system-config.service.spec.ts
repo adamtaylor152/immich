@@ -148,7 +148,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
       prompt: {
         style: 'balanced',
         sentenceCountTarget: 3,
-        lookFor: [],
+        lookFor: ['brands', 'signage', 'screens', 'documents', 'uniforms', 'tools', 'vehicles', 'animals', 'food', 'landmarks'],
         customVocabulary: [],
         nsfwIndicators: ['adult-nudity','bare-buttocks','bondage','explicit','exposed-genitals','naked','nsfw','nudity','restraint','sex-toy','sexual-activity'],
         medicalIndicators: ['bandage','cast','crutches','exam-table','hospital','iv-line','lab-result','medical','medical-monitor','medical-paperwork','mobility-aid','pill-organizer','prescription','syringe','ultrasound','wheelchair','wound','x-ray'],

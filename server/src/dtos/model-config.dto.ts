@@ -119,7 +119,7 @@ export const ImageDescriptionPromptSchema = z.object({
   sentenceCountTarget: z.int().min(1).max(6).default(3).describe('Target number of sentences in the description'),
   lookFor: z
     .array(z.string())
-    .default([])
+    .default(['brands', 'signage', 'screens', 'documents', 'uniforms', 'tools', 'vehicles', 'animals', 'food', 'landmarks'])
     .describe('Additional categories the model should note when visibly supported (brands, sports equipment, etc.)'),
   customVocabulary: z
     .array(z.string())

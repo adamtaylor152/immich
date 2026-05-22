@@ -281,7 +281,17 @@ export class MachineLearningRepository {
       this.setHealthy(url, false);
     }
 
-    throw new Error(`Machine learning request '${JSON.stringify(config)}' failed for all URLs`);
+    // Redact assembled prompt text to avoid leaking identity hints and admin-configured
+    // vocabulary into logs, while preserving model name and acceleration for debugging.
+    const sanitizedConfig = JSON.parse(JSON.stringify(config));
+    for (const taskKey of Object.keys(sanitizedConfig)) {
+      for (const typeKey of Object.keys(sanitizedConfig[taskKey] ?? {})) {
+        if (sanitizedConfig[taskKey][typeKey]?.options?.external_prompt !== undefined) {
+          sanitizedConfig[taskKey][typeKey].options.external_prompt = '[redacted]';
+        }
+      }
+    }
+    throw new Error(`Machine learning request '${JSON.stringify(sanitizedConfig)}' failed for all URLs`);
   }
 
   async detectFaces(imagePath: string, { modelName, minScore }: FaceDetectionOptions) {

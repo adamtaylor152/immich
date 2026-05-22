@@ -131,6 +131,46 @@ describe('ImageDescriptionPromptAssembler', () => {
     });
   });
 
+  describe('NSFW reinforcement', () => {
+    it('appends NSFW reinforcement section when nsfw.isNsfw is true', () => {
+      const { prompt } = assembler.build({ config: baseConfig(), knownPersons: [], nsfw: { isNsfw: true } });
+      expect(prompt).toMatch(/dedicated NSFW classifier flagged/i);
+      expect(prompt).toMatch(/nsfw_review/);
+    });
+
+    it('does not append NSFW reinforcement when nsfw.isNsfw is false', () => {
+      const { prompt } = assembler.build({ config: baseConfig(), knownPersons: [], nsfw: { isNsfw: false } });
+      expect(prompt).not.toMatch(/dedicated NSFW classifier flagged/i);
+    });
+
+    it('does not append NSFW reinforcement when nsfw is undefined', () => {
+      const { prompt } = assembler.build({ config: baseConfig(), knownPersons: [] });
+      expect(prompt).not.toMatch(/dedicated NSFW classifier flagged/i);
+    });
+
+    it('uses configured nsfwIndicators in reinforcement section', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig({ nsfwIndicators: ['custom-term-a', 'custom-term-b'] }),
+        knownPersons: [],
+        nsfw: { isNsfw: true },
+      });
+      expect(prompt).toContain('custom-term-a');
+      expect(prompt).toContain('custom-term-b');
+    });
+
+    it('appends NSFW reinforcement in advanced mode too', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig({
+          advanced: { enabled: true, rawPromptTemplate: 'TEMPLATE {schema}', placeholderValidation: 'strict' },
+        }),
+        knownPersons: [],
+        nsfw: { isNsfw: true },
+      });
+      expect(prompt).toMatch(/^TEMPLATE/);
+      expect(prompt).toMatch(/dedicated NSFW classifier flagged/i);
+    });
+  });
+
   describe('advanced mode', () => {
     it('uses raw prompt template verbatim with placeholders substituted', () => {
       const { prompt } = assembler.build({

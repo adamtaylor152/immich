@@ -110,9 +110,10 @@ Replace the existing `_make_prompt` method at `machine-learning/immich_ml/models
 
 ```python
 def _make_prompt(self, nsfw: Any = None, external_prompt: str | None = None) -> str:
-    if external_prompt:
+    if external_prompt is not None:
         # Server-assembled prompt; server is responsible for including any
         # NSFW conditional content and structured fields.
+        # Empty string is a valid caller-provided prompt; only None falls back.
         return external_prompt
     prompt = IMAGE_DESCRIPTION_PROMPT
     if isinstance(nsfw, dict) and nsfw.get("isNsfw"):

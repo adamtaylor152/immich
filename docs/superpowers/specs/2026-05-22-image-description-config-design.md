@@ -124,7 +124,7 @@ Assembly order when `advanced.enabled === false`:
 
 1. **Role line** — unchanged from today.
 2. **Identity hint** — only when `identityInjection.enabled` and at least one known person survives `minFaceConfidence`. Format:
-   ```
+   ```text
    Known people detected in this image (use these names when describing them; do not invent names):
    - Conner (top-left area)
    - Sarah (center)
@@ -282,7 +282,7 @@ Triggered on save when description-affecting config changed. Shows:
 
 | Layer                              | Coverage                                                                                                                                | Location                                                                       |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Python ML                          | external prompt parameter accepted; fallback to bundled constant; Florence path ignores prompt gracefully                                | `machine-learning/immich_ml/models/test_image_description.py`                  |
+| Python ML                          | external prompt parameter accepted; fallback to bundled constant; Florence path ignores prompt gracefully                                | `machine-learning/test_main.py`                  |
 | Prompt assembler                   | all structured-field permutations; advanced-mode `{schema}` validation; identity hint formatting for 0/1/many known persons             | `server/src/services/prompt-assembler.service.spec.ts` (new)                   |
 | Identity post-validator            | hallucinated names stripped; unambiguous substitution; multi-person ambiguity flagged; no fabrication                                   | `server/src/services/identity-post-validator.service.spec.ts` (new)            |
 | Smart album service                | tag triggers; CLIP threshold; exclusions; removal on re-description; idempotency                                                        | `server/src/services/smart-album.service.spec.ts` (new)                        |

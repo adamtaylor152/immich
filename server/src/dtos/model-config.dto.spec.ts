@@ -40,6 +40,7 @@ describe('ImageDescriptionConfigSchema', () => {
     expect(parsed.prompt.advanced.enabled).toBe(false);
     expect(parsed.prompt.nsfwIndicators).toContain('naked');
     expect(parsed.prompt.medicalIndicators).toContain('hospital');
+    expect(parsed.prompt.lookFor).toContain('brands');
   });
 
   it('rejects invalid style enum', () => {
