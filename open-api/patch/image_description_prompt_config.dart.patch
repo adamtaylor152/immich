@@ -1,0 +1,9 @@
+@@ -141,7 +141,7 @@ class ImageDescriptionPromptConfig {
+             ? (json[r'nsfwIndicators'] as Iterable).cast<String>().toList(growable: false)
+             : const [],
+         sentenceCountTarget: mapValueOfType<int>(json, r'sentenceCountTarget') ?? 3,
+-        style: ImageDescriptionPromptConfigStyleEnum.fromJson(json[r'style']) ?? 'balanced',
++        style: ImageDescriptionPromptConfigStyleEnum.fromJson(json[r'style']) ?? ImageDescriptionPromptConfigStyleEnum.balanced,
+       );
+     }
+     return null;
