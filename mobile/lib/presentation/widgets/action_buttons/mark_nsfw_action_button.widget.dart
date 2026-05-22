@@ -20,8 +20,12 @@ bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
     return false;
   }
 
-  final selectedAssets = ref.watch(multiSelectProvider.select((state) => state.selectedAssets));
-  return selectedAssets.whereType<RemoteAsset>().any((asset) => asset.ownerId == ownerId);
+  final selectedAssets = ref.watch(
+    multiSelectProvider.select((state) => state.selectedAssets),
+  );
+  return selectedAssets.whereType<RemoteAsset>().any(
+    (asset) => asset.ownerId == ownerId,
+  );
 }
 
 Future<void> performMarkNsfwAction(
@@ -46,7 +50,9 @@ Future<void> performMarkNsfwAction(
   if (context.mounted) {
     ImmichToast.show(
       context: context,
-      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
+      msg: result.success
+          ? successMessage
+          : 'scaffold_body_error_occurred'.t(context: context),
       gravity: ToastGravity.BOTTOM,
       toastType: result.success ? ToastType.success : ToastType.error,
     );
@@ -108,7 +114,9 @@ Future<void> performMarkSafeAction(
   if (context.mounted) {
     ImmichToast.show(
       context: context,
-      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
+      msg: result.success
+          ? successMessage
+          : 'scaffold_body_error_occurred'.t(context: context),
       gravity: ToastGravity.BOTTOM,
       toastType: result.success ? ToastType.success : ToastType.error,
     );
