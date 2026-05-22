@@ -61,6 +61,7 @@ describe(ImageEnrichmentService.name, () => {
     expect(mocks.asset.upsertMetadata).toHaveBeenCalledWith(
       assetId,
       expect.arrayContaining([expect.objectContaining({ key: AssetMetadataKey.MlEnrichment })]),
+      undefined,
     );
   });
 
@@ -295,6 +296,7 @@ describe(ImageEnrichmentService.name, () => {
           }),
         }),
       ]),
+      undefined,
     );
   });
 
@@ -343,6 +345,7 @@ describe(ImageEnrichmentService.name, () => {
           }),
         }),
       ]),
+      undefined,
     );
   });
 
@@ -523,6 +526,7 @@ describe(ImageEnrichmentService.name, () => {
           }),
         }),
       ]),
+      undefined,
     );
     expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
   });
@@ -644,6 +648,7 @@ describe(ImageEnrichmentService.name, () => {
           },
         }),
       ]),
+      undefined,
     );
     expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
   });

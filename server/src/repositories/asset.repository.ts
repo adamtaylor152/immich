@@ -387,12 +387,16 @@ export class AssetRepository {
       .execute();
   }
 
-  upsertMetadata(id: string, items: Array<{ key: string; value: Record<string, unknown> }>) {
+  upsertMetadata(
+    id: string,
+    items: Array<{ key: string; value: Record<string, unknown> }>,
+    kysely: Kysely<DB> = this.db,
+  ) {
     if (items.length === 0) {
       return [];
     }
 
-    return this.db
+    return kysely
       .insertInto('asset_metadata')
       .values(items.map((item) => ({ assetId: id, ...item })))
       .onConflict((oc) =>
@@ -418,8 +422,8 @@ export class AssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
-  getMetadataByKey(assetId: string, key: string) {
-    return this.db
+  getMetadataByKey(assetId: string, key: string, kysely: Kysely<DB> = this.db) {
+    return kysely
       .selectFrom('asset_metadata')
       .select(['key', 'value', 'updatedAt'])
       .where('assetId', '=', assetId)

@@ -23,6 +23,12 @@ export type AccessRequest = {
   auth: AuthDto;
   permission: Permission;
   ids: Set<string> | string[];
+  /**
+   * Skip the hidden-content / NSFW privacy filter when resolving access.
+   * Use only for endpoints whose purpose is to manage the very content the
+   * privacy filter would hide (e.g. NSFW review / image-enrichment actions).
+   */
+  ignorePrivacy?: boolean;
 };
 
 type SharedLinkAccessRequest = {
@@ -106,21 +112,23 @@ export const requireAccess = async (access: AccessRepository, request: AccessReq
 
 export const checkAccess = async (
   access: AccessRepository,
-  { ids, auth, permission }: AccessRequest,
+  { ids, auth, permission, ignorePrivacy }: AccessRequest,
 ): Promise<Set<string>> => {
   const idSet = Array.isArray(ids) ? new Set(ids) : ids;
   if (idSet.size === 0) {
     return new Set<string>();
   }
 
-  return auth.sharedLink
+  const effectiveAuth = ignorePrivacy ? { ...auth, hiddenContent: undefined, hideNsfwAssets: undefined } : auth;
+
+  return effectiveAuth.sharedLink
     ? checkSharedLinkAccess(access, {
-        sharedLink: auth.sharedLink,
-        hideNsfwAssets: accessPrivacy(auth),
+        sharedLink: effectiveAuth.sharedLink,
+        hideNsfwAssets: accessPrivacy(effectiveAuth),
         permission,
         ids: idSet,
       })
-    : checkOtherAccess(access, { auth, permission, ids: idSet });
+    : checkOtherAccess(access, { auth: effectiveAuth, permission, ids: idSet });
 };
 
 const checkSharedLinkAccess = async (
