@@ -192,8 +192,13 @@ describe(ImageEnrichmentService.name, () => {
     expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nsfw' }));
     expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'nudity' }));
     expect(mocks.tag.upsertValue).toHaveBeenCalledWith(expect.objectContaining({ userId: ownerId, value: 'naked' }));
-    const lastCall = mocks.asset.upsertMetadata.mock.calls.at(-1)!;
-    const saved = lastCall[1][0].value as { description: Record<string, unknown> };
+    // Walk back to the in-lock save that actually persisted the description
+    // block; persistAppliedBookkeeping issues a second save with only the
+    // tag-application deltas and never carries `description.result`.
+    const descriptionCall = mocks.asset.upsertMetadata.mock.calls.find(
+      (call) => (call[1][0]?.value as { description?: { result?: unknown } } | undefined)?.description?.result,
+    )!;
+    const saved = descriptionCall[1][0].value as { description: Record<string, unknown> };
     expect(saved.description.result).toEqual(
       expect.objectContaining({
         safety: expect.objectContaining({ is_nsfw_likely: true, confidence: 'high' }),

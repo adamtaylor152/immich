@@ -113,6 +113,16 @@ const withoutGeneratedDescriptionBlocks = (description: string, generatedDescrip
     .trim();
 };
 
+const copyAppliedFields = <T extends Record<string, unknown>>(target: T, source: T, keys: Array<keyof T>) => {
+  for (const key of keys) {
+    if (source[key] === undefined) {
+      delete target[key];
+    } else {
+      target[key] = source[key];
+    }
+  }
+};
+
 const normalizeTag = (tag: string) =>
   tag
     .toLowerCase()
@@ -339,7 +349,7 @@ export class ImageEnrichmentService extends BaseService {
 
     const changed = await this.applyNsfwTags(id, asset.ownerId, result, metadata);
     if (changed.metadata) {
-      await this.saveEnrichmentMetadata(id, metadata);
+      await this.persistAppliedBookkeeping(id, metadata);
     }
     if (changed.visible) {
       await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
@@ -464,7 +474,7 @@ export class ImageEnrichmentService extends BaseService {
     });
 
     if (changed.metadata) {
-      await this.saveEnrichmentMetadata(id, metadata);
+      await this.persistAppliedBookkeeping(id, metadata);
     }
     if (changed.visible) {
       await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
@@ -543,12 +553,44 @@ export class ImageEnrichmentService extends BaseService {
     metadata: EnrichmentMetadata,
   ) {
     if (changed.metadata) {
-      await this.saveEnrichmentMetadata(id, metadata);
+      await this.persistAppliedBookkeeping(id, metadata);
     }
 
     if (changed.visible) {
       await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
     }
+  }
+
+  /**
+   * Re-lock and merge only the tag-application bookkeeping fields
+   * (`appliedDescriptionHash`, `appliedTagHash`, `appliedTagValues`) from an
+   * in-memory snapshot into the freshly-read metadata, then persist.
+   *
+   * Tag application and ML inference happen outside the per-asset lock to
+   * keep the lock window short. Naively saving the post-side-effect snapshot
+   * would clobber any concurrent writes to other JSON keys (e.g. a reviewer
+   * setting `nsfwDetection.review` between phases). This helper preserves
+   * those concurrent writes while still recording the bookkeeping deltas the
+   * caller computed.
+   */
+  private async persistAppliedBookkeeping(id: string, snapshot: EnrichmentMetadata) {
+    await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+      const m = await this.getEnrichmentMetadata(id, trx);
+
+      if (m.description?.status === 'success' && snapshot.description?.status === 'success') {
+        copyAppliedFields(m.description, snapshot.description, [
+          'appliedDescriptionHash',
+          'appliedTagHash',
+          'appliedTagValues',
+        ]);
+      }
+
+      if (m.nsfwDetection?.status === 'success' && snapshot.nsfwDetection?.status === 'success') {
+        copyAppliedFields(m.nsfwDetection, snapshot.nsfwDetection, ['appliedTagHash', 'appliedTagValues']);
+      }
+
+      await this.saveEnrichmentMetadata(id, m, trx);
+    });
   }
 
   private ensureManualNsfwMetadata(metadata: EnrichmentMetadata, isNsfw: boolean): NsfwEnrichmentTask {
