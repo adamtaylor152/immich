@@ -144,6 +144,7 @@ describe(ServerService.name, () => {
         ocr: true,
         imageDescription: true,
         nsfwDetection: false,
+        nsfwHiding: false,
         passwordLogin: true,
         physicalDeduplication: false,
         search: true,
