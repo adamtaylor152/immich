@@ -97,7 +97,7 @@
             ? MediaType.Video
             : MediaType.All,
       rating: searchQuery.rating,
-      imageEnrichment: searchQuery.imageEnrichment,
+      imageEnrichment: searchQuery.imageEnrichment ?? '',
     };
   };
 
