@@ -95,10 +95,19 @@ describe(IdentityPostValidator.name, () => {
       expect(flags.hallucinatedNames).toBeUndefined();
     });
 
-    it('does not strip a known person name token when only one part appears in the text', () => {
-      // A description may shorten the name to just the first or last component.
-      const { description, flags } = sut.validate('Jane is reading.', [person('Mary Jane')]);
-      expect(description).toBe('Jane is reading.');
+    it('does not strip a known person name token when only one part appears mid-sentence', () => {
+      // Mid-sentence placement isolates the multi-word allow-list from the
+      // sentence-start protection rule. "Jane" here must survive because it's
+      // a token of the known full name "Mary Jane".
+      const { description, flags } = sut.validate('The kids saw Jane reading.', [person('Mary Jane')]);
+      expect(description).toBe('The kids saw Jane reading.');
+      expect(flags.hallucinatedNames).toBeUndefined();
+    });
+
+    it('does not strip a known name when case differs between description and stored person', () => {
+      // Person stored as lowercase in the DB; model emits canonical casing.
+      const { description, flags } = sut.validate('I saw Conner playing baseball.', [person('conner')]);
+      expect(description).toBe('I saw Conner playing baseball.');
       expect(flags.hallucinatedNames).toBeUndefined();
     });
   });
