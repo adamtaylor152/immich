@@ -91,6 +91,12 @@
   const isRunning = $derived(status === 'running');
   const isStopped = $derived(status === 'stopped');
   const isServerlessReady = $derived(status === 'serverless-ready');
+  // workerReady is the server-side /ping probe result. `serverless-ready`
+  // means the endpoint exists; workerReady means a worker is actually
+  // responding. Pod's `running` state is set after a successful /ping so
+  // workerReady is effectively true whenever running == true, but the
+  // server returns the explicit flag either way.
+  const workerReady = $derived(podState?.workerReady === true);
   const canBackfill = $derived((isRunning || isServerlessReady) && !backfilling);
   let endpointBusy = $state(false);
   let consentError = $state(false);
@@ -449,14 +455,21 @@
 
       {#if isTransitioning || isRunning || isServerlessReady}
         <div class="relative mt-3 h-6 w-full overflow-hidden rounded-full bg-immich-gray/20">
-          {#if isRunning || isServerlessReady}
+          {#if (isRunning || isServerlessReady) && workerReady}
             <div class="size-full bg-green-500 transition-all"></div>
           {:else}
+            <!-- Indeterminate animated bar for any not-yet-live state:
+                 provisioning, starting, stopping, serverless-provisioning,
+                 OR serverless-ready while the worker is still cold-starting. -->
             <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
           {/if}
           <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
-            {#if isRunning || isServerlessReady}
-              <span class="text-green-900">Ready. RunPod GPU is ready.</span>
+            {#if (isRunning || isServerlessReady) && workerReady}
+              <span class="text-green-900">Ready. RunPod GPU is responding.</span>
+            {:else if isServerlessReady}
+              <span class="text-yellow-900">Endpoint ready — worker initializing…</span>
+            {:else if isRunning}
+              <span class="text-yellow-900">Pod running — worker initializing…</span>
             {:else if status === 'serverless-provisioning'}
               <span class="text-yellow-900">Provisioning serverless endpoint…</span>
             {:else if status === 'provisioning'}

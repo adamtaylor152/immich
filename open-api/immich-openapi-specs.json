@@ -24348,6 +24348,9 @@
           "unhealthySince": {
             "type": "string"
           },
+          "workerReady": {
+            "type": "boolean"
+          },
           "workersMax": {
             "nullable": true,
             "type": "number"

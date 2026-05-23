@@ -84,6 +84,12 @@ const RunPodStateSchema = z
     workersMin: z.number().nullish(),
     workersMax: z.number().nullish(),
     idleTimeoutSeconds: z.number().nullish(),
+    // True when the RunPod endpoint exists AND the worker behind it is
+    // currently responding to /ping. Distinct from `status === 'serverless-ready'`,
+    // which only means the endpoint+template are provisioned on RunPod's
+    // side — the worker may still be cold-starting. The UI uses this to
+    // distinguish "endpoint provisioned" from "worker actually live".
+    workerReady: z.boolean().optional(),
   })
   .meta({ id: 'RunPodStateDto' });
 

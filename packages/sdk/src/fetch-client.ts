@@ -1885,6 +1885,7 @@ export type RunPodStateDto = {
     stoppedAt?: string;
     templateId?: string;
     unhealthySince?: string;
+    workerReady?: boolean;
     workersMax?: number | null;
     workersMin?: number | null;
 };

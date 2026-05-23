@@ -192,7 +192,30 @@ export class RunPodService extends BaseService {
 
   async getCurrentState(): Promise<RunPodStateDto> {
     const state = await this.loadState();
-    return this.mapStateToDto(state);
+    const dto = this.mapStateToDto(state);
+    // Synchronously probe the worker for serverless-ready / running states so
+    // the UI's 5s poll surfaces fresh worker-readiness, not the stale 30s
+    // background health-probe result. /ping needs to succeed AND return 200
+    // for the worker to be considered live.
+    if (state.status === 'serverless-ready' || state.status === 'running') {
+      const url = state.status === 'serverless-ready' ? state.endpointUrl : state.mlUrl;
+      const authToken = state.status === 'serverless-ready' ? await this.getApiKey() : state.authToken;
+      dto.workerReady = await this.probeWorkerReady(url, authToken);
+    }
+    return dto;
+  }
+
+  /** GET /ping with a short timeout. Returns true only on 200. */
+  private async probeWorkerReady(url: string, authToken: string | undefined): Promise<boolean> {
+    try {
+      const response = await fetch(new URL('/ping', url), {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+        signal: AbortSignal.timeout(3000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   async provision(dto: RunPodProvisionDto): Promise<RunPodStateDto> {
