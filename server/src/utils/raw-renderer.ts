@@ -15,7 +15,7 @@ export async function renderRawWithLibRaw(input: string): Promise<Buffer> {
   await mkdir(directory, { recursive: true });
 
   try {
-    await execFile('dcraw_emu', ['-T', '-w', '-O', output, input], { timeout: RAW_RENDER_TIMEOUT_MS });
+    await execFile('dcraw_emu', ['-T', '-w', '-Z', output, input], { timeout: RAW_RENDER_TIMEOUT_MS });
     return await readFile(output);
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(() => {});
