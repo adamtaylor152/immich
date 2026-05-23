@@ -13600,6 +13600,103 @@
         "x-immich-state": "Stable"
       }
     },
+    "/system-config/image-description/requeue": {
+      "post": {
+        "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.",
+        "operationId": "triggerImageDescriptionRequeue",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Image description is not enabled."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Trigger image description re-queue",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/image-description/requeue-estimate": {
+      "get": {
+        "description": "Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.",
+        "operationId": "getImageDescriptionRequeueEstimate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueEstimateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Estimate image description re-queue cost",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/system-config/machine-learning/hardware": {
       "get": {
         "description": "Retrieve available hardware acceleration providers from the machine learning service.",
@@ -16713,6 +16810,30 @@
         "required": [
           "isOnboarded"
         ],
+        "type": "object"
+      },
+      "AdvancedPromptConfig": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "description": "Use a raw prompt template instead of the structured fields",
+            "type": "boolean"
+          },
+          "placeholderValidation": {
+            "default": "strict",
+            "description": "Whether missing {schema} placeholder fails save (strict) or warns (warn)",
+            "enum": [
+              "strict",
+              "warn"
+            ],
+            "type": "string"
+          },
+          "rawPromptTemplate": {
+            "default": "",
+            "description": "Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "AlbumResponseDto": {
@@ -20048,6 +20169,31 @@
         },
         "type": "object"
       },
+      "IdentityInjectionConfig": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "description": "Inject named-face data into description prompts",
+            "type": "boolean"
+          },
+          "maxNames": {
+            "default": 5,
+            "description": "Maximum named persons to inject into a single prompt",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minFaceConfidence": {
+            "default": 0.7,
+            "description": "Minimum face-recognition confidence required to inject a name",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "ImageDescriptionConfig": {
         "properties": {
           "acceleration": {
@@ -20070,6 +20216,76 @@
           "modelName": {
             "description": "Name of the model to use",
             "type": "string"
+          },
+          "prompt": {
+            "$ref": "#/components/schemas/ImageDescriptionPromptConfig",
+            "default": {
+              "advanced": {
+                "enabled": false,
+                "placeholderValidation": "strict",
+                "rawPromptTemplate": ""
+              },
+              "customVocabulary": [],
+              "forbiddenInferences": [
+                "diagnoses",
+                "medication names",
+                "procedures",
+                "pregnancy",
+                "disability"
+              ],
+              "identityInjection": {
+                "enabled": true,
+                "maxNames": 5,
+                "minFaceConfidence": 0.7
+              },
+              "lookFor": [
+                "brands",
+                "signage",
+                "screens",
+                "documents",
+                "uniforms",
+                "tools",
+                "vehicles",
+                "animals",
+                "food",
+                "landmarks"
+              ],
+              "medicalIndicators": [
+                "bandage",
+                "cast",
+                "crutches",
+                "exam-table",
+                "hospital",
+                "iv-line",
+                "lab-result",
+                "medical",
+                "medical-monitor",
+                "medical-paperwork",
+                "mobility-aid",
+                "pill-organizer",
+                "prescription",
+                "syringe",
+                "ultrasound",
+                "wheelchair",
+                "wound",
+                "x-ray"
+              ],
+              "nsfwIndicators": [
+                "adult-nudity",
+                "bare-buttocks",
+                "bondage",
+                "explicit",
+                "exposed-genitals",
+                "naked",
+                "nsfw",
+                "nudity",
+                "restraint",
+                "sex-toy",
+                "sexual-activity"
+              ],
+              "sentenceCountTarget": 3,
+              "style": "balanced"
+            }
           }
         },
         "required": [
@@ -20163,6 +20379,198 @@
           "appliedDescription",
           "appliedTags",
           "status"
+        ],
+        "type": "object"
+      },
+      "ImageDescriptionPromptConfig": {
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/AdvancedPromptConfig",
+            "default": {
+              "enabled": false,
+              "placeholderValidation": "strict",
+              "rawPromptTemplate": ""
+            },
+            "description": "Advanced raw-prompt-editor configuration"
+          },
+          "customVocabulary": {
+            "default": [],
+            "description": "Tag values the model should prefer when applicable",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "forbiddenInferences": {
+            "default": [
+              "diagnoses",
+              "medication names",
+              "procedures",
+              "pregnancy",
+              "disability"
+            ],
+            "description": "Categories the model must not infer (diagnoses, medications, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "identityInjection": {
+            "$ref": "#/components/schemas/IdentityInjectionConfig",
+            "default": {
+              "enabled": true,
+              "maxNames": 5,
+              "minFaceConfidence": 0.7
+            },
+            "description": "Named-face injection configuration"
+          },
+          "lookFor": {
+            "default": [
+              "brands",
+              "signage",
+              "screens",
+              "documents",
+              "uniforms",
+              "tools",
+              "vehicles",
+              "animals",
+              "food",
+              "landmarks"
+            ],
+            "description": "Additional categories the model should note when visibly supported (brands, sports equipment, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "medicalIndicators": {
+            "default": [
+              "bandage",
+              "cast",
+              "crutches",
+              "exam-table",
+              "hospital",
+              "iv-line",
+              "lab-result",
+              "medical",
+              "medical-monitor",
+              "medical-paperwork",
+              "mobility-aid",
+              "pill-organizer",
+              "prescription",
+              "syringe",
+              "ultrasound",
+              "wheelchair",
+              "wound",
+              "x-ray"
+            ],
+            "description": "Allow-list of medical indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "nsfwIndicators": {
+            "default": [
+              "adult-nudity",
+              "bare-buttocks",
+              "bondage",
+              "explicit",
+              "exposed-genitals",
+              "naked",
+              "nsfw",
+              "nudity",
+              "restraint",
+              "sex-toy",
+              "sexual-activity"
+            ],
+            "description": "Allow-list of explicit NSFW indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sentenceCountTarget": {
+            "default": 3,
+            "description": "Target number of sentences in the description",
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "style": {
+            "default": "balanced",
+            "description": "Description verbosity preset",
+            "enum": [
+              "terse",
+              "balanced",
+              "rich"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ImageDescriptionRequeueEstimateDto": {
+        "properties": {
+          "activeBackend": {
+            "description": "Configured hardware acceleration backend (e.g. \"auto\", \"cuda\")",
+            "type": "string"
+          },
+          "activeModel": {
+            "description": "Configured image description model name",
+            "type": "string"
+          },
+          "estimatedTotalSeconds": {
+            "description": "Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "rollingAvgSeconds": {
+            "description": "Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "totalAssets": {
+            "description": "Total eligible image assets",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withDescription": {
+            "description": "Number of eligible assets that currently have a description (will be re-run on force-requeue).",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withoutDescription": {
+            "description": "Number of eligible assets that currently have no description.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeBackend",
+          "activeModel",
+          "estimatedTotalSeconds",
+          "rollingAvgSeconds",
+          "totalAssets",
+          "withDescription",
+          "withoutDescription"
+        ],
+        "type": "object"
+      },
+      "ImageDescriptionRequeueResponseDto": {
+        "properties": {
+          "queued": {
+            "description": "Whether the queue-all job was newly enqueued (false = already in-flight)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
         ],
         "type": "object"
       },
@@ -24099,6 +24507,10 @@
             "description": "Whether NSFW detection is enabled",
             "type": "boolean"
           },
+          "nsfwHiding": {
+            "description": "Whether NSFW-tagged assets are hidden from non-elevated library views",
+            "type": "boolean"
+          },
           "oauth": {
             "description": "Whether OAuth is enabled",
             "type": "boolean"
@@ -24149,6 +24561,7 @@
           "importFaces",
           "map",
           "nsfwDetection",
+          "nsfwHiding",
           "oauth",
           "oauthAutoLaunch",
           "ocr",
@@ -24795,6 +25208,47 @@
           "email",
           "name",
           "password"
+        ],
+        "type": "object"
+      },
+      "SmartAlbumKindConfig": {
+        "properties": {
+          "clipQueries": {
+            "description": "CLIP query phrases used when no tag trigger matches",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Whether this smart album is active",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "User-visible album name",
+            "type": "string"
+          },
+          "tagTriggers": {
+            "description": "Tags that mark an asset as belonging to this album",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "description": "CLIP similarity threshold",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "clipQueries",
+          "enabled",
+          "name",
+          "tagTriggers",
+          "threshold"
         ],
         "type": "object"
       },
@@ -27032,6 +27486,9 @@
           "server": {
             "$ref": "#/components/schemas/SystemConfigServerDto"
           },
+          "smartAlbums": {
+            "$ref": "#/components/schemas/SystemConfigSmartAlbumsDto"
+          },
           "storageTemplate": {
             "$ref": "#/components/schemas/SystemConfigStorageTemplateDto"
           },
@@ -27513,7 +27970,74 @@
               "device": "AUTO",
               "enabled": true,
               "fallbackModelName": "microsoft/Florence-2-base-ft",
-              "modelName": "Qwen/Qwen2.5-VL-3B-Instruct"
+              "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+              "prompt": {
+                "advanced": {
+                  "enabled": false,
+                  "placeholderValidation": "strict",
+                  "rawPromptTemplate": ""
+                },
+                "customVocabulary": [],
+                "forbiddenInferences": [
+                  "diagnoses",
+                  "medication names",
+                  "procedures",
+                  "pregnancy",
+                  "disability"
+                ],
+                "identityInjection": {
+                  "enabled": true,
+                  "maxNames": 5,
+                  "minFaceConfidence": 0.7
+                },
+                "lookFor": [
+                  "brands",
+                  "signage",
+                  "screens",
+                  "documents",
+                  "uniforms",
+                  "tools",
+                  "vehicles",
+                  "animals",
+                  "food",
+                  "landmarks"
+                ],
+                "medicalIndicators": [
+                  "bandage",
+                  "cast",
+                  "crutches",
+                  "exam-table",
+                  "hospital",
+                  "iv-line",
+                  "lab-result",
+                  "medical",
+                  "medical-monitor",
+                  "medical-paperwork",
+                  "mobility-aid",
+                  "pill-organizer",
+                  "prescription",
+                  "syringe",
+                  "ultrasound",
+                  "wheelchair",
+                  "wound",
+                  "x-ray"
+                ],
+                "nsfwIndicators": [
+                  "adult-nudity",
+                  "bare-buttocks",
+                  "bondage",
+                  "explicit",
+                  "exposed-genitals",
+                  "naked",
+                  "nsfw",
+                  "nudity",
+                  "restraint",
+                  "sex-toy",
+                  "sexual-activity"
+                ],
+                "sentenceCountTarget": 3,
+                "style": "balanced"
+              }
             }
           },
           "nsfwDetection": {
@@ -27899,6 +28423,50 @@
           "externalDomain",
           "loginPageMessage",
           "publicUsers"
+        ],
+        "type": "object"
+      },
+      "SystemConfigSmartAlbumsDto": {
+        "properties": {
+          "builtIn": {
+            "properties": {
+              "documents": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "food": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "nature": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "pets": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "screenshots": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "travel": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              }
+            },
+            "required": [
+              "travel",
+              "documents",
+              "screenshots",
+              "food",
+              "pets",
+              "nature"
+            ],
+            "type": "object"
+          },
+          "enabled": {
+            "description": "Master smart-album enabled toggle",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "builtIn",
+          "enabled"
         ],
         "type": "object"
       },

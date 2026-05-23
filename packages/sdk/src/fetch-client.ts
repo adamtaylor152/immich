@@ -2454,6 +2454,8 @@ export type ServerFeaturesDto = {
     map: boolean;
     /** Whether NSFW detection is enabled */
     nsfwDetection: boolean;
+    /** Whether NSFW-tagged assets are hidden from non-elevated library views */
+    nsfwHiding: boolean;
     /** Whether OAuth is enabled */
     oauth: boolean;
     /** Whether OAuth auto-launch is enabled */
@@ -2892,6 +2894,42 @@ export type FacialRecognitionConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type AdvancedPromptConfig = {
+    /** Use a raw prompt template instead of the structured fields */
+    enabled?: boolean;
+    /** Whether missing {schema} placeholder fails save (strict) or warns (warn) */
+    placeholderValidation?: PlaceholderValidation;
+    /** Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders */
+    rawPromptTemplate?: string;
+};
+export type IdentityInjectionConfig = {
+    /** Inject named-face data into description prompts */
+    enabled?: boolean;
+    /** Maximum named persons to inject into a single prompt */
+    maxNames?: number;
+    /** Minimum face-recognition confidence required to inject a name */
+    minFaceConfidence?: number;
+};
+export type ImageDescriptionPromptConfig = {
+    /** Advanced raw-prompt-editor configuration */
+    advanced?: AdvancedPromptConfig;
+    /** Tag values the model should prefer when applicable */
+    customVocabulary?: string[];
+    /** Categories the model must not infer (diagnoses, medications, etc.) */
+    forbiddenInferences?: string[];
+    /** Named-face injection configuration */
+    identityInjection?: IdentityInjectionConfig;
+    /** Additional categories the model should note when visibly supported (brands, sports equipment, etc.) */
+    lookFor?: string[];
+    /** Allow-list of medical indicator terms permitted in the description */
+    medicalIndicators?: string[];
+    /** Allow-list of explicit NSFW indicator terms permitted in the description */
+    nsfwIndicators?: string[];
+    /** Target number of sentences in the description */
+    sentenceCountTarget?: number;
+    /** Description verbosity preset */
+    style?: Style;
+};
 export type ImageDescriptionConfig = {
     /** Hardware acceleration backend to use */
     acceleration?: MachineLearningHardwareAcceleration;
@@ -2903,6 +2941,7 @@ export type ImageDescriptionConfig = {
     fallbackModelName: string;
     /** Name of the model to use */
     modelName: string;
+    prompt?: ImageDescriptionPromptConfig;
 };
 export type NsfwDetectionConfig = {
     /** Hardware device to use */
@@ -3067,6 +3106,30 @@ export type SystemConfigServerDto = {
     /** Public users */
     publicUsers: boolean;
 };
+export type SmartAlbumKindConfig = {
+    /** CLIP query phrases used when no tag trigger matches */
+    clipQueries: string[];
+    /** Whether this smart album is active */
+    enabled: boolean;
+    /** User-visible album name */
+    name: string;
+    /** Tags that mark an asset as belonging to this album */
+    tagTriggers: string[];
+    /** CLIP similarity threshold */
+    threshold: number;
+};
+export type SystemConfigSmartAlbumsDto = {
+    builtIn: {
+        documents: SmartAlbumKindConfig;
+        food: SmartAlbumKindConfig;
+        nature: SmartAlbumKindConfig;
+        pets: SmartAlbumKindConfig;
+        screenshots: SmartAlbumKindConfig;
+        travel: SmartAlbumKindConfig;
+    };
+    /** Master smart-album enabled toggle */
+    enabled: boolean;
+};
 export type SystemConfigStorageTemplateDto = {
     /** Enabled */
     enabled: boolean;
@@ -3119,11 +3182,32 @@ export type SystemConfigDto = {
     physicalDeduplication?: SystemConfigPhysicalDeduplicationDto;
     reverseGeocoding: SystemConfigReverseGeocodingDto;
     server: SystemConfigServerDto;
+    smartAlbums?: SystemConfigSmartAlbumsDto;
     storageTemplate: SystemConfigStorageTemplateDto;
     templates: SystemConfigTemplatesDto;
     theme: SystemConfigThemeDto;
     trash: SystemConfigTrashDto;
     user: SystemConfigUserDto;
+};
+export type ImageDescriptionRequeueResponseDto = {
+    /** Whether the queue-all job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type ImageDescriptionRequeueEstimateDto = {
+    /** Configured hardware acceleration backend (e.g. "auto", "cuda") */
+    activeBackend: string;
+    /** Configured image description model name */
+    activeModel: string;
+    /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
+    estimatedTotalSeconds: number;
+    /** Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented. */
+    rollingAvgSeconds: number;
+    /** Total eligible image assets */
+    totalAssets: number;
+    /** Number of eligible assets that currently have a description (will be re-run on force-requeue). */
+    withDescription: number;
+    /** Number of eligible assets that currently have no description. */
+    withoutDescription: number;
 };
 export type MachineLearningHardwareResponseDto = {
     /** Available PyTorch CUDA device count */
@@ -6966,6 +7050,31 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Trigger image description re-queue
+ */
+export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: ImageDescriptionRequeueResponseDto;
+    } | {
+        status: 400;
+    }>("/system-config/image-description/requeue", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Estimate image description re-queue cost
+ */
+export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ImageDescriptionRequeueEstimateDto;
+    }>("/system-config/image-description/requeue-estimate", {
+        ...opts
+    }));
+}
+/**
  * Get machine learning hardware
  */
 export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
@@ -8269,6 +8378,15 @@ export enum MachineLearningHardwareAcceleration {
     Auto = "auto",
     Openvino = "openvino",
     Cuda = "cuda"
+}
+export enum PlaceholderValidation {
+    Strict = "strict",
+    Warn = "warn"
+}
+export enum Style {
+    Terse = "terse",
+    Balanced = "balanced",
+    Rich = "rich"
 }
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",

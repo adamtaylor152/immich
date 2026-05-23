@@ -21,6 +21,7 @@ class ServerFeaturesDto {
     required this.importFaces,
     required this.map,
     required this.nsfwDetection,
+    required this.nsfwHiding,
     required this.oauth,
     required this.oauthAutoLaunch,
     required this.ocr,
@@ -56,6 +57,9 @@ class ServerFeaturesDto {
 
   /// Whether NSFW detection is enabled
   bool nsfwDetection;
+
+  /// Whether NSFW-tagged assets are hidden from non-elevated library views
+  bool nsfwHiding;
 
   /// Whether OAuth is enabled
   bool oauth;
@@ -97,6 +101,7 @@ class ServerFeaturesDto {
     other.importFaces == importFaces &&
     other.map == map &&
     other.nsfwDetection == nsfwDetection &&
+    other.nsfwHiding == nsfwHiding &&
     other.oauth == oauth &&
     other.oauthAutoLaunch == oauthAutoLaunch &&
     other.ocr == ocr &&
@@ -119,6 +124,7 @@ class ServerFeaturesDto {
     (importFaces.hashCode) +
     (map.hashCode) +
     (nsfwDetection.hashCode) +
+    (nsfwHiding.hashCode) +
     (oauth.hashCode) +
     (oauthAutoLaunch.hashCode) +
     (ocr.hashCode) +
@@ -131,7 +137,7 @@ class ServerFeaturesDto {
     (trash.hashCode);
 
   @override
-  String toString() => 'ServerFeaturesDto[configFile=$configFile, duplicateDetection=$duplicateDetection, email=$email, facialRecognition=$facialRecognition, imageDescription=$imageDescription, importFaces=$importFaces, map=$map, nsfwDetection=$nsfwDetection, oauth=$oauth, oauthAutoLaunch=$oauthAutoLaunch, ocr=$ocr, passwordLogin=$passwordLogin, physicalDeduplication=$physicalDeduplication, reverseGeocoding=$reverseGeocoding, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, trash=$trash]';
+  String toString() => 'ServerFeaturesDto[configFile=$configFile, duplicateDetection=$duplicateDetection, email=$email, facialRecognition=$facialRecognition, imageDescription=$imageDescription, importFaces=$importFaces, map=$map, nsfwDetection=$nsfwDetection, nsfwHiding=$nsfwHiding, oauth=$oauth, oauthAutoLaunch=$oauthAutoLaunch, ocr=$ocr, passwordLogin=$passwordLogin, physicalDeduplication=$physicalDeduplication, reverseGeocoding=$reverseGeocoding, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, trash=$trash]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -143,6 +149,7 @@ class ServerFeaturesDto {
       json[r'importFaces'] = this.importFaces;
       json[r'map'] = this.map;
       json[r'nsfwDetection'] = this.nsfwDetection;
+      json[r'nsfwHiding'] = this.nsfwHiding;
       json[r'oauth'] = this.oauth;
       json[r'oauthAutoLaunch'] = this.oauthAutoLaunch;
       json[r'ocr'] = this.ocr;
@@ -173,6 +180,7 @@ class ServerFeaturesDto {
         importFaces: mapValueOfType<bool>(json, r'importFaces')!,
         map: mapValueOfType<bool>(json, r'map')!,
         nsfwDetection: mapValueOfType<bool>(json, r'nsfwDetection')!,
+        nsfwHiding: mapValueOfType<bool>(json, r'nsfwHiding')!,
         oauth: mapValueOfType<bool>(json, r'oauth')!,
         oauthAutoLaunch: mapValueOfType<bool>(json, r'oauthAutoLaunch')!,
         ocr: mapValueOfType<bool>(json, r'ocr')!,
@@ -238,6 +246,7 @@ class ServerFeaturesDto {
     'importFaces',
     'map',
     'nsfwDetection',
+    'nsfwHiding',
     'oauth',
     'oauthAutoLaunch',
     'ocr',

@@ -8,6 +8,7 @@
   import ChangeDescription from '$lib/components/timeline/actions/ChangeDescriptionAction.svelte';
   import ChangeLocation from '$lib/components/timeline/actions/ChangeLocationAction.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
+  import MarkNsfwAction from '$lib/components/timeline/actions/MarkNsfwAction.svelte';
   import RemoveFromAlbum from '$lib/components/timeline/actions/RemoveFromAlbumAction.svelte';
   import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
@@ -113,6 +114,10 @@
       {/if}
       {#if authManager.preferences.tags.enabled && assetMultiSelectManager.isAllUserOwned}
         <TagAction menuItem />
+      {/if}
+      {#if assetMultiSelectManager.ownedAssets.length > 0}
+        <MarkNsfwAction menuItem />
+        <MarkNsfwAction menuItem markSafe />
       {/if}
       {#if isEditor || assetMultiSelectManager.isAllUserOwned}
         <RemoveFromAlbum menuItem bind:album onRemove={handleRemoveAssets} />

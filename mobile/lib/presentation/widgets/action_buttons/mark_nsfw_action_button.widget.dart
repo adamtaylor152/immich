@@ -24,22 +24,17 @@ bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
   return selectedAssets.whereType<RemoteAsset>().any((asset) => asset.ownerId == ownerId);
 }
 
-Future<void> performMarkNsfwAction(
-  BuildContext context,
-  WidgetRef ref, {
-  required ActionSource source,
-}) async {
-  if (!context.mounted) return;
+Future<void> performMarkNsfwAction(BuildContext context, WidgetRef ref, {required ActionSource source}) async {
+  if (!context.mounted) {
+    return;
+  }
 
   final result = await ref.read(actionProvider.notifier).markNsfw(source);
   if (result.success) {
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_nsfw_action_prompt'.t(
-    context: context,
-    args: {'count': result.count.toString()},
-  );
+  final successMessage = 'mark_nsfw_action_prompt'.t(context: context, args: {'count': result.count.toString()});
 
   if (context.mounted) {
     ImmichToast.show(
@@ -56,12 +51,7 @@ class MarkNsfwActionButton extends ConsumerWidget {
   final bool iconOnly;
   final bool menuItem;
 
-  const MarkNsfwActionButton({
-    super.key,
-    required this.source,
-    this.iconOnly = false,
-    this.menuItem = false,
-  });
+  const MarkNsfwActionButton({super.key, required this.source, this.iconOnly = false, this.menuItem = false});
 
   Future<void> _onTap(BuildContext context, WidgetRef ref) async {
     await performMarkNsfwAction(context, ref, source: source);
@@ -84,22 +74,17 @@ class MarkNsfwActionButton extends ConsumerWidget {
   }
 }
 
-Future<void> performMarkSafeAction(
-  BuildContext context,
-  WidgetRef ref, {
-  required ActionSource source,
-}) async {
-  if (!context.mounted) return;
+Future<void> performMarkSafeAction(BuildContext context, WidgetRef ref, {required ActionSource source}) async {
+  if (!context.mounted) {
+    return;
+  }
 
   final result = await ref.read(actionProvider.notifier).markSafe(source);
   if (result.success) {
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_safe_action_prompt'.t(
-    context: context,
-    args: {'count': result.count.toString()},
-  );
+  final successMessage = 'mark_safe_action_prompt'.t(context: context, args: {'count': result.count.toString()});
 
   if (context.mounted) {
     ImmichToast.show(
@@ -116,12 +101,7 @@ class MarkSafeActionButton extends ConsumerWidget {
   final bool iconOnly;
   final bool menuItem;
 
-  const MarkSafeActionButton({
-    super.key,
-    required this.source,
-    this.iconOnly = false,
-    this.menuItem = false,
-  });
+  const MarkSafeActionButton({super.key, required this.source, this.iconOnly = false, this.menuItem = false});
 
   Future<void> _onTap(BuildContext context, WidgetRef ref) async {
     await performMarkSafeAction(context, ref, source: source);

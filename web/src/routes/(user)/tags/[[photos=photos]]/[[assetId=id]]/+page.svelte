@@ -17,6 +17,7 @@
   import DeleteAssets from '$lib/components/timeline/actions/DeleteAssetsAction.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
   import FavoriteAction from '$lib/components/timeline/actions/FavoriteAction.svelte';
+  import MarkNsfwAction from '$lib/components/timeline/actions/MarkNsfwAction.svelte';
   import SelectAllAssets from '$lib/components/timeline/actions/SelectAllAction.svelte';
   import SetVisibilityAction from '$lib/components/timeline/actions/SetVisibilityAction.svelte';
   import TagAction from '$lib/components/timeline/actions/TagAction.svelte';
@@ -132,6 +133,10 @@
             menuItem
             onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
           />
+          {#if assetMultiSelectManager.ownedAssets.length > 0}
+            <MarkNsfwAction menuItem />
+            <MarkNsfwAction menuItem markSafe />
+          {/if}
           {#if authManager.preferences.tags.enabled}
             <TagAction menuItem />
           {/if}

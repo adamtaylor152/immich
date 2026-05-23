@@ -468,8 +468,8 @@
         <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
           <DownloadAction menuItem filename="{album.albumName}.zip" />
           {#if assetMultiSelectManager.ownedAssets.length > 0}
-            <MarkNsfwAction menuItem onMark={() => timelineManager.refresh()} />
-            <MarkNsfwAction menuItem markSafe onMark={() => timelineManager.refresh()} />
+            <MarkNsfwAction menuItem />
+            <MarkNsfwAction menuItem markSafe />
           {/if}
           {#if assetMultiSelectManager.isAllUserOwned}
             <ChangeDate menuItem />

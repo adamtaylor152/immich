@@ -3,6 +3,7 @@ import { toastManager } from '@immich/ui';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import { eventManager } from '$lib/managers/event-manager.svelte';
 import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
@@ -49,6 +50,8 @@ describe('MarkNsfwAction', () => {
   it('marks selected owned assets as NSFW', async () => {
     const assets = [timelineAsset('asset-1', authManager.user.id), timelineAsset('asset-2', authManager.user.id)];
     const onMark = vi.fn();
+    const onAssetsMarkNsfw = vi.fn();
+    const unsubscribe = eventManager.on({ AssetsMarkNsfw: onAssetsMarkNsfw });
     assetMultiSelectManager.selectAssets(assets);
 
     render(MarkNsfwAction, { menuItem: true, onMark });
@@ -64,16 +67,20 @@ describe('MarkNsfwAction', () => {
       id: assets[1].id,
       assetImageEnrichmentActionRequestDto: { action: AssetImageEnrichmentAction.MarkNsfw },
     });
+    expect(onAssetsMarkNsfw).toHaveBeenCalledWith(assets.map(({ id }) => id));
     expect(onMark).toHaveBeenCalledWith(
       assets.map(({ id }) => id),
       AssetImageEnrichmentAction.MarkNsfw,
     );
     expect(toastManager.primary).toHaveBeenCalled();
     expect(assetMultiSelectManager.selectionActive).toBe(false);
+    unsubscribe();
   });
 
   it('marks selected owned assets as safe', async () => {
     const assets = [timelineAsset('asset-1', authManager.user.id), timelineAsset('asset-2', authManager.user.id)];
+    const onAssetsMarkNsfw = vi.fn();
+    const unsubscribe = eventManager.on({ AssetsMarkNsfw: onAssetsMarkNsfw });
     assetMultiSelectManager.selectAssets(assets);
 
     render(MarkNsfwAction, { menuItem: true, markSafe: true });
@@ -89,6 +96,8 @@ describe('MarkNsfwAction', () => {
       id: assets[1].id,
       assetImageEnrichmentActionRequestDto: { action: AssetImageEnrichmentAction.MarkSafe },
     });
+    expect(onAssetsMarkNsfw).not.toHaveBeenCalled();
+    unsubscribe();
   });
 
   it('marks explicit asset ids without clearing timeline selection', async () => {

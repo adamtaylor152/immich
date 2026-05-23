@@ -146,6 +146,59 @@ const updatedConfig = Object.freeze<SystemConfig>({
       modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
       fallbackModelName: 'microsoft/Florence-2-base-ft',
       device: 'AUTO',
+      prompt: {
+        style: 'balanced',
+        sentenceCountTarget: 3,
+        lookFor: [
+          'brands',
+          'signage',
+          'screens',
+          'documents',
+          'uniforms',
+          'tools',
+          'vehicles',
+          'animals',
+          'food',
+          'landmarks',
+        ],
+        customVocabulary: [],
+        nsfwIndicators: [
+          'adult-nudity',
+          'bare-buttocks',
+          'bondage',
+          'explicit',
+          'exposed-genitals',
+          'naked',
+          'nsfw',
+          'nudity',
+          'restraint',
+          'sex-toy',
+          'sexual-activity',
+        ],
+        medicalIndicators: [
+          'bandage',
+          'cast',
+          'crutches',
+          'exam-table',
+          'hospital',
+          'iv-line',
+          'lab-result',
+          'medical',
+          'medical-monitor',
+          'medical-paperwork',
+          'mobility-aid',
+          'pill-organizer',
+          'prescription',
+          'syringe',
+          'ultrasound',
+          'wheelchair',
+          'wound',
+          'x-ray',
+        ],
+        forbiddenInferences: ['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'],
+        identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.7 },
+        advanced: { enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' },
+      },
     },
     nsfwDetection: {
       enabled: false,
@@ -282,6 +335,53 @@ const updatedConfig = Object.freeze<SystemConfig>({
       albumInviteTemplate: '',
       welcomeTemplate: '',
       albumUpdateTemplate: '',
+    },
+  },
+  smartAlbums: {
+    enabled: false,
+    builtIn: {
+      travel: {
+        enabled: true,
+        name: 'Travel',
+        tagTriggers: ['airport', 'beach', 'mountain', 'landmark', 'hotel', 'passport', 'suitcase', 'tourist'],
+        clipQueries: ['vacation travel landscape', 'tourist destination'],
+        threshold: 0.28,
+      },
+      documents: {
+        enabled: true,
+        name: 'Documents & Receipts',
+        tagTriggers: ['receipt', 'document', 'invoice', 'paperwork', 'scan', 'id-card'],
+        clipQueries: ['paper document', 'receipt or invoice'],
+        threshold: 0.28,
+      },
+      screenshots: {
+        enabled: true,
+        name: 'Screenshots',
+        tagTriggers: ['screenshot', 'ui', 'screen-capture', 'user-interface'],
+        clipQueries: ['phone or computer screenshot'],
+        threshold: 0.28,
+      },
+      food: {
+        enabled: true,
+        name: 'Food',
+        tagTriggers: ['food', 'meal', 'dish', 'restaurant', 'plate', 'cooking'],
+        clipQueries: ['plated food meal', 'restaurant dish'],
+        threshold: 0.28,
+      },
+      pets: {
+        enabled: true,
+        name: 'Pets',
+        tagTriggers: ['pet', 'dog', 'cat', 'puppy', 'kitten'],
+        clipQueries: ['domestic pet animal'],
+        threshold: 0.28,
+      },
+      nature: {
+        enabled: true,
+        name: 'Nature',
+        tagTriggers: ['nature', 'forest', 'mountain', 'ocean', 'sunset', 'wildlife', 'flower'],
+        clipQueries: ['natural landscape', 'wildlife'],
+        threshold: 0.28,
+      },
     },
   },
 });
@@ -689,6 +789,98 @@ describe(SystemConfigService.name, () => {
   describe('getCustomCss', () => {
     it('should return the default theme', async () => {
       await expect(sut.getCustomCss()).resolves.toEqual(defaults.theme.customCss);
+    });
+  });
+
+  describe('estimateDescriptionRequeue', () => {
+    it('should return asset counts and a fixed rolling average when no telemetry is available', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          imageDescription: {
+            enabled: true,
+            modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+            acceleration: MachineLearningHardwareAcceleration.Auto,
+          },
+        },
+      });
+      mocks.asset.getDescriptionStats.mockResolvedValue({
+        totalAssets: 100,
+        withDescription: 40,
+        withoutDescription: 60,
+      });
+
+      const result = await sut.estimateDescriptionRequeue();
+
+      expect(result).toMatchObject({
+        totalAssets: 100,
+        withDescription: 40,
+        withoutDescription: 60,
+        rollingAvgSeconds: 1.5,
+        estimatedTotalSeconds: 100 * 1.5,
+        activeModel: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      });
+      expect(typeof result.activeBackend).toBe('string');
+    });
+  });
+
+  describe('triggerDescriptionRequeue', () => {
+    it('should enqueue the queue-all job and return queued=true when the queue is idle', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: true } },
+      });
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        waiting: 0,
+        paused: 0,
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).resolves.toEqual({ queued: true });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'ImageDescriptionQueueAll',
+          data: { force: true },
+        }),
+      );
+    });
+
+    it('should return queued=false and not re-enqueue when the queue is already active', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: true } },
+      });
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 1,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        waiting: 50,
+        paused: 0,
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).resolves.toEqual({ queued: false });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when image description is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: false } },
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when global machine learning is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { enabled: false, imageDescription: { enabled: true } },
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
     });
   });
 });

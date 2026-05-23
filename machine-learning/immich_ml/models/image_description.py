@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,6 +15,7 @@ from immich_ml.config import log
 from immich_ml.models.base import InferenceModel
 from immich_ml.schemas import ImageDescriptionAcceleration, ModelTask, ModelType
 
+# KEEP IN SYNC WITH: server/src/services/prompt-assembler.service.ts (JSON_SCHEMA_BLOCK)
 IMAGE_DESCRIPTION_PROMPT = """You are generating a concise searchable image record from computer vision outputs.
 
 Use only visible evidence from the image. If estimating age, use broad apparent age groups only,
@@ -146,13 +148,18 @@ class ImageDescriptionModel(InferenceModel):
         self.acceleration = self._resolve_acceleration(self.requested_acceleration)
         self.hf_model_name = self._model_name_for_acceleration(model_name, self.acceleration)
         self.device = str(model_kwargs.get("device", "AUTO") or "AUTO")
+        self._openvino_lock = threading.Lock()
         super().__init__(model_name, **model_kwargs)
 
     def predict(self, *inputs: Any, **model_kwargs: Any) -> Any:
         self.load()
         if model_kwargs:
             self.configure(**model_kwargs)
-        return self._predict(*inputs, nsfw=model_kwargs.get("nsfw"))
+        return self._predict(
+            *inputs,
+            nsfw=model_kwargs.get("nsfw"),
+            external_prompt=model_kwargs.get("external_prompt"),
+        )
 
     def configure(self, **kwargs: Any) -> None:
         if "acceleration" in kwargs:
@@ -182,37 +189,42 @@ class ImageDescriptionModel(InferenceModel):
         return openvino_genai.VLMPipeline(str(self.cache_dir), device)
 
     def _predict(self, image: Image.Image, **model_kwargs: Any) -> dict[str, Any]:
+        nsfw = model_kwargs.get("nsfw")
+        external_prompt = model_kwargs.get("external_prompt")
         if self.acceleration == ImageDescriptionAcceleration.CUDA:
-            return self._predict_cuda(image, model_kwargs.get("nsfw"))
+            return self._predict_cuda(image, nsfw, external_prompt)
 
-        prompt = self._make_openvino_prompt(model_kwargs.get("nsfw"))
+        prompt = self._make_openvino_prompt(nsfw, external_prompt)
         images = [self._to_openvino_tensor(image)]
         try:
             result = self._generate_openvino(prompt, images)
         except RuntimeError as error:
-            if not self._should_retry_openvino_on_cpu(error):
+            if not self._is_openvino_dimension_error(error):
                 raise
-            log.warning(
-                "OpenVINO image description failed on device "
-                f"'{self.device}' with '{error}'. Retrying image description on CPU."
-            )
-            self.session = self._load_openvino("CPU")
-            self.device = "CPU"
+            with self._openvino_lock:
+                if self.device.upper() != "CPU":
+                    log.warning(
+                        "OpenVINO image description failed on device "
+                        f"'{self.device}' with '{error}'. Retrying image description on CPU."
+                    )
+                    self.session = self._load_openvino("CPU")
+                    self.device = "CPU"
             result = self._generate_openvino(prompt, images)
 
         text = self._result_text(result)
         return self._normalize_response(text)
 
     def _generate_openvino(self, prompt: str, images: list[Any]) -> Any:
-        session = cast(Any, self.session)
-        return session.generate(
-            prompt,
-            images=images,
-            generation_config=self._generation_config(),
-        )
+        with self._openvino_lock:
+            session = cast(Any, self.session)
+            return session.generate(
+                prompt,
+                images=images,
+                generation_config=self._generation_config(),
+            )
 
-    def _should_retry_openvino_on_cpu(self, error: RuntimeError) -> bool:
-        return self.device.upper() != "CPU" and "accessing out-of-range dimension" in str(error).lower()
+    def _is_openvino_dimension_error(self, error: RuntimeError) -> bool:
+        return "accessing out-of-range dimension" in str(error).lower()
 
     def _load_cuda(self) -> dict[str, Any]:
         try:
@@ -244,13 +256,14 @@ class ImageDescriptionModel(InferenceModel):
         model.eval()
         return {"model": model, "processor": processor, "device": device, "torch": torch, "torch_dtype": torch_dtype}
 
-    def _predict_cuda(self, image: Image.Image, nsfw: Any = None) -> dict[str, Any]:
+    def _predict_cuda(self, image: Image.Image, nsfw: Any = None, external_prompt: str | None = None) -> dict[str, Any]:
         if self.hf_model_name in FLORENCE_MODEL_NAMES:
+            # Florence uses task tokens, not prompts. external_prompt is ignored intentionally.
             return self._predict_florence(image)
-        return self._predict_qwen(image, nsfw)
+        return self._predict_qwen(image, nsfw, external_prompt)
 
-    def _predict_qwen(self, image: Image.Image, nsfw: Any = None) -> dict[str, Any]:
-        prompt = self._make_prompt(nsfw)
+    def _predict_qwen(self, image: Image.Image, nsfw: Any = None, external_prompt: str | None = None) -> dict[str, Any]:
+        prompt = self._make_prompt(nsfw, external_prompt)
         session = cast(dict[str, Any], self.session)
         model = session["model"]
         processor = session["processor"]
@@ -380,14 +393,20 @@ class ImageDescriptionModel(InferenceModel):
             return requested.lower()
         return requested
 
-    def _make_prompt(self, nsfw: Any = None) -> str:
+    def _make_prompt(self, nsfw: Any = None, external_prompt: str | None = None) -> str:
+        if external_prompt is not None:
+            # Server-assembled prompt; server is responsible for including any
+            # NSFW conditional content and structured fields. Any string
+            # (including "") is treated as caller-provided; only None falls
+            # back to the bundled default.
+            return external_prompt
         prompt = IMAGE_DESCRIPTION_PROMPT
         if isinstance(nsfw, dict) and nsfw.get("isNsfw"):
             prompt += NSFW_PROMPT_SUFFIX
         return prompt
 
-    def _make_openvino_prompt(self, nsfw: Any = None) -> str:
-        prompt = self._make_prompt(nsfw)
+    def _make_openvino_prompt(self, nsfw: Any = None, external_prompt: str | None = None) -> str:
+        prompt = self._make_prompt(nsfw, external_prompt)
         if self._uses_phi_openvino_model():
             return f"{PHI_OPENVINO_IMAGE_TAG}\n{prompt}"
         if self._uses_qwen_openvino_model():

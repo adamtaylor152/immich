@@ -119,6 +119,7 @@ describe('/server', () => {
         ocr: false,
         imageDescription: false,
         nsfwDetection: false,
+        nsfwHiding: false,
         passwordLogin: true,
         physicalDeduplication: false,
         search: true,

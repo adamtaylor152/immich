@@ -8,6 +8,10 @@ on:
 jobs:
   zizmor:
     name: Zizmor
+    # Skip on forks: Zizmor's impostor-commit audit needs to list tags on every
+    # referenced third-party action via the GitHub API, which the fork's runner
+    # token isn't authorized for and returns 403.
+    if: github.repository_owner == 'immich-app'
     uses: immich-app/devtools/.github/workflows/shared-zizmor.yml@main
     permissions:
       actions: read

@@ -2,13 +2,22 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import _ from 'lodash';
 import { defaults } from 'src/config';
 import { OnEvent } from 'src/decorators';
-import { mapConfig, SystemConfigDto } from 'src/dtos/system-config.dto';
-import { BootstrapEventPriority, SystemMetadataKey } from 'src/enum';
+import {
+  ImageDescriptionRequeueEstimateDto,
+  ImageDescriptionRequeueResponseDto,
+  mapConfig,
+  SystemConfigDto,
+} from 'src/dtos/system-config.dto';
+import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
 import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
 import { BaseService } from 'src/services/base.service';
 import { clearConfigCache } from 'src/utils/config';
+import { isImageDescriptionEnabled } from 'src/utils/misc';
 import { toPlainObject } from 'src/utils/object';
+
+/** Default per-asset estimate when no telemetry data is available. */
+const DEFAULT_SECONDS_PER_ASSET = 1.5;
 
 @Injectable()
 export class SystemConfigService extends BaseService {
@@ -121,5 +130,44 @@ export class SystemConfigService extends BaseService {
   async getCustomCss(): Promise<string> {
     const { theme } = await this.getConfig({ withCache: false });
     return theme.customCss;
+  }
+
+  async estimateDescriptionRequeue(): Promise<ImageDescriptionRequeueEstimateDto> {
+    const { machineLearning } = await this.getConfig({ withCache: false });
+    const stats = await this.assetRepository.getDescriptionStats();
+
+    // TODO(PR 4a): replace with a real rolling-average query over job completion
+    // telemetry once per-job duration tracking is added. For now, use a
+    // conservative default that is clearly labelled as an estimate.
+    const rollingAvgSeconds = DEFAULT_SECONDS_PER_ASSET;
+    const estimatedTotalSeconds = stats.totalAssets * rollingAvgSeconds;
+
+    return {
+      totalAssets: stats.totalAssets,
+      withDescription: stats.withDescription,
+      withoutDescription: stats.withoutDescription,
+      rollingAvgSeconds,
+      estimatedTotalSeconds,
+      activeBackend: machineLearning.imageDescription.acceleration,
+      activeModel: machineLearning.imageDescription.modelName,
+    };
+  }
+
+  async triggerDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
+    const { machineLearning } = await this.getConfig({ withCache: false });
+    if (!isImageDescriptionEnabled(machineLearning)) {
+      throw new BadRequestException('Image description is not enabled');
+    }
+
+    // BullMQ deduplication (set up in job.repository.ts) prevents double-enqueueing
+    // the queue-all job. We surface the result to the caller so the UI can react.
+    const counts = await this.jobRepository.getJobCounts(QueueName.ImageDescription);
+    const alreadyInFlight = (counts.active ?? 0) + (counts.waiting ?? 0) > 0;
+
+    if (!alreadyInFlight) {
+      await this.jobRepository.queue({ name: JobName.ImageDescriptionQueueAll, data: { force: true } });
+    }
+
+    return { queued: !alreadyInFlight };
   }
 }

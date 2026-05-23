@@ -1,6 +1,9 @@
 import json
 import os
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from random import randint
@@ -27,7 +30,7 @@ from immich_ml.models.clip.textual import MClipTextualEncoder, OpenClipTextualEn
 from immich_ml.models.clip.visual import OpenClipVisualEncoder
 from immich_ml.models.facial_recognition.detection import FaceDetector
 from immich_ml.models.facial_recognition.recognition import FaceRecognizer
-from immich_ml.models.image_description import ImageDescriptionModel
+from immich_ml.models.image_description import IMAGE_DESCRIPTION_PROMPT, ImageDescriptionModel
 from immich_ml.models.ocr.detection import TextDetector
 from immich_ml.models.ocr.recognition import TextRecognizer
 from immich_ml.models.ocr.schemas import OcrOptions
@@ -412,6 +415,150 @@ class TestImageDescriptionModel:
         assert gpu_session.calls == 1
         assert cpu_session.calls == 1
         assert model.device == "CPU"
+
+    def test_make_prompt_uses_external_when_provided(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt="CUSTOM PROMPT FROM SERVER")
+        assert prompt == "CUSTOM PROMPT FROM SERVER"
+
+    def test_make_prompt_falls_back_to_constant_when_external_missing(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt=None)
+        assert prompt == IMAGE_DESCRIPTION_PROMPT
+
+    def test_make_prompt_external_ignores_nsfw_suffix(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw={"isNsfw": True}, external_prompt="CUSTOM")
+        assert prompt == "CUSTOM"
+
+    def test_make_prompt_empty_external_returns_empty(self) -> None:
+        # Empty string is a valid (if unusual) caller-provided prompt; it must NOT
+        # fall through to the default IMAGE_DESCRIPTION_PROMPT.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        prompt = model._make_prompt(nsfw=None, external_prompt="")
+        assert prompt == ""
+
+    def test_florence_ignores_external_prompt(self, monkeypatch: MonkeyPatch) -> None:
+        model = ImageDescriptionModel("microsoft/Florence-2-base", acceleration="cuda")
+        monkeypatch.setattr(
+            ImageDescriptionModel,
+            "_predict_florence",
+            lambda self, image: {"description": "florence output", "tags": []},
+        )
+        result = model._predict_cuda(image=None, nsfw=None, external_prompt="THIS SHOULD BE IGNORED")
+        assert result["description"] == "florence output"
+
+    def test_predict_propagates_external_prompt_via_kwargs(self, monkeypatch: MonkeyPatch) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        captured: dict[str, Any] = {}
+        monkeypatch.setattr(ImageDescriptionModel, "load", lambda self: None)
+
+        def fake_predict(self: ImageDescriptionModel, *inputs: Any, **kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {"description": "stub"}
+
+        monkeypatch.setattr(ImageDescriptionModel, "_predict", fake_predict)
+        model.predict("image", external_prompt="HELLO FROM SERVER", nsfw=None)
+        assert captured.get("external_prompt") == "HELLO FROM SERVER"
+
+    def test_concurrent_cpu_fallback_does_not_spuriously_raise(self, monkeypatch: MonkeyPatch) -> None:
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                self.data = data
+
+        two_threads_have_failed_on_gpu = threading.Event()
+
+        class GpuSession:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def generate(self, *args: Any, **kwargs: Any) -> Any:
+                self.calls += 1
+                if self.calls >= 2:
+                    two_threads_have_failed_on_gpu.set()
+                raise RuntimeError("Accessing out-of-range dimension")
+
+        cpu_result = SimpleNamespace(
+            texts=[json.dumps({"description": "A room.", "tags": ["room"]})]
+        )
+
+        class CpuSession:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def generate(self, *args: Any, **kwargs: Any) -> Any:
+                self.calls += 1
+                return cpu_result
+
+        gpu_session = GpuSession()
+        cpu_session = CpuSession()
+
+        # Force the race window open: hold every retry-decision until at least two
+        # threads have failed on the GPU session. Without this gate the first thread
+        # can complete the entire swap before any sibling reaches the retry path,
+        # and the test would pass without exercising the race the fix targets.
+        original_dim_check = ImageDescriptionModel._is_openvino_dimension_error
+
+        def gated_dim_check(self: ImageDescriptionModel, error: RuntimeError) -> bool:
+            assert two_threads_have_failed_on_gpu.wait(timeout=2)
+            return original_dim_check(self, error)
+
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+        monkeypatch.setattr(ImageDescriptionModel, "_load_openvino", lambda self, device: cpu_session)
+        monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+        monkeypatch.setattr(ImageDescriptionModel, "_is_openvino_dimension_error", gated_dim_check)
+
+        model = ImageDescriptionModel(
+            "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=gpu_session
+        )
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(model.predict, image) for _ in range(8)]
+            results = [future.result() for future in futures]
+
+        assert all(result["description"] == "A room." for result in results)
+        assert model.device == "CPU"
+        assert gpu_session.calls >= 2
+
+    def test_serializes_concurrent_openvino_generates(self, monkeypatch: MonkeyPatch) -> None:
+        class Tensor:
+            def __init__(self, data: np.ndarray) -> None:
+                self.data = data
+
+        result_text = SimpleNamespace(
+            texts=[json.dumps({"description": "A room.", "tags": ["room"]})]
+        )
+
+        in_flight = 0
+        max_in_flight = 0
+        lock = threading.Lock()
+
+        def generate(*args: Any, **kwargs: Any) -> Any:
+            nonlocal in_flight, max_in_flight
+            with lock:
+                in_flight += 1
+                max_in_flight = max(max_in_flight, in_flight)
+            time.sleep(0.05)
+            with lock:
+                in_flight -= 1
+            return result_text
+
+        session = SimpleNamespace(generate=generate)
+        monkeypatch.setitem(sys.modules, "openvino", SimpleNamespace(Tensor=Tensor))
+        monkeypatch.setattr(ImageDescriptionModel, "_generation_config", lambda self: None)
+
+        model = ImageDescriptionModel(
+            "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino", session=session
+        )
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(model.predict, image) for _ in range(4)]
+            results = [future.result() for future in futures]
+
+        assert max_in_flight == 1
+        assert all(result["description"] == "A room." for result in results)
 
 
 @pytest.mark.usefixtures("ort_session")

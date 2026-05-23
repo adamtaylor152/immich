@@ -23,6 +23,8 @@ import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/ma
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
+import { IdentityPostValidator } from 'src/services/identity-post-validator.service';
+import { ImageDescriptionPromptAssembler, KnownPerson } from 'src/services/prompt-assembler.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
 import { isImageDescriptionEnabled, isNsfwDetectionEnabled, isSmartSearchEnabled } from 'src/utils/misc';
@@ -41,9 +43,13 @@ type EnrichmentTask<T> =
       modelName: string;
       updatedAt: string;
       result: T;
+      /** 8-char hex truncation of SHA-256(JSON.stringify(prompt config)) at inference time. */
+      configHash?: string;
       appliedDescriptionHash?: string;
       appliedTagHash?: string;
       appliedTagValues?: string[];
+      /** Identity validation flags recorded after post-processing the ML description. */
+      identityFlags?: { hallucinatedNames?: string[]; ambiguousReferences?: string[] };
     }
   | {
       status: 'failed';
@@ -90,6 +96,9 @@ const getErrorMessage = (error: unknown) => (error instanceof Error ? error.mess
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
+const promptConfigHash = (promptConfig: unknown) =>
+  createHash('sha256').update(JSON.stringify(promptConfig)).digest('hex').slice(0, 8);
+
 const getGeneratedDescriptionBlock = (description: string) => {
   const trimmed = description.trim();
   return trimmed ? `${GENERATED_DESCRIPTION_PREFIX} ${trimmed}` : undefined;
@@ -134,6 +143,9 @@ const normalizeTag = (tag: string) =>
 
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
+  private readonly promptAssembler = new ImageDescriptionPromptAssembler();
+  private readonly identityPostValidator = new IdentityPostValidator();
+
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
 
@@ -401,12 +413,20 @@ export class ImageEnrichmentService extends BaseService {
       }
     }
 
+    const knownPersons = await this.getKnownPersonsForAsset(asset.id);
+
     let result: ImageDescriptionResult;
     try {
+      const { prompt } = this.promptAssembler.build({
+        config: machineLearning.imageDescription.prompt,
+        knownPersons,
+        nsfw: nsfw ? { isNsfw: nsfw.isNsfw } : null,
+      });
       result = await this.machineLearningRepository.describeImage(
         asset.previewFile!,
         machineLearning.imageDescription,
         nsfw,
+        prompt,
       );
     } catch (error) {
       await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
@@ -420,6 +440,22 @@ export class ImageEnrichmentService extends BaseService {
         await this.saveEnrichmentMetadata(id, m, trx);
       });
       return JobStatus.Failed;
+    }
+
+    // Post-validate the ML description against known persons: strip any
+    // hallucinated names and substitute unambiguous generic person references.
+    // Only runs when there is at least one known person and a non-empty
+    // description — the validator is a no-op otherwise.
+    let identityFlags: { hallucinatedNames?: string[]; ambiguousReferences?: string[] } | undefined;
+    if (result.description && knownPersons.length > 0) {
+      const { description: validatedDescription, flags } = this.identityPostValidator.validate(
+        result.description,
+        knownPersons,
+      );
+      result = { ...result, description: validatedDescription };
+      if (flags.hallucinatedNames || flags.ambiguousReferences) {
+        identityFlags = flags;
+      }
     }
 
     // Phase: serialize the RMW so reviewer / NSFW writes can't clobber the
@@ -452,6 +488,8 @@ export class ImageEnrichmentService extends BaseService {
           modelName: machineLearning.imageDescription.modelName,
           updatedAt: new Date().toISOString(),
           result,
+          configHash: promptConfigHash(machineLearning.imageDescription.prompt),
+          ...(identityFlags ? { identityFlags } : {}),
         };
         await this.saveEnrichmentMetadata(id, m, trx);
         return { metadata: m, previousDescription, previousTagValues };
@@ -976,5 +1014,62 @@ export class ImageEnrichmentService extends BaseService {
       exif: updateLockedColumns({ assetId, tags: tags.map(({ value }) => value) }),
       lockedPropertiesBehavior: 'append',
     });
+  }
+
+  /**
+   * Build the list of named persons detected in the asset for identity-aware
+   * prompt assembly.
+   *
+   * Faces are only included when:
+   * - `personId` is set (face is linked to a person record)
+   * - `person.name` is non-empty (the person has been given a name)
+   * - `person.isHidden` is false (hidden persons are not surfaced)
+   * - Both `imageWidth` and `imageHeight` are non-zero (avoids NaN in boxCenter)
+   *
+   * `faceConfidence` is always 1.0 because Immich's `asset_face` table has no
+   * per-face recognition-confidence column; named faces are considered
+   * user-curated ground truth.
+   */
+  private async getKnownPersonsForAsset(assetId: string): Promise<KnownPerson[]> {
+    let faces;
+    try {
+      faces = await this.personRepository.getFaces(assetId, { isVisible: true });
+    } catch (error) {
+      // Non-fatal: identity injection is best-effort. If face lookup fails
+      // (DB hiccup, transient error), the description proceeds without
+      // known-person hints rather than failing the whole enrichment job.
+      // Log so persistent issues remain observable.
+      this.logger.warn(`Failed to fetch faces for identity injection on asset ${assetId}: ${getErrorMessage(error)}`);
+      return [];
+    }
+    const knownPersons: KnownPerson[] = [];
+
+    for (const face of faces) {
+      // Trim before checking so whitespace-only names ('   ') are rejected the same
+      // as empty strings — both would degrade the identity hint to "Known people: -".
+      const name = face.person?.name?.trim();
+      if (!face.personId || !name || face.person?.isHidden) {
+        continue;
+      }
+
+      const { imageWidth, imageHeight, boundingBoxX1, boundingBoxX2, boundingBoxY1, boundingBoxY2 } = face;
+
+      // Skip faces with degenerate dimensions to avoid division by zero or NaN.
+      if (!imageWidth || !imageHeight) {
+        continue;
+      }
+
+      knownPersons.push({
+        name,
+        // Always 1 — see method docstring (Immich has no per-face confidence column).
+        faceConfidence: 1,
+        boxCenter: [
+          (boundingBoxX1 + boundingBoxX2) / 2 / imageWidth,
+          (boundingBoxY1 + boundingBoxY2) / 2 / imageHeight,
+        ],
+      });
+    }
+
+    return knownPersons;
   }
 }

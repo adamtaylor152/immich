@@ -194,6 +194,8 @@ class ApiClient {
           return AdjustParameters.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
+        case 'AdvancedPromptConfig':
+          return AdvancedPromptConfig.fromJson(value);
         case 'AlbumResponseDto':
           return AlbumResponseDto.fromJson(value);
         case 'AlbumStatisticsResponseDto':
@@ -408,12 +410,20 @@ class ApiClient {
           return FoldersResponse.fromJson(value);
         case 'FoldersUpdate':
           return FoldersUpdate.fromJson(value);
+        case 'IdentityInjectionConfig':
+          return IdentityInjectionConfig.fromJson(value);
         case 'ImageDescriptionConfig':
           return ImageDescriptionConfig.fromJson(value);
         case 'ImageDescriptionEnrichmentResponseDto':
           return ImageDescriptionEnrichmentResponseDto.fromJson(value);
         case 'ImageDescriptionEnrichmentResponseDtoPeopleInner':
           return ImageDescriptionEnrichmentResponseDtoPeopleInner.fromJson(value);
+        case 'ImageDescriptionPromptConfig':
+          return ImageDescriptionPromptConfig.fromJson(value);
+        case 'ImageDescriptionRequeueEstimateDto':
+          return ImageDescriptionRequeueEstimateDto.fromJson(value);
+        case 'ImageDescriptionRequeueResponseDto':
+          return ImageDescriptionRequeueResponseDto.fromJson(value);
         case 'ImageEnrichmentFilter':
           return ImageEnrichmentFilterTypeTransformer().decode(value);
         case 'ImageEnrichmentReview':
@@ -702,6 +712,8 @@ class ApiClient {
           return SharedLinksUpdate.fromJson(value);
         case 'SignUpDto':
           return SignUpDto.fromJson(value);
+        case 'SmartAlbumKindConfig':
+          return SmartAlbumKindConfig.fromJson(value);
         case 'SmartSearchDto':
           return SmartSearchDto.fromJson(value);
         case 'SourceType':
@@ -856,6 +868,10 @@ class ApiClient {
           return SystemConfigReverseGeocodingDto.fromJson(value);
         case 'SystemConfigServerDto':
           return SystemConfigServerDto.fromJson(value);
+        case 'SystemConfigSmartAlbumsDto':
+          return SystemConfigSmartAlbumsDto.fromJson(value);
+        case 'SystemConfigSmartAlbumsDtoBuiltIn':
+          return SystemConfigSmartAlbumsDtoBuiltIn.fromJson(value);
         case 'SystemConfigSmtpDto':
           return SystemConfigSmtpDto.fromJson(value);
         case 'SystemConfigSmtpTransportDto':

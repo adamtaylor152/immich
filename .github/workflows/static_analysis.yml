@@ -92,7 +92,17 @@ jobs:
           exit 1
 
       - name: Run analyze
-        run: mise //mobile:analyze
+        env:
+          DCM_CI_KEY: ${{ secrets.DCM_CI_KEY }}
+        run: |
+          if [ -n "${DCM_CI_KEY:-}" ]; then
+            mise //mobile:analyze
+          else
+            # Fork environment: no DCM license. Run only the bundled dart analyzer;
+            # dcm is a commercial linter for style enforcement, not correctness.
+            echo "::notice::DCM_CI_KEY secret not configured; skipping dcm step"
+            mise //mobile:analyze:dart
+          fi
 
       - name: Run format
         run: mise //mobile:format
