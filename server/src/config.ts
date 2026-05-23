@@ -475,9 +475,14 @@ export const defaults = Object.freeze<SystemConfig>({
         // GPU **pool IDs** (not specific types). RunPod's serverless API
         // accepts AMPERE_16, AMPERE_24, ADA_24, AMPERE_48, ADA_48_PRO,
         // AMPERE_80, ADA_80_PRO, HOPPER_141, ADA_32_PRO, BLACKWELL_96,
-        // BLACKWELL_180. AMPERE_24 covers the A5000 / RTX 3090.
+        // BLACKWELL_180.
+        //
+        // Defaults target Qwen2.5-VL-9B image description at fp16 (~24 GB
+        // weights + activations). 48 GB pools (A40/A6000, L40/L40S) leave
+        // headroom; 80 GB (A100, H100) is the fallback for availability.
+        // Smaller pools work for CLIP/face/OCR but Qwen 9B will OOM there.
         // See https://docs.runpod.io/references/gpu-types#gpu-pools.
-        gpuTypeIds: ['AMPERE_24', 'ADA_24'],
+        gpuTypeIds: ['AMPERE_48', 'ADA_48_PRO', 'AMPERE_80'],
         workersMin: 0,
         workersMax: 3,
         idleTimeoutSeconds: 30,
