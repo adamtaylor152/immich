@@ -229,7 +229,7 @@ class ImageDescriptionModel(InferenceModel):
     def _load_cuda(self) -> dict[str, Any]:
         try:
             import torch
-            from transformers import AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
+            from transformers import AutoModelForCausalLM, AutoModelForVision2Seq, AutoProcessor
         except ImportError as error:
             raise ImportError(
                 "torch and transformers are required for CUDA image description models. "
@@ -248,7 +248,11 @@ class ImageDescriptionModel(InferenceModel):
                 trust_remote_code=trust_remote_code,
             ).to(device)
         else:
-            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            # AutoModelForVision2Seq dispatches to the right vision-LM class via
+            # the model's config.json. Works for the full Qwen2.5-VL family
+            # (3B/7B/32B/72B) and Qwen3-VL (e.g. 30B-A3B MoE) without hard-coding
+            # a single Conditional Generation class.
+            model = AutoModelForVision2Seq.from_pretrained(
                 str(self.cache_dir),
                 torch_dtype="auto",
             ).to(device)
