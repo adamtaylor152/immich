@@ -184,4 +184,79 @@ describe(MachineLearningRepository.name, () => {
     const entries = JSON.parse(String(formData.get('entries')));
     expect(entries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(qwenModelName);
   });
+
+  it('should sort configured URLs healthy-first while keeping the managed URL pinned to the front', async () => {
+    // Two configured URLs: A unhealthy, B healthy. Plus a managed RunPod URL.
+    // Expected iteration order: managed, B (healthy), A (unhealthy).
+    // The managed URL is ALWAYS first regardless of its /ping health, but
+    // among the configured URLs the live one moves up so we don't sit on a
+    // TCP timeout to the dead box.
+    sut.setup({
+      ...defaults.machineLearning,
+      urls: ['http://dead-box:3003', 'http://live-box:3003'],
+      availabilityChecks: { ...defaults.machineLearning.availabilityChecks, enabled: false },
+    });
+    // Mark health AFTER setup() so the values survive (setup also clears stale entries).
+    (sut as unknown as { healthyMap: Record<string, boolean> }).healthyMap = {
+      'http://dead-box:3003': false,
+      'http://live-box:3003': true,
+    };
+    sut.setManagedUrl('https://endpoint.api.runpod.ai/', 'rpa_test_key');
+
+    // First request: managed URL succeeds → only one fetch needed, but we want
+    // to assert the FULL iteration order, so make everything 500 and inspect calls.
+    const fetch = vi.fn().mockResolvedValue(new Response('error', { status: 500, statusText: 'Internal Error' }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      sut.describeImage(imagePath, {
+        modelName: qwenModelName,
+        fallbackModelName: '', // no fallback so iteration is one model per URL
+        acceleration: MachineLearningHardwareAcceleration.Cuda,
+        device: 'AUTO',
+      }),
+    ).rejects.toThrow('failed for all URLs');
+
+    // Three calls in expected order: managed, live, dead.
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(String(fetch.mock.calls[0][0])).toMatch(/endpoint\.api\.runpod\.ai/);
+    expect(String(fetch.mock.calls[1][0])).toMatch(/live-box/);
+    expect(String(fetch.mock.calls[2][0])).toMatch(/dead-box/);
+  });
+
+  it('should NOT demote the managed URL even when its /ping is failing', async () => {
+    // Codex's PR #52 review surfaced the previous-but-now-fixed bug where
+    // a cold-starting RunPod worker would be demoted because /ping timed out.
+    // This test guards against any future regression that tries to apply the
+    // configured-URL reorder logic to the managed URL.
+    sut.setup({
+      ...defaults.machineLearning,
+      urls: ['http://local:3003'],
+      availabilityChecks: { ...defaults.machineLearning.availabilityChecks, enabled: false },
+    });
+    sut.setManagedUrl('https://endpoint.api.runpod.ai/', 'rpa_test_key');
+    (sut as unknown as { healthyMap: Record<string, boolean> }).healthyMap = {
+      'http://local:3003': true, // local IS healthy
+      'https://endpoint.api.runpod.ai/': false, // managed reports unhealthy (cold start)
+    };
+
+    const fetch = vi.fn().mockResolvedValue(new Response('error', { status: 500, statusText: 'Internal Error' }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      sut.describeImage(imagePath, {
+        modelName: qwenModelName,
+        fallbackModelName: '',
+        acceleration: MachineLearningHardwareAcceleration.Cuda,
+        device: 'AUTO',
+      }),
+    ).rejects.toThrow('failed for all URLs');
+
+    // Managed URL must still be tried first even with healthyMap reporting it unhealthy.
+    // Lock the call count too, so a future regression that adds extra retries
+    // (e.g. silently retrying the same URL twice) fails this test.
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(String(fetch.mock.calls[0][0])).toMatch(/endpoint\.api\.runpod\.ai/);
+    expect(String(fetch.mock.calls[1][0])).toMatch(/local:3003/);
+  });
 });

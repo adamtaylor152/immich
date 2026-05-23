@@ -209,15 +209,34 @@ export class MachineLearningRepository {
     return this.managed?.url ?? null;
   }
 
-  /** Ordered list of (url, optional auth header) to try for ML requests. */
+  /** Ordered list of (url, optional auth header) to try for ML requests.
+   *
+   * Iteration order:
+   *   1. The managed (RunPod) URL, if set. Its priority comes from the RunPod
+   *      state machine — when RunPodService publishes it, RunPod is "ready",
+   *      and the /ping probe must NOT veto it. A cold-starting serverless
+   *      worker that takes 60 s to come up would otherwise get marked
+   *      unhealthy and silently demoted below local URLs.
+   *   2. Configured URLs, sorted healthy-first. Inside the configured list we
+   *      DO honor /ping results: if you have two local ML boxes and one is
+   *      offline, the live one moves to the front of the line so jobs aren't
+   *      blocked waiting for a TCP connect to the dead box. Unknown-health
+   *      URLs (never probed) are treated as healthy so first-tick behavior
+   *      matches the configured order.
+   */
   private getOrderedUrls(): ManagedUrlEntry[] {
     const fromConfig: ManagedUrlEntry[] = this.config.urls.map((url) => ({ url }));
+    const sortedConfig = [...fromConfig].sort((a, b) => {
+      const healthyA = this.healthyMap[a.url] === false ? 0 : 1;
+      const healthyB = this.healthyMap[b.url] === false ? 0 : 1;
+      return healthyB - healthyA;
+    });
     const managed = this.managed;
     if (!managed) {
-      return fromConfig;
+      return sortedConfig;
     }
     // Don't double up if a user typed the managed URL into the editable list.
-    return [managed, ...fromConfig.filter((entry) => entry.url !== managed.url)];
+    return [managed, ...sortedConfig.filter((entry) => entry.url !== managed.url)];
   }
 
   private authHeaders(entry: ManagedUrlEntry): Record<string, string> {
@@ -299,18 +318,15 @@ export class MachineLearningRepository {
 
   private async predict<T>(payload: ModelPayload, config: MachineLearningRequest): Promise<T> {
     const formData = await this.getFormData(payload, config);
-    // Use the natural order from getOrderedUrls (managed URL first when set,
-    // then configured fallbacks). The managed URL is only ever populated by
-    // RunPodService.syncManagedUrl when the RunPod state machine has
-    // declared the resource ready ('running' or 'serverless-ready'), so its
-    // presence is already the authoritative "RunPod is active" signal.
-    //
-    // Previously we reordered the iteration by the periodic /ping health
-    // probe, which used a 2s timeout that scale-to-zero serverless workers
-    // can't satisfy during cold starts — RunPod got marked unhealthy and
-    // local ML quietly won. The probe still runs for the
-    // `became {healthy,unhealthy}` audit log via setHealthy(), but we no
-    // longer let it veto routing decisions.
+    // Iteration order is set by getOrderedUrls():
+    //   1. The managed (RunPod) URL goes first regardless of /ping status.
+    //      RunPod's own state machine is the authoritative "is RunPod
+    //      active" signal; a cold-starting serverless worker would
+    //      otherwise be demoted below local URLs while it's booting up.
+    //   2. Configured URLs are sorted healthy-first by the /ping probe.
+    //      With a dead local URL and a healthy secondary, this avoids
+    //      sitting on a TCP connect timeout to the dead box before
+    //      falling through.
     const entries = this.getOrderedUrls();
 
     for (const entry of entries) {
