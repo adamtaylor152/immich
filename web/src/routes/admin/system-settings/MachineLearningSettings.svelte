@@ -135,6 +135,135 @@
     },
   };
 
+  // Curated image-description model presets.
+  //
+  // The dropdown lets admins pick from a vetted set of Qwen-VL models that are
+  // known to load on the published `:fork-main-cuda-runpod` ML image (Qwen2.5
+  // and Qwen3 families dispatched via `AutoModelForVision2Seq`). The "Custom"
+  // sentinel reveals a free-text HF model name input so power users aren't
+  // locked into this list.
+  //
+  // `gpuPoolIds` is a recommended-default for RunPod's serverless GPU pool
+  // textarea. The admin can override; we never silently rewrite their choice.
+  const CUSTOM_MODEL = '__custom__';
+
+  type DescriptionModelProfile = {
+    value: string;
+    label: string;
+    vramHint: string;
+    gpuPoolIds: string[];
+  };
+
+  const DESCRIPTION_MODEL_PROFILES: readonly DescriptionModelProfile[] = [
+    {
+      value: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      label: 'Qwen2.5-VL 3B (lightweight)',
+      vramHint: '~6 GB VRAM',
+      gpuPoolIds: ['AMPERE_24', 'ADA_24'],
+    },
+    {
+      value: 'Qwen/Qwen2.5-VL-7B-Instruct',
+      label: 'Qwen2.5-VL 7B (balanced)',
+      vramHint: '~16 GB VRAM',
+      gpuPoolIds: ['AMPERE_24', 'AMPERE_48', 'ADA_48_PRO'],
+    },
+    {
+      value: 'Qwen/Qwen2.5-VL-32B-Instruct',
+      label: 'Qwen2.5-VL 32B (quality)',
+      vramHint: '~64 GB VRAM, needs 80 GB GPU',
+      gpuPoolIds: ['AMPERE_80', 'ADA_80_PRO'],
+    },
+    {
+      value: 'Qwen/Qwen2.5-VL-72B-Instruct',
+      label: 'Qwen2.5-VL 72B (top tier)',
+      vramHint: '~144 GB VRAM, multi-GPU only',
+      gpuPoolIds: ['AMPERE_80_2X'],
+    },
+    {
+      value: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      label: 'Qwen3-VL 30B-A3B (MoE)',
+      vramHint: '~60 GB VRAM',
+      gpuPoolIds: ['AMPERE_48', 'AMPERE_80'],
+    },
+  ];
+
+  type FallbackModelProfile = {
+    value: string;
+    label: string;
+  };
+
+  const FALLBACK_MODEL_PROFILES: readonly FallbackModelProfile[] = [
+    { value: 'microsoft/Florence-2-base-ft', label: 'Florence-2-base-ft (local CUDA only)' },
+    { value: 'microsoft/Florence-2-large-ft', label: 'Florence-2-large-ft (local CUDA only)' },
+  ];
+
+  const findDescriptionProfile = (modelName: string): DescriptionModelProfile | undefined =>
+    DESCRIPTION_MODEL_PROFILES.find((p) => p.value === modelName);
+
+  const descriptionModelOptions = $derived([
+    ...DESCRIPTION_MODEL_PROFILES.map((p) => ({
+      value: p.value,
+      text: `${p.label} — ${p.vramHint}`,
+    })),
+    { value: CUSTOM_MODEL, text: 'Custom… (enter Hugging Face model ID)' },
+  ]);
+
+  const fallbackModelOptions = $derived([
+    ...FALLBACK_MODEL_PROFILES.map((p) => ({ value: p.value, text: p.label })),
+    { value: CUSTOM_MODEL, text: 'Custom… (enter Hugging Face model ID)' },
+  ]);
+
+  let descriptionModelChoice = $state<string>(CUSTOM_MODEL);
+  let fallbackModelChoice = $state<string>(CUSTOM_MODEL);
+
+  // Sync the dropdown selection FROM the underlying config on init / mode change.
+  // We never write back to imageDescription.modelName from this effect — only
+  // user interaction (the onSelect handlers below) edits the model name.
+  $effect(() => {
+    const current = imageDescription.modelName;
+    descriptionModelChoice = findDescriptionProfile(current) ? current : CUSTOM_MODEL;
+  });
+
+  $effect(() => {
+    const current = imageDescription.fallbackModelName;
+    fallbackModelChoice = FALLBACK_MODEL_PROFILES.some((p) => p.value === current) ? current : CUSTOM_MODEL;
+  });
+
+  const onDescriptionModelChange = (next: string | number) => {
+    const selected = String(next);
+    descriptionModelChoice = selected;
+    if (selected !== CUSTOM_MODEL) {
+      imageDescription.modelName = selected;
+    }
+  };
+
+  const onFallbackModelChange = (next: string | number) => {
+    const selected = String(next);
+    fallbackModelChoice = selected;
+    if (selected !== CUSTOM_MODEL) {
+      imageDescription.fallbackModelName = selected;
+    }
+  };
+
+  const recommendedPoolsForCurrentModel = $derived(findDescriptionProfile(imageDescription.modelName)?.gpuPoolIds);
+
+  const currentPoolsMatchRecommended = $derived.by(() => {
+    const recommended = recommendedPoolsForCurrentModel;
+    if (!recommended) {
+      return false;
+    }
+    const current = runpodServerless?.gpuTypeIds ?? [];
+    return current.length === recommended.length && current.every((id, idx) => id === recommended[idx]);
+  });
+
+  const applyRecommendedPools = () => {
+    const recommended = recommendedPoolsForCurrentModel;
+    if (!recommended || !runpodServerless) {
+      return;
+    }
+    runpodServerless.gpuTypeIds = [...recommended];
+  };
+
   const hardwareAccelerationOptions = $derived([
     {
       value: hardwareAcceleration.Auto,
@@ -950,23 +1079,69 @@
 
           <hr />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.TEXT}
+          <SettingSelect
             label={$t('admin.machine_learning_image_description_model')}
-            bind:value={imageDescription.modelName}
-            required={true}
+            value={descriptionModelChoice}
+            options={descriptionModelOptions}
+            onSelect={onDescriptionModelChange}
             disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
             isEdited={imageDescription.modelName !== savedImageDescription.modelName}
+            name="image-description-model"
           />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.TEXT}
+          {#if descriptionModelChoice === CUSTOM_MODEL}
+            <SettingInputField
+              inputType={SettingInputFieldType.TEXT}
+              label="Custom model (Hugging Face ID)"
+              bind:value={imageDescription.modelName}
+              required={true}
+              disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+              isEdited={imageDescription.modelName !== savedImageDescription.modelName}
+            />
+          {/if}
+
+          {#if runpodMode === RunPodMode.Serverless && recommendedPoolsForCurrentModel && !currentPoolsMatchRecommended}
+            <div
+              class="-mt-2 mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
+            >
+              <p class="mb-1">
+                Recommended RunPod GPU pools for this model:
+                <code class="rounded-sm bg-blue-100 px-1 dark:bg-blue-900">
+                  {recommendedPoolsForCurrentModel.join(', ')}
+                </code>
+              </p>
+              <button
+                type="button"
+                class="text-xs font-medium underline hover:no-underline disabled:opacity-50"
+                onclick={applyRecommendedPools}
+                {disabled}
+              >
+                Apply to GPU pool list
+              </button>
+            </div>
+          {/if}
+
+          <SettingSelect
             label={$t('admin.machine_learning_image_description_fallback_model')}
-            bind:value={imageDescription.fallbackModelName}
-            required={true}
+            desc="Used only when RunPod is not the active backend. RunPod always uses the primary model with no fallback."
+            value={fallbackModelChoice}
+            options={fallbackModelOptions}
+            onSelect={onFallbackModelChange}
             disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
             isEdited={imageDescription.fallbackModelName !== savedImageDescription.fallbackModelName}
+            name="image-description-fallback-model"
           />
+
+          {#if fallbackModelChoice === CUSTOM_MODEL}
+            <SettingInputField
+              inputType={SettingInputFieldType.TEXT}
+              label="Custom fallback model (Hugging Face ID)"
+              bind:value={imageDescription.fallbackModelName}
+              required={true}
+              disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+              isEdited={imageDescription.fallbackModelName !== savedImageDescription.fallbackModelName}
+            />
+          {/if}
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}

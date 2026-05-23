@@ -403,35 +403,88 @@ export class MachineLearningRepository {
       },
     });
 
-    const request = buildRequest(modelName);
+    // The fallback model is intentionally NOT tried on the managed (RunPod) URL.
+    // Two reasons:
+    //   1. The admin picks a single primary model in the dropdown; silently
+    //      switching to Florence on RunPod muddies that contract.
+    //   2. Florence's HF modeling code requires transformers 4.x and isn't
+    //      loadable on the cuda-runpod image's transformers 5.x pin, so the
+    //      fallback would always 500 anyway — wasting a round trip + cold-start.
+    // Local (configured) URLs still get the fallback retry: they may be running
+    // an older ML image where Florence works fine, and Florence is the only
+    // small-footprint option on CPU/laptop deploys.
+    const managedUrl = this.getManagedUrl();
+    const orderedUrls = this.getOrderedUrls();
 
-    try {
-      const response = await this.predict<ImageDescriptionResponse>({ imagePath }, request);
-      return response[ModelTask.IMAGE_DESCRIPTION];
-    } catch (error) {
-      if (!fallbackModelName || fallbackModelName === modelName) {
-        throw error;
+    const florenceUnavailable =
+      acceleration !== MachineLearningHardwareAcceleration.Cuda &&
+      !!fallbackModelName &&
+      isFlorenceImageDescriptionModel(fallbackModelName);
+
+    let lastError: unknown = new Error('Machine learning has no configured URLs');
+    for (const entry of orderedUrls) {
+      const isManaged = entry.url === managedUrl;
+      const candidateModels: string[] = [modelName];
+      if (!isManaged && fallbackModelName && fallbackModelName !== modelName && !florenceUnavailable) {
+        candidateModels.push(fallbackModelName);
       }
 
-      if (
-        acceleration !== MachineLearningHardwareAcceleration.Cuda &&
-        isFlorenceImageDescriptionModel(fallbackModelName)
-      ) {
-        this.logger.warn(
-          `Image description model '${modelName}' failed; not retrying with fallback model '${fallbackModelName}' because Florence models require CUDA acceleration.`,
+      let urlReachable = false;
+      for (const candidateModel of candidateModels) {
+        try {
+          const formData = await this.getFormData({ imagePath }, buildRequest(candidateModel));
+          const response = await fetch(new URL('predict', entry.url), {
+            method: 'POST',
+            headers: this.authHeaders(entry),
+            body: formData,
+          });
+          if (response.ok) {
+            this.setHealthy(entry.url, true);
+            const body = (await response.json()) as ImageDescriptionResponse;
+            if (candidateModel !== modelName) {
+              this.logger.warn(
+                `Image description model '${modelName}' failed on "${entry.url}"; succeeded with fallback model '${candidateModel}'`,
+              );
+            }
+            return body[ModelTask.IMAGE_DESCRIPTION];
+          }
+          urlReachable = true;
+          lastError = new Error(`HTTP ${response.status} ${response.statusText}`);
+          this.logger.warn(
+            `Image description request to "${entry.url}" (model='${candidateModel}') failed with status ${response.status}: ${response.statusText}`,
+          );
+        } catch (error) {
+          lastError = error;
+          this.logger.warn(
+            `Image description request to "${entry.url}" (model='${candidateModel}') failed: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+
+      // Mark unhealthy only on transport-level failure; HTTP-level errors mean
+      // the server was reachable but the model load/inference failed, which the
+      // /ping probe will pick up independently.
+      this.setHealthy(entry.url, urlReachable);
+
+      if (isManaged && managedUrl && fallbackModelName && fallbackModelName !== modelName && !florenceUnavailable) {
+        // Audit log so admins can see the fallback was skipped because RunPod was the candidate.
+        this.logger.debug(
+          `Image description fallback model '${fallbackModelName}' not attempted on managed URL "${entry.url}".`,
         );
-        throw error;
       }
-
-      this.logger.warn(
-        `Image description model '${modelName}' failed; retrying with fallback model '${fallbackModelName}'`,
-      );
-      const fallbackResponse = await this.predict<ImageDescriptionResponse>(
-        { imagePath },
-        buildRequest(fallbackModelName),
-      );
-      return fallbackResponse[ModelTask.IMAGE_DESCRIPTION];
     }
+
+    const sanitizedConfig = JSON.parse(JSON.stringify(buildRequest(modelName)));
+    for (const taskKey of Object.keys(sanitizedConfig)) {
+      for (const typeKey of Object.keys(sanitizedConfig[taskKey] ?? {})) {
+        if (sanitizedConfig[taskKey][typeKey]?.options?.external_prompt !== undefined) {
+          sanitizedConfig[taskKey][typeKey].options.external_prompt = '[redacted]';
+        }
+      }
+    }
+    throw new Error(
+      `Machine learning request '${JSON.stringify(sanitizedConfig)}' failed for all URLs (last error: ${lastError instanceof Error ? lastError.message : String(lastError)})`,
+    );
   }
 
   async detectNsfw(imagePath: string, { modelName, threshold, device }: NsfwDetectionOptions) {

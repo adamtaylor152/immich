@@ -444,11 +444,15 @@ describe(RunPodService.name, () => {
       // The template MUST NOT include IMMICH_ML_AUTH_TOKEN — RunPod's proxy already auth-gates
       // and adding our middleware would double-bearer. PORT/PORT_HEALTH are required so the LB
       // proxy knows which port on the worker to forward to — without them requests hang.
+      // The image-description preload env is injected so the worker pre-warms the chosen VLM
+      // at boot instead of losing the first request to RunPod's 30 s proxy timeout while
+      // Qwen2.5-VL downloads.
       const templatePayload = (mocks.runPod.createTemplate as ReturnType<typeof vi.fn>).mock.calls[0][1];
       expect(templatePayload.env).toEqual({
         MACHINE_LEARNING_CACHE_FOLDER: '/cache',
         PORT: '3003',
         PORT_HEALTH: '3003',
+        MACHINE_LEARNING_PRELOAD__IMAGE_DESCRIPTION__VISUAL: 'Qwen/Qwen2.5-VL-3B-Instruct',
       });
       expect(templatePayload.env).not.toHaveProperty('IMMICH_ML_AUTH_TOKEN');
       expect(mocks.runPod.createEndpoint).toHaveBeenCalledTimes(1);

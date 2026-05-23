@@ -102,4 +102,86 @@ describe(MachineLearningRepository.name, () => {
     const entries = JSON.parse(String(formData.get('entries')));
     expect(entries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(florenceModelName);
   });
+
+  it('should NOT retry the fallback model on the managed (RunPod) URL', async () => {
+    // Two URLs in priority order: managed (RunPod) first, then a local fallback.
+    // Primary fails on managed → we skip the Florence retry on managed and
+    // move straight to the local URL, where the fallback IS allowed.
+    sut.setManagedUrl('https://endpoint.api.runpod.ai/', 'rpa_test_key');
+
+    const fetch = vi
+      .fn()
+      // 1) managed URL, primary model → 500
+      .mockResolvedValueOnce(new Response('error', { status: 500, statusText: 'Internal Error' }))
+      // 2) local URL, primary model → 500
+      .mockResolvedValueOnce(new Response('error', { status: 500, statusText: 'Internal Error' }))
+      // 3) local URL, fallback model → 200
+      .mockResolvedValueOnce(
+        Response.json({
+          imageHeight: 64,
+          imageWidth: 64,
+          [ModelTask.IMAGE_DESCRIPTION]: {
+            description: 'cat',
+            people: [],
+            environment: '',
+            objects: ['cat'],
+            visible_text: [],
+            context: '',
+            tags: ['cat'],
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+
+    await sut.describeImage(imagePath, {
+      modelName: qwenModelName,
+      fallbackModelName: florenceModelName,
+      acceleration: MachineLearningHardwareAcceleration.Cuda,
+      device: 'AUTO',
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+
+    // First call: managed URL, primary model
+    expect(String(fetch.mock.calls[0][0])).toMatch(/endpoint\.api\.runpod\.ai/);
+    const managedEntries = JSON.parse(String((fetch.mock.calls[0][1].body as FormData).get('entries')));
+    expect(managedEntries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(qwenModelName);
+
+    // Second call: local URL, primary model (NOT fallback — primary always tried first)
+    expect(String(fetch.mock.calls[1][0])).toMatch(/immich-machine-learning:3003/);
+    const localPrimaryEntries = JSON.parse(String((fetch.mock.calls[1][1].body as FormData).get('entries')));
+    expect(localPrimaryEntries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(qwenModelName);
+
+    // Third call: local URL, fallback model
+    expect(String(fetch.mock.calls[2][0])).toMatch(/immich-machine-learning:3003/);
+    const localFallbackEntries = JSON.parse(String((fetch.mock.calls[2][1].body as FormData).get('entries')));
+    expect(localFallbackEntries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(florenceModelName);
+  });
+
+  it('should never call the fallback model when only the managed URL is configured', async () => {
+    // Tear down the URL list so the managed URL is the only candidate.
+    sut.setup({
+      ...defaults.machineLearning,
+      urls: [],
+      availabilityChecks: { ...defaults.machineLearning.availabilityChecks, enabled: false },
+    });
+    sut.setManagedUrl('https://endpoint.api.runpod.ai/', 'rpa_test_key');
+
+    const fetch = vi.fn().mockResolvedValue(new Response('error', { status: 500, statusText: 'Internal Error' }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      sut.describeImage(imagePath, {
+        modelName: qwenModelName,
+        fallbackModelName: florenceModelName,
+        acceleration: MachineLearningHardwareAcceleration.Cuda,
+        device: 'AUTO',
+      }),
+    ).rejects.toThrow('failed for all URLs');
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const formData = fetch.mock.calls[0][1].body as FormData;
+    const entries = JSON.parse(String(formData.get('entries')));
+    expect(entries[ModelTask.IMAGE_DESCRIPTION][ModelType.VISUAL].modelName).toBe(qwenModelName);
+  });
 });

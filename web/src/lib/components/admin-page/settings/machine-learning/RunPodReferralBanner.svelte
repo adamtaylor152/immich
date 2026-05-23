@@ -73,8 +73,8 @@
       <div class="flex-1">
         <h3 class="text-base/tight font-semibold">New to RunPod? Get $5–$500 in free credit</h3>
         <p class="mt-1 text-sm text-white/90">
-          Sign up with this referral link — enough for ~30 hours of A5000 time. Helps support continued development of
-          this RunPod integration.
+          Sign up with this referral link — enough for up to ~30 hours of A5000 time. Helps support continued
+          development of this RunPod integration.
         </p>
       </div>
 

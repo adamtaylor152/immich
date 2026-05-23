@@ -31,10 +31,19 @@ class OcrSettings(BaseModel):
     detection: str | None = None
 
 
+class ImageDescriptionSettings(BaseModel):
+    # Single visual VLM model for the image-description-tagging task.
+    # When set, the model is downloaded and warmed into VRAM at container
+    # boot — important for RunPod serverless cold starts, where the model
+    # download + load takes longer than the edge proxy's 30 s timeout.
+    visual: str | None = None
+
+
 class PreloadModelData(BaseModel):
     clip: ClipSettings = ClipSettings()
     facial_recognition: FacialRecognitionSettings = FacialRecognitionSettings()
     ocr: OcrSettings = OcrSettings()
+    image_description: ImageDescriptionSettings = ImageDescriptionSettings()
 
 
 class MaxBatchSize(BaseModel):
