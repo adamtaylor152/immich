@@ -214,6 +214,7 @@ describe(AssetRepository.name, () => {
     it('should only count images with an asset_job_status row and a preview file', async () => {
       const { ctx, sut } = setup(await getKyselyDB());
       const { user } = await ctx.newUser();
+      const baseline = await sut.getDescriptionStats();
 
       // Eligible: image with job status + preview
       const { asset: eligible } = await ctx.newAsset({ ownerId: user.id });
@@ -231,13 +232,15 @@ describe(AssetRepository.name, () => {
       await addDescriptionPreviewState(ctx, hidden.id);
 
       const stats = await sut.getDescriptionStats();
-      expect(stats.totalAssets).toBeGreaterThanOrEqual(1);
-      expect(stats.withoutDescription).toBeGreaterThanOrEqual(1);
+      expect(stats.totalAssets - baseline.totalAssets).toBe(1);
+      expect(stats.withDescription - baseline.withDescription).toBe(0);
+      expect(stats.withoutDescription - baseline.withoutDescription).toBe(1);
     });
 
     it('should count eligible assets with a successful description as withDescription', async () => {
       const { ctx, sut } = setup(await getKyselyDB());
       const { user } = await ctx.newUser();
+      const baseline = await sut.getDescriptionStats();
 
       const { asset: described } = await ctx.newAsset({ ownerId: user.id });
       await addDescriptionPreviewState(ctx, described.id);
@@ -248,9 +251,9 @@ describe(AssetRepository.name, () => {
       });
 
       const stats = await sut.getDescriptionStats();
-      expect(stats.withDescription).toBeGreaterThanOrEqual(1);
-      expect(stats.totalAssets).toBeGreaterThanOrEqual(stats.withDescription);
-      expect(stats.withoutDescription).toBe(stats.totalAssets - stats.withDescription);
+      expect(stats.totalAssets - baseline.totalAssets).toBe(1);
+      expect(stats.withDescription - baseline.withDescription).toBe(1);
+      expect(stats.withoutDescription - baseline.withoutDescription).toBe(0);
     });
   });
 });
