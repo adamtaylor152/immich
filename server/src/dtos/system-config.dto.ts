@@ -151,6 +151,22 @@ const MachineLearningHardwareResponseSchema = z
   })
   .meta({ id: 'MachineLearningHardwareResponseDto' });
 
+const SystemConfigRunPodSchema = z
+  .object({
+    enabled: configBool.describe('Enabled'),
+    apiKey: z.string().describe('RunPod API key'),
+    imageName: z.string().min(1).describe('Container image to launch'),
+    defaultGpuTypeId: z.string().min(1).describe('Preferred GPU type ID'),
+    containerDiskGb: z.int().min(10).max(2000).describe('Container disk size (GB)'),
+    volumeGb: z.int().min(0).max(2000).describe('Persistent volume size (GB)'),
+    autoStopEnabled: configBool.describe('Auto-stop when idle'),
+    autoStopGraceMinutes: z.int().min(1).max(1440).describe('Idle minutes before auto-stop'),
+    autoBackfillOnLaunch: configBool.describe('Auto-run ML backfill on pod ready'),
+    maxRuntimeHours: z.int().min(1).max(168).describe('Hard runtime ceiling (hours)'),
+    dataPrivacyAcknowledged: configBool.describe('User accepted that image previews leave the network'),
+  })
+  .meta({ id: 'SystemConfigRunPodDto' });
+
 const SystemConfigMachineLearningSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
@@ -162,6 +178,7 @@ const SystemConfigMachineLearningSchema = z
     ocr: OcrConfigSchema,
     imageDescription: ImageDescriptionConfigSchema.default(defaults.machineLearning.imageDescription),
     nsfwDetection: NsfwDetectionConfigSchema.default(defaults.machineLearning.nsfwDetection),
+    runpod: SystemConfigRunPodSchema.default(defaults.machineLearning.runpod),
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });
 

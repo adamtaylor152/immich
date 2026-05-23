@@ -1853,6 +1853,53 @@ export type QueueJobResponseDto = {
     /** Job creation timestamp */
     timestamp: number;
 };
+export type RunPodBackfillResultDto = {
+    enqueued: string[];
+    skipped: string[];
+};
+export type RunPodConnectionTestDto = {
+    /** API key to verify (overrides the stored key for the test) */
+    apiKey?: string;
+};
+export type RunPodConnectionResultDto = {
+    message?: string;
+    ok: boolean;
+};
+export type RunPodGpuTypeDto = {
+    communityCloud?: boolean;
+    displayName: string;
+    id: string;
+    memoryInGb: number;
+    pricePerHour?: number | null;
+    secureCloud?: boolean;
+};
+export type RunPodProvisionDto = {
+    /** User confirms image previews will be sent to RunPod */
+    acknowledgeDataPrivacy: boolean;
+    gpuCount?: number;
+    /** RunPod GPU type ID, e.g. "NVIDIA RTX A5000" */
+    gpuTypeId: string;
+    /** Override the configured image */
+    imageName?: string;
+    maxRuntimeHours?: number;
+};
+export type RunPodStateDto = {
+    errorMessage?: string;
+    estimatedCostUsd?: number;
+    gpuTypeId?: string;
+    imageName?: string;
+    instanceTag?: string;
+    lastBusyAt?: string;
+    maxRuntimeHours?: number;
+    mlUrl?: string;
+    podCreatedAt?: string;
+    podId?: string;
+    pricePerHour?: number;
+    runningSince?: string;
+    status: Status2;
+    stoppedAt?: string;
+    unhealthySince?: string;
+};
 export type AskSearchDto = {
     /** Search language code */
     language?: string;
@@ -2881,6 +2928,30 @@ export type OcrConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type SystemConfigRunPodDto = {
+    /** RunPod API key */
+    apiKey: string;
+    /** Auto-run ML backfill on pod ready */
+    autoBackfillOnLaunch: boolean;
+    /** Auto-stop when idle */
+    autoStopEnabled: boolean;
+    /** Idle minutes before auto-stop */
+    autoStopGraceMinutes: number;
+    /** Container disk size (GB) */
+    containerDiskGb: number;
+    /** User accepted that image previews leave the network */
+    dataPrivacyAcknowledged: boolean;
+    /** Preferred GPU type ID */
+    defaultGpuTypeId: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Container image to launch */
+    imageName: string;
+    /** Hard runtime ceiling (hours) */
+    maxRuntimeHours: number;
+    /** Persistent volume size (GB) */
+    volumeGb: number;
+};
 export type SystemConfigMachineLearningDto = {
     availabilityChecks: MachineLearningAvailabilityChecksDto;
     clip: ClipConfig;
@@ -2891,6 +2962,7 @@ export type SystemConfigMachineLearningDto = {
     imageDescription?: ImageDescriptionConfig;
     nsfwDetection?: NsfwDetectionConfig;
     ocr: OcrConfig;
+    runpod?: SystemConfigRunPodDto;
     /** ML service URLs */
     urls: string[];
 };
@@ -6008,6 +6080,106 @@ export function getQueueJobs({ name, status }: {
     }));
 }
 /**
+ * Enqueue all ML backfill jobs
+ */
+export function backfill(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodBackfillResultDto;
+    }>("/runpod/backfill", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Test RunPod connection
+ */
+export function testConnection({ runPodConnectionTestDto }: {
+    runPodConnectionTestDto: RunPodConnectionTestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodConnectionResultDto;
+    }>("/runpod/connect", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: runPodConnectionTestDto
+    })));
+}
+/**
+ * List RunPod GPU types
+ */
+export function listGpus(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodGpuTypeDto[];
+    }>("/runpod/gpus", {
+        ...opts
+    }));
+}
+/**
+ * Provision a RunPod pod
+ */
+export function provision({ runPodProvisionDto }: {
+    runPodProvisionDto: RunPodProvisionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: RunPodStateDto;
+    }>("/runpod/pods", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: runPodProvisionDto
+    })));
+}
+/**
+ * Terminate the current RunPod pod
+ */
+export function terminate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current", {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Get current RunPod state
+ */
+export function getCurrent(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current", {
+        ...opts
+    }));
+}
+/**
+ * Resume the current RunPod pod
+ */
+export function start(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current/start", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Stop the current RunPod pod
+ */
+export function stop(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current/stop", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * Ask Search
  */
 export function askSearch({ askSearchDto }: {
@@ -7905,6 +8077,15 @@ export enum JobName {
     NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
     NsfwDetection = "NsfwDetection",
     WorkflowAssetCreate = "WorkflowAssetCreate"
+}
+export enum Status2 {
+    Idle = "idle",
+    Provisioning = "provisioning",
+    Starting = "starting",
+    Running = "running",
+    Stopping = "stopping",
+    Stopped = "stopped",
+    Error = "error"
 }
 export enum ImageEnrichmentFilter {
     Nsfw = "nsfw",

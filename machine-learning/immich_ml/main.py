@@ -12,12 +12,14 @@ from zipfile import BadZipFile
 
 import onnxruntime as ort
 import orjson
-from fastapi import Depends, FastAPI, File, Form, HTTPException
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request
 from fastapi.responses import ORJSONResponse, PlainTextResponse
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidProtobuf, NoSuchFile
 from PIL.Image import Image
 from pydantic import ValidationError
 from starlette.formparsers import MultiPartParser
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from immich_ml.models import get_model_deps
 from immich_ml.models.base import InferenceModel
@@ -152,6 +154,35 @@ def get_entries(entries: str = Form()) -> InferenceEntries:
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+# Health endpoints stay unauthenticated so RunPod's proxy probes and LAN deployments
+# (the default UX) keep working unchanged. Auth only kicks in for paths that actually
+# do inference, and only when IMMICH_ML_AUTH_TOKEN is set in the environment.
+_AUTH_EXEMPT_PATHS = {"/", "/ping"}
+
+
+class BearerAuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, expected_token: str | None) -> None:
+        super().__init__(app)
+        self._expected = expected_token
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not self._expected:
+            return await call_next(request)
+        if request.url.path in _AUTH_EXEMPT_PATHS:
+            return await call_next(request)
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or token != self._expected:
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+
+_auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
+if _auth_token:
+    log.info("Bearer-token authentication enabled for /predict")
+app.add_middleware(BearerAuthMiddleware, expected_token=_auth_token)
 
 
 @app.get("/")

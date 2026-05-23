@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RunPodPanel from '$lib/components/admin-page/settings/machine-learning/RunPodPanel.svelte';
   import SettingAccordion from '$lib/components/shared-components/settings/SettingAccordion.svelte';
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSelect from './SettingSelect.svelte';
@@ -17,7 +18,7 @@
   } from '@immich/sdk';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
   const disabled = $derived(featureFlagsManager.value.configFile);
@@ -99,8 +100,32 @@
     },
   ]);
 
+  let managedRunPodUrl = $state<string>('');
+  let managedUrlTimer: ReturnType<typeof setInterval> | undefined;
+
+  const refreshManagedUrl = async () => {
+    try {
+      const response = await fetch('/api/runpod/pods/current', { credentials: 'include' });
+      if (!response.ok) {
+        return;
+      }
+      const state = (await response.json()) as { status?: string; mlUrl?: string };
+      managedRunPodUrl = state.status === 'running' && state.mlUrl ? state.mlUrl : '';
+    } catch {
+      // ignore — the chip just won't render
+    }
+  };
+
   onMount(() => {
     void detectMachineLearningHardware();
+    void refreshManagedUrl();
+    managedUrlTimer = setInterval(refreshManagedUrl, 10000);
+  });
+
+  onDestroy(() => {
+    if (managedUrlTimer) {
+      clearInterval(managedUrlTimer);
+    }
   });
 
   const detectMachineLearningHardware = async () => {
@@ -157,6 +182,13 @@
 
         <hr />
 
+        {#if managedRunPodUrl}
+          <div class="p-2 rounded border border-immich-gray/30 bg-immich-bg/30 text-xs font-mono break-all">
+            <span class="not-italic font-sans text-immich-gray">Managed by RunPod (auto):</span>
+            {managedRunPodUrl}
+          </div>
+        {/if}
+
         <div>
           {#each configToEdit.machineLearning.urls as _, i (i)}
             <SettingInputField
@@ -193,6 +225,110 @@
           >
         </div>
       </div>
+
+      <SettingAccordion
+        key="runpod"
+        title="Cloud GPU (RunPod)"
+        subtitle="Provision the ML container on RunPod when local hardware can't keep up. Pod auto-stops when queues go idle."
+      >
+        <div class="ms-4 mt-4 flex flex-col gap-4">
+          <SettingSwitch
+            title="Enable RunPod integration"
+            subtitle="When on, Immich can provision and route ML traffic to a RunPod pod."
+            bind:checked={configToEdit.machineLearning.runpod.enabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled}
+          />
+
+          <hr />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.PASSWORD}
+            label="API key"
+            description="Anyone with admin access to Immich (or database read access) can spend money with this key. Generate one with pod create/read/delete scope."
+            bind:value={configToEdit.machineLearning.runpod.apiKey}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.apiKey !== config.machineLearning.runpod.apiKey}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.TEXT}
+            label="Container image"
+            description="The ML container image to run on RunPod. Defaults to the fork's RunPod-tuned CUDA build."
+            bind:value={configToEdit.machineLearning.runpod.imageName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.imageName !== config.machineLearning.runpod.imageName}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.TEXT}
+            label="Default GPU type"
+            description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
+            bind:value={configToEdit.machineLearning.runpod.defaultGpuTypeId}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.defaultGpuTypeId !==
+              config.machineLearning.runpod.defaultGpuTypeId}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Container disk (GB)"
+            bind:value={configToEdit.machineLearning.runpod.containerDiskGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.containerDiskGb !==
+              config.machineLearning.runpod.containerDiskGb}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Persistent volume (GB)"
+            description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
+            bind:value={configToEdit.machineLearning.runpod.volumeGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.volumeGb !== config.machineLearning.runpod.volumeGb}
+          />
+
+          <SettingSwitch
+            title="Auto-stop when idle"
+            subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
+            bind:checked={configToEdit.machineLearning.runpod.autoStopEnabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Idle grace (minutes)"
+            description="How long the pod can stay idle before auto-stop fires."
+            bind:value={configToEdit.machineLearning.runpod.autoStopGraceMinutes}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.runpod.enabled ||
+              !configToEdit.machineLearning.runpod.autoStopEnabled}
+            isEdited={configToEdit.machineLearning.runpod.autoStopGraceMinutes !==
+              config.machineLearning.runpod.autoStopGraceMinutes}
+          />
+
+          <SettingSwitch
+            title="Auto-backfill on launch"
+            subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
+            bind:checked={configToEdit.machineLearning.runpod.autoBackfillOnLaunch}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Max runtime (hours)"
+            description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
+            bind:value={configToEdit.machineLearning.runpod.maxRuntimeHours}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            isEdited={configToEdit.machineLearning.runpod.maxRuntimeHours !==
+              config.machineLearning.runpod.maxRuntimeHours}
+          />
+
+          <hr />
+
+          <RunPodPanel />
+        </div>
+      </SettingAccordion>
 
       <SettingAccordion
         key="availability-checks"

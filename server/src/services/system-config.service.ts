@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { defaults } from 'src/config';
 import { OnEvent } from 'src/decorators';
 import { mapConfig, SystemConfigDto } from 'src/dtos/system-config.dto';
-import { BootstrapEventPriority } from 'src/enum';
+import { BootstrapEventPriority, SystemMetadataKey } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
 import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
 import { BaseService } from 'src/services/base.service';
@@ -69,6 +69,18 @@ export class SystemConfigService extends BaseService {
       const masterUser = await this.userRepository.get(physicalDeduplication.masterUserId, {});
       if (!masterUser || masterUser.deletedAt) {
         throw new Error('Physical deduplication master user must exist and be active.');
+      }
+    }
+
+    const oldRunpod = oldConfig.machineLearning.runpod;
+    const newRunpod = newConfig.machineLearning.runpod;
+    if (oldRunpod.apiKey !== newRunpod.apiKey || oldRunpod.imageName !== newRunpod.imageName) {
+      const runpodState = await this.systemMetadataRepository.get(SystemMetadataKey.RunPodState);
+      const inFlight = runpodState && ['provisioning', 'starting', 'stopping'].includes(runpodState.status);
+      if (inFlight) {
+        throw new Error(
+          `Cannot change RunPod API key or image while a pod is ${runpodState!.status}. Wait for the transition to settle, then retry.`,
+        );
       }
     }
   }

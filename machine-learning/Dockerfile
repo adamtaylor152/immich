@@ -164,3 +164,15 @@ ENTRYPOINT ["tini", "--"]
 CMD ["python", "-m", "immich_ml"]
 
 HEALTHCHECK CMD python3 healthcheck.py
+
+# Runpod-tuned variant: same image plus environment defaults that make sense
+# when the container is run as a remote inference server on RunPod cloud GPUs.
+# Built via `--target prod-runpod` from the CUDA prod stage.
+FROM prod AS prod-runpod
+
+ENV MACHINE_LEARNING_PRELOAD__CLIP__VISUAL=ViT-B-16-SigLIP-384__webli \
+    MACHINE_LEARNING_PRELOAD__CLIP__TEXTUAL=ViT-B-16-SigLIP-384__webli \
+    MACHINE_LEARNING_PRELOAD__FACIAL_RECOGNITION__DETECTION=buffalo_l \
+    MACHINE_LEARNING_PRELOAD__FACIAL_RECOGNITION__RECOGNITION=buffalo_l \
+    MACHINE_LEARNING_HTTP_KEEPALIVE_TIMEOUT_S=90 \
+    MACHINE_LEARNING_MODEL_TTL=0

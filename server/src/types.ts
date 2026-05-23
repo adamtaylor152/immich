@@ -547,6 +547,62 @@ export type MemoriesState = {
 };
 export type MediaLocation = { location: string };
 
+export type RunPodPersistedState =
+  | { status: 'idle'; instanceTag?: string }
+  | {
+      status: 'provisioning' | 'starting';
+      podId: string;
+      podCreatedAt: string;
+      gpuTypeId: string;
+      imageName: string;
+      authToken: string;
+      instanceTag: string;
+    }
+  | {
+      status: 'running';
+      podId: string;
+      podCreatedAt: string;
+      gpuTypeId: string;
+      imageName: string;
+      mlUrl: string;
+      authToken: string;
+      runningSince: string;
+      lastBusyAt: string;
+      maxRuntimeHours: number;
+      instanceTag: string;
+      unhealthySince?: string;
+    }
+  | {
+      status: 'stopping';
+      podId: string;
+      podCreatedAt?: string;
+      gpuTypeId: string;
+      imageName: string;
+      authToken: string;
+      instanceTag: string;
+      stopAttempts: number;
+      lastStopAttemptAt?: string;
+    }
+  | {
+      status: 'stopped';
+      podId: string;
+      podCreatedAt: string;
+      gpuTypeId: string;
+      imageName: string;
+      authToken: string;
+      stoppedAt: string;
+      instanceTag: string;
+    }
+  | {
+      status: 'error';
+      podId?: string;
+      gpuTypeId?: string;
+      imageName?: string;
+      message: string;
+      errorAt: string;
+      instanceTag: string;
+    };
+
 export interface SystemMetadata extends Record<SystemMetadataKey, Record<string, any>> {
   [SystemMetadataKey.AdminOnboarding]: { isOnboarded: boolean };
   [SystemMetadataKey.FacialRecognitionState]: { lastRun?: string };
@@ -559,6 +615,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.SystemFlags]: DeepPartial<SystemFlags>;
   [SystemMetadataKey.VersionCheckState]: VersionCheckMetadata;
   [SystemMetadataKey.MemoriesState]: MemoriesState;
+  [SystemMetadataKey.RunPodState]: RunPodPersistedState;
 }
 
 export type UserPreferences = {

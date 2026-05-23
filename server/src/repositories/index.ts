@@ -34,6 +34,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
+import { RunPodRepository } from 'src/repositories/runpod.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { ServerInfoRepository } from 'src/repositories/server-info.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
@@ -91,6 +92,7 @@ export const repositories = [
   PhysicalFileRepository,
   PluginRepository,
   ProcessRepository,
+  RunPodRepository,
   SearchRepository,
   SessionRepository,
   ServerInfoRepository,
