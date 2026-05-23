@@ -544,7 +544,14 @@ const SmartAlbumReevaluateResponseSchema = z
 export class SmartAlbumReevaluateResponseDto extends createZodDto(SmartAlbumReevaluateResponseSchema) {}
 
 /** Known built-in smart-album kinds. Keep aligned with SystemConfig['smartAlbums']['builtIn']. */
-export const SMART_ALBUM_BUILT_IN_KINDS = ['travel', 'documents', 'screenshots', 'food', 'pets', 'nature'] as const;
+export const SMART_ALBUM_BUILT_IN_KINDS = [
+  'travel',
+  'documents',
+  'screenshots',
+  'food',
+  'pets',
+  'nature',
+] as const satisfies readonly (keyof SystemConfig['smartAlbums']['builtIn'])[];
 export type SmartAlbumBuiltInKind = (typeof SMART_ALBUM_BUILT_IN_KINDS)[number];
 
 const SmartAlbumReevaluateRequestSchema = z

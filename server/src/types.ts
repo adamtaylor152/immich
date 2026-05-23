@@ -445,7 +445,10 @@ export type JobItem =
   // Smart albums. Optional `kind` scopes the re-evaluate to a single built-in
   // kind (one of the SystemConfig['smartAlbums']['builtIn'] keys); omit/undefined
   // means "all kinds".
-  | { name: JobName.SmartAlbumReevaluateAll; data?: IBaseJob & { kind?: string } }
+  | {
+      name: JobName.SmartAlbumReevaluateAll;
+      data?: IBaseJob & { kind?: keyof SystemConfig['smartAlbums']['builtIn'] };
+    }
 
   // Workflow
   | { name: JobName.WorkflowAssetCreate; data: { workflowId: string; assetId: string } }

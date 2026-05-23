@@ -270,7 +270,9 @@ describe(SmartAlbumService.name, () => {
     });
 
     it('should skip with unknown kind', async () => {
-      const result = await sut.handleReevaluateAll({ kind: 'not-a-real-kind' });
+      // Cast to bypass compile-time narrowing — this is intentionally an invalid
+      // value to verify the runtime guard inside handleReevaluateAll.
+      const result = await sut.handleReevaluateAll({ kind: 'not-a-real-kind' as never });
 
       expect(result).toBe(JobStatus.Skipped);
       expect(mocks.assetJob.streamForSmartAlbumReevaluation).not.toHaveBeenCalled();
