@@ -589,7 +589,7 @@
 
           <hr />
 
-          <RunPodPanel />
+          <RunPodPanel workingConfig={configToEdit.machineLearning} />
         </div>
       </SettingAccordion>
 

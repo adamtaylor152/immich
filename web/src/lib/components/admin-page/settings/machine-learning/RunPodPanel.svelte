@@ -15,6 +15,12 @@
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import { Button, toastManager } from '@immich/ui';
+  import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+
+  // Optionally accept the in-progress form state so visibility of the launch
+  // fieldsets reacts to dropdown changes the admin hasn't saved yet. Falls
+  // back to the saved config when the parent doesn't pass anything.
+  let { workingConfig }: { workingConfig?: SystemConfigMachineLearningDto } = $props();
 
   // Hand-rolled fetch instead of the SDK helper so we don't have to plumb additional
   // generated names through. Hits /api/runpod/pods/current with the existing session.
@@ -55,13 +61,29 @@
   // Zod's `.default(...)` on runpod makes it optional in the DTO type even
   // though the server always materialises it; assert non-null here.
   const rp = $derived(config.machineLearning.runpod!);
-  const runpodMode = $derived<RunPodMode>(
-    rp.mode && rp.mode !== RunPodMode.Disabled ? rp.mode : rp.enabled ? RunPodMode.Pod : RunPodMode.Disabled,
+  // Visibility-driving state. When the parent passes `workingConfig` (the
+  // form's in-progress edits), prefer it so changing the Mode dropdown
+  // immediately reveals/hides the matching sections. Otherwise fall back to
+  // the saved server config so the panel is still usable standalone.
+  const editing = $derived<{ enabled: boolean; runpod: NonNullable<typeof rp> }>(
+    workingConfig
+      ? { enabled: workingConfig.enabled, runpod: workingConfig.runpod! }
+      : { enabled: config.machineLearning.enabled, runpod: rp },
   );
-  const enabled = $derived(config.machineLearning.enabled && runpodMode !== RunPodMode.Disabled);
+  const runpodMode = $derived<RunPodMode>(
+    editing.runpod.mode && editing.runpod.mode !== RunPodMode.Disabled
+      ? editing.runpod.mode
+      : editing.runpod.enabled
+        ? RunPodMode.Pod
+        : RunPodMode.Disabled,
+  );
+  const enabled = $derived(editing.enabled && runpodMode !== RunPodMode.Disabled);
   const isPodMode = $derived(runpodMode === RunPodMode.Pod);
   const isServerlessMode = $derived(runpodMode === RunPodMode.Serverless);
-  const apiKeyConfigured = $derived(rp.apiKey.length > 0);
+  // The saved apiKey is always redacted to '' on read, so checking its
+  // length here always returned false. Honour the explicit server-side
+  // boolean OR a fresh non-empty value typed into the in-progress form.
+  const apiKeyConfigured = $derived(Boolean(rp.apiKeyConfigured) || (editing.runpod.apiKey?.length ?? 0) > 0);
   const status = $derived(podState?.status ?? 'idle');
   const isTransitioning = $derived(
     ['provisioning', 'starting', 'stopping', 'serverless-provisioning'].includes(status),
