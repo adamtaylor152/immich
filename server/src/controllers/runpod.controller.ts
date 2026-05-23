@@ -109,4 +109,29 @@ export class RunPodController {
   backfill(): Promise<RunPodBackfillResultDto> {
     return this.service.runBackfill();
   }
+
+  @Post('endpoint/setup')
+  @HttpCode(HttpStatus.OK)
+  @Authenticated({ permission: Permission.SystemConfigUpdate, admin: true })
+  @Endpoint({
+    summary: 'Set up (or verify) the serverless endpoint',
+    description:
+      'Idempotently creates the RunPod template + serverless endpoint for this Immich instance. Reuses an existing endpoint tagged with our instance prefix when one is found.',
+    history: new HistoryBuilder().added('v2'),
+  })
+  setupServerlessEndpoint(): Promise<RunPodStateDto> {
+    return this.service.ensureServerlessEndpoint();
+  }
+
+  @Delete('endpoint')
+  @Authenticated({ permission: Permission.SystemConfigUpdate, admin: true })
+  @Endpoint({
+    summary: 'Tear down the serverless endpoint',
+    description:
+      'Deletes the serverless endpoint and template owned by this Immich instance. Soft-fails when resources are already gone on RunPod.',
+    history: new HistoryBuilder().added('v2'),
+  })
+  teardownServerlessEndpoint(): Promise<RunPodStateDto> {
+    return this.service.teardownServerlessEndpoint();
+  }
 }

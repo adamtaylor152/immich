@@ -219,6 +219,54 @@ class RunPodAdminApi {
     return null;
   }
 
+  /// Set up (or verify) the serverless endpoint
+  ///
+  /// Idempotently creates the RunPod template + serverless endpoint for this Immich instance. Reuses an existing endpoint tagged with our instance prefix when one is found.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> setupServerlessEndpointWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/runpod/endpoint/setup';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Set up (or verify) the serverless endpoint
+  ///
+  /// Idempotently creates the RunPod template + serverless endpoint for this Immich instance. Reuses an existing endpoint tagged with our instance prefix when one is found.
+  Future<RunPodStateDto?> setupServerlessEndpoint() async {
+    final response = await setupServerlessEndpointWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'RunPodStateDto',) as RunPodStateDto;
+    
+    }
+    return null;
+  }
+
   /// Resume the current RunPod pod
   ///
   /// Start a previously stopped pod, reusing its model cache.
@@ -302,6 +350,54 @@ class RunPodAdminApi {
   /// Stops the pod but keeps the model-cache volume so a future start is fast.
   Future<RunPodStateDto?> stop() async {
     final response = await stopWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'RunPodStateDto',) as RunPodStateDto;
+    
+    }
+    return null;
+  }
+
+  /// Tear down the serverless endpoint
+  ///
+  /// Deletes the serverless endpoint and template owned by this Immich instance. Soft-fails when resources are already gone on RunPod.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> teardownServerlessEndpointWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/runpod/endpoint';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Tear down the serverless endpoint
+  ///
+  /// Deletes the serverless endpoint and template owned by this Immich instance. Soft-fails when resources are already gone on RunPod.
+  Future<RunPodStateDto?> teardownServerlessEndpoint() async {
+    final response = await teardownServerlessEndpointWithHttpInfo();
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

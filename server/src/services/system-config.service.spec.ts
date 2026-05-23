@@ -209,8 +209,10 @@ const updatedConfig = Object.freeze<SystemConfig>({
     },
     runpod: {
       enabled: false,
+      mode: 'disabled',
       apiKey: '',
       imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
+      dataPrivacyAcknowledged: false,
       defaultGpuTypeId: 'NVIDIA RTX A5000',
       containerDiskGb: 50,
       volumeGb: 20,
@@ -218,7 +220,15 @@ const updatedConfig = Object.freeze<SystemConfig>({
       autoStopGraceMinutes: 15,
       autoBackfillOnLaunch: false,
       maxRuntimeHours: 24,
-      dataPrivacyAcknowledged: false,
+      serverless: {
+        gpuTypeIds: ['NVIDIA RTX A5000', 'NVIDIA GeForce RTX 3090', 'NVIDIA GeForce RTX 4090'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        executionTimeoutMs: 600_000,
+        scalerType: 'QUEUE_DELAY',
+        scalerValue: 4,
+      },
     },
   },
   map: {
@@ -657,7 +667,9 @@ describe(SystemConfigService.name, () => {
             },
           },
         }),
-      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is provisioning/);
+      ).rejects.toThrow(
+        /Cannot change RunPod API key, image, or mode while a transition is in flight \(status=provisioning\)/,
+      );
     });
 
     it('should reject runpod image changes while pod is stopping', async () => {
@@ -673,7 +685,9 @@ describe(SystemConfigService.name, () => {
             },
           },
         }),
-      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is stopping/);
+      ).rejects.toThrow(
+        /Cannot change RunPod API key, image, or mode while a transition is in flight \(status=stopping\)/,
+      );
     });
 
     it('should allow runpod api key changes when no pod transition is in flight', async () => {
@@ -706,6 +720,52 @@ describe(SystemConfigService.name, () => {
           },
         }),
       ).resolves.toBeUndefined();
+    });
+
+    it('should reject mode changes while serverless setup is in flight', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'serverless-provisioning' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, mode: 'serverless' },
+            },
+          },
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, mode: 'disabled' },
+            },
+          },
+        }),
+      ).rejects.toThrow(
+        /Cannot change RunPod API key, image, or mode while a transition is in flight \(status=serverless-provisioning\)/,
+      );
+    });
+
+    it('should reject switching away from pod mode while a pod is running', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'running' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, mode: 'pod' },
+            },
+          },
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, mode: 'serverless' },
+            },
+          },
+        }),
+      ).rejects.toThrow(/Terminate the running pod before switching modes/);
     });
 
     it('should update the config and emit an event', async () => {

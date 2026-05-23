@@ -1,7 +1,17 @@
 import { createZodDto } from 'nestjs-zod';
 import z from 'zod';
 
-const RunPodStatusSchema = z.enum(['idle', 'provisioning', 'starting', 'running', 'stopping', 'stopped', 'error']);
+const RunPodStatusSchema = z.enum([
+  'idle',
+  'provisioning',
+  'starting',
+  'running',
+  'stopping',
+  'stopped',
+  'error',
+  'serverless-provisioning',
+  'serverless-ready',
+]);
 
 const RunPodConnectionTestSchema = z
   .object({
@@ -56,6 +66,13 @@ const RunPodStateSchema = z
     instanceTag: z.string().optional(),
     errorMessage: z.string().optional(),
     unhealthySince: z.string().optional(),
+    // Serverless-only fields
+    endpointId: z.string().optional(),
+    endpointUrl: z.string().optional(),
+    templateId: z.string().optional(),
+    workersMin: z.number().optional(),
+    workersMax: z.number().optional(),
+    idleTimeoutSeconds: z.number().optional(),
   })
   .meta({ id: 'RunPodStateDto' });
 

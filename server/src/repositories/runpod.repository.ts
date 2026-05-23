@@ -47,6 +47,56 @@ export type CreatePodInput = {
   env: Record<string, string>;
 };
 
+export type RunPodTemplateSummary = {
+  id: string;
+  name: string;
+  imageName: string;
+  containerDiskInGb?: number;
+  ports?: string;
+  env?: Array<{ key: string; value: string }> | Record<string, string>;
+};
+
+export type CreateTemplateInput = {
+  name: string;
+  imageName: string;
+  containerDiskInGb: number;
+  ports: string[];
+  env: Record<string, string>;
+};
+
+export type RunPodEndpointSummary = {
+  id: string;
+  name: string;
+  templateId: string;
+  computeType?: 'GPU' | 'CPU';
+  gpuTypeIds: string[];
+  gpuCount?: number;
+  workersMin: number;
+  workersMax: number;
+  idleTimeout?: number;
+  executionTimeoutMs?: number;
+  scalerType?: 'QUEUE_DELAY' | 'REQUEST_COUNT';
+  scalerValue?: number;
+  createdAt?: string;
+  workers?: Array<{ id?: string; status?: string }>;
+  env?: Record<string, string>;
+};
+
+export type RunPodScalerType = 'QUEUE_DELAY' | 'REQUEST_COUNT';
+
+export type CreateEndpointInput = {
+  name: string;
+  templateId: string;
+  gpuTypeIds: string[];
+  gpuCount?: number;
+  workersMin: number;
+  workersMax: number;
+  idleTimeout: number;
+  executionTimeoutMs: number;
+  scalerType: RunPodScalerType;
+  scalerValue: number;
+};
+
 export class RunPodApiError extends Error {
   constructor(
     message: string,
@@ -149,6 +199,113 @@ export class RunPodRepository {
 
   buildProxyUrl(podId: string, port = 3003): string {
     return `https://${podId}-${port}.proxy.runpod.net/`;
+  }
+
+  // ── Serverless: templates + endpoints ─────────────────────────────────────
+  // RunPod's serverless model has two objects:
+  //  - Template: bundles image + ports + env. Reusable across endpoints.
+  //  - Endpoint: references a templateId, sets scaling. Workers scale 0→N
+  //    on demand. Load-balancing endpoints expose
+  //    `https://<endpoint-id>.api.runpod.ai/<path>` and forward HTTP paths
+  //    directly to the worker; clients send `Authorization: Bearer <apiKey>`.
+
+  async createTemplate(apiKey: string, input: CreateTemplateInput): Promise<RunPodTemplateSummary> {
+    // RunPod templates accept env as an array of {key, value} pairs.
+    const envArray = Object.entries(input.env).map(([key, value]) => ({ key, value }));
+    return this.request<RunPodTemplateSummary>(
+      apiKey,
+      'POST',
+      '/templates',
+      {
+        name: input.name,
+        imageName: input.imageName,
+        containerDiskInGb: input.containerDiskInGb,
+        ports: input.ports.join(','),
+        env: envArray,
+      },
+      30_000,
+    );
+  }
+
+  async getTemplate(apiKey: string, templateId: string): Promise<RunPodTemplateSummary> {
+    return this.request<RunPodTemplateSummary>(
+      apiKey,
+      'GET',
+      `/templates/${encodeURIComponent(templateId)}`,
+      undefined,
+      15_000,
+    );
+  }
+
+  async listTemplates(apiKey: string): Promise<RunPodTemplateSummary[]> {
+    const data = await this.request<RunPodTemplateSummary[] | { data: RunPodTemplateSummary[] }>(
+      apiKey,
+      'GET',
+      '/templates',
+      undefined,
+      15_000,
+    );
+    return Array.isArray(data) ? data : (data?.data ?? []);
+  }
+
+  async deleteTemplate(apiKey: string, templateId: string): Promise<void> {
+    await this.request(apiKey, 'DELETE', `/templates/${encodeURIComponent(templateId)}`, undefined, 30_000);
+  }
+
+  async createEndpoint(apiKey: string, input: CreateEndpointInput): Promise<RunPodEndpointSummary> {
+    return this.request<RunPodEndpointSummary>(
+      apiKey,
+      'POST',
+      '/endpoints',
+      {
+        name: input.name,
+        templateId: input.templateId,
+        computeType: 'GPU',
+        gpuTypeIds: input.gpuTypeIds,
+        gpuCount: input.gpuCount ?? 1,
+        workersMin: input.workersMin,
+        workersMax: input.workersMax,
+        idleTimeout: input.idleTimeout,
+        executionTimeoutMs: input.executionTimeoutMs,
+        scalerType: input.scalerType,
+        scalerValue: input.scalerValue,
+      },
+      30_000,
+    );
+  }
+
+  async getEndpoint(apiKey: string, endpointId: string): Promise<RunPodEndpointSummary> {
+    return this.request<RunPodEndpointSummary>(
+      apiKey,
+      'GET',
+      `/endpoints/${encodeURIComponent(endpointId)}`,
+      undefined,
+      15_000,
+    );
+  }
+
+  async listEndpoints(apiKey: string): Promise<RunPodEndpointSummary[]> {
+    const data = await this.request<RunPodEndpointSummary[] | { data: RunPodEndpointSummary[] }>(
+      apiKey,
+      'GET',
+      '/endpoints',
+      undefined,
+      15_000,
+    );
+    return Array.isArray(data) ? data : (data?.data ?? []);
+  }
+
+  async deleteEndpoint(apiKey: string, endpointId: string): Promise<void> {
+    await this.request(apiKey, 'DELETE', `/endpoints/${encodeURIComponent(endpointId)}`, undefined, 30_000);
+  }
+
+  /**
+   * URL pattern for load-balancing serverless endpoints. Paths from the
+   * container's HTTP server (e.g., FastAPI's `/predict`, `/ping`) are
+   * forwarded as-is. Clients authenticate with `Authorization: Bearer <apiKey>`.
+   */
+  buildEndpointUrl(endpointId: string): string {
+    return `https://${endpointId}.api.runpod.ai/`;
   }
 
   private async graphql<T>(apiKey: string, query: string, timeoutMs: number): Promise<T> {

@@ -880,6 +880,8 @@ class ApiClient {
           return SystemConfigReverseGeocodingDto.fromJson(value);
         case 'SystemConfigRunPodDto':
           return SystemConfigRunPodDto.fromJson(value);
+        case 'SystemConfigRunPodServerlessDto':
+          return SystemConfigRunPodServerlessDto.fromJson(value);
         case 'SystemConfigServerDto':
           return SystemConfigServerDto.fromJson(value);
         case 'SystemConfigSmartAlbumsDto':

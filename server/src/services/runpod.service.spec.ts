@@ -392,4 +392,189 @@ describe(RunPodService.name, () => {
       expect(mocks.machineLearning.clearManagedUrl).toHaveBeenCalled();
     });
   });
+
+  describe('serverless mode', () => {
+    const ENDPOINT_URL = 'https://ep_xyz.api.runpod.ai/';
+
+    const stubServerlessConfig = (overrides: Partial<SystemConfig['machineLearning']['runpod']> = {}): SystemConfig =>
+      stubConfig({ mode: 'serverless', ...overrides });
+
+    beforeEach(() => {
+      (mocks.runPod.buildEndpointUrl as ReturnType<typeof vi.fn>).mockImplementation(
+        (endpointId: string) => `https://${endpointId}.api.runpod.ai/`,
+      );
+    });
+
+    it('ensureServerlessEndpoint creates template + endpoint and writes ready state', async () => {
+      stubServerlessConfig();
+      // Make the get/set mocks behave like a real key/value store so that the
+      // post-write syncManagedUrl() observes the freshly written state.
+      let currentState: RunPodPersistedState = { status: 'idle' };
+      (mocks.systemMetadata.get as ReturnType<typeof vi.fn>).mockImplementation((key: SystemMetadataKey) =>
+        Promise.resolve(key === SystemMetadataKey.RunPodState ? currentState : null),
+      );
+      (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mockImplementation(
+        (_key: SystemMetadataKey, value: RunPodPersistedState) => {
+          currentState = value;
+          return Promise.resolve();
+        },
+      );
+      (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(null);
+      (mocks.runPod.listEndpoints as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+      (mocks.runPod.createTemplate as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'tmpl_abc',
+        name: 'immich-aaaaaaaa-template',
+        imageName: 'ghcr.io/x/y:z',
+      });
+      (mocks.runPod.createEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'ep_xyz',
+        name: 'immich-aaaaaaaa-endpoint',
+        templateId: 'tmpl_abc',
+      });
+
+      const result = await sut.ensureServerlessEndpoint();
+
+      expect(result.status).toBe('serverless-ready');
+      expect(result.endpointId).toBe('ep_xyz');
+      expect(result.endpointUrl).toBe(ENDPOINT_URL);
+      expect(mocks.runPod.createTemplate).toHaveBeenCalledTimes(1);
+      // The template MUST NOT include IMMICH_ML_AUTH_TOKEN — RunPod's proxy already auth-gates
+      // and adding our middleware would double-bearer.
+      const templatePayload = (mocks.runPod.createTemplate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      expect(templatePayload.env).toEqual({ MACHINE_LEARNING_CACHE_FOLDER: '/cache' });
+      expect(mocks.runPod.createEndpoint).toHaveBeenCalledTimes(1);
+      expect(mocks.systemMetadata.set).toHaveBeenCalledWith(
+        SystemMetadataKey.RunPodState,
+        expect.objectContaining({ status: 'serverless-ready', endpointId: 'ep_xyz' }),
+      );
+      // The managed URL must be set with the RunPod API key as the bearer.
+      expect(mocks.machineLearning.setManagedUrl).toHaveBeenCalledWith(ENDPOINT_URL, 'rp_test');
+    });
+
+    it('ensureServerlessEndpoint adopts an existing endpoint instead of creating a duplicate', async () => {
+      const config = stubServerlessConfig();
+      setState({ status: 'idle', instanceTag: 'aaaaaaaa-1234' });
+      // Listing returns a matching endpoint — the service should reuse it.
+      (mocks.runPod.listEndpoints as ReturnType<typeof vi.fn>).mockResolvedValue([
+        {
+          id: 'ep_existing',
+          name: `immich-${config.machineLearning.runpod.imageName.slice(0, 8)}-endpoint`,
+          templateId: 'tmpl_existing',
+        },
+        // Add an entry with our actual prefix
+        { id: 'ep_existing_real', name: 'immich-aaaaaaaa-endpoint', templateId: 'tmpl_existing' },
+      ]);
+
+      await sut.ensureServerlessEndpoint();
+
+      expect(mocks.runPod.createTemplate).not.toHaveBeenCalled();
+      expect(mocks.runPod.createEndpoint).not.toHaveBeenCalled();
+      expect(mocks.systemMetadata.set).toHaveBeenCalledWith(
+        SystemMetadataKey.RunPodState,
+        expect.objectContaining({ status: 'serverless-ready', endpointId: 'ep_existing_real' }),
+      );
+    });
+
+    it('ensureServerlessEndpoint verifies an already-ready endpoint and returns it unchanged', async () => {
+      stubServerlessConfig();
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_existing',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+      (mocks.runPod.getEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'ep_existing',
+        name: 'immich-aaaaaaaa-endpoint',
+        templateId: 'tmpl_existing',
+      });
+
+      const result = await sut.ensureServerlessEndpoint();
+      expect(result.status).toBe('serverless-ready');
+      expect(mocks.runPod.createTemplate).not.toHaveBeenCalled();
+      expect(mocks.runPod.createEndpoint).not.toHaveBeenCalled();
+    });
+
+    it('teardownServerlessEndpoint deletes endpoint + template and returns idle', async () => {
+      stubServerlessConfig();
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_existing',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+
+      const result = await sut.teardownServerlessEndpoint();
+      expect(result.status).toBe('idle');
+      expect(mocks.runPod.deleteEndpoint).toHaveBeenCalledWith('rp_test', 'ep_existing');
+      expect(mocks.runPod.deleteTemplate).toHaveBeenCalledWith('rp_test', 'tmpl_existing');
+      expect(mocks.machineLearning.clearManagedUrl).toHaveBeenCalled();
+    });
+
+    it('teardownServerlessEndpoint soft-fails when the endpoint is already gone', async () => {
+      stubServerlessConfig();
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_existing',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+      (mocks.runPod.deleteEndpoint as ReturnType<typeof vi.fn>).mockRejectedValue(new RunPodNotFoundError('gone'));
+      (mocks.runPod.deleteTemplate as ReturnType<typeof vi.fn>).mockRejectedValue(new RunPodNotFoundError('gone'));
+
+      const result = await sut.teardownServerlessEndpoint();
+      expect(result.status).toBe('idle');
+    });
+
+    it('provision is refused in serverless mode', async () => {
+      stubServerlessConfig();
+      setState({ status: 'idle' });
+      await expect(
+        sut.provision({ gpuTypeId: 'NVIDIA RTX A5000', acknowledgeDataPrivacy: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('syncManagedUrl injects the endpoint URL with the API key as bearer in serverless-ready', async () => {
+      stubServerlessConfig();
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_xyz',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+      (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+      await sut.onConfigInit({ newConfig: _systemConfigWithRunPod({ mode: 'serverless' }) } as never);
+
+      expect(mocks.machineLearning.setManagedUrl).toHaveBeenCalledWith(ENDPOINT_URL, 'rp_test');
+    });
+  });
 });

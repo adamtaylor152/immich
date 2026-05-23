@@ -13,9 +13,12 @@ part of openapi.api;
 class RunPodStateDto {
   /// Returns a new [RunPodStateDto] instance.
   RunPodStateDto({
+    this.endpointId,
+    this.endpointUrl,
     this.errorMessage,
     this.estimatedCostUsd,
     this.gpuTypeId,
+    this.idleTimeoutSeconds,
     this.imageName,
     this.instanceTag,
     this.lastBusyAt,
@@ -27,8 +30,27 @@ class RunPodStateDto {
     this.runningSince,
     required this.status,
     this.stoppedAt,
+    this.templateId,
     this.unhealthySince,
+    this.workersMax,
+    this.workersMin,
   });
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? endpointId;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? endpointUrl;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -53,6 +75,14 @@ class RunPodStateDto {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   String? gpuTypeId;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? idleTimeoutSeconds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -142,13 +172,40 @@ class RunPodStateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
+  String? templateId;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   String? unhealthySince;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? workersMax;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? workersMin;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is RunPodStateDto &&
+    other.endpointId == endpointId &&
+    other.endpointUrl == endpointUrl &&
     other.errorMessage == errorMessage &&
     other.estimatedCostUsd == estimatedCostUsd &&
     other.gpuTypeId == gpuTypeId &&
+    other.idleTimeoutSeconds == idleTimeoutSeconds &&
     other.imageName == imageName &&
     other.instanceTag == instanceTag &&
     other.lastBusyAt == lastBusyAt &&
@@ -160,14 +217,20 @@ class RunPodStateDto {
     other.runningSince == runningSince &&
     other.status == status &&
     other.stoppedAt == stoppedAt &&
-    other.unhealthySince == unhealthySince;
+    other.templateId == templateId &&
+    other.unhealthySince == unhealthySince &&
+    other.workersMax == workersMax &&
+    other.workersMin == workersMin;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (endpointId == null ? 0 : endpointId!.hashCode) +
+    (endpointUrl == null ? 0 : endpointUrl!.hashCode) +
     (errorMessage == null ? 0 : errorMessage!.hashCode) +
     (estimatedCostUsd == null ? 0 : estimatedCostUsd!.hashCode) +
     (gpuTypeId == null ? 0 : gpuTypeId!.hashCode) +
+    (idleTimeoutSeconds == null ? 0 : idleTimeoutSeconds!.hashCode) +
     (imageName == null ? 0 : imageName!.hashCode) +
     (instanceTag == null ? 0 : instanceTag!.hashCode) +
     (lastBusyAt == null ? 0 : lastBusyAt!.hashCode) +
@@ -179,13 +242,26 @@ class RunPodStateDto {
     (runningSince == null ? 0 : runningSince!.hashCode) +
     (status.hashCode) +
     (stoppedAt == null ? 0 : stoppedAt!.hashCode) +
-    (unhealthySince == null ? 0 : unhealthySince!.hashCode);
+    (templateId == null ? 0 : templateId!.hashCode) +
+    (unhealthySince == null ? 0 : unhealthySince!.hashCode) +
+    (workersMax == null ? 0 : workersMax!.hashCode) +
+    (workersMin == null ? 0 : workersMin!.hashCode);
 
   @override
-  String toString() => 'RunPodStateDto[errorMessage=$errorMessage, estimatedCostUsd=$estimatedCostUsd, gpuTypeId=$gpuTypeId, imageName=$imageName, instanceTag=$instanceTag, lastBusyAt=$lastBusyAt, maxRuntimeHours=$maxRuntimeHours, mlUrl=$mlUrl, podCreatedAt=$podCreatedAt, podId=$podId, pricePerHour=$pricePerHour, runningSince=$runningSince, status=$status, stoppedAt=$stoppedAt, unhealthySince=$unhealthySince]';
+  String toString() => 'RunPodStateDto[endpointId=$endpointId, endpointUrl=$endpointUrl, errorMessage=$errorMessage, estimatedCostUsd=$estimatedCostUsd, gpuTypeId=$gpuTypeId, idleTimeoutSeconds=$idleTimeoutSeconds, imageName=$imageName, instanceTag=$instanceTag, lastBusyAt=$lastBusyAt, maxRuntimeHours=$maxRuntimeHours, mlUrl=$mlUrl, podCreatedAt=$podCreatedAt, podId=$podId, pricePerHour=$pricePerHour, runningSince=$runningSince, status=$status, stoppedAt=$stoppedAt, templateId=$templateId, unhealthySince=$unhealthySince, workersMax=$workersMax, workersMin=$workersMin]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.endpointId != null) {
+      json[r'endpointId'] = this.endpointId;
+    } else {
+    //  json[r'endpointId'] = null;
+    }
+    if (this.endpointUrl != null) {
+      json[r'endpointUrl'] = this.endpointUrl;
+    } else {
+    //  json[r'endpointUrl'] = null;
+    }
     if (this.errorMessage != null) {
       json[r'errorMessage'] = this.errorMessage;
     } else {
@@ -200,6 +276,11 @@ class RunPodStateDto {
       json[r'gpuTypeId'] = this.gpuTypeId;
     } else {
     //  json[r'gpuTypeId'] = null;
+    }
+    if (this.idleTimeoutSeconds != null) {
+      json[r'idleTimeoutSeconds'] = this.idleTimeoutSeconds;
+    } else {
+    //  json[r'idleTimeoutSeconds'] = null;
     }
     if (this.imageName != null) {
       json[r'imageName'] = this.imageName;
@@ -252,10 +333,25 @@ class RunPodStateDto {
     } else {
     //  json[r'stoppedAt'] = null;
     }
+    if (this.templateId != null) {
+      json[r'templateId'] = this.templateId;
+    } else {
+    //  json[r'templateId'] = null;
+    }
     if (this.unhealthySince != null) {
       json[r'unhealthySince'] = this.unhealthySince;
     } else {
     //  json[r'unhealthySince'] = null;
+    }
+    if (this.workersMax != null) {
+      json[r'workersMax'] = this.workersMax;
+    } else {
+    //  json[r'workersMax'] = null;
+    }
+    if (this.workersMin != null) {
+      json[r'workersMin'] = this.workersMin;
+    } else {
+    //  json[r'workersMin'] = null;
     }
     return json;
   }
@@ -269,9 +365,12 @@ class RunPodStateDto {
       final json = value.cast<String, dynamic>();
 
       return RunPodStateDto(
+        endpointId: mapValueOfType<String>(json, r'endpointId'),
+        endpointUrl: mapValueOfType<String>(json, r'endpointUrl'),
         errorMessage: mapValueOfType<String>(json, r'errorMessage'),
         estimatedCostUsd: num.parse('${json[r'estimatedCostUsd']}'),
         gpuTypeId: mapValueOfType<String>(json, r'gpuTypeId'),
+        idleTimeoutSeconds: num.parse('${json[r'idleTimeoutSeconds']}'),
         imageName: mapValueOfType<String>(json, r'imageName'),
         instanceTag: mapValueOfType<String>(json, r'instanceTag'),
         lastBusyAt: mapValueOfType<String>(json, r'lastBusyAt'),
@@ -283,7 +382,10 @@ class RunPodStateDto {
         runningSince: mapValueOfType<String>(json, r'runningSince'),
         status: RunPodStateDtoStatusEnum.fromJson(json[r'status'])!,
         stoppedAt: mapValueOfType<String>(json, r'stoppedAt'),
+        templateId: mapValueOfType<String>(json, r'templateId'),
         unhealthySince: mapValueOfType<String>(json, r'unhealthySince'),
+        workersMax: num.parse('${json[r'workersMax']}'),
+        workersMin: num.parse('${json[r'workersMin']}'),
       );
     }
     return null;
@@ -355,6 +457,8 @@ class RunPodStateDtoStatusEnum {
   static const stopping = RunPodStateDtoStatusEnum._(r'stopping');
   static const stopped = RunPodStateDtoStatusEnum._(r'stopped');
   static const error = RunPodStateDtoStatusEnum._(r'error');
+  static const serverlessProvisioning = RunPodStateDtoStatusEnum._(r'serverless-provisioning');
+  static const serverlessReady = RunPodStateDtoStatusEnum._(r'serverless-ready');
 
   /// List of all possible values in this [enum][RunPodStateDtoStatusEnum].
   static const values = <RunPodStateDtoStatusEnum>[
@@ -365,6 +469,8 @@ class RunPodStateDtoStatusEnum {
     stopping,
     stopped,
     error,
+    serverlessProvisioning,
+    serverlessReady,
   ];
 
   static RunPodStateDtoStatusEnum? fromJson(dynamic value) => RunPodStateDtoStatusEnumTypeTransformer().decode(value);
@@ -410,6 +516,8 @@ class RunPodStateDtoStatusEnumTypeTransformer {
         case r'stopping': return RunPodStateDtoStatusEnum.stopping;
         case r'stopped': return RunPodStateDtoStatusEnum.stopped;
         case r'error': return RunPodStateDtoStatusEnum.error;
+        case r'serverless-provisioning': return RunPodStateDtoStatusEnum.serverlessProvisioning;
+        case r'serverless-ready': return RunPodStateDtoStatusEnum.serverlessReady;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

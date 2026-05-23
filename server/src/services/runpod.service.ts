@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { SystemConfig } from 'src/config';
 import { OnEvent } from 'src/decorators';
 import { RunPodBackfillResultDto, RunPodGpuTypeDto, RunPodProvisionDto, RunPodStateDto } from 'src/dtos/runpod.dto';
 import {
@@ -12,9 +13,24 @@ import {
   SystemMetadataKey,
 } from 'src/enum';
 import { ArgOf, ArgsOf } from 'src/repositories/event.repository';
-import { RunPodNotFoundError, RunPodPodSummary } from 'src/repositories/runpod.repository';
+import { RunPodEndpointSummary, RunPodNotFoundError, RunPodPodSummary } from 'src/repositories/runpod.repository';
 import { BaseService } from 'src/services/base.service';
 import { RunPodPersistedState } from 'src/types';
+
+type RunPodMode = 'disabled' | 'pod' | 'serverless';
+
+/**
+ * Resolve the effective mode from config, applying the back-compat rule for
+ * configs persisted before the `mode` discriminator existed: if mode is
+ * 'disabled' but the legacy `enabled: true` flag is set, treat as 'pod'.
+ */
+function effectiveMode(config: SystemConfig): RunPodMode {
+  const rp = config.machineLearning.runpod;
+  if (rp.mode && rp.mode !== 'disabled') {
+    return rp.mode;
+  }
+  return rp.enabled ? 'pod' : 'disabled';
+}
 
 // Job names whose successful (or failed) execution counts as ML activity.
 // If any of these run, we know the pod was useful in the recent window.
@@ -77,7 +93,18 @@ export class RunPodService extends BaseService {
   async onConfigInit({ newConfig }: ArgOf<'ConfigInit'>) {
     this.currentApiKey = newConfig.machineLearning.runpod.apiKey;
     await this.syncManagedUrl();
-    this.startTicker();
+    if (effectiveMode(newConfig) === 'pod') {
+      this.startTicker();
+    } else {
+      this.stopTicker();
+    }
+    if (effectiveMode(newConfig) === 'serverless') {
+      // Best-effort lazy setup on boot — the user expects the endpoint to be
+      // ready by the time ML jobs start firing. Don't block bootstrap.
+      void this.ensureServerlessEndpoint(newConfig).catch((error) =>
+        this.logger.warn(`Boot-time serverless setup failed: ${error}`),
+      );
+    }
   }
 
   @OnEvent({ name: 'AppShutdown' })
@@ -86,9 +113,26 @@ export class RunPodService extends BaseService {
   }
 
   @OnEvent({ name: 'ConfigUpdate', server: true })
-  async onConfigUpdate({ newConfig }: ArgOf<'ConfigUpdate'>) {
+  async onConfigUpdate({ newConfig, oldConfig }: ArgOf<'ConfigUpdate'>) {
     this.currentApiKey = newConfig.machineLearning.runpod.apiKey;
     await this.syncManagedUrl();
+    const mode = effectiveMode(newConfig);
+    const oldMode = effectiveMode(oldConfig);
+    if (mode === 'pod') {
+      this.startTicker();
+    } else {
+      this.stopTicker();
+    }
+    if (mode === 'serverless') {
+      void this.ensureServerlessEndpoint(newConfig).catch((error) =>
+        this.logger.warn(`Serverless setup after config update failed: ${error}`),
+      );
+    } else if (oldMode === 'serverless') {
+      // Mode changed away from serverless — tear down the endpoint + template.
+      void this.teardownServerlessEndpoint().catch((error) =>
+        this.logger.warn(`Serverless teardown after mode change failed: ${error}`),
+      );
+    }
   }
 
   @OnEvent({ name: 'JobStart' })
@@ -100,6 +144,11 @@ export class RunPodService extends BaseService {
     // predict() call below picks up the pod.
     if (ML_JOB_NAMES.has(job.name)) {
       void this.syncManagedUrl().catch((error) => this.logger.warn(`Pre-job managed URL sync failed: ${error}`));
+      // Lazy provisioning for serverless mode — if the endpoint doesn't exist
+      // yet (e.g. first ML job after enabling), create it now.
+      void this.maybeEnsureServerlessOnJob().catch((error) =>
+        this.logger.warn(`Lazy serverless setup on JobStart failed: ${error}`),
+      );
     }
   }
 
@@ -158,6 +207,11 @@ export class RunPodService extends BaseService {
   private async provisionLocked(dto: RunPodProvisionDto): Promise<RunPodStateDto> {
     const config = await this.getConfig({ withCache: false });
     const runpod = config.machineLearning.runpod;
+    if (effectiveMode(config) !== 'pod') {
+      throw new BadRequestException(
+        `Pod mode is not active (mode=${effectiveMode(config)}). Switch to Pod mode in System Settings → Machine Learning first.`,
+      );
+    }
     if (!runpod.enabled) {
       throw new BadRequestException('RunPod integration is not enabled');
     }
@@ -774,6 +828,14 @@ export class RunPodService extends BaseService {
       if (existing !== state.mlUrl) {
         this.machineLearningRepository.setManagedUrl(state.mlUrl, state.authToken);
       }
+    } else if (state.status === 'serverless-ready') {
+      // For serverless, the bearer is the user's RunPod API key — that's
+      // what RunPod's proxy enforces at the `.api.runpod.ai` URL.
+      const apiKey = await this.getApiKey();
+      const existing = this.machineLearningRepository.getManagedUrl();
+      if (apiKey && existing !== state.endpointUrl) {
+        this.machineLearningRepository.setManagedUrl(state.endpointUrl, apiKey);
+      }
     } else if (this.machineLearningRepository.getManagedUrl()) {
       this.machineLearningRepository.clearManagedUrl();
     }
@@ -868,6 +930,199 @@ export class RunPodService extends BaseService {
     if (state.status === 'error') {
       base.errorMessage = state.message;
     }
+    if (state.status === 'serverless-ready') {
+      base.endpointId = state.endpointId;
+      base.endpointUrl = state.endpointUrl;
+      base.templateId = state.templateId;
+      base.workersMin = state.workersMin;
+      base.workersMax = state.workersMax;
+      base.idleTimeoutSeconds = state.idleTimeoutSeconds;
+      base.mlUrl = state.endpointUrl;
+    }
     return base;
+  }
+
+  // ── Serverless lifecycle ──────────────────────────────────────────────
+
+  /**
+   * Lazy provisioning called from JobStart: only does work if the user is in
+   * serverless mode AND the endpoint isn't already ready. Cheap enough to
+   * fire on every ML job — it short-circuits if state is already
+   * 'serverless-ready'.
+   */
+  private async maybeEnsureServerlessOnJob(): Promise<void> {
+    const config = await this.getConfig({ withCache: true });
+    if (effectiveMode(config) !== 'serverless') {
+      return;
+    }
+    const state = await this.loadState();
+    if (state.status === 'serverless-ready' || state.status === 'serverless-provisioning') {
+      return;
+    }
+    await this.ensureServerlessEndpoint(config);
+  }
+
+  /**
+   * Idempotently create the template + endpoint. Re-uses an existing endpoint
+   * tagged with our instance prefix if one is found (e.g. across server
+   * restarts where state was lost but the RunPod resources persisted).
+   *
+   * Optionally accepts a config object so the boot-time / config-update paths
+   * (which already have the new config in hand) don't double-read.
+   */
+  async ensureServerlessEndpoint(config?: SystemConfig): Promise<RunPodStateDto> {
+    const resolvedConfig = config ?? (await this.getConfig({ withCache: false }));
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () =>
+      this.ensureServerlessEndpointLocked(resolvedConfig),
+    );
+  }
+
+  private async ensureServerlessEndpointLocked(config: SystemConfig): Promise<RunPodStateDto> {
+    if (effectiveMode(config) !== 'serverless') {
+      throw new BadRequestException('Serverless mode is not active');
+    }
+    const apiKey = await this.requireApiKey();
+    const runpod = config.machineLearning.runpod;
+    const state = await this.loadState();
+
+    // Already ready — verify the endpoint actually exists, otherwise re-create.
+    if (state.status === 'serverless-ready') {
+      try {
+        await this.runPodRepository.getEndpoint(apiKey, state.endpointId);
+        await this.syncManagedUrl();
+        return this.mapStateToDto(state);
+      } catch (error) {
+        if (!(error instanceof RunPodNotFoundError)) {
+          this.logger.warn(`Failed to verify existing endpoint ${state.endpointId}: ${error}`);
+        }
+        this.logger.log(`Endpoint ${state.endpointId} gone; will re-create`);
+      }
+    }
+
+    const instanceTag = ('instanceTag' in state && state.instanceTag) || randomUUID();
+    const prefix = `immich-${instanceTag.slice(0, 8)}`;
+    await this.writeState({
+      status: 'serverless-provisioning',
+      instanceTag,
+      imageName: runpod.imageName,
+      attemptedAt: new Date().toISOString(),
+    });
+
+    try {
+      // Adopt: look for an existing endpoint with our instance prefix.
+      let endpoint: RunPodEndpointSummary | undefined;
+      let templateId: string | undefined;
+      try {
+        const endpoints = await this.runPodRepository.listEndpoints(apiKey);
+        endpoint = endpoints.find((e) => e.name?.startsWith(prefix));
+        if (endpoint) {
+          templateId = endpoint.templateId;
+          this.logger.log(`Adopting existing serverless endpoint ${endpoint.id} (tag=${instanceTag})`);
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to scan for existing endpoints: ${error}`);
+      }
+
+      if (!endpoint) {
+        // Create template + endpoint fresh.
+        const template = await this.runPodRepository.createTemplate(apiKey, {
+          name: `${prefix}-template`,
+          imageName: runpod.imageName,
+          containerDiskInGb: runpod.containerDiskGb,
+          ports: [`${ML_PORT}/http`],
+          // Crucially: no IMMICH_ML_AUTH_TOKEN in serverless mode. RunPod's
+          // proxy already auth-gates with the API key; double-auth would
+          // require the proxy to forward our header which it doesn't.
+          env: { MACHINE_LEARNING_CACHE_FOLDER: '/cache' },
+        });
+        templateId = template.id;
+        endpoint = await this.runPodRepository.createEndpoint(apiKey, {
+          name: `${prefix}-endpoint`,
+          templateId,
+          gpuTypeIds: runpod.serverless.gpuTypeIds,
+          workersMin: runpod.serverless.workersMin,
+          workersMax: runpod.serverless.workersMax,
+          idleTimeout: runpod.serverless.idleTimeoutSeconds,
+          executionTimeoutMs: runpod.serverless.executionTimeoutMs,
+          scalerType: runpod.serverless.scalerType,
+          scalerValue: runpod.serverless.scalerValue,
+        });
+        this.logger.log(`Created serverless endpoint ${endpoint.id} (template ${templateId}) tag=${instanceTag}`);
+      }
+
+      const endpointUrl = this.runPodRepository.buildEndpointUrl(endpoint.id);
+      const next: RunPodPersistedState = {
+        status: 'serverless-ready',
+        instanceTag,
+        templateId: templateId!,
+        endpointId: endpoint.id,
+        endpointUrl,
+        imageName: runpod.imageName,
+        gpuTypeIds: runpod.serverless.gpuTypeIds,
+        workersMin: runpod.serverless.workersMin,
+        workersMax: runpod.serverless.workersMax,
+        idleTimeoutSeconds: runpod.serverless.idleTimeoutSeconds,
+        createdAt: new Date().toISOString(),
+      };
+      await this.writeState(next);
+      await this.syncManagedUrl();
+      return this.mapStateToDto(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.writeState({
+        status: 'error',
+        message: `Failed to create serverless endpoint: ${message}`,
+        errorAt: new Date().toISOString(),
+        instanceTag,
+      });
+      throw new BadRequestException(`Serverless setup failed: ${message}`);
+    }
+  }
+
+  /**
+   * Delete the endpoint + template owned by this Immich instance. Soft-fails
+   * if either is gone (NotFound) — that's the expected state when a user has
+   * already cleaned up via the RunPod dashboard.
+   */
+  async teardownServerlessEndpoint(): Promise<RunPodStateDto> {
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () => this.teardownServerlessLocked());
+  }
+
+  private async teardownServerlessLocked(): Promise<RunPodStateDto> {
+    const state = await this.loadState();
+    if (state.status !== 'serverless-ready' && state.status !== 'serverless-provisioning') {
+      return this.mapStateToDto(state);
+    }
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      // No key, can't talk to RunPod. Just clear our state.
+      await this.writeState({ status: 'idle', instanceTag: state.instanceTag });
+      this.machineLearningRepository.clearManagedUrl();
+      return this.mapStateToDto({ status: 'idle', instanceTag: state.instanceTag });
+    }
+
+    if (state.status === 'serverless-ready') {
+      try {
+        await this.runPodRepository.deleteEndpoint(apiKey, state.endpointId);
+        this.logger.log(`Deleted serverless endpoint ${state.endpointId}`);
+      } catch (error) {
+        if (!(error instanceof RunPodNotFoundError)) {
+          this.logger.warn(`Failed to delete endpoint ${state.endpointId}: ${error}`);
+        }
+      }
+      try {
+        await this.runPodRepository.deleteTemplate(apiKey, state.templateId);
+        this.logger.log(`Deleted serverless template ${state.templateId}`);
+      } catch (error) {
+        if (!(error instanceof RunPodNotFoundError)) {
+          this.logger.warn(`Failed to delete template ${state.templateId}: ${error}`);
+        }
+      }
+    }
+
+    const next: RunPodPersistedState = { status: 'idle', instanceTag: state.instanceTag };
+    await this.writeState(next);
+    this.machineLearningRepository.clearManagedUrl();
+    return this.mapStateToDto(next);
   }
 }

@@ -83,12 +83,29 @@ export class SystemConfigService extends BaseService {
 
     const oldRunpod = oldConfig.machineLearning.runpod;
     const newRunpod = newConfig.machineLearning.runpod;
-    if (oldRunpod.apiKey !== newRunpod.apiKey || oldRunpod.imageName !== newRunpod.imageName) {
+    const sensitiveChange =
+      oldRunpod.apiKey !== newRunpod.apiKey ||
+      oldRunpod.imageName !== newRunpod.imageName ||
+      oldRunpod.mode !== newRunpod.mode;
+    if (sensitiveChange) {
       const runpodState = await this.systemMetadataRepository.get(SystemMetadataKey.RunPodState);
-      const inFlight = runpodState && ['provisioning', 'starting', 'stopping'].includes(runpodState.status);
+      const inFlight =
+        runpodState && ['provisioning', 'starting', 'stopping', 'serverless-provisioning'].includes(runpodState.status);
       if (inFlight) {
         throw new Error(
-          `Cannot change RunPod API key or image while a pod is ${runpodState!.status}. Wait for the transition to settle, then retry.`,
+          `Cannot change RunPod API key, image, or mode while a transition is in flight (status=${runpodState!.status}). Wait for it to settle, then retry.`,
+        );
+      }
+      // Block switching FROM Pod mode WHILE a pod is running. The admin must
+      // terminate the pod first — otherwise we'd orphan a billable resource.
+      if (
+        oldRunpod.mode === 'pod' &&
+        newRunpod.mode !== 'pod' &&
+        runpodState &&
+        ['running', 'stopped'].includes(runpodState.status)
+      ) {
+        throw new Error(
+          `Terminate the running pod before switching modes (current pod status: ${runpodState.status}).`,
         );
       }
     }
