@@ -122,8 +122,16 @@ export type SystemConfig = {
     };
     runpod: {
       enabled: boolean;
+      // Selects between Pod mode (manually-launched dedicated GPU) and
+      // Serverless mode (auto-managed endpoint that scales workers 0→N on
+      // demand). When 'disabled' the rest of the block is inert. When the
+      // value is missing (old configs), the runtime infers 'pod' if
+      // `enabled` is true, else 'disabled' — see mapConfig.
+      mode: 'disabled' | 'pod' | 'serverless';
       apiKey: string;
       imageName: string;
+      dataPrivacyAcknowledged: boolean;
+      // Pod-mode settings (unchanged from PR #37)
       defaultGpuTypeId: string;
       containerDiskGb: number;
       volumeGb: number;
@@ -131,7 +139,21 @@ export type SystemConfig = {
       autoStopGraceMinutes: number;
       autoBackfillOnLaunch: boolean;
       maxRuntimeHours: number;
-      dataPrivacyAcknowledged: boolean;
+      // Serverless-mode settings (new)
+      serverless: {
+        // Ranked list of GPU type IDs RunPod can pick from. Cheapest first.
+        gpuTypeIds: string[];
+        // 0 = true scale-to-zero; 1+ = keep that many warm at all times.
+        workersMin: number;
+        // Hard concurrency / cost ceiling.
+        workersMax: number;
+        // Seconds a worker stays warm after the last request.
+        idleTimeoutSeconds: number;
+        // Max time a single request can take before the worker kills it.
+        executionTimeoutMs: number;
+        scalerType: 'QUEUE_DELAY' | 'REQUEST_COUNT';
+        scalerValue: number;
+      };
     };
   };
   map: {
@@ -438,8 +460,10 @@ export const defaults = Object.freeze<SystemConfig>({
     },
     runpod: {
       enabled: false,
+      mode: 'disabled',
       apiKey: '',
       imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
+      dataPrivacyAcknowledged: false,
       defaultGpuTypeId: 'NVIDIA RTX A5000',
       containerDiskGb: 50,
       volumeGb: 20,
@@ -447,7 +471,22 @@ export const defaults = Object.freeze<SystemConfig>({
       autoStopGraceMinutes: 15,
       autoBackfillOnLaunch: false,
       maxRuntimeHours: 24,
-      dataPrivacyAcknowledged: false,
+      serverless: {
+        // GPU **pool IDs** (not specific types). RunPod's serverless API
+        // accepts AMPERE_16, AMPERE_24, ADA_24, AMPERE_48, ADA_48_PRO,
+        // AMPERE_80, ADA_80_PRO, HOPPER_141, ADA_32_PRO, BLACKWELL_96,
+        // BLACKWELL_180. AMPERE_24 covers the A5000 / RTX 3090.
+        // See https://docs.runpod.io/references/gpu-types#gpu-pools.
+        gpuTypeIds: ['AMPERE_24', 'ADA_24'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        executionTimeoutMs: 600_000,
+        // LB endpoints have no queue, so REQUEST_COUNT is the only meaningful
+        // scaler. RunPod silently accepts QUEUE_DELAY for LB but it's a no-op.
+        scalerType: 'REQUEST_COUNT',
+        scalerValue: 4,
+      },
     },
   },
   map: {

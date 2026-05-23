@@ -10,6 +10,8 @@ env:
 
 jobs:
   deploy:
+    # Upstream-only: destroys per-PR docs.immich.app preview subdomains.
+    if: github.repository == 'immich-app/immich'
     name: Docs Destroy
     runs-on: ubuntu-latest
     permissions:

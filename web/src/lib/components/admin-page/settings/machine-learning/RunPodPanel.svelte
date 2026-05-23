@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import {
     listGpus as listRunPodGpus,
+    Mode2 as RunPodMode,
     provision as provisionRunPodPod,
     start as startRunPodPod,
     stop as stopRunPodPod,
@@ -54,13 +55,65 @@
   // Zod's `.default(...)` on runpod makes it optional in the DTO type even
   // though the server always materialises it; assert non-null here.
   const rp = $derived(config.machineLearning.runpod!);
-  const enabled = $derived(config.machineLearning.enabled && rp.enabled);
+  const runpodMode = $derived<RunPodMode>(
+    rp.mode && rp.mode !== RunPodMode.Disabled ? rp.mode : rp.enabled ? RunPodMode.Pod : RunPodMode.Disabled,
+  );
+  const enabled = $derived(config.machineLearning.enabled && runpodMode !== RunPodMode.Disabled);
+  const isPodMode = $derived(runpodMode === RunPodMode.Pod);
+  const isServerlessMode = $derived(runpodMode === RunPodMode.Serverless);
   const apiKeyConfigured = $derived(rp.apiKey.length > 0);
   const status = $derived(podState?.status ?? 'idle');
-  const isTransitioning = $derived(['provisioning', 'starting', 'stopping'].includes(status));
+  const isTransitioning = $derived(
+    ['provisioning', 'starting', 'stopping', 'serverless-provisioning'].includes(status),
+  );
   const isRunning = $derived(status === 'running');
   const isStopped = $derived(status === 'stopped');
-  const canBackfill = $derived(isRunning && !backfilling);
+  const isServerlessReady = $derived(status === 'serverless-ready');
+  const canBackfill = $derived((isRunning || isServerlessReady) && !backfilling);
+  let endpointBusy = $state(false);
+
+  const setupServerlessEndpoint = async (): Promise<RunPodStateDto> => {
+    const response = await fetch('/api/runpod/endpoint/setup', { method: 'POST', credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to set up serverless endpoint (${response.status})`);
+    }
+    return response.json();
+  };
+
+  const teardownServerlessEndpoint = async (): Promise<RunPodStateDto> => {
+    const response = await fetch('/api/runpod/endpoint', { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to tear down serverless endpoint (${response.status})`);
+    }
+    return response.json();
+  };
+
+  const handleServerlessSetup = async () => {
+    endpointBusy = true;
+    try {
+      podState = await setupServerlessEndpoint();
+      toastManager.primary('Serverless endpoint ready');
+    } catch (error) {
+      handleError(error, 'Failed to set up serverless endpoint');
+    } finally {
+      endpointBusy = false;
+    }
+  };
+
+  const handleServerlessTeardown = async () => {
+    if (!confirm('Delete the serverless endpoint and its template? ML jobs will fall back to local URLs.')) {
+      return;
+    }
+    endpointBusy = true;
+    try {
+      podState = await teardownServerlessEndpoint();
+      toastManager.primary('Serverless endpoint torn down');
+    } catch (error) {
+      handleError(error, 'Failed to tear down serverless endpoint');
+    } finally {
+      endpointBusy = false;
+    }
+  };
 
   // The poll fires every 5s; a transient API blip should not spam toast
   // notifications. Only surface an error once per consecutive failure streak,
@@ -249,8 +302,8 @@
   {#if !enabled}
     <div class="rounded-sm bg-immich-bg/50 p-3 text-sm">
       <p>
-        Cloud GPU provisioning is off. Enable machine learning above, then turn on
-        <strong>Enable RunPod integration</strong> in this section to activate it.
+        Cloud GPU provisioning is off. Enable machine learning above, then pick a
+        <strong>Mode</strong> (Pod or Serverless) in this section to activate it.
       </p>
     </div>
   {/if}
@@ -263,8 +316,8 @@
             <span class="font-semibold">Status:</span>
             <span
               class="rounded-sm px-2 py-0.5 font-mono text-xs tracking-wide uppercase"
-              class:bg-green-200={isRunning}
-              class:text-green-900={isRunning}
+              class:bg-green-200={isRunning || isServerlessReady}
+              class:text-green-900={isRunning || isServerlessReady}
               class:bg-yellow-200={isTransitioning}
               class:text-yellow-900={isTransitioning}
               class:bg-red-200={status === 'error'}
@@ -276,6 +329,15 @@
           </div>
           {#if podState.podId}
             <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
+          {/if}
+          {#if podState.endpointId}
+            <div class="mt-1 font-mono text-xs text-immich-gray">endpoint: {podState.endpointId}</div>
+          {/if}
+          {#if podState.templateId}
+            <div class="mt-1 font-mono text-xs text-immich-gray">template: {podState.templateId}</div>
+          {/if}
+          {#if podState.endpointUrl}
+            <div class="mt-1 font-mono text-xs break-all text-immich-gray">endpoint URL: {podState.endpointUrl}</div>
           {/if}
           {#if podState.imageName}
             <div class="mt-1 text-xs break-all text-immich-gray">image: {podState.imageName}</div>
@@ -296,6 +358,17 @@
             {@const cost = formatCost(podState)}
             {#if cost}
               <div class="mt-1 text-xs text-immich-gray">estimated cost: {cost}</div>
+            {/if}
+          {/if}
+          {#if isServerlessReady}
+            <div class="mt-1 text-xs text-immich-gray">
+              billing: scale-to-zero (RunPod's dashboard shows exact per-second usage)
+            </div>
+            {#if podState.workersMin !== undefined && podState.workersMax !== undefined}
+              <div class="mt-1 text-xs text-immich-gray">
+                workers: min {podState.workersMin} · max {podState.workersMax}
+                {#if podState.idleTimeoutSeconds !== undefined}· idle {podState.idleTimeoutSeconds}s{/if}
+              </div>
             {/if}
           {/if}
           {#if podState.stoppedAt}
@@ -321,17 +394,70 @@
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
               {terminating ? 'Terminating…' : 'Terminate'}
             </Button>
-          {:else if status === 'error'}
-            <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
-              Clear / terminate
+          {:else if isServerlessReady}
+            <Button size="small" color="secondary" onclick={handleServerlessSetup} disabled={endpointBusy}>
+              {endpointBusy ? 'Recreating…' : 'Recreate endpoint'}
             </Button>
+            <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
+              {endpointBusy ? 'Tearing down…' : 'Tear down'}
+            </Button>
+          {:else if status === 'error'}
+            {#if isServerlessMode}
+              <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
+                Clear
+              </Button>
+            {:else}
+              <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
+                Clear / terminate
+              </Button>
+            {/if}
           {/if}
         </div>
       </div>
     </div>
   {/if}
 
-  {#if enabled}
+  {#if enabled && isServerlessMode && (status === 'idle' || status === 'error' || status === 'serverless-provisioning')}
+    <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
+      <legend class="px-1 text-sm font-semibold">Serverless endpoint</legend>
+
+      {#if !apiKeyConfigured}
+        <div class="text-sm text-yellow-700">
+          Set <strong>API key</strong> above and click <strong>Test connection</strong> first.
+        </div>
+      {:else}
+        <p class="text-sm text-immich-gray">
+          The endpoint is created automatically the first time an ML job runs. Click below to provision it now (typical
+          setup: 5–10 seconds; first cold start of a worker is ~30–60s).
+        </p>
+      {/if}
+
+      <label class="flex items-start gap-2 text-sm">
+        <input type="checkbox" bind:checked={consent} class="mt-0.5" />
+        <span>
+          I understand that image previews will be sent to RunPod (an external service) and that the configured API key
+          can spin up paid serverless workers.
+        </span>
+      </label>
+
+      <div class="flex justify-end gap-2">
+        <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
+          {testing ? 'Testing…' : 'Test connection'}
+        </Button>
+        <Button size="small" onclick={handleServerlessSetup} disabled={endpointBusy || !consent}>
+          {endpointBusy ? 'Setting up…' : 'Set up endpoint'}
+        </Button>
+      </div>
+
+      {#if testResult}
+        <div class="text-xs" class:text-green-700={testResult.ok} class:text-red-700={!testResult.ok}>
+          {testResult.ok ? 'Connection OK' : `Failed: ${testResult.message ?? 'unknown error'}`}
+        </div>
+      {/if}
+    </fieldset>
+  {/if}
+
+  {#if enabled && isPodMode}
     {#if status === 'idle' || status === 'error'}
       <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
         <legend class="px-1 text-sm font-semibold">Launch new pod</legend>
@@ -432,6 +558,24 @@
       <strong>Security:</strong> The pod's URL is reachable from the public internet. Immich protects it with a
       per-launch bearer token (the server sends <code>Authorization: Bearer ...</code> on every request). Unauthenticated
       requests get a 401. Stopping a pod releases the GPU but keeps the model cache for fast resume.
+    </div>
+  {/if}
+
+  {#if enabled && isServerlessMode && isServerlessReady}
+    <div class="flex items-center gap-2">
+      <Button size="small" onclick={handleBackfill} disabled={!canBackfill}>
+        {backfilling ? 'Enqueuing…' : 'Run ML backfill now'}
+      </Button>
+      <span class="text-xs text-immich-gray">
+        Queues smart search, face detection, OCR, duplicates, image description, and NSFW detection for every eligible
+        asset. Workers spin up automatically.
+      </span>
+    </div>
+
+    <div class="rounded-sm border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+      <strong>Security:</strong> Each request to the endpoint URL is signed with your RunPod API key as a bearer token. RunPod's
+      proxy rejects unauthenticated requests at the edge — Immich's per-pod random secret is not needed in this mode. Workers
+      scale to zero when idle (no billing).
     </div>
   {/if}
 </div>

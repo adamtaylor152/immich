@@ -225,8 +225,10 @@ Class | Method | HTTP request | Description
 *RunPodAdminApi* | [**getCurrent**](doc//RunPodAdminApi.md#getcurrent) | **GET** /runpod/pods/current | Get current RunPod state
 *RunPodAdminApi* | [**listGpus**](doc//RunPodAdminApi.md#listgpus) | **GET** /runpod/gpus | List RunPod GPU types
 *RunPodAdminApi* | [**provision**](doc//RunPodAdminApi.md#provision) | **POST** /runpod/pods | Provision a RunPod pod
+*RunPodAdminApi* | [**setupServerlessEndpoint**](doc//RunPodAdminApi.md#setupserverlessendpoint) | **POST** /runpod/endpoint/setup | Set up (or verify) the serverless endpoint
 *RunPodAdminApi* | [**start**](doc//RunPodAdminApi.md#start) | **POST** /runpod/pods/current/start | Resume the current RunPod pod
 *RunPodAdminApi* | [**stop**](doc//RunPodAdminApi.md#stop) | **POST** /runpod/pods/current/stop | Stop the current RunPod pod
+*RunPodAdminApi* | [**teardownServerlessEndpoint**](doc//RunPodAdminApi.md#teardownserverlessendpoint) | **DELETE** /runpod/endpoint | Tear down the serverless endpoint
 *RunPodAdminApi* | [**terminate**](doc//RunPodAdminApi.md#terminate) | **DELETE** /runpod/pods/current | Terminate the current RunPod pod
 *RunPodAdminApi* | [**testConnection**](doc//RunPodAdminApi.md#testconnection) | **POST** /runpod/connect | Test RunPod connection
 *SearchApi* | [**askSearch**](doc//SearchApi.md#asksearch) | **POST** /search/ask | Ask Search
@@ -699,6 +701,7 @@ Class | Method | HTTP request | Description
  - [SystemConfigPhysicalDeduplicationDto](doc//SystemConfigPhysicalDeduplicationDto.md)
  - [SystemConfigReverseGeocodingDto](doc//SystemConfigReverseGeocodingDto.md)
  - [SystemConfigRunPodDto](doc//SystemConfigRunPodDto.md)
+ - [SystemConfigRunPodServerlessDto](doc//SystemConfigRunPodServerlessDto.md)
  - [SystemConfigServerDto](doc//SystemConfigServerDto.md)
  - [SystemConfigSmartAlbumsDto](doc//SystemConfigSmartAlbumsDto.md)
  - [SystemConfigSmartAlbumsDtoBuiltIn](doc//SystemConfigSmartAlbumsDtoBuiltIn.md)

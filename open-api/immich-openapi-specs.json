@@ -9894,6 +9894,90 @@
         "x-immich-permission": "systemConfig.update"
       }
     },
+    "/runpod/endpoint": {
+      "delete": {
+        "description": "Deletes the serverless endpoint and template owned by this Immich instance. Soft-fails when resources are already gone on RunPod.",
+        "operationId": "teardownServerlessEndpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Tear down the serverless endpoint",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/endpoint/setup": {
+      "post": {
+        "description": "Idempotently creates the RunPod template + serverless endpoint for this Immich instance. Reuses an existing endpoint tagged with our instance prefix when one is found.",
+        "operationId": "setupServerlessEndpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Set up (or verify) the serverless endpoint",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
     "/runpod/gpus": {
       "get": {
         "description": "Returns the GPU types currently offered by RunPod, with pricing.",
@@ -24195,6 +24279,12 @@
       },
       "RunPodStateDto": {
         "properties": {
+          "endpointId": {
+            "type": "string"
+          },
+          "endpointUrl": {
+            "type": "string"
+          },
           "errorMessage": {
             "type": "string"
           },
@@ -24203,6 +24293,10 @@
           },
           "gpuTypeId": {
             "type": "string"
+          },
+          "idleTimeoutSeconds": {
+            "nullable": true,
+            "type": "number"
           },
           "imageName": {
             "type": "string"
@@ -24239,15 +24333,28 @@
               "running",
               "stopping",
               "stopped",
-              "error"
+              "error",
+              "serverless-provisioning",
+              "serverless-ready"
             ],
             "type": "string"
           },
           "stoppedAt": {
             "type": "string"
           },
+          "templateId": {
+            "type": "string"
+          },
           "unhealthySince": {
             "type": "string"
+          },
+          "workersMax": {
+            "nullable": true,
+            "type": "number"
+          },
+          "workersMin": {
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
@@ -28554,21 +28661,21 @@
             "type": "string"
           },
           "autoBackfillOnLaunch": {
-            "description": "Auto-run ML backfill on pod ready",
+            "description": "Auto-run ML backfill on pod ready (Pod mode)",
             "type": "boolean"
           },
           "autoStopEnabled": {
-            "description": "Auto-stop when idle",
+            "description": "Auto-stop when idle (Pod mode)",
             "type": "boolean"
           },
           "autoStopGraceMinutes": {
-            "description": "Idle minutes before auto-stop",
+            "description": "Idle minutes before auto-stop (Pod mode)",
             "maximum": 1440,
             "minimum": 1,
             "type": "integer"
           },
           "containerDiskGb": {
-            "description": "Container disk size (GB)",
+            "description": "Container disk size (GB) (Pod mode)",
             "maximum": 2000,
             "minimum": 10,
             "type": "integer"
@@ -28578,7 +28685,7 @@
             "type": "boolean"
           },
           "defaultGpuTypeId": {
-            "description": "Preferred GPU type ID",
+            "description": "Preferred GPU type ID (Pod mode)",
             "minLength": 1,
             "type": "string"
           },
@@ -28592,13 +28699,38 @@
             "type": "string"
           },
           "maxRuntimeHours": {
-            "description": "Hard runtime ceiling (hours)",
+            "description": "Hard runtime ceiling (hours) (Pod mode)",
             "maximum": 168,
             "minimum": 1,
             "type": "integer"
           },
+          "mode": {
+            "default": "disabled",
+            "description": "disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.",
+            "enum": [
+              "disabled",
+              "pod",
+              "serverless"
+            ],
+            "type": "string"
+          },
+          "serverless": {
+            "$ref": "#/components/schemas/SystemConfigRunPodServerlessDto",
+            "default": {
+              "executionTimeoutMs": 600000,
+              "gpuTypeIds": [
+                "AMPERE_24",
+                "ADA_24"
+              ],
+              "idleTimeoutSeconds": 30,
+              "scalerType": "REQUEST_COUNT",
+              "scalerValue": 4,
+              "workersMax": 3,
+              "workersMin": 0
+            }
+          },
           "volumeGb": {
-            "description": "Persistent volume size (GB)",
+            "description": "Persistent volume size (GB) (Pod mode)",
             "maximum": 2000,
             "minimum": 0,
             "type": "integer"
@@ -28616,6 +28748,66 @@
           "imageName",
           "maxRuntimeHours",
           "volumeGb"
+        ],
+        "type": "object"
+      },
+      "SystemConfigRunPodServerlessDto": {
+        "properties": {
+          "executionTimeoutMs": {
+            "description": "Max time per request (ms)",
+            "maximum": 3600000,
+            "minimum": 5000,
+            "type": "integer"
+          },
+          "gpuTypeIds": {
+            "description": "Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "idleTimeoutSeconds": {
+            "description": "Seconds before an idle worker scales down",
+            "maximum": 3600,
+            "minimum": 5,
+            "type": "integer"
+          },
+          "scalerType": {
+            "description": "Worker autoscaler strategy",
+            "enum": [
+              "QUEUE_DELAY",
+              "REQUEST_COUNT"
+            ],
+            "type": "string"
+          },
+          "scalerValue": {
+            "description": "Scaler threshold (queue seconds or request count)",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workersMax": {
+            "description": "Max concurrent workers",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workersMin": {
+            "description": "Always-warm workers (0 = scale to zero)",
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "executionTimeoutMs",
+          "gpuTypeIds",
+          "idleTimeoutSeconds",
+          "scalerType",
+          "scalerValue",
+          "workersMax",
+          "workersMin"
         ],
         "type": "object"
       },

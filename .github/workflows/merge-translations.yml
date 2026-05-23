@@ -20,6 +20,8 @@ env:
 
 jobs:
   merge:
+    # Upstream-only: weblate translation pipeline targets immich-app/immich.
+    if: github.repository == 'immich-app/immich'
     runs-on: ubuntu-latest
     permissions:
       contents: write

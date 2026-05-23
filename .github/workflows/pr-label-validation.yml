@@ -8,6 +8,8 @@ permissions: {}
 
 jobs:
   validate-release-label:
+    # Upstream-only: changelog labels are for immich-app/immich's release process.
+    if: github.repository == 'immich-app/immich'
     runs-on: ubuntu-latest
     permissions:
       issues: write

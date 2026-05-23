@@ -28,6 +28,7 @@ patch --no-backup-if-mismatch -u ../mobile/openapi/lib/model/asset_edit_action_i
 # upstream template is fixed.
 patch --no-backup-if-mismatch -u ../mobile/openapi/lib/model/image_description_prompt_config.dart <./patch/image_description_prompt_config.dart.patch
 patch --no-backup-if-mismatch -u ../mobile/openapi/lib/model/advanced_prompt_config.dart <./patch/advanced_prompt_config.dart.patch
+patch --no-backup-if-mismatch -u ../mobile/openapi/lib/model/system_config_run_pod_dto.dart <./patch/system_config_run_pod_dto.dart.patch
 # Don't include analysis_options.yaml for the generated openapi files
 # so that language servers can properly exclude the mobile/openapi directory
 rm ../mobile/openapi/analysis_options.yaml

@@ -422,6 +422,7 @@ part 'model/system_config_password_login_dto.dart';
 part 'model/system_config_physical_deduplication_dto.dart';
 part 'model/system_config_reverse_geocoding_dto.dart';
 part 'model/system_config_run_pod_dto.dart';
+part 'model/system_config_run_pod_serverless_dto.dart';
 part 'model/system_config_server_dto.dart';
 part 'model/system_config_smart_albums_dto.dart';
 part 'model/system_config_smart_albums_dto_built_in.dart';

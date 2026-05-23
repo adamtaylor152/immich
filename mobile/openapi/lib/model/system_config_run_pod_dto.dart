@@ -23,25 +23,27 @@ class SystemConfigRunPodDto {
     required this.enabled,
     required this.imageName,
     required this.maxRuntimeHours,
+    this.mode = const SystemConfigRunPodDtoModeEnum._('disabled'),
+    this.serverless,
     required this.volumeGb,
   });
 
   /// RunPod API key (write-only; empty preserves the existing key)
   String apiKey;
 
-  /// Auto-run ML backfill on pod ready
+  /// Auto-run ML backfill on pod ready (Pod mode)
   bool autoBackfillOnLaunch;
 
-  /// Auto-stop when idle
+  /// Auto-stop when idle (Pod mode)
   bool autoStopEnabled;
 
-  /// Idle minutes before auto-stop
+  /// Idle minutes before auto-stop (Pod mode)
   ///
   /// Minimum value: 1
   /// Maximum value: 1440
   int autoStopGraceMinutes;
 
-  /// Container disk size (GB)
+  /// Container disk size (GB) (Pod mode)
   ///
   /// Minimum value: 10
   /// Maximum value: 2000
@@ -50,7 +52,7 @@ class SystemConfigRunPodDto {
   /// User accepted that image previews leave the network
   bool dataPrivacyAcknowledged;
 
-  /// Preferred GPU type ID
+  /// Preferred GPU type ID (Pod mode)
   String defaultGpuTypeId;
 
   /// Enabled
@@ -59,13 +61,24 @@ class SystemConfigRunPodDto {
   /// Container image to launch
   String imageName;
 
-  /// Hard runtime ceiling (hours)
+  /// Hard runtime ceiling (hours) (Pod mode)
   ///
   /// Minimum value: 1
   /// Maximum value: 168
   int maxRuntimeHours;
 
-  /// Persistent volume size (GB)
+  /// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.
+  SystemConfigRunPodDtoModeEnum mode;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  SystemConfigRunPodServerlessDto? serverless;
+
+  /// Persistent volume size (GB) (Pod mode)
   ///
   /// Minimum value: 0
   /// Maximum value: 2000
@@ -83,6 +96,8 @@ class SystemConfigRunPodDto {
     other.enabled == enabled &&
     other.imageName == imageName &&
     other.maxRuntimeHours == maxRuntimeHours &&
+    other.mode == mode &&
+    other.serverless == serverless &&
     other.volumeGb == volumeGb;
 
   @override
@@ -98,10 +113,12 @@ class SystemConfigRunPodDto {
     (enabled.hashCode) +
     (imageName.hashCode) +
     (maxRuntimeHours.hashCode) +
+    (mode.hashCode) +
+    (serverless == null ? 0 : serverless!.hashCode) +
     (volumeGb.hashCode);
 
   @override
-  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, volumeGb=$volumeGb]';
+  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, serverless=$serverless, volumeGb=$volumeGb]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -115,6 +132,12 @@ class SystemConfigRunPodDto {
       json[r'enabled'] = this.enabled;
       json[r'imageName'] = this.imageName;
       json[r'maxRuntimeHours'] = this.maxRuntimeHours;
+      json[r'mode'] = this.mode;
+    if (this.serverless != null) {
+      json[r'serverless'] = this.serverless;
+    } else {
+    //  json[r'serverless'] = null;
+    }
       json[r'volumeGb'] = this.volumeGb;
     return json;
   }
@@ -138,6 +161,8 @@ class SystemConfigRunPodDto {
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         imageName: mapValueOfType<String>(json, r'imageName')!,
         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
+        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,
+        serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
         volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
       );
     }
@@ -199,4 +224,81 @@ class SystemConfigRunPodDto {
     'volumeGb',
   };
 }
+
+/// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.
+class SystemConfigRunPodDtoModeEnum {
+  /// Instantiate a new enum with the provided [value].
+  const SystemConfigRunPodDtoModeEnum._(this.value);
+
+  /// The underlying value of this enum member.
+  final String value;
+
+  @override
+  String toString() => value;
+
+  String toJson() => value;
+
+  static const disabled = SystemConfigRunPodDtoModeEnum._(r'disabled');
+  static const pod = SystemConfigRunPodDtoModeEnum._(r'pod');
+  static const serverless = SystemConfigRunPodDtoModeEnum._(r'serverless');
+
+  /// List of all possible values in this [enum][SystemConfigRunPodDtoModeEnum].
+  static const values = <SystemConfigRunPodDtoModeEnum>[
+    disabled,
+    pod,
+    serverless,
+  ];
+
+  static SystemConfigRunPodDtoModeEnum? fromJson(dynamic value) => SystemConfigRunPodDtoModeEnumTypeTransformer().decode(value);
+
+  static List<SystemConfigRunPodDtoModeEnum> listFromJson(dynamic json, {bool growable = false,}) {
+    final result = <SystemConfigRunPodDtoModeEnum>[];
+    if (json is List && json.isNotEmpty) {
+      for (final row in json) {
+        final value = SystemConfigRunPodDtoModeEnum.fromJson(row);
+        if (value != null) {
+          result.add(value);
+        }
+      }
+    }
+    return result.toList(growable: growable);
+  }
+}
+
+/// Transformation class that can [encode] an instance of [SystemConfigRunPodDtoModeEnum] to String,
+/// and [decode] dynamic data back to [SystemConfigRunPodDtoModeEnum].
+class SystemConfigRunPodDtoModeEnumTypeTransformer {
+  factory SystemConfigRunPodDtoModeEnumTypeTransformer() => _instance ??= const SystemConfigRunPodDtoModeEnumTypeTransformer._();
+
+  const SystemConfigRunPodDtoModeEnumTypeTransformer._();
+
+  String encode(SystemConfigRunPodDtoModeEnum data) => data.value;
+
+  /// Decodes a [dynamic value][data] to a SystemConfigRunPodDtoModeEnum.
+  ///
+  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
+  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
+  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
+  ///
+  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
+  /// and users are still using an old app with the old code.
+  SystemConfigRunPodDtoModeEnum? decode(dynamic data, {bool allowNull = true}) {
+    if (data != null) {
+      switch (data) {
+        case r'disabled': return SystemConfigRunPodDtoModeEnum.disabled;
+        case r'pod': return SystemConfigRunPodDtoModeEnum.pod;
+        case r'serverless': return SystemConfigRunPodDtoModeEnum.serverless;
+        default:
+          if (!allowNull) {
+            throw ArgumentError('Unknown enum value to decode: $data');
+          }
+      }
+    }
+    return null;
+  }
+
+  /// Singleton [SystemConfigRunPodDtoModeEnumTypeTransformer] instance.
+  static SystemConfigRunPodDtoModeEnumTypeTransformer? _instance;
+}
+
 

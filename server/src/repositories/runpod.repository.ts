@@ -47,6 +47,71 @@ export type CreatePodInput = {
   env: Record<string, string>;
 };
 
+export type RunPodTemplateSummary = {
+  id: string;
+  name: string;
+  imageName: string;
+  containerDiskInGb?: number;
+  ports?: string[] | string;
+  env?: Record<string, string> | Array<{ key: string; value: string }>;
+  isServerless?: boolean;
+};
+
+export type CreateTemplateInput = {
+  name: string;
+  imageName: string;
+  containerDiskInGb: number;
+  ports: string[];
+  env: Record<string, string>;
+  /** Set true to create a Serverless template (vs the default Pod template). */
+  isServerless?: boolean;
+};
+
+export type RunPodEndpointSummary = {
+  id: string;
+  name: string;
+  templateId: string;
+  computeType?: 'GPU' | 'CPU';
+  gpuTypeIds: string[];
+  gpuCount?: number;
+  workersMin: number;
+  workersMax: number;
+  idleTimeout?: number;
+  executionTimeoutMs?: number;
+  scalerType?: 'QUEUE_DELAY' | 'REQUEST_COUNT';
+  scalerValue?: number;
+  createdAt?: string;
+  workers?: Array<{ id?: string; status?: string }>;
+  env?: Record<string, string>;
+};
+
+export type RunPodScalerType = 'QUEUE_DELAY' | 'REQUEST_COUNT';
+
+export type CreateEndpointInput = {
+  name: string;
+  templateId: string;
+  gpuTypeIds: string[];
+  gpuCount?: number;
+  workersMin: number;
+  workersMax: number;
+  idleTimeout: number;
+  executionTimeoutMs: number;
+  scalerType: RunPodScalerType;
+  scalerValue: number;
+  /**
+   * Endpoint execution model. 'LB' = load-balancer (direct HTTP routing to
+   * workers, supports custom routes like `/predict`). 'QB' = queue-based
+   * (only `/run` + `/status`). LB is the one that integrates cleanly with
+   * Immich's existing predict() flow.
+   *
+   * IMPORTANT: this field is only available via RunPod's GraphQL API. The
+   * REST `POST /v1/endpoints` schema rejects it; the public docs only
+   * describe the field as a console UI toggle. Confirmed against the
+   * runpod/flash open-source resource model.
+   */
+  type?: 'LB' | 'QB';
+};
+
 export class RunPodApiError extends Error {
   constructor(
     message: string,
@@ -151,7 +216,190 @@ export class RunPodRepository {
     return `https://${podId}-${port}.proxy.runpod.net/`;
   }
 
-  private async graphql<T>(apiKey: string, query: string, timeoutMs: number): Promise<T> {
+  // ── Serverless: templates + endpoints ─────────────────────────────────────
+  // RunPod's serverless model has two objects:
+  //  - Template: bundles image + ports + env. Reusable across endpoints.
+  //  - Endpoint: references a templateId, sets scaling. Workers scale 0→N
+  //    on demand. Load-balancing endpoints expose
+  //    `https://<endpoint-id>.api.runpod.ai/<path>` and forward HTTP paths
+  //    directly to the worker; clients send `Authorization: Bearer <apiKey>`.
+
+  async createTemplate(apiKey: string, input: CreateTemplateInput): Promise<RunPodTemplateSummary> {
+    // RunPod's current REST schema (validated 2026-05-23) wants env as an
+    // object (map of key → value) and ports as an array of strings. Older
+    // examples in their docs show the inverse; the live API rejects both
+    // variants of that older shape with HTTP 400 + a schema-mismatch error.
+    return this.request<RunPodTemplateSummary>(
+      apiKey,
+      'POST',
+      '/templates',
+      {
+        name: input.name,
+        imageName: input.imageName,
+        containerDiskInGb: input.containerDiskInGb,
+        ports: input.ports,
+        env: input.env,
+        // Serverless endpoints reject pod-flavoured templates with HTTP 500
+        // "Serverless endpoints cannot use pod templates."
+        ...(input.isServerless ? { isServerless: true } : {}),
+      },
+      30_000,
+    );
+  }
+
+  async getTemplate(apiKey: string, templateId: string): Promise<RunPodTemplateSummary> {
+    return this.request<RunPodTemplateSummary>(
+      apiKey,
+      'GET',
+      `/templates/${encodeURIComponent(templateId)}`,
+      undefined,
+      15_000,
+    );
+  }
+
+  async listTemplates(apiKey: string): Promise<RunPodTemplateSummary[]> {
+    const data = await this.request<RunPodTemplateSummary[] | { data: RunPodTemplateSummary[] }>(
+      apiKey,
+      'GET',
+      '/templates',
+      undefined,
+      15_000,
+    );
+    return Array.isArray(data) ? data : (data?.data ?? []);
+  }
+
+  async deleteTemplate(apiKey: string, templateId: string): Promise<void> {
+    await this.request(apiKey, 'DELETE', `/templates/${encodeURIComponent(templateId)}`, undefined, 30_000);
+  }
+
+  async createEndpoint(apiKey: string, input: CreateEndpointInput): Promise<RunPodEndpointSummary> {
+    // For load-balancer endpoints we MUST go through GraphQL — the REST schema
+    // does not expose the `type` field that flips the endpoint into LB mode
+    // (confirmed by inspecting runpod/flash's resource serialiser).
+    if (input.type === 'LB') {
+      return this.createEndpointViaGraphQL(apiKey, input);
+    }
+    return this.request<RunPodEndpointSummary>(
+      apiKey,
+      'POST',
+      '/endpoints',
+      {
+        name: input.name,
+        templateId: input.templateId,
+        computeType: 'GPU',
+        gpuTypeIds: input.gpuTypeIds,
+        gpuCount: input.gpuCount ?? 1,
+        workersMin: input.workersMin,
+        workersMax: input.workersMax,
+        idleTimeout: input.idleTimeout,
+        executionTimeoutMs: input.executionTimeoutMs,
+        scalerType: input.scalerType,
+        scalerValue: input.scalerValue,
+      },
+      30_000,
+    );
+  }
+
+  /**
+   * Create an endpoint via the GraphQL `saveEndpoint` mutation. Required for
+   * load-balancer endpoints. GraphQL accepts the same scaling fields as REST
+   * but additionally exposes `type: "LB"`.
+   *
+   * GPU IDs are passed as a comma-joined string (GraphQL convention; REST uses
+   * an array). Confirmed via runpod/runpod-python `generate_endpoint_mutation`.
+   */
+  private async createEndpointViaGraphQL(apiKey: string, input: CreateEndpointInput): Promise<RunPodEndpointSummary> {
+    const mutation = `
+      mutation saveEndpoint($input: EndpointInput!) {
+        saveEndpoint(input: $input) {
+          id
+          name
+          templateId
+          gpuIds
+          workersMin
+          workersMax
+          idleTimeout
+          scalerType
+          scalerValue
+          executionTimeoutMs
+        }
+      }
+    `;
+    const payload = {
+      name: input.name,
+      templateId: input.templateId,
+      gpuIds: input.gpuTypeIds.join(','),
+      gpuCount: input.gpuCount ?? 1,
+      workersMin: input.workersMin,
+      workersMax: input.workersMax,
+      idleTimeout: input.idleTimeout,
+      executionTimeoutMs: input.executionTimeoutMs,
+      scalerType: input.scalerType,
+      scalerValue: input.scalerValue,
+      type: input.type ?? 'QB',
+    };
+    const data = await this.graphql<{ saveEndpoint: { id: string; name: string; templateId: string } }>(
+      apiKey,
+      mutation,
+      30_000,
+      { input: payload },
+    );
+    const endpoint = data.saveEndpoint;
+    // Reshape into the summary type the rest of the service expects.
+    return {
+      id: endpoint.id,
+      name: endpoint.name,
+      templateId: endpoint.templateId,
+      gpuTypeIds: input.gpuTypeIds,
+      workersMin: input.workersMin,
+      workersMax: input.workersMax,
+      idleTimeout: input.idleTimeout,
+      executionTimeoutMs: input.executionTimeoutMs,
+      scalerType: input.scalerType,
+      scalerValue: input.scalerValue,
+    };
+  }
+
+  async getEndpoint(apiKey: string, endpointId: string): Promise<RunPodEndpointSummary> {
+    return this.request<RunPodEndpointSummary>(
+      apiKey,
+      'GET',
+      `/endpoints/${encodeURIComponent(endpointId)}`,
+      undefined,
+      15_000,
+    );
+  }
+
+  async listEndpoints(apiKey: string): Promise<RunPodEndpointSummary[]> {
+    const data = await this.request<RunPodEndpointSummary[] | { data: RunPodEndpointSummary[] }>(
+      apiKey,
+      'GET',
+      '/endpoints',
+      undefined,
+      15_000,
+    );
+    return Array.isArray(data) ? data : (data?.data ?? []);
+  }
+
+  async deleteEndpoint(apiKey: string, endpointId: string): Promise<void> {
+    await this.request(apiKey, 'DELETE', `/endpoints/${encodeURIComponent(endpointId)}`, undefined, 30_000);
+  }
+
+  /**
+   * URL pattern for load-balancing serverless endpoints. Paths from the
+   * container's HTTP server (e.g., FastAPI's `/predict`, `/ping`) are
+   * forwarded as-is. Clients authenticate with `Authorization: Bearer <apiKey>`.
+   */
+  buildEndpointUrl(endpointId: string): string {
+    return `https://${endpointId}.api.runpod.ai/`;
+  }
+
+  private async graphql<T>(
+    apiKey: string,
+    query: string,
+    timeoutMs: number,
+    variables?: Record<string, unknown>,
+  ): Promise<T> {
     if (!apiKey) {
       throw new RunPodApiError('RunPod API key is not configured');
     }
@@ -164,7 +412,7 @@ export class RunPodRepository {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(variables ? { query, variables } : { query }),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
@@ -235,8 +483,11 @@ export class RunPodRepository {
         // keep the raw text
       }
       this.logger.warn(`RunPod ${method} ${path} failed: ${response.status} ${response.statusText} ${text}`);
+      // Truncate the body before mixing it into the user-facing message so a
+      // huge HTML error page doesn't bloat the response.
+      const snippet = text ? `: ${text.slice(0, 400)}` : '';
       throw new RunPodApiError(
-        `RunPod ${method} ${path} failed: ${response.status} ${response.statusText}`,
+        `RunPod ${method} ${path} failed: ${response.status} ${response.statusText}${snippet}`,
         response.status,
         parsed,
       );

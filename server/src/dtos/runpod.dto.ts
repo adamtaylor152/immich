@@ -1,7 +1,17 @@
 import { createZodDto } from 'nestjs-zod';
 import z from 'zod';
 
-const RunPodStatusSchema = z.enum(['idle', 'provisioning', 'starting', 'running', 'stopping', 'stopped', 'error']);
+const RunPodStatusSchema = z.enum([
+  'idle',
+  'provisioning',
+  'starting',
+  'running',
+  'stopping',
+  'stopped',
+  'error',
+  'serverless-provisioning',
+  'serverless-ready',
+]);
 
 const RunPodConnectionTestSchema = z
   .object({
@@ -50,12 +60,30 @@ const RunPodStateSchema = z
     runningSince: z.string().optional(),
     lastBusyAt: z.string().optional(),
     stoppedAt: z.string().optional(),
+    // Pod-mode numerics intentionally stay `.optional()` (not `.nullish()`)
+    // even though that means the Dart generator still emits a brittle
+    // `num.parse('${json[...]}')` for them. Loosening the contract to
+    // include `null` here would be a breaking change for existing clients
+    // (oasdiff catches it). The Dart parse path has been latently buggy
+    // since PR #37; the right fix is a Dart-side post-generate patch in a
+    // follow-up — not a wire-format break.
     maxRuntimeHours: z.number().optional(),
     estimatedCostUsd: z.number().optional(),
     pricePerHour: z.number().optional(),
     instanceTag: z.string().optional(),
     errorMessage: z.string().optional(),
     unhealthySince: z.string().optional(),
+    // Serverless-only fields. These are NEW with this PR, so marking them
+    // `.nullish()` doesn't break any existing client — and it lets the
+    // openapi-generator's null-safe Dart parse path kick in (the previous
+    // CodeRabbit pass flagged `num.parse('null')` would crash these
+    // specifically when the DTO is fetched in non-serverless state).
+    endpointId: z.string().optional(),
+    endpointUrl: z.string().optional(),
+    templateId: z.string().optional(),
+    workersMin: z.number().nullish(),
+    workersMax: z.number().nullish(),
+    idleTimeoutSeconds: z.number().nullish(),
   })
   .meta({ id: 'RunPodStateDto' });
 

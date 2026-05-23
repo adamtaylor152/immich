@@ -159,4 +159,136 @@ describe(RunPodRepository.name, () => {
     expect(sut.buildProxyUrl('pod_xyz')).toBe('https://pod_xyz-3003.proxy.runpod.net/');
     expect(sut.buildProxyUrl('pod_xyz', 8888)).toBe('https://pod_xyz-8888.proxy.runpod.net/');
   });
+
+  describe('serverless', () => {
+    it('createTemplate posts an env array of key/value pairs', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(Response.json({ id: 'tmpl_abc', name: 'immich-aaaa-template', imageName: 'ghcr.io/x/y:z' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await sut.createTemplate(apiKey, {
+        name: 'immich-aaaa-template',
+        imageName: 'ghcr.io/x/y:z',
+        containerDiskInGb: 50,
+        ports: ['3003/http'],
+        env: { MACHINE_LEARNING_CACHE_FOLDER: '/cache' },
+      });
+      expect(result.id).toBe('tmpl_abc');
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://rest.runpod.io/v1/templates');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body.imageName).toBe('ghcr.io/x/y:z');
+      // RunPod's live REST API (validated against the real service) wants ports as
+      // an array of strings, and env as a plain object. Older docs show the inverse
+      // shapes — those get rejected with HTTP 400.
+      expect(body.ports).toEqual(['3003/http']);
+      expect(body.env).toEqual({ MACHINE_LEARNING_CACHE_FOLDER: '/cache' });
+    });
+
+    it('createEndpoint (REST, no type or QB) serialises scaling config into the payload', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        Response.json({
+          id: 'ep_abc',
+          name: 'immich-aaaa-endpoint',
+          templateId: 'tmpl_abc',
+          workersMin: 0,
+          workersMax: 3,
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await sut.createEndpoint(apiKey, {
+        name: 'immich-aaaa-endpoint',
+        templateId: 'tmpl_abc',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeout: 30,
+        executionTimeoutMs: 600_000,
+        scalerType: 'QUEUE_DELAY',
+        scalerValue: 4,
+      });
+      expect(result.id).toBe('ep_abc');
+
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://rest.runpod.io/v1/endpoints');
+      const body = JSON.parse(init.body);
+      expect(body.templateId).toBe('tmpl_abc');
+      expect(body.gpuTypeIds).toEqual(['NVIDIA RTX A5000']);
+      expect(body.workersMin).toBe(0);
+      expect(body.workersMax).toBe(3);
+      expect(body.idleTimeout).toBe(30);
+      expect(body.scalerType).toBe('QUEUE_DELAY');
+    });
+
+    it('createEndpoint with type=LB routes through the GraphQL mutation', async () => {
+      // RunPod's REST schema doesn't accept `type: LB` — that field is only
+      // available through the GraphQL `saveEndpoint` mutation. Confirmed
+      // empirically against the live API and against runpod/flash's resource
+      // serialiser.
+      const fetchMock = vi.fn().mockResolvedValue(
+        Response.json({
+          data: {
+            saveEndpoint: {
+              id: 'ep_lb',
+              name: 'immich-aaaa-endpoint',
+              templateId: 'tmpl_abc',
+              gpuIds: 'AMPERE_24',
+            },
+          },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await sut.createEndpoint(apiKey, {
+        name: 'immich-aaaa-endpoint',
+        templateId: 'tmpl_abc',
+        gpuTypeIds: ['AMPERE_24', 'ADA_24'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeout: 30,
+        executionTimeoutMs: 600_000,
+        scalerType: 'REQUEST_COUNT',
+        scalerValue: 4,
+        type: 'LB',
+      });
+
+      expect(result.id).toBe('ep_lb');
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('https://api.runpod.io/graphql');
+      const body = JSON.parse(init.body);
+      // GraphQL request envelope.
+      expect(body.query).toContain('mutation saveEndpoint');
+      expect(body.variables.input.type).toBe('LB');
+      // GraphQL wants gpuIds as a comma-joined string (not an array).
+      expect(body.variables.input.gpuIds).toBe('AMPERE_24,ADA_24');
+      expect(body.variables.input.scalerType).toBe('REQUEST_COUNT');
+    });
+
+    it('deleteEndpoint accepts 404 as success via NotFoundError', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response('gone', { status: 404, statusText: 'Not Found' }));
+      vi.stubGlobal('fetch', fetchMock);
+      await expect(sut.deleteEndpoint(apiKey, 'ep_missing')).rejects.toBeInstanceOf(RunPodNotFoundError);
+    });
+
+    it('listEndpoints returns an array of summaries', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        Response.json([
+          { id: 'ep_1', name: 'immich-aaaa-endpoint', templateId: 'tmpl_1' },
+          { id: 'ep_2', name: 'someone-else', templateId: 'tmpl_2' },
+        ]),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const result = await sut.listEndpoints(apiKey);
+      expect(result).toHaveLength(2);
+      expect(result[0]?.id).toBe('ep_1');
+    });
+
+    it('buildEndpointUrl returns the per-endpoint api.runpod.ai URL', () => {
+      expect(sut.buildEndpointUrl('ep_xyz')).toBe('https://ep_xyz.api.runpod.ai/');
+    });
+  });
 });

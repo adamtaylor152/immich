@@ -1865,6 +1865,29 @@ export type RunPodConnectionResultDto = {
     message?: string;
     ok: boolean;
 };
+export type RunPodStateDto = {
+    endpointId?: string;
+    endpointUrl?: string;
+    errorMessage?: string;
+    estimatedCostUsd?: number;
+    gpuTypeId?: string;
+    idleTimeoutSeconds?: number | null;
+    imageName?: string;
+    instanceTag?: string;
+    lastBusyAt?: string;
+    maxRuntimeHours?: number;
+    mlUrl?: string;
+    podCreatedAt?: string;
+    podId?: string;
+    pricePerHour?: number;
+    runningSince?: string;
+    status: Status2;
+    stoppedAt?: string;
+    templateId?: string;
+    unhealthySince?: string;
+    workersMax?: number | null;
+    workersMin?: number | null;
+};
 export type RunPodGpuTypeDto = {
     communityCloud?: boolean;
     displayName: string;
@@ -1882,23 +1905,6 @@ export type RunPodProvisionDto = {
     /** Override the configured image */
     imageName?: string;
     maxRuntimeHours?: number;
-};
-export type RunPodStateDto = {
-    errorMessage?: string;
-    estimatedCostUsd?: number;
-    gpuTypeId?: string;
-    imageName?: string;
-    instanceTag?: string;
-    lastBusyAt?: string;
-    maxRuntimeHours?: number;
-    mlUrl?: string;
-    podCreatedAt?: string;
-    podId?: string;
-    pricePerHour?: number;
-    runningSince?: string;
-    status: Status2;
-    stoppedAt?: string;
-    unhealthySince?: string;
 };
 export type AskSearchDto = {
     /** Search language code */
@@ -2971,28 +2977,47 @@ export type OcrConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type SystemConfigRunPodServerlessDto = {
+    /** Max time per request (ms) */
+    executionTimeoutMs: number;
+    /** Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required. */
+    gpuTypeIds: string[];
+    /** Seconds before an idle worker scales down */
+    idleTimeoutSeconds: number;
+    /** Worker autoscaler strategy */
+    scalerType: ScalerType;
+    /** Scaler threshold (queue seconds or request count) */
+    scalerValue: number;
+    /** Max concurrent workers */
+    workersMax: number;
+    /** Always-warm workers (0 = scale to zero) */
+    workersMin: number;
+};
 export type SystemConfigRunPodDto = {
     /** RunPod API key (write-only; empty preserves the existing key) */
     apiKey: string;
-    /** Auto-run ML backfill on pod ready */
+    /** Auto-run ML backfill on pod ready (Pod mode) */
     autoBackfillOnLaunch: boolean;
-    /** Auto-stop when idle */
+    /** Auto-stop when idle (Pod mode) */
     autoStopEnabled: boolean;
-    /** Idle minutes before auto-stop */
+    /** Idle minutes before auto-stop (Pod mode) */
     autoStopGraceMinutes: number;
-    /** Container disk size (GB) */
+    /** Container disk size (GB) (Pod mode) */
     containerDiskGb: number;
     /** User accepted that image previews leave the network */
     dataPrivacyAcknowledged: boolean;
-    /** Preferred GPU type ID */
+    /** Preferred GPU type ID (Pod mode) */
     defaultGpuTypeId: string;
     /** Enabled */
     enabled: boolean;
     /** Container image to launch */
     imageName: string;
-    /** Hard runtime ceiling (hours) */
+    /** Hard runtime ceiling (hours) (Pod mode) */
     maxRuntimeHours: number;
-    /** Persistent volume size (GB) */
+    /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients. */
+    mode?: Mode2;
+    serverless?: SystemConfigRunPodServerlessDto;
+    /** Persistent volume size (GB) (Pod mode) */
     volumeGb: number;
 };
 export type SystemConfigMachineLearningDto = {
@@ -6209,6 +6234,30 @@ export function testConnection({ runPodConnectionTestDto }: {
     })));
 }
 /**
+ * Tear down the serverless endpoint
+ */
+export function teardownServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/endpoint", {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Set up (or verify) the serverless endpoint
+ */
+export function setupServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/endpoint/setup", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * List RunPod GPU types
  */
 export function listGpus(opts?: Oazapfts.RequestOpts) {
@@ -8250,7 +8299,9 @@ export enum Status2 {
     Running = "running",
     Stopping = "stopping",
     Stopped = "stopped",
-    Error = "error"
+    Error = "error",
+    ServerlessProvisioning = "serverless-provisioning",
+    ServerlessReady = "serverless-ready"
 }
 export enum ImageEnrichmentFilter {
     Nsfw = "nsfw",
@@ -8443,6 +8494,15 @@ export enum Style {
     Terse = "terse",
     Balanced = "balanced",
     Rich = "rich"
+}
+export enum Mode2 {
+    Disabled = "disabled",
+    Pod = "pod",
+    Serverless = "serverless"
+}
+export enum ScalerType {
+    QueueDelay = "QUEUE_DELAY",
+    RequestCount = "REQUEST_COUNT"
 }
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",

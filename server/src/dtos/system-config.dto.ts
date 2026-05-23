@@ -151,9 +151,41 @@ const MachineLearningHardwareResponseSchema = z
   })
   .meta({ id: 'MachineLearningHardwareResponseDto' });
 
+const SystemConfigRunPodServerlessSchema = z
+  .object({
+    gpuTypeIds: z
+      .array(z.string())
+      .min(1)
+      .describe('Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.'),
+    workersMin: z.int().min(0).max(10).describe('Always-warm workers (0 = scale to zero)'),
+    workersMax: z.int().min(1).max(20).describe('Max concurrent workers'),
+    idleTimeoutSeconds: z.int().min(5).max(3600).describe('Seconds before an idle worker scales down'),
+    executionTimeoutMs: z.int().min(5000).max(3_600_000).describe('Max time per request (ms)'),
+    scalerType: z.enum(['QUEUE_DELAY', 'REQUEST_COUNT']).describe('Worker autoscaler strategy'),
+    scalerValue: z.int().min(1).max(60).describe('Scaler threshold (queue seconds or request count)'),
+  })
+  // Cross-field guard — reject configs where workersMin > workersMax instead
+  // of letting RunPod's endpoint create fail at provisioning time with a less
+  // obvious error.
+  .refine((data) => data.workersMax >= data.workersMin, {
+    message: 'workersMax must be greater than or equal to workersMin',
+    path: ['workersMax'],
+  })
+  .meta({ id: 'SystemConfigRunPodServerlessDto' });
+
 const SystemConfigRunPodSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
+    // Optional in the wire DTO so older clients that don't know about the
+    // discriminator can still PUT the legacy shape. Server back-compat
+    // infers the effective mode from `enabled` when this is undefined or
+    // 'disabled' (see `effectiveMode` in runpod.service.ts).
+    mode: z
+      .enum(['disabled', 'pod', 'serverless'])
+      .default('disabled')
+      .describe(
+        'disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.',
+      ),
     // apiKey is a billing credential. mapConfig() redacts it to '' on every
     // GET response, and updateSystemConfig() interprets an empty incoming
     // value as "preserve the stored key" (rather than "wipe it"). Net effect:
@@ -173,14 +205,17 @@ const SystemConfigRunPodSchema = z
     // layer.
     apiKey: z.string().describe('RunPod API key (write-only; empty preserves the existing key)'),
     imageName: z.string().min(1).describe('Container image to launch'),
-    defaultGpuTypeId: z.string().min(1).describe('Preferred GPU type ID'),
-    containerDiskGb: z.int().min(10).max(2000).describe('Container disk size (GB)'),
-    volumeGb: z.int().min(0).max(2000).describe('Persistent volume size (GB)'),
-    autoStopEnabled: configBool.describe('Auto-stop when idle'),
-    autoStopGraceMinutes: z.int().min(1).max(1440).describe('Idle minutes before auto-stop'),
-    autoBackfillOnLaunch: configBool.describe('Auto-run ML backfill on pod ready'),
-    maxRuntimeHours: z.int().min(1).max(168).describe('Hard runtime ceiling (hours)'),
     dataPrivacyAcknowledged: configBool.describe('User accepted that image previews leave the network'),
+    // Pod-mode settings
+    defaultGpuTypeId: z.string().min(1).describe('Preferred GPU type ID (Pod mode)'),
+    containerDiskGb: z.int().min(10).max(2000).describe('Container disk size (GB) (Pod mode)'),
+    volumeGb: z.int().min(0).max(2000).describe('Persistent volume size (GB) (Pod mode)'),
+    autoStopEnabled: configBool.describe('Auto-stop when idle (Pod mode)'),
+    autoStopGraceMinutes: z.int().min(1).max(1440).describe('Idle minutes before auto-stop (Pod mode)'),
+    autoBackfillOnLaunch: configBool.describe('Auto-run ML backfill on pod ready (Pod mode)'),
+    maxRuntimeHours: z.int().min(1).max(168).describe('Hard runtime ceiling (hours) (Pod mode)'),
+    // Serverless-mode settings
+    serverless: SystemConfigRunPodServerlessSchema.default(defaults.machineLearning.runpod.serverless),
   })
   .meta({ id: 'SystemConfigRunPodDto' });
 

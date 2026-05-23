@@ -609,6 +609,30 @@ export type RunPodPersistedState =
       message: string;
       errorAt: string;
       instanceTag: string;
+    }
+  // Serverless variants — runtime is fully managed by RunPod so the lifecycle
+  // is much simpler than pod mode: we just create the template + endpoint once
+  // and the endpoint scales workers 0→N on demand. No "running"/"stopped"
+  // distinction because the endpoint itself is always "there"; only the
+  // workers scale.
+  | {
+      status: 'serverless-provisioning';
+      instanceTag: string;
+      imageName: string;
+      attemptedAt: string;
+    }
+  | {
+      status: 'serverless-ready';
+      instanceTag: string;
+      templateId: string;
+      endpointId: string;
+      endpointUrl: string;
+      imageName: string;
+      gpuTypeIds: string[];
+      workersMin: number;
+      workersMax: number;
+      idleTimeoutSeconds: number;
+      createdAt: string;
     };
 
 export interface SystemMetadata extends Record<SystemMetadataKey, Record<string, any>> {

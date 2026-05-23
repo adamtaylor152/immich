@@ -22,6 +22,16 @@ import { toPlainObject } from 'src/utils/object';
 /** Default per-asset estimate when no telemetry data is available. */
 const DEFAULT_SECONDS_PER_ASSET = 1.5;
 
+/**
+ * Back-compat-aware mode resolver. Mirrors `RunPodService.effectiveMode`:
+ * legacy configs may have `enabled: true` while `mode` is still 'disabled'
+ * (the field didn't exist before this PR). Such configs are treated as Pod
+ * mode — otherwise the "terminate the pod first" guard would be bypassed and
+ * a billable resource orphaned.
+ */
+const effectiveRunPodMode = (rp: { mode?: string; enabled: boolean }): 'disabled' | 'pod' | 'serverless' =>
+  rp.mode && rp.mode !== 'disabled' ? (rp.mode as 'pod' | 'serverless') : rp.enabled ? 'pod' : 'disabled';
+
 @Injectable()
 export class SystemConfigService extends BaseService {
   @OnEvent({ name: 'AppBootstrap', priority: BootstrapEventPriority.SystemConfig })
@@ -86,12 +96,31 @@ export class SystemConfigService extends BaseService {
 
     const oldRunpod = oldConfig.machineLearning.runpod;
     const newRunpod = newConfig.machineLearning.runpod;
-    if (oldRunpod.apiKey !== newRunpod.apiKey || oldRunpod.imageName !== newRunpod.imageName) {
+    const oldEffective = effectiveRunPodMode(oldRunpod);
+    const newEffective = effectiveRunPodMode(newRunpod);
+    const sensitiveChange =
+      oldRunpod.apiKey !== newRunpod.apiKey ||
+      oldRunpod.imageName !== newRunpod.imageName ||
+      oldEffective !== newEffective;
+    if (sensitiveChange) {
       const runpodState = await this.systemMetadataRepository.get(SystemMetadataKey.RunPodState);
-      const inFlight = runpodState && ['provisioning', 'starting', 'stopping'].includes(runpodState.status);
+      const inFlight =
+        runpodState && ['provisioning', 'starting', 'stopping', 'serverless-provisioning'].includes(runpodState.status);
       if (inFlight) {
         throw new Error(
-          `Cannot change RunPod API key or image while a pod is ${runpodState!.status}. Wait for the transition to settle, then retry.`,
+          `Cannot change RunPod API key, image, or mode while a transition is in flight (status=${runpodState!.status}). Wait for it to settle, then retry.`,
+        );
+      }
+      // Block switching FROM Pod mode WHILE a pod is running. The admin must
+      // terminate the pod first — otherwise we'd orphan a billable resource.
+      if (
+        oldEffective === 'pod' &&
+        newEffective !== 'pod' &&
+        runpodState &&
+        ['running', 'stopped'].includes(runpodState.status)
+      ) {
+        throw new Error(
+          `Terminate the running pod before switching modes (current pod status: ${runpodState.status}).`,
         );
       }
     }

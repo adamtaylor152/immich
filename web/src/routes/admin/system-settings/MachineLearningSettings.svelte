@@ -1,5 +1,6 @@
 <script lang="ts">
   import RunPodPanel from '$lib/components/admin-page/settings/machine-learning/RunPodPanel.svelte';
+  import RunPodReferralBanner from '$lib/components/admin-page/settings/machine-learning/RunPodReferralBanner.svelte';
   import SettingAccordion from '$lib/components/shared-components/settings/SettingAccordion.svelte';
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSelect from './SettingSelect.svelte';
@@ -17,6 +18,7 @@
     getImageDescriptionRequeueEstimate,
     getMachineLearningHardware,
     MachineLearningHardwareAcceleration,
+    Mode2 as RunPodMode,
     PlaceholderValidation,
     Style,
     type ImageDescriptionRequeueEstimateDto,
@@ -41,6 +43,44 @@
   // need to repeat the non-null assertion everywhere.
   const runpod = $derived(configToEdit.machineLearning.runpod!);
   const savedRunpod = $derived(config.machineLearning.runpod!);
+  // Effective UI mode. Older configs may have `mode` undefined while
+  // `enabled === true`; treat that as legacy pod mode so the form doesn't
+  // surprise the admin.
+  const runpodMode = $derived<RunPodMode>(
+    runpod.mode && runpod.mode !== RunPodMode.Disabled
+      ? runpod.mode
+      : runpod.enabled
+        ? RunPodMode.Pod
+        : RunPodMode.Disabled,
+  );
+
+  const applyRunpodMode = (next: string | number) => {
+    const mode = String(next) as RunPodMode;
+    runpod.mode = mode;
+    // Keep the legacy `enabled` flag in sync so older code paths (and the
+    // server's back-compat inference) still see a consistent picture.
+    runpod.enabled = mode !== RunPodMode.Disabled;
+  };
+
+  const runpodModeOptions = [
+    {
+      value: RunPodMode.Disabled,
+      text: 'Disabled — use only the local URLs above',
+    },
+    {
+      value: RunPodMode.Pod,
+      text: 'Dedicated Pod — cheapest active rate; admin stops it manually',
+    },
+    {
+      value: RunPodMode.Serverless,
+      text: 'On-demand Serverless — scales to zero; higher per-second cost but $0 idle',
+    },
+  ];
+
+  const runpodServerless = $derived(runpod.serverless!);
+  const savedRunpodServerless = $derived(savedRunpod.serverless!);
+  const runpodGpuTypeIdsText = $derived((runpod.serverless?.gpuTypeIds ?? []).join('\n'));
+  const savedRunpodGpuTypeIdsText = $derived((savedRunpod.serverless?.gpuTypeIds ?? []).join('\n'));
 
   $effect(() => {
     const enhancedVideo = configToEdit.machineLearning.duplicateDetection.enhancedVideo;
@@ -314,14 +354,25 @@
       <SettingAccordion
         key="runpod"
         title="Cloud GPU (RunPod)"
-        subtitle="Provision the ML container on RunPod when local hardware can't keep up. Pod auto-stops when queues go idle."
+        subtitle="Provision the ML container on RunPod when local hardware can't keep up. Choose Pod for cheap active rates, or Serverless for scale-to-zero billing."
       >
         <div class="ms-4 mt-4 flex flex-col gap-4">
-          <SettingSwitch
-            title="Enable RunPod integration"
-            subtitle="When on, Immich can provision and route ML traffic to a RunPod pod."
-            bind:checked={runpod.enabled}
+          <RunPodReferralBanner />
+
+          <SettingSelect
+            label="Mode"
+            desc="Pod = a dedicated GPU pod you stop manually (cheapest while active). Serverless = an on-demand endpoint that scales to zero (~4× per-second cost but $0 when idle)."
+            name="runpod-mode"
+            value={runpodMode}
+            options={runpodModeOptions}
             disabled={disabled || !configToEdit.machineLearning.enabled}
+            isEdited={runpodMode !==
+              (savedRunpod.mode && savedRunpod.mode !== RunPodMode.Disabled
+                ? savedRunpod.mode
+                : savedRunpod.enabled
+                  ? RunPodMode.Pod
+                  : RunPodMode.Disabled)}
+            onSelect={applyRunpodMode}
           />
 
           <hr />
@@ -329,9 +380,9 @@
           <SettingInputField
             inputType={SettingInputFieldType.PASSWORD}
             label="API key"
-            description="Anyone with admin access to Immich (or database read access) can spend money with this key. Generate one with pod create/read/delete scope."
+            description="Anyone with admin access to Immich (or database read access) can spend money with this key. Generate one with pod + serverless scope."
             bind:value={runpod.apiKey}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
             isEdited={runpod.apiKey !== savedRunpod.apiKey}
           />
 
@@ -340,67 +391,150 @@
             label="Container image"
             description="The ML container image to run on RunPod. Defaults to the fork's RunPod-tuned CUDA build."
             bind:value={runpod.imageName}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
             isEdited={runpod.imageName !== savedRunpod.imageName}
           />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.TEXT}
-            label="Default GPU type"
-            description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
-            bind:value={runpod.defaultGpuTypeId}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.defaultGpuTypeId !== savedRunpod.defaultGpuTypeId}
-          />
+          {#if runpodMode === 'pod'}
+            <SettingInputField
+              inputType={SettingInputFieldType.TEXT}
+              label="Default GPU type"
+              description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
+              bind:value={runpod.defaultGpuTypeId}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpod.defaultGpuTypeId !== savedRunpod.defaultGpuTypeId}
+            />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.NUMBER}
-            label="Container disk (GB)"
-            bind:value={runpod.containerDiskGb}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.containerDiskGb !== savedRunpod.containerDiskGb}
-          />
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Container disk (GB)"
+              bind:value={runpod.containerDiskGb}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpod.containerDiskGb !== savedRunpod.containerDiskGb}
+            />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.NUMBER}
-            label="Persistent volume (GB)"
-            description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
-            bind:value={runpod.volumeGb}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.volumeGb !== savedRunpod.volumeGb}
-          />
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Persistent volume (GB)"
+              description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
+              bind:value={runpod.volumeGb}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpod.volumeGb !== savedRunpod.volumeGb}
+            />
 
-          <SettingSwitch
-            title="Auto-stop when idle"
-            subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
-            bind:checked={runpod.autoStopEnabled}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-          />
+            <SettingSwitch
+              title="Auto-stop when idle"
+              subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
+              bind:checked={runpod.autoStopEnabled}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+            />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.NUMBER}
-            label="Idle grace (minutes)"
-            description="How long the pod can stay idle before auto-stop fires."
-            bind:value={runpod.autoStopGraceMinutes}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled || !runpod.autoStopEnabled}
-            isEdited={runpod.autoStopGraceMinutes !== savedRunpod.autoStopGraceMinutes}
-          />
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Idle grace (minutes)"
+              description="How long the pod can stay idle before auto-stop fires."
+              bind:value={runpod.autoStopGraceMinutes}
+              disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.autoStopEnabled}
+              isEdited={runpod.autoStopGraceMinutes !== savedRunpod.autoStopGraceMinutes}
+            />
 
-          <SettingSwitch
-            title="Auto-backfill on launch"
-            subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
-            bind:checked={runpod.autoBackfillOnLaunch}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-          />
+            <SettingSwitch
+              title="Auto-backfill on launch"
+              subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
+              bind:checked={runpod.autoBackfillOnLaunch}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+            />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.NUMBER}
-            label="Max runtime (hours)"
-            description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
-            bind:value={runpod.maxRuntimeHours}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
-          />
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Max runtime (hours)"
+              description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
+              bind:value={runpod.maxRuntimeHours}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
+            />
+          {:else if runpodMode === 'serverless'}
+            <SettingTextarea
+              label="GPU pool IDs (one per line, in priority order)"
+              description="RunPod serverless wants GPU pool IDs (e.g. AMPERE_24, ADA_24, AMPERE_48), not specific types. AMPERE_24 covers the A5000 / RTX 3090. See https://docs.runpod.io/references/gpu-types#gpu-pools."
+              value={runpodGpuTypeIdsText}
+              onChange={(text) =>
+                (runpodServerless.gpuTypeIds = text
+                  .split('\n')
+                  .map((l) => l.trim())
+                  .filter(Boolean))}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodGpuTypeIdsText !== savedRunpodGpuTypeIdsText}
+            />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Min workers"
+              description="Keep at least this many workers warm. 0 = true scale-to-zero (cold start ~30–60s on first request)."
+              bind:value={runpodServerless.workersMin}
+              min={0}
+              max={10}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.workersMin !== savedRunpodServerless.workersMin}
+            />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Max workers"
+              description="Upper bound on concurrent workers. RunPod's scaler will burst up to this when queues build."
+              bind:value={runpodServerless.workersMax}
+              min={1}
+              max={20}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.workersMax !== savedRunpodServerless.workersMax}
+            />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Idle timeout (seconds)"
+              description="How long a worker keeps running after its last request before scaling down."
+              bind:value={runpodServerless.idleTimeoutSeconds}
+              min={5}
+              max={3600}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.idleTimeoutSeconds !== savedRunpodServerless.idleTimeoutSeconds}
+            />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Execution timeout (ms)"
+              description="Per-request timeout. ML jobs typically take seconds; the default 10 min ceiling is forgiving."
+              bind:value={runpodServerless.executionTimeoutMs}
+              min={5000}
+              max={3_600_000}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.executionTimeoutMs !== savedRunpodServerless.executionTimeoutMs}
+            />
+
+            <SettingSelect
+              label="Scaler type"
+              desc="QUEUE_DELAY scales on queued requests; REQUEST_COUNT on absolute throughput."
+              name="runpod-scaler-type"
+              bind:value={runpodServerless.scalerType}
+              options={[
+                { value: 'QUEUE_DELAY', text: 'QUEUE_DELAY (recommended)' },
+                { value: 'REQUEST_COUNT', text: 'REQUEST_COUNT' },
+              ]}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.scalerType !== savedRunpodServerless.scalerType}
+            />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Scaler value"
+              description="Threshold for the scaler. For QUEUE_DELAY, scales when delay exceeds this many seconds."
+              bind:value={runpodServerless.scalerValue}
+              min={1}
+              max={300}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpodServerless.scalerValue !== savedRunpodServerless.scalerValue}
+            />
+          {/if}
 
           <hr />
 

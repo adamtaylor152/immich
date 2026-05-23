@@ -65,20 +65,27 @@ The machine learning container can be shared among several Immich instances rega
 
 ## Using RunPod (cloud GPU)
 
-If your hardware can't run smart-search, face detection, OCR, or image description at a reasonable pace, you can offload them to a [RunPod](https://www.runpod.io/) cloud GPU. Immich provisions the pod for you, transparently routes ML jobs to it while it's running, and stops it when the queues go idle so you only pay for the time you're actually using.
+If your hardware can't run smart-search, face detection, OCR, or image description at a reasonable pace, you can offload them to a [RunPod](https://www.runpod.io/) cloud GPU. Immich offers two modes you pick per-instance in the admin panel:
 
-This fork ships a purpose-built image, `ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod`, which is identical to the standard CUDA image plus a few RunPod-tuned defaults (preloads the CLIP and face-recognition models at boot, disables idle model unloading, raises the HTTP keep-alive to match RunPod's 100 s proxy timeout).
+| Mode                       | Active price (A5000 example) | Idle price                     | When to pick                                                          |
+| -------------------------- | ---------------------------- | ------------------------------ | --------------------------------------------------------------------- |
+| **Pod** (dedicated)        | $0.16/hr                     | $0.16/hr (billed continuously) | Big one-shot backfills, sustained heavy use, lowest active cost.      |
+| **Serverless** (on-demand) | $0.68/hr                     | $0.00/hr (`workersMin=0`)      | Trickle uploads, leave-it-on usage, no manual stop discipline needed. |
+
+Break-even is around 6 active hours per 24h — most home libraries with a handful of uploads per day sit well below that and should pick Serverless. Pod still wins for the initial library scan.
+
+This fork ships a purpose-built image, `ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod`, which is identical to the standard CUDA image plus a few RunPod-tuned defaults (preloads the CLIP and face-recognition models at boot, disables idle model unloading, raises the HTTP keep-alive to match RunPod's 100 s proxy timeout). It works for both modes without changes.
 
 ### One-time setup
 
-1. Create a [RunPod API key](https://www.runpod.io/console/user/settings) with pod create / read / delete permission.
+1. Create a [RunPod API key](https://www.runpod.io/console/user/settings) with pod + serverless create/read/delete permission.
 2. In Immich → **Administration → System Settings → Machine Learning → Cloud GPU (RunPod)**:
+   - Pick a **Mode** — Pod or Serverless.
    - Paste the API key and click **Test connection**.
-   - Pick a GPU type (RTX A5000 is the cheapest 24 GB option; RTX 4090 is faster).
-   - Set **Auto-stop after idle (minutes)** — the default 15 is fine for one-off backfills.
-   - Set **Max runtime (hours)** — a hard ceiling, default 24, to prevent runaway billing if something goes wrong.
+   - For **Pod** mode: pick a GPU type (RTX A5000 is the cheapest 24 GB option; RTX 4090 is faster). Set **Auto-stop after idle (minutes)** — the default 15 is fine for one-off backfills. Set **Max runtime (hours)** — a hard ceiling, default 24, to prevent runaway billing.
+   - For **Serverless** mode: provide an ordered list of **GPU pool IDs** — `AMPERE_24`, `ADA_24`, `AMPERE_48`, etc. (RunPod's serverless API uses pool IDs, not specific types like "NVIDIA RTX A5000"; see [GPU pools](https://docs.runpod.io/references/gpu-types#gpu-pools)). Adjust `Min workers` (default `0` for true scale-to-zero), `Max workers`, and `Idle timeout` if the defaults don't fit. Behind the scenes, Immich creates the endpoint as a **Load Balancer** type (RunPod's GraphQL `type: "LB"`) so it forwards raw HTTP — the REST API doesn't expose this field, so the integration uses the GraphQL `saveEndpoint` mutation.
    - Tick the data-privacy acknowledgement.
-3. Click **Launch pod**. The first launch takes ~2–3 minutes; subsequent resume from a stopped pod takes ~15–30 seconds.
+3. Click **Launch pod** (Pod mode) or **Set up endpoint** (Serverless mode). Pod first launch takes ~2–3 minutes; subsequent resume from a stopped pod takes ~15–30 seconds. Serverless endpoint creation is ~5–10 seconds; the first request afterwards triggers a ~30–60s cold start while RunPod spins up a worker.
 
 While the pod is **starting**, ML jobs keep running against your local container (if you have one) — Immich only routes jobs to the cloud GPU once it returns `pong`. The RunPod URL is added to the live ML config as a managed entry; you'll see it as a read-only line above the editable URL list.
 
@@ -95,7 +102,16 @@ You can also tick **Auto-backfill on launch** to fire the same set automatically
 
 ### Security
 
-The pod is exposed at `https://<pod-id>-3003.proxy.runpod.net` and is reachable from anywhere on the internet. Immich addresses this by generating a per-launch bearer token, injecting it into the container's `IMMICH_ML_AUTH_TOKEN` env var, and adding an `Authorization: Bearer <token>` header to every request. Any request without the matching token gets a 401. Health endpoints (`/`, `/ping`) stay unauthenticated so RunPod's proxy health probes work.
+In **Pod** mode the pod is exposed at `https://<pod-id>-3003.proxy.runpod.net` and is reachable from anywhere on the internet. Immich addresses this by generating a per-launch bearer token, injecting it into the container's `IMMICH_ML_AUTH_TOKEN` env var, and adding an `Authorization: Bearer <token>` header to every request. Any request without the matching token gets a 401. Health endpoints (`/`, `/ping`) stay unauthenticated so RunPod's proxy health probes work.
+
+In **Serverless** mode the endpoint is at `https://<endpoint-id>.api.runpod.ai/...` and RunPod's edge proxy enforces auth itself — every request must include `Authorization: Bearer <RUNPOD_API_KEY>`. Immich passes the API key as the bearer to each request automatically; you don't need a separate per-instance secret. The middleware `IMMICH_ML_AUTH_TOKEN` is NOT set in this mode (the double-bearer wouldn't be forwarded through the proxy anyway).
+
+:::info Cold-start caveat
+With `workersMin = 0` (true scale-to-zero), the first ML request after an idle period triggers a worker boot that takes ~30–90 s. Immich's default **Availability checks → timeout** (2 s) is far below that, so the periodic health probe marks the endpoint unhealthy and Immich falls back to local ML URLs. Either:
+
+1. Set `workersMin = 1` (keeps one warm; ~$80/mo on an A5000 but no cold starts), or
+2. Bump **Availability checks → timeout** to 60–120 s if you can tolerate per-job cold-start delay.
+   :::
 
 :::danger
 The RunPod API key can spin up paid infrastructure. Treat it like a credit-card credential — anyone with admin access to Immich (or read access to its Postgres database) can spend money on your RunPod account.
