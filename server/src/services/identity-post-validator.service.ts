@@ -114,7 +114,19 @@ export class IdentityPostValidator {
    */
   validate(description: string, knownPersons: KnownPerson[]): IdentityValidationResult {
     const flags: IdentityValidationResult['flags'] = {};
-    const knownNames = new Set(knownPersons.map((p) => p.name));
+    // Tokenize each known name on whitespace so multi-word names like "Mary Jane"
+    // don't lose their second token to the hallucination pass. The token-level
+    // pattern below matches one capitalized word at a time, so a description
+    // like "Mary Jane is smiling" needs both "Mary" AND "Jane" in the allow set.
+    // Empty strings are filtered out defensively (would always match `\b\b`).
+    const knownNames = new Set(
+      knownPersons.flatMap((p) =>
+        p.name
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter((token) => token.length > 0),
+      ),
+    );
 
     // ---- Step 1: strip hallucinated names ----
     // Candidate pattern: a CamelCase word (single capital + lowercase letters)

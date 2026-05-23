@@ -67,6 +67,20 @@ describe(IdentityPostValidator.name, () => {
       const { flags } = sut.validate('Madison pushed Madison off a swing.', []);
       expect(flags.hallucinatedNames).toEqual(['Madison']);
     });
+
+    it('preserves every token of a multi-word known name (e.g. "Mary Jane")', () => {
+      const { description, flags } = sut.validate('The kids saw Mary Jane in the garden.', [person('Mary Jane')]);
+      // Neither "Mary" nor "Jane" should be stripped as hallucinated.
+      expect(description).toBe('The kids saw Mary Jane in the garden.');
+      expect(flags.hallucinatedNames).toBeUndefined();
+    });
+
+    it('does not strip a known person name token when only one part appears in the text', () => {
+      // A description may shorten the name to just the first or last component.
+      const { description, flags } = sut.validate('Jane is reading.', [person('Mary Jane')]);
+      expect(description).toBe('Jane is reading.');
+      expect(flags.hallucinatedNames).toBeUndefined();
+    });
   });
 
   describe('generic person substitution — single known person', () => {
