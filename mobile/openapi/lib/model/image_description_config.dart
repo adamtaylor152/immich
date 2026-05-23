@@ -18,6 +18,7 @@ class ImageDescriptionConfig {
     required this.enabled,
     required this.fallbackModelName,
     required this.modelName,
+    this.prompt,
   });
 
   ///
@@ -40,13 +41,22 @@ class ImageDescriptionConfig {
   /// Name of the model to use
   String modelName;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  ImageDescriptionPromptConfig? prompt;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is ImageDescriptionConfig &&
     other.acceleration == acceleration &&
     other.device == device &&
     other.enabled == enabled &&
     other.fallbackModelName == fallbackModelName &&
-    other.modelName == modelName;
+    other.modelName == modelName &&
+    other.prompt == prompt;
 
   @override
   int get hashCode =>
@@ -55,10 +65,11 @@ class ImageDescriptionConfig {
     (device.hashCode) +
     (enabled.hashCode) +
     (fallbackModelName.hashCode) +
-    (modelName.hashCode);
+    (modelName.hashCode) +
+    (prompt == null ? 0 : prompt!.hashCode);
 
   @override
-  String toString() => 'ImageDescriptionConfig[acceleration=$acceleration, device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, modelName=$modelName]';
+  String toString() => 'ImageDescriptionConfig[acceleration=$acceleration, device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, modelName=$modelName, prompt=$prompt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -71,6 +82,11 @@ class ImageDescriptionConfig {
       json[r'enabled'] = this.enabled;
       json[r'fallbackModelName'] = this.fallbackModelName;
       json[r'modelName'] = this.modelName;
+    if (this.prompt != null) {
+      json[r'prompt'] = this.prompt;
+    } else {
+    //  json[r'prompt'] = null;
+    }
     return json;
   }
 
@@ -88,6 +104,7 @@ class ImageDescriptionConfig {
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         fallbackModelName: mapValueOfType<String>(json, r'fallbackModelName')!,
         modelName: mapValueOfType<String>(json, r'modelName')!,
+        prompt: ImageDescriptionPromptConfig.fromJson(json[r'prompt']),
       );
     }
     return null;

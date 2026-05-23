@@ -16354,6 +16354,30 @@
         ],
         "type": "object"
       },
+      "AdvancedPromptConfig": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "description": "Use a raw prompt template instead of the structured fields",
+            "type": "boolean"
+          },
+          "placeholderValidation": {
+            "default": "strict",
+            "description": "Whether missing {schema} placeholder fails save (strict) or warns (warn)",
+            "enum": [
+              "strict",
+              "warn"
+            ],
+            "type": "string"
+          },
+          "rawPromptTemplate": {
+            "default": "",
+            "description": "Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AlbumResponseDto": {
         "properties": {
           "albumName": {
@@ -19687,6 +19711,31 @@
         },
         "type": "object"
       },
+      "IdentityInjectionConfig": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "description": "Inject named-face data into description prompts",
+            "type": "boolean"
+          },
+          "maxNames": {
+            "default": 5,
+            "description": "Maximum named persons to inject into a single prompt",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minFaceConfidence": {
+            "default": 0.7,
+            "description": "Minimum face-recognition confidence required to inject a name",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "ImageDescriptionConfig": {
         "properties": {
           "acceleration": {
@@ -19709,6 +19758,76 @@
           "modelName": {
             "description": "Name of the model to use",
             "type": "string"
+          },
+          "prompt": {
+            "$ref": "#/components/schemas/ImageDescriptionPromptConfig",
+            "default": {
+              "advanced": {
+                "enabled": false,
+                "placeholderValidation": "strict",
+                "rawPromptTemplate": ""
+              },
+              "customVocabulary": [],
+              "forbiddenInferences": [
+                "diagnoses",
+                "medication names",
+                "procedures",
+                "pregnancy",
+                "disability"
+              ],
+              "identityInjection": {
+                "enabled": true,
+                "maxNames": 5,
+                "minFaceConfidence": 0.7
+              },
+              "lookFor": [
+                "brands",
+                "signage",
+                "screens",
+                "documents",
+                "uniforms",
+                "tools",
+                "vehicles",
+                "animals",
+                "food",
+                "landmarks"
+              ],
+              "medicalIndicators": [
+                "bandage",
+                "cast",
+                "crutches",
+                "exam-table",
+                "hospital",
+                "iv-line",
+                "lab-result",
+                "medical",
+                "medical-monitor",
+                "medical-paperwork",
+                "mobility-aid",
+                "pill-organizer",
+                "prescription",
+                "syringe",
+                "ultrasound",
+                "wheelchair",
+                "wound",
+                "x-ray"
+              ],
+              "nsfwIndicators": [
+                "adult-nudity",
+                "bare-buttocks",
+                "bondage",
+                "explicit",
+                "exposed-genitals",
+                "naked",
+                "nsfw",
+                "nudity",
+                "restraint",
+                "sex-toy",
+                "sexual-activity"
+              ],
+              "sentenceCountTarget": 3,
+              "style": "balanced"
+            }
           }
         },
         "required": [
@@ -19803,6 +19922,134 @@
           "appliedTags",
           "status"
         ],
+        "type": "object"
+      },
+      "ImageDescriptionPromptConfig": {
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/AdvancedPromptConfig",
+            "default": {
+              "enabled": false,
+              "placeholderValidation": "strict",
+              "rawPromptTemplate": ""
+            },
+            "description": "Advanced raw-prompt-editor configuration"
+          },
+          "customVocabulary": {
+            "default": [],
+            "description": "Tag values the model should prefer when applicable",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "forbiddenInferences": {
+            "default": [
+              "diagnoses",
+              "medication names",
+              "procedures",
+              "pregnancy",
+              "disability"
+            ],
+            "description": "Categories the model must not infer (diagnoses, medications, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "identityInjection": {
+            "$ref": "#/components/schemas/IdentityInjectionConfig",
+            "default": {
+              "enabled": true,
+              "maxNames": 5,
+              "minFaceConfidence": 0.7
+            },
+            "description": "Named-face injection configuration"
+          },
+          "lookFor": {
+            "default": [
+              "brands",
+              "signage",
+              "screens",
+              "documents",
+              "uniforms",
+              "tools",
+              "vehicles",
+              "animals",
+              "food",
+              "landmarks"
+            ],
+            "description": "Additional categories the model should note when visibly supported (brands, sports equipment, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "medicalIndicators": {
+            "default": [
+              "bandage",
+              "cast",
+              "crutches",
+              "exam-table",
+              "hospital",
+              "iv-line",
+              "lab-result",
+              "medical",
+              "medical-monitor",
+              "medical-paperwork",
+              "mobility-aid",
+              "pill-organizer",
+              "prescription",
+              "syringe",
+              "ultrasound",
+              "wheelchair",
+              "wound",
+              "x-ray"
+            ],
+            "description": "Allow-list of medical indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "nsfwIndicators": {
+            "default": [
+              "adult-nudity",
+              "bare-buttocks",
+              "bondage",
+              "explicit",
+              "exposed-genitals",
+              "naked",
+              "nsfw",
+              "nudity",
+              "restraint",
+              "sex-toy",
+              "sexual-activity"
+            ],
+            "description": "Allow-list of explicit NSFW indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sentenceCountTarget": {
+            "default": 3,
+            "description": "Target number of sentences in the description",
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "style": {
+            "default": "balanced",
+            "description": "Description verbosity preset",
+            "enum": [
+              "terse",
+              "balanced",
+              "rich"
+            ],
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "ImageEnrichmentFilter": {
@@ -24270,6 +24517,47 @@
         ],
         "type": "object"
       },
+      "SmartAlbumKindConfig": {
+        "properties": {
+          "clipQueries": {
+            "description": "CLIP query phrases used when no tag trigger matches",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Whether this smart album is active",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "User-visible album name",
+            "type": "string"
+          },
+          "tagTriggers": {
+            "description": "Tags that mark an asset as belonging to this album",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "description": "CLIP similarity threshold",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "clipQueries",
+          "enabled",
+          "name",
+          "tagTriggers",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "SmartSearchDto": {
         "properties": {
           "albumIds": {
@@ -26504,6 +26792,9 @@
           "server": {
             "$ref": "#/components/schemas/SystemConfigServerDto"
           },
+          "smartAlbums": {
+            "$ref": "#/components/schemas/SystemConfigSmartAlbumsDto"
+          },
           "storageTemplate": {
             "$ref": "#/components/schemas/SystemConfigStorageTemplateDto"
           },
@@ -26985,7 +27276,74 @@
               "device": "AUTO",
               "enabled": true,
               "fallbackModelName": "microsoft/Florence-2-base-ft",
-              "modelName": "Qwen/Qwen2.5-VL-3B-Instruct"
+              "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+              "prompt": {
+                "advanced": {
+                  "enabled": false,
+                  "placeholderValidation": "strict",
+                  "rawPromptTemplate": ""
+                },
+                "customVocabulary": [],
+                "forbiddenInferences": [
+                  "diagnoses",
+                  "medication names",
+                  "procedures",
+                  "pregnancy",
+                  "disability"
+                ],
+                "identityInjection": {
+                  "enabled": true,
+                  "maxNames": 5,
+                  "minFaceConfidence": 0.7
+                },
+                "lookFor": [
+                  "brands",
+                  "signage",
+                  "screens",
+                  "documents",
+                  "uniforms",
+                  "tools",
+                  "vehicles",
+                  "animals",
+                  "food",
+                  "landmarks"
+                ],
+                "medicalIndicators": [
+                  "bandage",
+                  "cast",
+                  "crutches",
+                  "exam-table",
+                  "hospital",
+                  "iv-line",
+                  "lab-result",
+                  "medical",
+                  "medical-monitor",
+                  "medical-paperwork",
+                  "mobility-aid",
+                  "pill-organizer",
+                  "prescription",
+                  "syringe",
+                  "ultrasound",
+                  "wheelchair",
+                  "wound",
+                  "x-ray"
+                ],
+                "nsfwIndicators": [
+                  "adult-nudity",
+                  "bare-buttocks",
+                  "bondage",
+                  "explicit",
+                  "exposed-genitals",
+                  "naked",
+                  "nsfw",
+                  "nudity",
+                  "restraint",
+                  "sex-toy",
+                  "sexual-activity"
+                ],
+                "sentenceCountTarget": 3,
+                "style": "balanced"
+              }
             }
           },
           "nsfwDetection": {
@@ -27296,6 +27654,50 @@
           "externalDomain",
           "loginPageMessage",
           "publicUsers"
+        ],
+        "type": "object"
+      },
+      "SystemConfigSmartAlbumsDto": {
+        "properties": {
+          "builtIn": {
+            "properties": {
+              "documents": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "food": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "nature": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "pets": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "screenshots": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              },
+              "travel": {
+                "$ref": "#/components/schemas/SmartAlbumKindConfig"
+              }
+            },
+            "required": [
+              "travel",
+              "documents",
+              "screenshots",
+              "food",
+              "pets",
+              "nature"
+            ],
+            "type": "object"
+          },
+          "enabled": {
+            "description": "Master smart-album enabled toggle",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "builtIn",
+          "enabled"
         ],
         "type": "object"
       },

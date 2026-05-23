@@ -90,12 +90,113 @@ export const OcrConfigSchema = ModelConfigSchema.extend({
     .describe('Minimum confidence score for text recognition'),
 }).meta({ id: 'OcrConfig' });
 
+const IdentityInjectionSchema = z
+  .object({
+    enabled: z.boolean().default(true).describe('Inject named-face data into description prompts'),
+    maxNames: z.int().min(1).max(20).default(5).describe('Maximum named persons to inject into a single prompt'),
+    minFaceConfidence: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .max(1)
+      .default(0.7)
+      .describe('Minimum face-recognition confidence required to inject a name'),
+  })
+  .meta({ id: 'IdentityInjectionConfig' });
+
+const AdvancedPromptSchema = z
+  .object({
+    enabled: z.boolean().default(false).describe('Use a raw prompt template instead of the structured fields'),
+    rawPromptTemplate: z
+      .string()
+      .default('')
+      .describe('Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders'),
+    placeholderValidation: z
+      .enum(['strict', 'warn'])
+      .default('strict')
+      .describe('Whether missing {schema} placeholder fails save (strict) or warns (warn)'),
+  })
+  .meta({ id: 'AdvancedPromptConfig' });
+
+export const ImageDescriptionPromptSchema = z
+  .object({
+    style: z.enum(['terse', 'balanced', 'rich']).default('balanced').describe('Description verbosity preset'),
+    sentenceCountTarget: z.int().min(1).max(6).default(3).describe('Target number of sentences in the description'),
+    lookFor: z
+      .array(z.string())
+      .default([
+        'brands',
+        'signage',
+        'screens',
+        'documents',
+        'uniforms',
+        'tools',
+        'vehicles',
+        'animals',
+        'food',
+        'landmarks',
+      ])
+      .describe('Additional categories the model should note when visibly supported (brands, sports equipment, etc.)'),
+    customVocabulary: z.array(z.string()).default([]).describe('Tag values the model should prefer when applicable'),
+    nsfwIndicators: z
+      .array(z.string())
+      .default([
+        'adult-nudity',
+        'bare-buttocks',
+        'bondage',
+        'explicit',
+        'exposed-genitals',
+        'naked',
+        'nsfw',
+        'nudity',
+        'restraint',
+        'sex-toy',
+        'sexual-activity',
+      ])
+      .describe('Allow-list of explicit NSFW indicator terms permitted in the description'),
+    medicalIndicators: z
+      .array(z.string())
+      .default([
+        'bandage',
+        'cast',
+        'crutches',
+        'exam-table',
+        'hospital',
+        'iv-line',
+        'lab-result',
+        'medical',
+        'medical-monitor',
+        'medical-paperwork',
+        'mobility-aid',
+        'pill-organizer',
+        'prescription',
+        'syringe',
+        'ultrasound',
+        'wheelchair',
+        'wound',
+        'x-ray',
+      ])
+      .describe('Allow-list of medical indicator terms permitted in the description'),
+    forbiddenInferences: z
+      .array(z.string())
+      .default(['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'])
+      .describe('Categories the model must not infer (diagnoses, medications, etc.)'),
+    identityInjection: IdentityInjectionSchema.default(() => IdentityInjectionSchema.parse({})).describe(
+      'Named-face injection configuration',
+    ),
+    advanced: AdvancedPromptSchema.default(() => AdvancedPromptSchema.parse({})).describe(
+      'Advanced raw-prompt-editor configuration',
+    ),
+  })
+  .meta({ id: 'ImageDescriptionPromptConfig' });
+
 export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
   acceleration: MachineLearningHardwareAccelerationSchema.default(MachineLearningHardwareAcceleration.Auto).describe(
     'Hardware acceleration backend to use',
   ),
   fallbackModelName: z.string().describe('Name of the fallback model to use'),
   device: z.string().describe('Hardware device to use'),
+  prompt: ImageDescriptionPromptSchema.default(() => ImageDescriptionPromptSchema.parse({})),
 }).meta({ id: 'ImageDescriptionConfig' });
 
 export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({

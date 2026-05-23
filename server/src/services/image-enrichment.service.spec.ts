@@ -149,6 +149,7 @@ describe(ImageEnrichmentService.name, () => {
       previewFile,
       expect.objectContaining({ modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' }),
       nsfw,
+      expect.stringMatching(/searchable image record[\s\S]*dedicated NSFW classifier flagged/i),
     );
     expect(mocks.asset.upsertExif).toHaveBeenCalledWith({
       exif: expect.objectContaining({

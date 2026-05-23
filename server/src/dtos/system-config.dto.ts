@@ -151,6 +151,30 @@ const MachineLearningHardwareResponseSchema = z
   })
   .meta({ id: 'MachineLearningHardwareResponseDto' });
 
+const SmartAlbumKindSchema = z
+  .object({
+    enabled: configBool.describe('Whether this smart album is active'),
+    name: z.string().describe('User-visible album name'),
+    tagTriggers: z.array(z.string()).describe('Tags that mark an asset as belonging to this album'),
+    clipQueries: z.array(z.string()).describe('CLIP query phrases used when no tag trigger matches'),
+    threshold: z.number().meta({ format: 'double' }).min(0).max(1).describe('CLIP similarity threshold'),
+  })
+  .meta({ id: 'SmartAlbumKindConfig' });
+
+const SystemConfigSmartAlbumsSchema = z
+  .object({
+    enabled: configBool.describe('Master smart-album enabled toggle'),
+    builtIn: z.object({
+      travel: SmartAlbumKindSchema,
+      documents: SmartAlbumKindSchema,
+      screenshots: SmartAlbumKindSchema,
+      food: SmartAlbumKindSchema,
+      pets: SmartAlbumKindSchema,
+      nature: SmartAlbumKindSchema,
+    }),
+  })
+  .meta({ id: 'SystemConfigSmartAlbumsDto' });
+
 const SystemConfigMachineLearningSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
@@ -417,6 +441,7 @@ export const SystemConfigSchema = z
     templates: SystemConfigTemplatesSchema,
     server: SystemConfigServerSchema,
     user: SystemConfigUserSchema,
+    smartAlbums: SystemConfigSmartAlbumsSchema.default(defaults.smartAlbums),
   })
   .describe('System configuration')
   .meta({ id: 'SystemConfigDto' });

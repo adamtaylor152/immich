@@ -99,6 +99,17 @@ export type SystemConfig = {
       modelName: string;
       fallbackModelName: string;
       device: string;
+      prompt: {
+        style: 'terse' | 'balanced' | 'rich';
+        sentenceCountTarget: number;
+        lookFor: string[];
+        customVocabulary: string[];
+        nsfwIndicators: string[];
+        medicalIndicators: string[];
+        forbiddenInferences: string[];
+        identityInjection: { enabled: boolean; maxNames: number; minFaceConfidence: number };
+        advanced: { enabled: boolean; rawPromptTemplate: string; placeholderValidation: 'strict' | 'warn' };
+      };
     };
     nsfwDetection: {
       enabled: boolean;
@@ -229,6 +240,17 @@ export type SystemConfig = {
   user: {
     deleteDelay: number;
   };
+  smartAlbums: {
+    enabled: boolean;
+    builtIn: {
+      travel: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+      documents: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+      screenshots: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+      food: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+      pets: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+      nature: { enabled: boolean; name: string; tagTriggers: string[]; clipQueries: string[]; threshold: number };
+    };
+  };
 };
 
 export type MachineLearningConfig = SystemConfig['machineLearning'];
@@ -336,6 +358,59 @@ export const defaults = Object.freeze<SystemConfig>({
       modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
       fallbackModelName: 'microsoft/Florence-2-base-ft',
       device: 'AUTO',
+      prompt: {
+        style: 'balanced',
+        sentenceCountTarget: 3,
+        lookFor: [
+          'brands',
+          'signage',
+          'screens',
+          'documents',
+          'uniforms',
+          'tools',
+          'vehicles',
+          'animals',
+          'food',
+          'landmarks',
+        ],
+        customVocabulary: [],
+        nsfwIndicators: [
+          'adult-nudity',
+          'bare-buttocks',
+          'bondage',
+          'explicit',
+          'exposed-genitals',
+          'naked',
+          'nsfw',
+          'nudity',
+          'restraint',
+          'sex-toy',
+          'sexual-activity',
+        ],
+        medicalIndicators: [
+          'bandage',
+          'cast',
+          'crutches',
+          'exam-table',
+          'hospital',
+          'iv-line',
+          'lab-result',
+          'medical',
+          'medical-monitor',
+          'medical-paperwork',
+          'mobility-aid',
+          'pill-organizer',
+          'prescription',
+          'syringe',
+          'ultrasound',
+          'wheelchair',
+          'wound',
+          'x-ray',
+        ],
+        forbiddenInferences: ['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'],
+        identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.7 },
+        advanced: { enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' },
+      },
     },
     nsfwDetection: {
       enabled: false,
@@ -480,5 +555,52 @@ export const defaults = Object.freeze<SystemConfig>({
   },
   user: {
     deleteDelay: 7,
+  },
+  smartAlbums: {
+    enabled: false,
+    builtIn: {
+      travel: {
+        enabled: true,
+        name: 'Travel',
+        tagTriggers: ['airport', 'beach', 'mountain', 'landmark', 'hotel', 'passport', 'suitcase', 'tourist'],
+        clipQueries: ['vacation travel landscape', 'tourist destination'],
+        threshold: 0.28,
+      },
+      documents: {
+        enabled: true,
+        name: 'Documents & Receipts',
+        tagTriggers: ['receipt', 'document', 'invoice', 'paperwork', 'scan', 'id-card'],
+        clipQueries: ['paper document', 'receipt or invoice'],
+        threshold: 0.28,
+      },
+      screenshots: {
+        enabled: true,
+        name: 'Screenshots',
+        tagTriggers: ['screenshot', 'ui', 'screen-capture', 'user-interface'],
+        clipQueries: ['phone or computer screenshot'],
+        threshold: 0.28,
+      },
+      food: {
+        enabled: true,
+        name: 'Food',
+        tagTriggers: ['food', 'meal', 'dish', 'restaurant', 'plate', 'cooking'],
+        clipQueries: ['plated food meal', 'restaurant dish'],
+        threshold: 0.28,
+      },
+      pets: {
+        enabled: true,
+        name: 'Pets',
+        tagTriggers: ['pet', 'dog', 'cat', 'puppy', 'kitten'],
+        clipQueries: ['domestic pet animal'],
+        threshold: 0.28,
+      },
+      nature: {
+        enabled: true,
+        name: 'Nature',
+        tagTriggers: ['nature', 'forest', 'mountain', 'ocean', 'sunset', 'wildlife', 'flower'],
+        clipQueries: ['natural landscape', 'wildlife'],
+        threshold: 0.28,
+      },
+    },
   },
 });

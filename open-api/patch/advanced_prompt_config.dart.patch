@@ -1,0 +1,9 @@
+@@ -61,7 +61,7 @@ class AdvancedPromptConfig {
+
+       return AdvancedPromptConfig(
+         enabled: mapValueOfType<bool>(json, r'enabled') ?? false,
+-        placeholderValidation: AdvancedPromptConfigPlaceholderValidationEnum.fromJson(json[r'placeholderValidation']) ?? 'strict',
++        placeholderValidation: AdvancedPromptConfigPlaceholderValidationEnum.fromJson(json[r'placeholderValidation']) ?? AdvancedPromptConfigPlaceholderValidationEnum.strict,
+         rawPromptTemplate: mapValueOfType<String>(json, r'rawPromptTemplate') ?? '',
+       );
+     }
