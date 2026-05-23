@@ -280,6 +280,7 @@ Class | Method | HTTP request | Description
 *SyncApi* | [**getSyncAck**](doc//SyncApi.md#getsyncack) | **GET** /sync/ack | Retrieve acknowledgements
 *SyncApi* | [**getSyncStream**](doc//SyncApi.md#getsyncstream) | **POST** /sync/stream | Stream sync changes
 *SyncApi* | [**sendSyncAck**](doc//SyncApi.md#sendsyncack) | **POST** /sync/ack | Acknowledge changes
+*SystemConfigApi* | [**deferImageDescriptionRequeue**](doc//SystemConfigApi.md#deferimagedescriptionrequeue) | **POST** /system-config/image-description/defer-requeue | Defer image description re-queue
 *SystemConfigApi* | [**getConfig**](doc//SystemConfigApi.md#getconfig) | **GET** /system-config | Get system configuration
 *SystemConfigApi* | [**getConfigDefaults**](doc//SystemConfigApi.md#getconfigdefaults) | **GET** /system-config/defaults | Get system configuration defaults
 *SystemConfigApi* | [**getImageDescriptionRequeueEstimate**](doc//SystemConfigApi.md#getimagedescriptionrequeueestimate) | **GET** /system-config/image-description/requeue-estimate | Estimate image description re-queue cost
@@ -619,6 +620,7 @@ Class | Method | HTTP request | Description
  - [SignUpDto](doc//SignUpDto.md)
  - [SmartAlbumKindConfig](doc//SmartAlbumKindConfig.md)
  - [SmartAlbumReevaluateEstimateDto](doc//SmartAlbumReevaluateEstimateDto.md)
+ - [SmartAlbumReevaluateRequestDto](doc//SmartAlbumReevaluateRequestDto.md)
  - [SmartAlbumReevaluateResponseDto](doc//SmartAlbumReevaluateResponseDto.md)
  - [SmartSearchDto](doc//SmartSearchDto.md)
  - [SourceType](doc//SourceType.md)

@@ -13600,6 +13600,49 @@
         "x-immich-state": "Stable"
       }
     },
+    "/system-config/image-description/defer-requeue": {
+      "post": {
+        "description": "Marks the image description config as having a pending re-queue. The persistent banner on the admin Image Description settings page will surface a reminder until the actual re-queue is triggered.",
+        "operationId": "deferImageDescriptionRequeue",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Image description is not enabled."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Defer image description re-queue",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
     "/system-config/image-description/requeue": {
       "post": {
         "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.",
@@ -13750,9 +13793,19 @@
     },
     "/system-config/smart-albums/reevaluate": {
       "post": {
-        "description": "Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.",
+        "description": "Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).",
         "operationId": "triggerSmartAlbumReevaluate",
         "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmartAlbumReevaluateRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -13765,7 +13818,7 @@
             "description": ""
           },
           "400": {
-            "description": "Smart albums are not enabled."
+            "description": "Smart albums are not enabled, or invalid kind."
           }
         },
         "security": [
@@ -20310,8 +20363,20 @@
             "description": "Name of the fallback model to use",
             "type": "string"
           },
+          "lastConfigChangeAt": {
+            "default": null,
+            "description": "ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth).",
+            "nullable": true,
+            "type": "string"
+          },
           "modelName": {
             "description": "Name of the model to use",
+            "type": "string"
+          },
+          "pendingRequeueAt": {
+            "default": null,
+            "description": "ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent \"re-queue pending\" banner.",
+            "nullable": true,
             "type": "string"
           },
           "prompt": {
@@ -25371,6 +25436,23 @@
         ],
         "type": "object"
       },
+      "SmartAlbumReevaluateRequestDto": {
+        "properties": {
+          "kind": {
+            "description": "Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.",
+            "enum": [
+              "travel",
+              "documents",
+              "screenshots",
+              "food",
+              "pets",
+              "nature"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SmartAlbumReevaluateResponseDto": {
         "properties": {
           "queued": {
@@ -28101,7 +28183,9 @@
               "device": "AUTO",
               "enabled": true,
               "fallbackModelName": "microsoft/Florence-2-base-ft",
+              "lastConfigChangeAt": null,
               "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+              "pendingRequeueAt": null,
               "prompt": {
                 "advanced": {
                   "enabled": false,
