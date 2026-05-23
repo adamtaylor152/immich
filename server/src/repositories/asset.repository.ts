@@ -1289,8 +1289,23 @@ export class AssetRepository {
 
   @GenerateSql({ params: [] })
   async getDescriptionStats(): Promise<DescriptionStats> {
+    // Mirrors the same filters used by streamForImageDescriptionJob / streamForImageEnrichmentTask
+    // so that the counts returned here reflect exactly what the requeue job will process.
     const result = await this.db
       .selectFrom('asset')
+      .innerJoin('asset_job_status as job_status', 'job_status.assetId', 'asset.id')
+      .where('asset.type', '=', sql.lit(AssetType.Image))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.visibility', '!=', sql.lit(AssetVisibility.Hidden))
+      .$call(withDefaultVisibility)
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', sql.lit(AssetFileType.Preview)),
+        ),
+      )
       .select((eb) => eb.fn.countAll<number>().as('totalAssets'))
       .select((eb) =>
         eb.fn
@@ -1307,9 +1322,6 @@ export class AssetRepository {
           )
           .as('withDescription'),
       )
-      .where('asset.type', '=', sql.lit(AssetType.Image))
-      .where('asset.deletedAt', 'is', null)
-      .$call(withDefaultVisibility)
       .executeTakeFirstOrThrow();
 
     const totalAssets = Number(result.totalAssets);

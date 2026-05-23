@@ -354,7 +354,8 @@ describe(ImageEnrichmentService.name, () => {
     await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Failed);
 
     const failCall = mocks.asset.upsertMetadata.mock.calls.find(
-      (call) => (call[1][0]?.value as { description?: { status?: string } } | undefined)?.description?.status === 'failed',
+      (call) =>
+        (call[1][0]?.value as { description?: { status?: string } } | undefined)?.description?.status === 'failed',
     )!;
     const saved = failCall[1][0].value as { description: Record<string, unknown> };
     expect(saved.description).not.toHaveProperty('configHash');

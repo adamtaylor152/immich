@@ -13,6 +13,7 @@ import { ArgOf } from 'src/repositories/event.repository';
 import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
 import { BaseService } from 'src/services/base.service';
 import { clearConfigCache } from 'src/utils/config';
+import { isImageDescriptionEnabled } from 'src/utils/misc';
 import { toPlainObject } from 'src/utils/object';
 
 /** Default per-asset estimate when no telemetry data is available. */
@@ -131,7 +132,7 @@ export class SystemConfigService extends BaseService {
 
   async triggerDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
     const { machineLearning } = await this.getConfig({ withCache: false });
-    if (!machineLearning.imageDescription.enabled) {
+    if (!isImageDescriptionEnabled(machineLearning)) {
       throw new BadRequestException('Image description is not enabled');
     }
 

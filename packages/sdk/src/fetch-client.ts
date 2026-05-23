@@ -3128,7 +3128,7 @@ export type ImageDescriptionRequeueEstimateDto = {
     activeModel: string;
     /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
     estimatedTotalSeconds: number;
-    /** Rolling average seconds per asset (last 1000 completed jobs, or default estimate) */
+    /** Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented. */
     rollingAvgSeconds: number;
     /** Total eligible image assets */
     totalAssets: number;
@@ -6884,6 +6884,8 @@ export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
         data: ImageDescriptionRequeueResponseDto;
+    } | {
+        status: 400;
     }>("/system-config/image-description/requeue", {
         ...opts,
         method: "POST"

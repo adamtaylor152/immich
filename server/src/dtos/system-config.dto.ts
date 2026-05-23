@@ -459,15 +459,14 @@ const ImageDescriptionRequeueEstimateSchema = z
       .int()
       .min(0)
       .describe('Number of eligible assets that currently have a description (will be re-run on force-requeue).'),
-    withoutDescription: z
-      .int()
-      .min(0)
-      .describe('Number of eligible assets that currently have no description.'),
+    withoutDescription: z.int().min(0).describe('Number of eligible assets that currently have no description.'),
     rollingAvgSeconds: z
       .number()
       .meta({ format: 'double' })
       .min(0)
-      .describe('Rolling average seconds per asset (last 1000 completed jobs, or default estimate)'),
+      .describe(
+        'Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.',
+      ),
     estimatedTotalSeconds: z
       .number()
       .meta({ format: 'double' })

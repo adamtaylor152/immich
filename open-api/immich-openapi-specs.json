@@ -13245,7 +13245,7 @@
     },
     "/system-config/image-description/requeue": {
       "post": {
-        "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.",
+        "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.",
         "operationId": "triggerImageDescriptionRequeue",
         "parameters": [],
         "responses": {
@@ -13258,6 +13258,9 @@
               }
             },
             "description": ""
+          },
+          "400": {
+            "description": "Image description is not enabled."
           }
         },
         "security": [
@@ -20163,7 +20166,7 @@
             "type": "number"
           },
           "rollingAvgSeconds": {
-            "description": "Rolling average seconds per asset (last 1000 completed jobs, or default estimate)",
+            "description": "Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.",
             "format": "double",
             "minimum": 0,
             "type": "number"

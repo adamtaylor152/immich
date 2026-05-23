@@ -33,7 +33,7 @@ class ImageDescriptionRequeueEstimateDto {
   /// Minimum value: 0
   double estimatedTotalSeconds;
 
-  /// Rolling average seconds per asset (last 1000 completed jobs, or default estimate)
+  /// Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.
   ///
   /// Minimum value: 0
   double rollingAvgSeconds;

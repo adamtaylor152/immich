@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Put } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   ImageDescriptionRequeueEstimateDto,
@@ -93,9 +93,10 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Trigger image description re-queue',
     description:
-      'Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.',
+      'Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
+  @ApiResponse({ status: 400, description: 'Image description is not enabled.' })
   triggerImageDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
     return this.service.triggerDescriptionRequeue();
   }

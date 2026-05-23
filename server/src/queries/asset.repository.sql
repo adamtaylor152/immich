@@ -956,3 +956,36 @@ from
   "asset"
 where
   "asset"."id" = $1
+
+-- AssetRepository.getDescriptionStats
+select
+  count(*) as "totalAssets",
+  count("asset"."id") filter (
+    where
+      exists (
+        select
+          "asset_metadata"."assetId"
+        from
+          "asset_metadata"
+        where
+          "asset_metadata"."assetId" = "asset"."id"
+          and "asset_metadata"."key" = $1
+          and asset_metadata.value -> 'description' ->> 'status' = $2
+      )
+  ) as "withDescription"
+from
+  "asset"
+  inner join "asset_job_status" as "job_status" on "job_status"."assetId" = "asset"."id"
+where
+  "asset"."type" = 'IMAGE'
+  and "asset"."deletedAt" is null
+  and "asset"."visibility" != 'hidden'
+  and "asset"."visibility" in ('archive', 'timeline')
+  and exists (
+    select
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = 'preview'
+  )

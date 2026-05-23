@@ -258,7 +258,7 @@ class SystemConfigApi {
 
   /// Trigger image description re-queue
   ///
-  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.
+  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.
   ///
   /// Note: This method returns the HTTP [Response].
   Future<Response> triggerImageDescriptionRequeueWithHttpInfo() async {
@@ -288,7 +288,7 @@ class SystemConfigApi {
 
   /// Trigger image description re-queue
   ///
-  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.
+  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.
   Future<ImageDescriptionRequeueResponseDto?> triggerImageDescriptionRequeue() async {
     final response = await triggerImageDescriptionRequeueWithHttpInfo();
     if (response.statusCode >= HttpStatus.badRequest) {

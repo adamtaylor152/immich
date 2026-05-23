@@ -734,5 +734,14 @@ describe(SystemConfigService.name, () => {
       await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
+
+    it('should throw BadRequestException when global machine learning is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { enabled: false, imageDescription: { enabled: true } },
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
   });
 });
