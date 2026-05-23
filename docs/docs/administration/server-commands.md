@@ -160,7 +160,7 @@ Schema Revert to Upstream
 
 See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md) for the full procedure (backup, downgrade, verification).
 
-```
+```bash
 immich-admin schema-revert-to-upstream
 ... destructive operation warning ...
 ? Type "revert" to confirm:  revert
