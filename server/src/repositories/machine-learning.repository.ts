@@ -299,13 +299,21 @@ export class MachineLearningRepository {
 
   private async predict<T>(payload: ModelPayload, config: MachineLearningRequest): Promise<T> {
     const formData = await this.getFormData(payload, config);
+    // Use the natural order from getOrderedUrls (managed URL first when set,
+    // then configured fallbacks). The managed URL is only ever populated by
+    // RunPodService.syncManagedUrl when the RunPod state machine has
+    // declared the resource ready ('running' or 'serverless-ready'), so its
+    // presence is already the authoritative "RunPod is active" signal.
+    //
+    // Previously we reordered the iteration by the periodic /ping health
+    // probe, which used a 2s timeout that scale-to-zero serverless workers
+    // can't satisfy during cold starts — RunPod got marked unhealthy and
+    // local ML quietly won. The probe still runs for the
+    // `became {healthy,unhealthy}` audit log via setHealthy(), but we no
+    // longer let it veto routing decisions.
     const entries = this.getOrderedUrls();
 
-    for (const entry of [
-      // try healthy servers first
-      ...entries.filter((entry) => this.isHealthy(entry.url)),
-      ...entries.filter((entry) => !this.isHealthy(entry.url)),
-    ]) {
+    for (const entry of entries) {
       try {
         const response = await fetch(new URL('predict', entry.url), {
           method: 'POST',
@@ -437,11 +445,10 @@ export class MachineLearningRepository {
   }
 
   async getHardware(): Promise<MachineLearningHardwareResponse> {
+    // Same managed-first ordering as predict(); don't let the 2s health probe
+    // shadow a cold-starting RunPod worker. See predict() for the rationale.
     const entries = this.getOrderedUrls();
-    for (const entry of [
-      ...entries.filter((entry) => this.isHealthy(entry.url)),
-      ...entries.filter((entry) => !this.isHealthy(entry.url)),
-    ]) {
+    for (const entry of entries) {
       try {
         const response = await fetch(new URL('/hardware', entry.url), {
           headers: this.authHeaders(entry),

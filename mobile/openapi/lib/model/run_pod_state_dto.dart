@@ -32,6 +32,7 @@ class RunPodStateDto {
     this.stoppedAt,
     this.templateId,
     this.unhealthySince,
+    this.workerReady,
     this.workersMax,
     this.workersMin,
   });
@@ -176,6 +177,14 @@ class RunPodStateDto {
   ///
   String? unhealthySince;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? workerReady;
+
   num? workersMax;
 
   num? workersMin;
@@ -201,6 +210,7 @@ class RunPodStateDto {
     other.stoppedAt == stoppedAt &&
     other.templateId == templateId &&
     other.unhealthySince == unhealthySince &&
+    other.workerReady == workerReady &&
     other.workersMax == workersMax &&
     other.workersMin == workersMin;
 
@@ -226,11 +236,12 @@ class RunPodStateDto {
     (stoppedAt == null ? 0 : stoppedAt!.hashCode) +
     (templateId == null ? 0 : templateId!.hashCode) +
     (unhealthySince == null ? 0 : unhealthySince!.hashCode) +
+    (workerReady == null ? 0 : workerReady!.hashCode) +
     (workersMax == null ? 0 : workersMax!.hashCode) +
     (workersMin == null ? 0 : workersMin!.hashCode);
 
   @override
-  String toString() => 'RunPodStateDto[endpointId=$endpointId, endpointUrl=$endpointUrl, errorMessage=$errorMessage, estimatedCostUsd=$estimatedCostUsd, gpuTypeId=$gpuTypeId, idleTimeoutSeconds=$idleTimeoutSeconds, imageName=$imageName, instanceTag=$instanceTag, lastBusyAt=$lastBusyAt, maxRuntimeHours=$maxRuntimeHours, mlUrl=$mlUrl, podCreatedAt=$podCreatedAt, podId=$podId, pricePerHour=$pricePerHour, runningSince=$runningSince, status=$status, stoppedAt=$stoppedAt, templateId=$templateId, unhealthySince=$unhealthySince, workersMax=$workersMax, workersMin=$workersMin]';
+  String toString() => 'RunPodStateDto[endpointId=$endpointId, endpointUrl=$endpointUrl, errorMessage=$errorMessage, estimatedCostUsd=$estimatedCostUsd, gpuTypeId=$gpuTypeId, idleTimeoutSeconds=$idleTimeoutSeconds, imageName=$imageName, instanceTag=$instanceTag, lastBusyAt=$lastBusyAt, maxRuntimeHours=$maxRuntimeHours, mlUrl=$mlUrl, podCreatedAt=$podCreatedAt, podId=$podId, pricePerHour=$pricePerHour, runningSince=$runningSince, status=$status, stoppedAt=$stoppedAt, templateId=$templateId, unhealthySince=$unhealthySince, workerReady=$workerReady, workersMax=$workersMax, workersMin=$workersMin]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -325,6 +336,11 @@ class RunPodStateDto {
     } else {
     //  json[r'unhealthySince'] = null;
     }
+    if (this.workerReady != null) {
+      json[r'workerReady'] = this.workerReady;
+    } else {
+    //  json[r'workerReady'] = null;
+    }
     if (this.workersMax != null) {
       json[r'workersMax'] = this.workersMax;
     } else {
@@ -374,6 +390,7 @@ class RunPodStateDto {
         stoppedAt: mapValueOfType<String>(json, r'stoppedAt'),
         templateId: mapValueOfType<String>(json, r'templateId'),
         unhealthySince: mapValueOfType<String>(json, r'unhealthySince'),
+        workerReady: mapValueOfType<bool>(json, r'workerReady'),
         workersMax: json[r'workersMax'] == null
             ? null
             : num.parse('${json[r'workersMax']}'),

@@ -1885,6 +1885,7 @@ export type RunPodStateDto = {
     stoppedAt?: string;
     templateId?: string;
     unhealthySince?: string;
+    workerReady?: boolean;
     workersMax?: number | null;
     workersMin?: number | null;
 };
@@ -2996,6 +2997,8 @@ export type SystemConfigRunPodServerlessDto = {
 export type SystemConfigRunPodDto = {
     /** RunPod API key (write-only; empty preserves the existing key) */
     apiKey: string;
+    /** Read-only indicator that a key is currently stored. Set by the server; ignored on write. */
+    apiKeyConfigured?: boolean;
     /** Auto-run ML backfill on pod ready (Pod mode) */
     autoBackfillOnLaunch: boolean;
     /** Auto-stop when idle (Pod mode) */

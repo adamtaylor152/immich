@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { defaults, SystemConfig } from 'src/config';
+import { mapConfig } from 'src/dtos/system-config.dto';
 import {
   AudioCodec,
   Colorspace,
@@ -414,7 +415,7 @@ describe(SystemConfigService.name, () => {
     it('should return the default config', () => {
       mocks.systemMetadata.get.mockResolvedValue(partialConfig);
 
-      expect(sut.getDefaults()).toEqual(defaults);
+      expect(sut.getDefaults()).toEqual(mapConfig(defaults));
       expect(mocks.systemMetadata.get).not.toHaveBeenCalled();
     });
   });
@@ -423,7 +424,7 @@ describe(SystemConfigService.name, () => {
     it('should return the default config', async () => {
       mocks.systemMetadata.get.mockResolvedValue({});
 
-      await expect(sut.getSystemConfig()).resolves.toEqual(defaults);
+      await expect(sut.getSystemConfig()).resolves.toEqual(mapConfig(defaults));
     });
 
     it('should merge the overrides', async () => {
@@ -434,14 +435,14 @@ describe(SystemConfigService.name, () => {
         user: { deleteDelay: 15 },
       });
 
-      await expect(sut.getSystemConfig()).resolves.toEqual(updatedConfig);
+      await expect(sut.getSystemConfig()).resolves.toEqual(mapConfig(updatedConfig));
     });
 
     it('should load the config from a json file', async () => {
       mocks.config.getEnv.mockReturnValue(mockEnvData({ configFile: 'immich-config.json' }));
       mocks.systemMetadata.readFile.mockResolvedValue(JSON.stringify(partialConfig));
 
-      await expect(sut.getSystemConfig()).resolves.toEqual(updatedConfig);
+      await expect(sut.getSystemConfig()).resolves.toEqual(mapConfig(updatedConfig));
 
       expect(mocks.systemMetadata.readFile).toHaveBeenCalledWith('immich-config.json');
     });
@@ -525,7 +526,7 @@ describe(SystemConfigService.name, () => {
       `;
       mocks.systemMetadata.readFile.mockResolvedValue(partialConfig);
 
-      await expect(sut.getSystemConfig()).resolves.toEqual(updatedConfig);
+      await expect(sut.getSystemConfig()).resolves.toEqual(mapConfig(updatedConfig));
 
       expect(mocks.systemMetadata.readFile).toHaveBeenCalledWith('immich-config.yaml');
     });
@@ -534,7 +535,7 @@ describe(SystemConfigService.name, () => {
       mocks.config.getEnv.mockReturnValue(mockEnvData({ configFile: 'immich-config.json' }));
       mocks.systemMetadata.readFile.mockResolvedValue(JSON.stringify({}));
 
-      await expect(sut.getSystemConfig()).resolves.toEqual(defaults);
+      await expect(sut.getSystemConfig()).resolves.toEqual(mapConfig(defaults));
 
       expect(mocks.systemMetadata.readFile).toHaveBeenCalledWith('immich-config.json');
     });
@@ -772,7 +773,7 @@ describe(SystemConfigService.name, () => {
 
     it('should update the config and emit an event', async () => {
       mocks.systemMetadata.get.mockResolvedValue(partialConfig);
-      await expect(sut.updateSystemConfig(updatedConfig)).resolves.toEqual(updatedConfig);
+      await expect(sut.updateSystemConfig(updatedConfig)).resolves.toEqual(mapConfig(updatedConfig));
       expect(mocks.event.emit).toHaveBeenCalledWith(
         'ConfigUpdate',
         expect.objectContaining({ oldConfig: expect.any(Object), newConfig: updatedConfig }),

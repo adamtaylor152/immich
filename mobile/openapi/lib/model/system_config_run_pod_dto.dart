@@ -14,6 +14,7 @@ class SystemConfigRunPodDto {
   /// Returns a new [SystemConfigRunPodDto] instance.
   SystemConfigRunPodDto({
     required this.apiKey,
+    this.apiKeyConfigured,
     required this.autoBackfillOnLaunch,
     required this.autoStopEnabled,
     required this.autoStopGraceMinutes,
@@ -30,6 +31,15 @@ class SystemConfigRunPodDto {
 
   /// RunPod API key (write-only; empty preserves the existing key)
   String apiKey;
+
+  /// Read-only indicator that a key is currently stored. Set by the server; ignored on write.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? apiKeyConfigured;
 
   /// Auto-run ML backfill on pod ready (Pod mode)
   bool autoBackfillOnLaunch;
@@ -87,6 +97,7 @@ class SystemConfigRunPodDto {
   @override
   bool operator ==(Object other) => identical(this, other) || other is SystemConfigRunPodDto &&
     other.apiKey == apiKey &&
+    other.apiKeyConfigured == apiKeyConfigured &&
     other.autoBackfillOnLaunch == autoBackfillOnLaunch &&
     other.autoStopEnabled == autoStopEnabled &&
     other.autoStopGraceMinutes == autoStopGraceMinutes &&
@@ -104,6 +115,7 @@ class SystemConfigRunPodDto {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (apiKey.hashCode) +
+    (apiKeyConfigured == null ? 0 : apiKeyConfigured!.hashCode) +
     (autoBackfillOnLaunch.hashCode) +
     (autoStopEnabled.hashCode) +
     (autoStopGraceMinutes.hashCode) +
@@ -118,11 +130,16 @@ class SystemConfigRunPodDto {
     (volumeGb.hashCode);
 
   @override
-  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, serverless=$serverless, volumeGb=$volumeGb]';
+  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, apiKeyConfigured=$apiKeyConfigured, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, serverless=$serverless, volumeGb=$volumeGb]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'apiKey'] = this.apiKey;
+    if (this.apiKeyConfigured != null) {
+      json[r'apiKeyConfigured'] = this.apiKeyConfigured;
+    } else {
+    //  json[r'apiKeyConfigured'] = null;
+    }
       json[r'autoBackfillOnLaunch'] = this.autoBackfillOnLaunch;
       json[r'autoStopEnabled'] = this.autoStopEnabled;
       json[r'autoStopGraceMinutes'] = this.autoStopGraceMinutes;
@@ -152,6 +169,7 @@ class SystemConfigRunPodDto {
 
       return SystemConfigRunPodDto(
         apiKey: mapValueOfType<String>(json, r'apiKey')!,
+        apiKeyConfigured: mapValueOfType<bool>(json, r'apiKeyConfigured'),
         autoBackfillOnLaunch: mapValueOfType<bool>(json, r'autoBackfillOnLaunch')!,
         autoStopEnabled: mapValueOfType<bool>(json, r'autoStopEnabled')!,
         autoStopGraceMinutes: mapValueOfType<int>(json, r'autoStopGraceMinutes')!,

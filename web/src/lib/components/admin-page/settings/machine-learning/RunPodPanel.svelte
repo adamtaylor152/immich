@@ -15,6 +15,12 @@
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import { Button, toastManager } from '@immich/ui';
+  import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+
+  // Optionally accept the in-progress form state so visibility of the launch
+  // fieldsets reacts to dropdown changes the admin hasn't saved yet. Falls
+  // back to the saved config when the parent doesn't pass anything.
+  let { workingConfig }: { workingConfig?: SystemConfigMachineLearningDto } = $props();
 
   // Hand-rolled fetch instead of the SDK helper so we don't have to plumb additional
   // generated names through. Hits /api/runpod/pods/current with the existing session.
@@ -29,7 +35,18 @@
   const runBackfill = async () => {
     const response = await fetch('/api/runpod/backfill', { method: 'POST', credentials: 'include' });
     if (!response.ok) {
-      throw new Error(`Failed to enqueue backfill (${response.status})`);
+      // Surface the actual server error message (e.g. "Cannot start backfill
+      // while RunPod is serverless-ready") instead of a generic status code.
+      let detail = `${response.status}`;
+      try {
+        const body = (await response.json()) as { message?: string };
+        if (body.message) {
+          detail = body.message;
+        }
+      } catch {
+        // Body wasn't JSON; fall back to status code.
+      }
+      throw new Error(`Failed to enqueue backfill: ${detail}`);
     }
     return response.json() as Promise<{ enqueued: string[]; skipped: string[] }>;
   };
@@ -55,13 +72,29 @@
   // Zod's `.default(...)` on runpod makes it optional in the DTO type even
   // though the server always materialises it; assert non-null here.
   const rp = $derived(config.machineLearning.runpod!);
-  const runpodMode = $derived<RunPodMode>(
-    rp.mode && rp.mode !== RunPodMode.Disabled ? rp.mode : rp.enabled ? RunPodMode.Pod : RunPodMode.Disabled,
+  // Visibility-driving state. When the parent passes `workingConfig` (the
+  // form's in-progress edits), prefer it so changing the Mode dropdown
+  // immediately reveals/hides the matching sections. Otherwise fall back to
+  // the saved server config so the panel is still usable standalone.
+  const editing = $derived<{ enabled: boolean; runpod: NonNullable<typeof rp> }>(
+    workingConfig
+      ? { enabled: workingConfig.enabled, runpod: workingConfig.runpod! }
+      : { enabled: config.machineLearning.enabled, runpod: rp },
   );
-  const enabled = $derived(config.machineLearning.enabled && runpodMode !== RunPodMode.Disabled);
+  const runpodMode = $derived<RunPodMode>(
+    editing.runpod.mode && editing.runpod.mode !== RunPodMode.Disabled
+      ? editing.runpod.mode
+      : editing.runpod.enabled
+        ? RunPodMode.Pod
+        : RunPodMode.Disabled,
+  );
+  const enabled = $derived(editing.enabled && runpodMode !== RunPodMode.Disabled);
   const isPodMode = $derived(runpodMode === RunPodMode.Pod);
   const isServerlessMode = $derived(runpodMode === RunPodMode.Serverless);
-  const apiKeyConfigured = $derived(rp.apiKey.length > 0);
+  // The saved apiKey is always redacted to '' on read, so checking its
+  // length here always returned false. Honour the explicit server-side
+  // boolean OR a fresh non-empty value typed into the in-progress form.
+  const apiKeyConfigured = $derived(Boolean(rp.apiKeyConfigured) || (editing.runpod.apiKey?.length ?? 0) > 0);
   const status = $derived(podState?.status ?? 'idle');
   const isTransitioning = $derived(
     ['provisioning', 'starting', 'stopping', 'serverless-provisioning'].includes(status),
@@ -69,6 +102,12 @@
   const isRunning = $derived(status === 'running');
   const isStopped = $derived(status === 'stopped');
   const isServerlessReady = $derived(status === 'serverless-ready');
+  // workerReady is the server-side /ping probe result. `serverless-ready`
+  // means the endpoint exists; workerReady means a worker is actually
+  // responding. Pod's `running` state is set after a successful /ping so
+  // workerReady is effectively true whenever running == true, but the
+  // server returns the explicit flag either way.
+  const workerReady = $derived(podState?.workerReady === true);
   const canBackfill = $derived((isRunning || isServerlessReady) && !backfilling);
   let endpointBusy = $state(false);
   let consentError = $state(false);
@@ -337,30 +376,6 @@
               {status}
             </span>
           </div>
-
-          {#if isTransitioning || isRunning || isServerlessReady}
-            <div class="relative mt-2 h-6 w-full max-w-md overflow-hidden rounded-full bg-immich-gray/20">
-              {#if isRunning || isServerlessReady}
-                <div class="size-full bg-green-500 transition-all"></div>
-              {:else}
-                <!-- Indeterminate animated bar during boot. -->
-                <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
-              {/if}
-              <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
-                {#if isRunning || isServerlessReady}
-                  <span class="text-green-900">Ready. RunPod GPU is ready.</span>
-                {:else if status === 'serverless-provisioning'}
-                  <span class="text-yellow-900">Provisioning serverless endpoint…</span>
-                {:else if status === 'provisioning'}
-                  <span class="text-yellow-900">Provisioning pod…</span>
-                {:else if status === 'starting'}
-                  <span class="text-yellow-900">Starting pod…</span>
-                {:else if status === 'stopping'}
-                  <span class="text-yellow-900">Stopping pod…</span>
-                {/if}
-              </div>
-            </div>
-          {/if}
           {#if podState.podId}
             <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
           {/if}
@@ -448,6 +463,36 @@
           {/if}
         </div>
       </div>
+
+      {#if isTransitioning || isRunning || isServerlessReady}
+        <div class="relative mt-3 h-6 w-full overflow-hidden rounded-full bg-immich-gray/20">
+          {#if (isRunning || isServerlessReady) && workerReady}
+            <div class="size-full bg-green-500 transition-all"></div>
+          {:else}
+            <!-- Indeterminate animated bar for any not-yet-live state:
+                 provisioning, starting, stopping, serverless-provisioning,
+                 OR serverless-ready while the worker is still cold-starting. -->
+            <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
+          {/if}
+          <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
+            {#if (isRunning || isServerlessReady) && workerReady}
+              <span class="text-green-900">Ready. RunPod GPU is responding.</span>
+            {:else if isServerlessReady}
+              <span class="text-yellow-900">Endpoint ready — worker initializing…</span>
+            {:else if isRunning}
+              <span class="text-yellow-900">Pod running — worker initializing…</span>
+            {:else if status === 'serverless-provisioning'}
+              <span class="text-yellow-900">Provisioning serverless endpoint…</span>
+            {:else if status === 'provisioning'}
+              <span class="text-yellow-900">Provisioning pod…</span>
+            {:else if status === 'starting'}
+              <span class="text-yellow-900">Starting pod…</span>
+            {:else if status === 'stopping'}
+              <span class="text-yellow-900">Stopping pod…</span>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 
