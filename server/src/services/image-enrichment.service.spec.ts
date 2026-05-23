@@ -1088,6 +1088,8 @@ describe(ImageEnrichmentService.name, () => {
         tags,
       });
       // smartAlbum mocks default to no-ops.
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(new Map());
+      mocks.smartAlbum.getExcludedSmartAlbumIds.mockResolvedValue(new Set());
       mocks.smartAlbum.getMatchingKinds.mockResolvedValue([]);
       mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockResolvedValue(null);
       mocks.smartAlbum.isExcluded.mockResolvedValue(false);
@@ -1095,15 +1097,13 @@ describe(ImageEnrichmentService.name, () => {
       mocks.smartAlbum.removeAssetFromSmartAlbum.mockResolvedValue();
     });
 
-    it('should invoke smart-album evaluation after a successful description (evaluate path executes)', async () => {
-      // Trigger an error inside evaluate so we can observe the logger.warn call.
-      // This confirms evaluate was invoked; the mock will throw on first call to
-      // the smart-album repo so we catch + log it.
-      mocks.smartAlbum.getMatchingKinds.mockRejectedValue(new Error('forced'));
-
+    it('should invoke smart-album evaluation with the asset, owner, and tags after a successful description', async () => {
       await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
 
-      expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Smart-album evaluation failed'));
+      // The asset's ownerId is set by the test factory; just verify evaluate was
+      // wired through with the right shape and the model-emitted tags.
+      expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).toHaveBeenCalledTimes(1);
+      expect(mocks.smartAlbum.getMatchingKinds).toHaveBeenCalledWith(assetId, expect.any(String));
     });
 
     it('should not fail the description job when smartAlbumService.evaluate throws', async () => {

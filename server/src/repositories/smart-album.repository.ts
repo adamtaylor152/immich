@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { AlbumUserRole } from 'src/enum';
 import { DB } from 'src/schema';
 
 @Injectable()
@@ -9,7 +10,9 @@ export class SmartAlbumRepository {
 
   /**
    * Idempotent: for each (ownerId, kind) pair that doesn't already have a
-   * smart_album row, create a backing album + smart_album in a single CTE.
+   * smart_album row, create the backing album + album_user (owner) + smart_album
+   * in a single CTE chain. Relies on the unique constraint on (ownerId, kind)
+   * to handle race conditions between concurrent calls.
    */
   async ensureForUser(ownerId: string, kinds: { kind: string; name: string }[]): Promise<void> {
     if (kinds.length === 0) {
@@ -28,14 +31,14 @@ export class SmartAlbumRepository {
         continue;
       }
 
-      // Create the backing album and smart_album row in one CTE.
+      // Create backing album + album_user (owner) + smart_album in one CTE
+      // chain. The final INSERT references both `new_album` and `new_album_owner`
+      // so PostgreSQL is forced to execute every data-modifying CTE.
+      // ON CONFLICT (ownerId, kind) DO NOTHING absorbs the rare race where a
+      // concurrent ensureForUser inserted the same kind between the SELECT
+      // above and this INSERT.
       await this.db
-        .with('new_album', (qb) =>
-          qb
-            .insertInto('album')
-            .values({ albumName: name })
-            .returning('id'),
-        )
+        .with('new_album', (qb) => qb.insertInto('album').values({ albumName: name }).returning('id'))
         .with('new_album_owner', (qb) =>
           qb
             .insertInto('album_user')
@@ -45,21 +48,24 @@ export class SmartAlbumRepository {
                 .select((eb) => [
                   eb.ref('new_album.id').as('albumId'),
                   sql`${ownerId}::uuid`.as('userId'),
-                  sql`${'owner'}::album_user_role_enum`.as('role'),
+                  sql`${AlbumUserRole.Owner}::album_user_role_enum`.as('role'),
                 ]),
             )
             .returning('albumId'),
         )
         .insertInto('smart_album')
+        .columns(['albumId', 'ownerId', 'kind'])
         .expression((eb) =>
           eb
-            .selectFrom('new_album')
+            .selectFrom('new_album_owner')
+            .innerJoin('new_album', 'new_album.id', 'new_album_owner.albumId')
             .select((eb) => [
-              eb.ref('new_album.id').as('albumId'),
+              eb.ref('new_album_owner.albumId').as('albumId'),
               sql`${ownerId}::uuid`.as('ownerId'),
               sql`${kind}`.as('kind'),
             ]),
         )
+        .onConflict((oc) => oc.columns(['ownerId', 'kind']).doNothing())
         .execute();
     }
   }
@@ -74,6 +80,20 @@ export class SmartAlbumRepository {
     return row?.id ?? null;
   }
 
+  /**
+   * Return a map of kind -> smart_album.id for all built-in kinds belonging to
+   * `ownerId`. Replaces N round-trips to `getSmartAlbumIdForOwnerAndKind` with
+   * a single query.
+   */
+  async getAllSmartAlbumIdsForOwner(ownerId: string): Promise<Map<string, string>> {
+    const rows = await this.db
+      .selectFrom('smart_album')
+      .select(['id', 'kind'])
+      .where('ownerId', '=', ownerId)
+      .execute();
+    return new Map(rows.map((r) => [r.kind, r.id]));
+  }
+
   async isExcluded(smartAlbumId: string, assetId: string): Promise<boolean> {
     const row = await this.db
       .selectFrom('smart_album_exclusion')
@@ -85,60 +105,89 @@ export class SmartAlbumRepository {
   }
 
   /**
+   * Return the subset of `smartAlbumIds` that have the given asset excluded.
+   * Single query equivalent of calling `isExcluded` per smart album.
+   */
+  async getExcludedSmartAlbumIds(assetId: string, smartAlbumIds: string[]): Promise<Set<string>> {
+    if (smartAlbumIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .selectFrom('smart_album_exclusion')
+      .select('smartAlbumId')
+      .where('assetId', '=', assetId)
+      .where('smartAlbumId', 'in', smartAlbumIds)
+      .execute();
+    return new Set(rows.map((r) => r.smartAlbumId));
+  }
+
+  /**
    * Add asset to smart_album_asset AND mirror into album_asset so it shows
-   * up in normal album browsing. Both inserts are ON CONFLICT DO NOTHING.
+   * up in normal album browsing. Both inserts run in a single transaction so
+   * we never end up with a half-applied membership.
    */
   async addAssetToSmartAlbum(
     smartAlbumId: string,
     assetId: string,
     matchReason: 'tag' | 'clip' | 'both',
   ): Promise<void> {
-    const smartAlbum = await this.db
-      .selectFrom('smart_album')
-      .select('albumId')
-      .where('id', '=', smartAlbumId)
-      .executeTakeFirst();
+    await this.db.transaction().execute(async (trx) => {
+      const smartAlbum = await trx
+        .selectFrom('smart_album')
+        .select('albumId')
+        .where('id', '=', smartAlbumId)
+        .executeTakeFirst();
 
-    if (!smartAlbum) {
-      return;
-    }
+      if (!smartAlbum) {
+        return;
+      }
 
-    await this.db
-      .insertInto('smart_album_asset')
-      .values({ smartAlbumId, assetId, matchReason })
-      .onConflict((oc) => oc.doNothing())
-      .execute();
+      await trx
+        .insertInto('smart_album_asset')
+        .values({ smartAlbumId, assetId, matchReason })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
 
-    await this.db
-      .insertInto('album_asset')
-      .values({ albumId: smartAlbum.albumId, assetId })
-      .onConflict((oc) => oc.doNothing())
-      .execute();
+      await trx
+        .insertInto('album_asset')
+        .values({ albumId: smartAlbum.albumId, assetId })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+    });
   }
 
   /**
    * Remove asset from smart_album_asset AND from the backing album_asset.
+   *
+   * Wrapped in a transaction so we never leave the mirror half-applied. The
+   * mirror is deleted FIRST so that, if a transaction aborts midway, the
+   * remaining `smart_album_asset` row will let the next `evaluate` call
+   * either re-add the mirror or remove the smart-album-asset row — i.e. the
+   * orphan self-heals. Deleting in the opposite order would leave a stuck
+   * `album_asset` row that no future evaluate could clean up.
    */
   async removeAssetFromSmartAlbum(smartAlbumId: string, assetId: string): Promise<void> {
-    const smartAlbum = await this.db
-      .selectFrom('smart_album')
-      .select('albumId')
-      .where('id', '=', smartAlbumId)
-      .executeTakeFirst();
+    await this.db.transaction().execute(async (trx) => {
+      const smartAlbum = await trx
+        .selectFrom('smart_album')
+        .select('albumId')
+        .where('id', '=', smartAlbumId)
+        .executeTakeFirst();
 
-    await this.db
-      .deleteFrom('smart_album_asset')
-      .where('smartAlbumId', '=', smartAlbumId)
-      .where('assetId', '=', assetId)
-      .execute();
+      if (smartAlbum) {
+        await trx
+          .deleteFrom('album_asset')
+          .where('albumId', '=', smartAlbum.albumId)
+          .where('assetId', '=', assetId)
+          .execute();
+      }
 
-    if (smartAlbum) {
-      await this.db
-        .deleteFrom('album_asset')
-        .where('albumId', '=', smartAlbum.albumId)
+      await trx
+        .deleteFrom('smart_album_asset')
+        .where('smartAlbumId', '=', smartAlbumId)
         .where('assetId', '=', assetId)
         .execute();
-    }
+    });
   }
 
   /**
@@ -156,16 +205,36 @@ export class SmartAlbumRepository {
   }
 
   /**
-   * Add to smart_album_exclusion and remove from smart_album_asset + album_asset.
-   * Stub for PR 7 (admin UI opt-out endpoint).
+   * Add to smart_album_exclusion and remove from smart_album_asset + album_asset
+   * atomically. Stub for PR 7 (admin UI opt-out endpoint).
    */
   async excludeAsset(smartAlbumId: string, assetId: string): Promise<void> {
-    await this.db
-      .insertInto('smart_album_exclusion')
-      .values({ smartAlbumId, assetId })
-      .onConflict((oc) => oc.doNothing())
-      .execute();
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .insertInto('smart_album_exclusion')
+        .values({ smartAlbumId, assetId })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
 
-    await this.removeAssetFromSmartAlbum(smartAlbumId, assetId);
+      const smartAlbum = await trx
+        .selectFrom('smart_album')
+        .select('albumId')
+        .where('id', '=', smartAlbumId)
+        .executeTakeFirst();
+
+      if (smartAlbum) {
+        await trx
+          .deleteFrom('album_asset')
+          .where('albumId', '=', smartAlbum.albumId)
+          .where('assetId', '=', assetId)
+          .execute();
+      }
+
+      await trx
+        .deleteFrom('smart_album_asset')
+        .where('smartAlbumId', '=', smartAlbumId)
+        .where('assetId', '=', assetId)
+        .execute();
+    });
   }
 }

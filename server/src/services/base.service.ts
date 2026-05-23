@@ -41,10 +41,10 @@ import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { ServerInfoRepository } from 'src/repositories/server-info.repository';
-import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { StackRepository } from 'src/repositories/stack.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository';
@@ -227,6 +227,7 @@ export class BaseService {
       ctx.ocrRepository,
       ctx.partnerRepository,
       ctx.personRepository,
+      ctx.physicalFileRepository,
       ctx.pluginRepository,
       ctx.processRepository,
       ctx.searchRepository,
@@ -245,6 +246,7 @@ export class BaseService {
       ctx.trashRepository,
       ctx.userRepository,
       ctx.versionRepository,
+      ctx.videoStreamRepository,
       ctx.viewRepository,
       ctx.websocketRepository,
       ctx.workflowRepository,

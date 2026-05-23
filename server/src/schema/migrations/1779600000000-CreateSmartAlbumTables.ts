@@ -21,7 +21,7 @@ export async function up(db: Kysely<any>): Promise<void> {
       "smartAlbumId" uuid NOT NULL REFERENCES "smart_album"("id") ON DELETE CASCADE,
       "assetId" uuid NOT NULL REFERENCES "asset"("id") ON DELETE CASCADE,
       "addedAt" timestamptz NOT NULL DEFAULT now(),
-      "matchReason" text NOT NULL,
+      "matchReason" text NOT NULL CHECK ("matchReason" IN ('tag', 'clip', 'both')),
       PRIMARY KEY ("smartAlbumId", "assetId")
     );
   `.execute(db);

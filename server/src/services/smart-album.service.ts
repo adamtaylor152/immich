@@ -1,19 +1,54 @@
 import { Injectable } from '@nestjs/common';
+import { SystemConfig } from 'src/config';
 import { OnEvent } from 'src/decorators';
+import { BootstrapEventPriority, ImmichWorker } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 
-const BUILT_IN_KINDS = ['travel', 'documents', 'screenshots', 'food', 'pets', 'nature'] as const;
-type BuiltInKind = (typeof BUILT_IN_KINDS)[number];
+type BuiltInKind = keyof SystemConfig['smartAlbums']['builtIn'];
+
+/**
+ * Per-config memoized cache of lowercased tag-trigger sets. Keyed on the
+ * `builtIn` config object reference — when config is reloaded by SystemConfig,
+ * the reference changes and the cache is rebuilt lazily.
+ */
+const tagTriggerCache = new WeakMap<SystemConfig['smartAlbums']['builtIn'], Map<BuiltInKind, Set<string>>>();
+
+const getTagTriggerSet = (builtIn: SystemConfig['smartAlbums']['builtIn'], kind: BuiltInKind): Set<string> => {
+  let perConfig = tagTriggerCache.get(builtIn);
+  if (!perConfig) {
+    perConfig = new Map();
+    tagTriggerCache.set(builtIn, perConfig);
+  }
+  let set = perConfig.get(kind);
+  if (!set) {
+    set = new Set(builtIn[kind].tagTriggers.map((t) => t.toLowerCase()));
+    perConfig.set(kind, set);
+  }
+  return set;
+};
 
 @Injectable()
 export class SmartAlbumService extends BaseService {
   /**
    * On server startup, ensure the 6 built-in smart albums exist for every
-   * active user. Idempotent — safe to call on every server start.
-   * Runs after SystemConfig bootstrap (priority > 100 means later).
+   * active user. Idempotent — safe to call on every server start. Gated on
+   * `smartAlbums.enabled` so users who haven't opted in don't get six surprise
+   * albums silently injected into their library.
+   *
+   * Runs on the API worker only (one process), AFTER SystemConfig has loaded
+   * its values from the database.
    */
-  @OnEvent({ name: 'AppBootstrap' })
+  @OnEvent({
+    name: 'AppBootstrap',
+    priority: BootstrapEventPriority.SystemConfig + 1,
+    workers: [ImmichWorker.Api],
+  })
   async onBootstrap(): Promise<void> {
+    const { smartAlbums } = await this.getConfig({ withCache: true });
+    if (!smartAlbums.enabled) {
+      return;
+    }
+
     const users = await this.userRepository.getList({ withDeleted: false });
     for (const user of users) {
       try {
@@ -42,29 +77,40 @@ export class SmartAlbumService extends BaseService {
       return;
     }
 
+    const builtInKinds = Object.keys(smartAlbums.builtIn) as BuiltInKind[];
+    const albumIdByKind = await this.smartAlbumRepository.getAllSmartAlbumIdsForOwner(ownerId);
+    const candidateAlbumIds: string[] = [];
+    for (const kind of builtInKinds) {
+      const id = albumIdByKind.get(kind);
+      if (id) {
+        candidateAlbumIds.push(id);
+      }
+    }
+    const excludedAlbumIds = await this.smartAlbumRepository.getExcludedSmartAlbumIds(assetId, candidateAlbumIds);
+
     const lowerTags = tags.map((t) => t.toLowerCase());
 
     const currentKinds = new Set(await this.smartAlbumRepository.getMatchingKinds(assetId, ownerId));
     const matchedKinds = new Set<string>();
 
-    for (const kind of BUILT_IN_KINDS) {
-      const kindConfig = smartAlbums.builtIn[kind as BuiltInKind];
+    for (const kind of builtInKinds) {
+      const kindConfig = smartAlbums.builtIn[kind];
       if (!kindConfig.enabled) {
         continue;
       }
 
-      const smartAlbumId = await this.smartAlbumRepository.getSmartAlbumIdForOwnerAndKind(ownerId, kind);
+      const smartAlbumId = albumIdByKind.get(kind);
       if (!smartAlbumId) {
         // User not yet bootstrapped — ensureBuiltInAlbumsForUser will create it.
         continue;
       }
 
-      if (await this.smartAlbumRepository.isExcluded(smartAlbumId, assetId)) {
+      if (excludedAlbumIds.has(smartAlbumId)) {
         continue;
       }
 
       // Tag match: case-insensitive comparison against tagTriggers.
-      const tagTriggerLower = new Set(kindConfig.tagTriggers.map((t) => t.toLowerCase()));
+      const tagTriggerLower = getTagTriggerSet(smartAlbums.builtIn, kind);
       const hasTagMatch = lowerTags.some((tag) => tagTriggerLower.has(tag));
 
       if (hasTagMatch) {
@@ -83,7 +129,7 @@ export class SmartAlbumService extends BaseService {
     // remove it so that stale memberships don't linger when tags change.
     for (const kind of currentKinds) {
       if (!matchedKinds.has(kind)) {
-        const smartAlbumId = await this.smartAlbumRepository.getSmartAlbumIdForOwnerAndKind(ownerId, kind);
+        const smartAlbumId = albumIdByKind.get(kind as BuiltInKind);
         if (smartAlbumId) {
           await this.smartAlbumRepository.removeAssetFromSmartAlbum(smartAlbumId, assetId);
         }
@@ -97,9 +143,13 @@ export class SmartAlbumService extends BaseService {
    */
   async ensureBuiltInAlbumsForUser(ownerId: string): Promise<void> {
     const { smartAlbums } = await this.getConfig({ withCache: true });
-    const kinds = BUILT_IN_KINDS.map((kind) => ({
+    if (!smartAlbums.enabled) {
+      return;
+    }
+    const builtInKinds = Object.keys(smartAlbums.builtIn) as BuiltInKind[];
+    const kinds = builtInKinds.map((kind) => ({
       kind,
-      name: smartAlbums.builtIn[kind as BuiltInKind].name,
+      name: smartAlbums.builtIn[kind].name,
     }));
     await this.smartAlbumRepository.ensureForUser(ownerId, kinds);
   }

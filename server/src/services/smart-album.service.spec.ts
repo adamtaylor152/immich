@@ -3,6 +3,9 @@ import { newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
 import { vi } from 'vitest';
 
+// Build an albumIdByKind map for the given kinds.
+const albumMap = (entries: Record<string, string>) => new Map(Object.entries(entries));
+
 describe(SmartAlbumService.name, () => {
   let sut: SmartAlbumService;
   let mocks: ServiceMocks;
@@ -11,35 +14,31 @@ describe(SmartAlbumService.name, () => {
   const assetId = newUuid();
   const travelAlbumId = newUuid();
   const foodAlbumId = newUuid();
+  const natureAlbumId = newUuid();
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(SmartAlbumService));
 
-    // Default: smartAlbums enabled, all built-in kinds enabled.
+    // Default: smartAlbums enabled, all built-in kinds enabled (relying on
+    // SystemConfig defaults loaded via getConfig).
     mocks.systemMetadata.get.mockResolvedValue({
       smartAlbums: { enabled: true },
     });
 
-    // Default: asset not currently in any smart albums.
+    // Default repo state: no smart albums bootstrapped, no exclusions, no
+    // existing memberships.
+    mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(new Map());
+    mocks.smartAlbum.getExcludedSmartAlbumIds.mockResolvedValue(new Set());
     mocks.smartAlbum.getMatchingKinds.mockResolvedValue([]);
-
-    // Default: not excluded.
     mocks.smartAlbum.isExcluded.mockResolvedValue(false);
-
-    // Default: null album IDs (not bootstrapped).
     mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockResolvedValue(null);
-
-    // Default: add/remove succeed silently.
     mocks.smartAlbum.addAssetToSmartAlbum.mockResolvedValue();
     mocks.smartAlbum.removeAssetFromSmartAlbum.mockResolvedValue();
   });
 
   describe('evaluate', () => {
     it('should add asset to matching kinds based on tags', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
 
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'sunset'] });
 
@@ -54,6 +53,7 @@ describe(SmartAlbumService.name, () => {
 
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'airport'] });
 
+      expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).not.toHaveBeenCalled();
       expect(mocks.smartAlbum.getMatchingKinds).not.toHaveBeenCalled();
       expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalled();
     });
@@ -65,10 +65,7 @@ describe(SmartAlbumService.name, () => {
           builtIn: { travel: { enabled: false } },
         },
       });
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
 
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'airport'] });
 
@@ -77,11 +74,8 @@ describe(SmartAlbumService.name, () => {
     });
 
     it('should skip when exclusion exists for the asset in that smart album', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
-      mocks.smartAlbum.isExcluded.mockResolvedValue(true);
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.smartAlbum.getExcludedSmartAlbumIds.mockResolvedValue(new Set([travelAlbumId]));
 
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'airport'] });
 
@@ -91,23 +85,16 @@ describe(SmartAlbumService.name, () => {
     it('should remove asset from previously-matched kinds when tags no longer match', async () => {
       // Asset is currently in 'travel'.
       mocks.smartAlbum.getMatchingKinds.mockResolvedValue(['travel']);
-      // But current tags don't match travel triggers.
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
 
-      await sut.evaluate({ assetId, ownerId, tags: ['sunset'] }); // 'sunset' matches nature, not travel
+      // 'sunset' matches nature, not travel, and nature has no bootstrapped album.
+      await sut.evaluate({ assetId, ownerId, tags: ['sunset'] });
 
-      // travel should be removed (sunset matches nature but nature has no album bootstrapped)
       expect(mocks.smartAlbum.removeAssetFromSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId);
     });
 
     it('should be idempotent when called twice (relies on addAssetToSmartAlbum ON CONFLICT)', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'food') {return Promise.resolve(foodAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ food: foodAlbumId }));
 
       await sut.evaluate({ assetId, ownerId, tags: ['food', 'meal'] });
       await sut.evaluate({ assetId, ownerId, tags: ['food', 'meal'] });
@@ -117,10 +104,7 @@ describe(SmartAlbumService.name, () => {
     });
 
     it('should match case-insensitively (tag "Beach" matches trigger "beach")', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
 
       // Tag is mixed-case, trigger in config is lowercase
       await sut.evaluate({ assetId, ownerId, tags: ['Beach', 'Sunset'] });
@@ -128,8 +112,8 @@ describe(SmartAlbumService.name, () => {
       expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'tag');
     });
 
-    it('should skip when getSmartAlbumIdForOwnerAndKind returns null (user not bootstrapped)', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockResolvedValue(null);
+    it('should skip when no kinds have a bootstrapped album (user not yet bootstrapped)', async () => {
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(new Map());
 
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'airport', 'food', 'meal', 'dog', 'cat'] });
 
@@ -137,10 +121,7 @@ describe(SmartAlbumService.name, () => {
     });
 
     it('should produce no false matches from the CLIP stub (only tag matching fires)', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
 
       // Empty tags — no tag matches; CLIP stub must not add anything
       await sut.evaluate({ assetId, ownerId, tags: [] });
@@ -149,17 +130,30 @@ describe(SmartAlbumService.name, () => {
     });
 
     it('should match multiple kinds when tags overlap multiple triggers', async () => {
-      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockImplementation((_ownerId, kind) => {
-        if (kind === 'travel') {return Promise.resolve(travelAlbumId);}
-        if (kind === 'food') {return Promise.resolve(foodAlbumId);}
-        return Promise.resolve(null);
-      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ travel: travelAlbumId, food: foodAlbumId }),
+      );
 
       // 'beach' matches travel, 'food' matches food
       await sut.evaluate({ assetId, ownerId, tags: ['beach', 'food'] });
 
       expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'tag');
       expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(foodAlbumId, assetId, 'tag');
+    });
+
+    it('should batch repo lookups: one getAllSmartAlbumIdsForOwner + one getExcludedSmartAlbumIds per evaluate', async () => {
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ travel: travelAlbumId, food: foodAlbumId, nature: natureAlbumId }),
+      );
+
+      await sut.evaluate({ assetId, ownerId, tags: ['beach'] });
+
+      expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).toHaveBeenCalledTimes(1);
+      expect(mocks.smartAlbum.getExcludedSmartAlbumIds).toHaveBeenCalledTimes(1);
+      // Per-kind isExcluded MUST NOT be called; we batched it.
+      expect(mocks.smartAlbum.isExcluded).not.toHaveBeenCalled();
+      // Per-kind getSmartAlbumIdForOwnerAndKind MUST NOT be called either.
+      expect(mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind).not.toHaveBeenCalled();
     });
   });
 
@@ -183,6 +177,16 @@ describe(SmartAlbumService.name, () => {
       const [, kinds] = (mocks.smartAlbum.ensureForUser as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(kinds).toHaveLength(6);
     });
+
+    it('should not call ensureForUser when smartAlbums.enabled is false', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: false },
+      });
+
+      await sut.ensureBuiltInAlbumsForUser(ownerId);
+
+      expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
+    });
   });
 
   describe('onBootstrap', () => {
@@ -201,13 +205,22 @@ describe(SmartAlbumService.name, () => {
       const userId1 = newUuid();
       const userId2 = newUuid();
       mocks.user.getList.mockResolvedValue([{ id: userId1 }, { id: userId2 }] as never);
-      mocks.smartAlbum.ensureForUser
-        .mockRejectedValueOnce(new Error('db error'))
-        .mockResolvedValueOnce();
+      mocks.smartAlbum.ensureForUser.mockRejectedValueOnce(new Error('db error')).mockResolvedValueOnce();
 
       await expect(sut.onBootstrap()).resolves.not.toThrow();
 
       expect(mocks.smartAlbum.ensureForUser).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not enumerate users when smartAlbums.enabled is false', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: false },
+      });
+
+      await sut.onBootstrap();
+
+      expect(mocks.user.getList).not.toHaveBeenCalled();
+      expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
     });
   });
 });

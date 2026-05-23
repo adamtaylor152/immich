@@ -7,7 +7,7 @@ export class SmartAlbumAssetTable {
   @ForeignKeyColumn(() => SmartAlbumTable, { onDelete: 'CASCADE', nullable: false, primary: true })
   smartAlbumId!: string;
 
-  @ForeignKeyColumn(() => AssetTable, { onDelete: 'CASCADE', nullable: false, primary: true })
+  @ForeignKeyColumn(() => AssetTable, { onDelete: 'CASCADE', nullable: false, primary: true, index: true })
   assetId!: string;
 
   @CreateDateColumn()
