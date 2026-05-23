@@ -154,7 +154,24 @@ const MachineLearningHardwareResponseSchema = z
 const SystemConfigRunPodSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
-    apiKey: z.string().describe('RunPod API key'),
+    // apiKey is a billing credential. mapConfig() redacts it to '' on every
+    // GET response, and updateSystemConfig() interprets an empty incoming
+    // value as "preserve the stored key" (rather than "wipe it"). Net effect:
+    // the secret is never returned by the API once set, and admin form
+    // round-trips don't accidentally erase it. To rotate, send a new
+    // non-empty value. To clear, an admin must disable the integration and
+    // can leave the field blank (server-side preserve only fires when the
+    // stored value is non-empty AND the incoming value is empty — clearing
+    // intentionally would require a separate explicit action, same UX as
+    // most password fields).
+    //
+    // We intentionally do NOT use `.meta({ writeOnly: true })`: although the
+    // OpenAPI semantics are correct, oazapfts removes write-only fields from
+    // the generated TypeScript type entirely, which breaks the admin form's
+    // ability to bind to the field as an input. The masking + preserve
+    // pattern above achieves the same security guarantee at the application
+    // layer.
+    apiKey: z.string().describe('RunPod API key (write-only; empty preserves the existing key)'),
     imageName: z.string().min(1).describe('Container image to launch'),
     defaultGpuTypeId: z.string().min(1).describe('Preferred GPU type ID'),
     containerDiskGb: z.int().min(10).max(2000).describe('Container disk size (GB)'),
@@ -445,5 +462,16 @@ export class SystemConfigTemplateStorageOptionDto extends createZodDto(SystemCon
 export class SystemConfigDto extends createZodDto(SystemConfigSchema) {}
 
 export function mapConfig(config: SystemConfig): SystemConfigDto {
-  return config;
+  // Redact secrets on read. Writes that come back with an empty string here
+  // preserve the stored value (see utils/config.ts:updateConfig).
+  return {
+    ...config,
+    machineLearning: {
+      ...config.machineLearning,
+      runpod: {
+        ...config.machineLearning.runpod,
+        apiKey: '',
+      },
+    },
+  };
 }

@@ -320,7 +320,7 @@ export class MachineLearningRepository {
         this.logger.warn(
           `Machine learning request to "${entry.url}" failed with status ${response.status}: ${response.statusText}`,
         );
-      } catch (error: Error | unknown) {
+      } catch (error: unknown) {
         this.logger.warn(
           `Machine learning request to "${entry.url}" failed: ${error instanceof Error ? error.message : error}`,
         );
@@ -441,7 +441,7 @@ export class MachineLearningRepository {
         this.logger.warn(
           `Machine learning hardware request to "${entry.url}" failed with status ${response.status}: ${response.statusText}`,
         );
-      } catch (error: Error | unknown) {
+      } catch (error: unknown) {
         this.logger.warn(
           `Machine learning hardware request to "${entry.url}" failed: ${error instanceof Error ? error.message : error}`,
         );

@@ -178,7 +178,39 @@ export class RunPodService extends BaseService {
     const instanceTag = state.status === 'idle' && !state.instanceTag ? randomUUID() : (state.instanceTag ?? randomUUID());
     const authToken = randomBytes(32).toString('hex');
     const imageName = dto.imageName?.trim() || runpod.imageName;
-    const podName = `immich-${instanceTag.slice(0, 8)}-${Math.floor(Date.now() / 1000)}`;
+    const podNamePrefix = `immich-${instanceTag.slice(0, 8)}-`;
+    const podName = `${podNamePrefix}${Math.floor(Date.now() / 1000)}`;
+
+    // Adopt-orphan-pod: if the previous attempt's createPod ambiguously failed
+    // (RunPod might have created the pod even if the response was lost), there
+    // could be a pod tagged with our instanceTag prefix sitting orphaned on the
+    // account. List pods first and adopt any match instead of creating a duplicate.
+    try {
+      const existing = await this.runPodRepository.listPods(key);
+      const orphan = existing.find((p) => p.name?.startsWith(podNamePrefix));
+      if (orphan) {
+        this.logger.log(`Adopting orphan pod ${orphan.id} from previous attempt (tag=${instanceTag})`);
+        // We don't know the authToken the orphan was launched with (it's per-launch
+        // random and we discarded ours when the previous attempt errored). Best we
+        // can do safely: terminate the orphan and create a fresh one with our new
+        // token. This is destructive on the orphan but only triggers when the user
+        // explicitly clicked "Launch" again — the alternative is letting the
+        // unknown-token pod bill silently.
+        try {
+          await this.runPodRepository.terminatePod(key, orphan.id);
+          this.logger.log(`Orphan ${orphan.id} terminated; proceeding with fresh launch`);
+        } catch (terminateError) {
+          if (!(terminateError instanceof RunPodNotFoundError)) {
+            this.logger.warn(`Failed to terminate orphan ${orphan.id}: ${terminateError}`);
+          }
+        }
+      }
+    } catch (listError) {
+      // If listing fails, fall through and try createPod anyway. Worst case is the
+      // user gets a 409-style error from RunPod about the existing pod and can
+      // recover via Terminate.
+      this.logger.warn(`Failed to scan for orphan pods before create: ${listError}`);
+    }
 
     let created: RunPodPodSummary;
     try {
@@ -198,9 +230,13 @@ export class RunPodService extends BaseService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // Preserve the instanceTag so the next provision attempt will list pods
+      // by our name prefix and clean up any orphan created by this ambiguous
+      // failure. The pod (if any was actually created) is named with our tag
+      // prefix so the user can also find it in the RunPod dashboard.
       await this.writeState({
         status: 'error',
-        message: `Failed to create pod: ${message}`,
+        message: `Failed to create pod: ${message}. If a pod was created despite this error it is named "${podNamePrefix}…" on RunPod; the next launch attempt will scan for and clean up any orphan.`,
         errorAt: new Date().toISOString(),
         instanceTag,
       });

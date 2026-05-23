@@ -72,6 +72,18 @@ export class RunPodRepository {
     await this.request(apiKey, 'GET', '/pods', undefined, 10_000);
   }
 
+  /** Returns all pods owned by the API key, no filtering. */
+  async listPods(apiKey: string): Promise<RunPodPodSummary[]> {
+    const data = await this.request<RunPodPodSummary[] | { data: RunPodPodSummary[] }>(
+      apiKey,
+      'GET',
+      '/pods',
+      undefined,
+      15_000,
+    );
+    return Array.isArray(data) ? data : (data?.data ?? []);
+  }
+
   async listGpuTypes(apiKey: string): Promise<RunPodGpuType[]> {
     const data = await this.request<RunPodGpuType[] | { data: RunPodGpuType[] }>(
       apiKey,

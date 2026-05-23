@@ -19,6 +19,7 @@ import { SystemConfigService } from 'src/services/system-config.service';
 import { DeepPartial } from 'src/types';
 import { mockEnvData } from 'test/repositories/config.repository.mock';
 import { newTestService, ServiceMocks } from 'test/utils';
+import { vi } from 'vitest';
 
 const partialConfig = {
   ffmpeg: { crf: 30 },
@@ -621,6 +622,67 @@ describe(SystemConfigService.name, () => {
       mocks.systemMetadata.readFile.mockResolvedValue(JSON.stringify({}));
       await expect(sut.updateSystemConfig(defaults)).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
+    });
+
+    it('should redact runpod.apiKey on read via mapConfig', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { runpod: { apiKey: 'rp_secret_value', enabled: true } },
+      });
+
+      const result = await sut.getSystemConfig();
+
+      expect(result.machineLearning.runpod.apiKey).toBe('');
+    });
+
+    it('should preserve stored runpod.apiKey when an empty value is written back', async () => {
+      const storedConfig = {
+        machineLearning: { runpod: { apiKey: 'rp_secret_value', enabled: true } },
+      };
+      mocks.systemMetadata.get.mockResolvedValue(storedConfig);
+
+      // The admin reads the config (apiKey: ''), edits some other field, and saves.
+      // The empty apiKey in the submitted DTO must not wipe the stored secret.
+      const newConfig = {
+        ...defaults,
+        machineLearning: {
+          ...defaults.machineLearning,
+          runpod: { ...defaults.machineLearning.runpod, apiKey: '', enabled: true },
+        },
+      };
+
+      await sut.updateSystemConfig(newConfig);
+
+      // updateConfig is called with the dto we mutated in-place; verify the
+      // preserved-key value is what gets persisted.
+      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([key]) => key === 'system-config',
+      );
+      expect(persisted).toBeDefined();
+      // The persisted partial config should include the preserved key.
+      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_secret_value');
+    });
+
+    it('should accept a non-empty new runpod.apiKey on write (rotation)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { runpod: { apiKey: 'rp_old_value', enabled: true } },
+      });
+
+      const newConfig = {
+        ...defaults,
+        machineLearning: {
+          ...defaults.machineLearning,
+          runpod: { ...defaults.machineLearning.runpod, apiKey: 'rp_NEW_value', enabled: true },
+        },
+      };
+
+      await sut.updateSystemConfig(newConfig);
+
+      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([key]) => key === 'system-config',
+      );
+      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_NEW_value');
     });
   });
 

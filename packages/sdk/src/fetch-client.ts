@@ -2929,7 +2929,7 @@ export type OcrConfig = {
     modelName: string;
 };
 export type SystemConfigRunPodDto = {
-    /** RunPod API key */
+    /** RunPod API key (write-only; empty preserves the existing key) */
     apiKey: string;
     /** Auto-run ML backfill on pod ready */
     autoBackfillOnLaunch: boolean;

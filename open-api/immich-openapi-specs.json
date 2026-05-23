@@ -27811,7 +27811,7 @@
       "SystemConfigRunPodDto": {
         "properties": {
           "apiKey": {
-            "description": "RunPod API key",
+            "description": "RunPod API key (write-only; empty preserves the existing key)",
             "type": "string"
           },
           "autoBackfillOnLaunch": {

@@ -93,6 +93,17 @@ export class SystemConfigService extends BaseService {
 
     const oldConfig = await this.getConfig({ withCache: false });
 
+    // mapConfig redacts machineLearning.runpod.apiKey to '' on read. Mirror
+    // the convention on write: an empty incoming apiKey means "preserve the
+    // existing value" (the user didn't intend to rotate the key), not "wipe
+    // the stored key". The user can clear the key by toggling RunPod off, or
+    // by sending a different non-empty placeholder; sending the redacted
+    // sentinel back unchanged must not destroy the real secret.
+    const incomingRunpodKey = dto.machineLearning?.runpod?.apiKey;
+    if (incomingRunpodKey === '' && oldConfig.machineLearning.runpod.apiKey !== '') {
+      dto.machineLearning.runpod.apiKey = oldConfig.machineLearning.runpod.apiKey;
+    }
+
     try {
       await this.eventRepository.emit('ConfigValidate', { newConfig: toPlainObject(dto), oldConfig });
     } catch (error) {

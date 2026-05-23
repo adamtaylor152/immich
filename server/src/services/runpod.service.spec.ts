@@ -98,6 +98,7 @@ describe(RunPodService.name, () => {
 
     it('creates the pod and writes provisioning state', async () => {
       stubConfig({ apiKey: 'rp_test', dataPrivacyAcknowledged: true, imageName: 'ghcr.io/x/y:z' });
+      (mocks.runPod.listPods as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       (mocks.runPod.createPod as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: 'pod_abc',
         name: 'immich-aaaa-0',
@@ -122,6 +123,37 @@ describe(RunPodService.name, () => {
         SystemMetadataKey.RunPodState,
         expect.objectContaining({ status: 'provisioning', podId: 'pod_abc' }),
       );
+    });
+
+    it('terminates an orphan pod from a previous ambiguous failure before creating a fresh one', async () => {
+      stubConfig({ apiKey: 'rp_test', dataPrivacyAcknowledged: true, imageName: 'ghcr.io/x/y:z' });
+      // Previous attempt errored but left state with instanceTag; the user retries.
+      setState({
+        status: 'error',
+        message: 'Failed to create pod: timeout',
+        errorAt: new Date(Date.now() - 60_000).toISOString(),
+        instanceTag: 'aaaa1111-2222-3333-4444-555566667777',
+      });
+      // RunPod returns a pod whose name matches our instanceTag prefix — this is the orphan.
+      (mocks.runPod.listPods as ReturnType<typeof vi.fn>).mockResolvedValue([
+        { id: 'pod_orphan', name: 'immich-aaaa1111-1748000000', desiredStatus: 'RUNNING', imageName: 'x', gpuTypeIds: ['x'] },
+        { id: 'pod_other_user', name: 'something-else', desiredStatus: 'RUNNING', imageName: 'x', gpuTypeIds: ['x'] },
+      ]);
+      (mocks.runPod.terminatePod as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (mocks.runPod.createPod as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'pod_new',
+        name: 'immich-aaaa1111-1748000123',
+        desiredStatus: 'CREATED',
+        imageName: 'x',
+        gpuTypeIds: ['x'],
+      } as RunPodPodSummary);
+
+      const result = await sut.provision({ gpuTypeId: 'NVIDIA RTX A5000', acknowledgeDataPrivacy: true });
+
+      expect(mocks.runPod.terminatePod).toHaveBeenCalledWith('rp_test', 'pod_orphan');
+      // The unrelated pod (different name prefix) must not be touched.
+      expect(mocks.runPod.terminatePod).not.toHaveBeenCalledWith('rp_test', 'pod_other_user');
+      expect(result.podId).toBe('pod_new');
     });
   });
 
