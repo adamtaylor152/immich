@@ -7,6 +7,7 @@ import {
   ImageDescriptionRequeueResponseDto,
   mapConfig,
   SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateRequestDto,
   SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
 } from 'src/dtos/system-config.dto';
@@ -263,23 +264,30 @@ export class SystemConfigService extends BaseService {
     return { totalAssets: stats.withDescription, withDescription: stats.withDescription };
   }
 
-  async triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
+  async triggerSmartAlbumReevaluate(dto: SmartAlbumReevaluateRequestDto = {}): Promise<SmartAlbumReevaluateResponseDto> {
     const { smartAlbums } = await this.getConfig({ withCache: false });
     if (!smartAlbums.enabled) {
       throw new BadRequestException('Smart albums are not enabled');
     }
 
+    const kind = dto.kind;
+    if (kind && !(kind in smartAlbums.builtIn)) {
+      // Defensive — the zod enum should catch this at the controller, but a
+      // belt-and-braces check guards against drift if config kinds expand
+      // faster than the request schema.
+      throw new BadRequestException(`Unknown smart-album kind: ${kind}`);
+    }
+
     // The re-evaluate-all job runs on the shared BackgroundTask queue, so
     // getJobCounts would over-report. Instead, look up the BullMQ dedup id
     // directly to detect an in-flight job. Matching dedup id is set in
-    // job.repository.ts getJobOptions().
-    const alreadyInFlight = await this.jobRepository.hasDedupJob(
-      QueueName.BackgroundTask,
-      JobName.SmartAlbumReevaluateAll,
-    );
+    // job.repository.ts getJobOptions() — kind-scoped dispatches have their
+    // own namespace so they don't collide with each other or with all-kinds.
+    const dedupId = kind ? `${JobName.SmartAlbumReevaluateAll}:${kind}` : JobName.SmartAlbumReevaluateAll;
+    const alreadyInFlight = await this.jobRepository.hasDedupJob(QueueName.BackgroundTask, dedupId);
 
     if (!alreadyInFlight) {
-      await this.jobRepository.queue({ name: JobName.SmartAlbumReevaluateAll });
+      await this.jobRepository.queue({ name: JobName.SmartAlbumReevaluateAll, data: kind ? { kind } : undefined });
     }
 
     return { queued: !alreadyInFlight };

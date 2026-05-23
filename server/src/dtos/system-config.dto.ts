@@ -543,6 +543,23 @@ const SmartAlbumReevaluateResponseSchema = z
 
 export class SmartAlbumReevaluateResponseDto extends createZodDto(SmartAlbumReevaluateResponseSchema) {}
 
+/** Known built-in smart-album kinds. Keep aligned with SystemConfig['smartAlbums']['builtIn']. */
+export const SMART_ALBUM_BUILT_IN_KINDS = ['travel', 'documents', 'screenshots', 'food', 'pets', 'nature'] as const;
+export type SmartAlbumBuiltInKind = (typeof SMART_ALBUM_BUILT_IN_KINDS)[number];
+
+const SmartAlbumReevaluateRequestSchema = z
+  .object({
+    kind: z
+      .enum(SMART_ALBUM_BUILT_IN_KINDS)
+      .optional()
+      .describe(
+        'Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.',
+      ),
+  })
+  .meta({ id: 'SmartAlbumReevaluateRequestDto' });
+
+export class SmartAlbumReevaluateRequestDto extends createZodDto(SmartAlbumReevaluateRequestSchema) {}
+
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   // Redact secrets on read. Writes that come back with an empty string here
   // preserve the stored value (see utils/config.ts:updateConfig).

@@ -70,16 +70,25 @@ export class SmartAlbumService extends BaseService {
    *
    * Tag matching is case-insensitive. CLIP query similarity is stubbed — see
    * the TODO comment below.
+   *
+   * Pass `onlyKind` to scope the evaluation to a single built-in kind. The
+   * admin "Re-evaluate this album" button uses this to avoid touching
+   * memberships of unrelated kinds. When set, other kinds are neither added
+   * NOR removed for this asset — same semantics as if those kinds were
+   * disabled for this single call.
    */
-  async evaluate(input: { assetId: string; ownerId: string; tags: string[] }): Promise<void> {
-    const { assetId, ownerId, tags } = input;
+  async evaluate(input: { assetId: string; ownerId: string; tags: string[]; onlyKind?: string }): Promise<void> {
+    const { assetId, ownerId, tags, onlyKind } = input;
     const { smartAlbums } = await this.getConfig({ withCache: true });
 
     if (!smartAlbums.enabled) {
       return;
     }
 
-    const builtInKinds = Object.keys(smartAlbums.builtIn) as BuiltInKind[];
+    const allBuiltInKinds = Object.keys(smartAlbums.builtIn) as BuiltInKind[];
+    // When scoped to a single kind, treat the others as if disabled for this
+    // call — they are neither matched nor removed.
+    const builtInKinds = onlyKind ? allBuiltInKinds.filter((k) => k === onlyKind) : allBuiltInKinds;
     const albumIdByKind = await this.smartAlbumRepository.getAllSmartAlbumIdsForOwner(ownerId);
     const candidateAlbumIds: string[] = [];
     for (const kind of builtInKinds) {
@@ -128,8 +137,15 @@ export class SmartAlbumService extends BaseService {
     }
 
     // Removal: for each kind the asset was previously in that no longer matches,
-    // remove it so that stale memberships don't linger when tags change.
+    // remove it so that stale memberships don't linger when tags change. When
+    // scoped to a single kind via onlyKind, we MUST limit the removal loop to
+    // that one kind too — otherwise re-evaluating "food" would silently strip
+    // the asset out of "pets" or "travel" because matchedKinds only contains
+    // food matches.
     for (const kind of currentKinds) {
+      if (onlyKind && kind !== onlyKind) {
+        continue;
+      }
       if (!matchedKinds.has(kind)) {
         const smartAlbumId = albumIdByKind.get(kind as BuiltInKind);
         if (smartAlbumId) {
@@ -162,9 +178,15 @@ export class SmartAlbumService extends BaseService {
    * than fanning out per-asset jobs.
    */
   @OnJob({ name: JobName.SmartAlbumReevaluateAll, queue: QueueName.BackgroundTask })
-  async handleReevaluateAll(_data: JobOf<JobName.SmartAlbumReevaluateAll>): Promise<JobStatus> {
+  async handleReevaluateAll(data: JobOf<JobName.SmartAlbumReevaluateAll>): Promise<JobStatus> {
     const { smartAlbums } = await this.getConfig({ withCache: false });
     if (!smartAlbums.enabled) {
+      return JobStatus.Skipped;
+    }
+
+    const kind = (data as { kind?: string } | undefined)?.kind;
+    if (kind && !(kind in smartAlbums.builtIn)) {
+      this.logger.warn(`Smart-album re-evaluate dispatched with unknown kind "${kind}" — skipping`);
       return JobStatus.Skipped;
     }
 
@@ -175,6 +197,7 @@ export class SmartAlbumService extends BaseService {
           assetId: asset.id,
           ownerId: asset.ownerId,
           tags: asset.tags ?? [],
+          onlyKind: kind,
         });
       } catch (error) {
         this.logger.warn(

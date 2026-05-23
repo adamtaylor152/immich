@@ -1139,6 +1139,28 @@ describe(SystemConfigService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
+    it('should enqueue with kind-scoped dedup when a kind is provided', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ smartAlbums: { enabled: true } });
+      mocks.job.hasDedupJob.mockResolvedValue(false);
+
+      const result = await sut.triggerSmartAlbumReevaluate({ kind: 'food' });
+
+      expect(result).toEqual({ queued: true });
+      expect(mocks.job.hasDedupJob).toHaveBeenCalledWith(QueueName.BackgroundTask, 'SmartAlbumReevaluateAll:food');
+      expect(mocks.job.queue).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'SmartAlbumReevaluateAll', data: { kind: 'food' } }),
+      );
+    });
+
+    it('should reject an unknown kind', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ smartAlbums: { enabled: true } });
+
+      await expect(
+        sut.triggerSmartAlbumReevaluate({ kind: 'not-a-real-kind' as never }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException when smartAlbums is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         smartAlbums: { enabled: false },

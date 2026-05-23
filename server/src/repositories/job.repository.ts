@@ -354,7 +354,13 @@ export class JobRepository {
         return { deduplication: { id: JobName.ImageDescriptionQueueAll } };
       }
       case JobName.SmartAlbumReevaluateAll: {
-        return { deduplication: { id: JobName.SmartAlbumReevaluateAll } };
+        // Kind-scoped dispatches get their own dedup namespace so they don't
+        // collide with each other OR with the all-kinds dispatch. This lets
+        // an admin queue (e.g.) "food" and "pets" simultaneously without
+        // BullMQ silently dropping the second one as a duplicate of the first.
+        const kind = (item.data as { kind?: string } | undefined)?.kind;
+        const dedupId = kind ? `${JobName.SmartAlbumReevaluateAll}:${kind}` : JobName.SmartAlbumReevaluateAll;
+        return { deduplication: { id: dedupId } };
       }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };

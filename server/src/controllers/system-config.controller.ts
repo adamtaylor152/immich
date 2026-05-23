@@ -6,6 +6,7 @@ import {
   ImageDescriptionRequeueResponseDto,
   MachineLearningHardwareResponseDto,
   SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateRequestDto,
   SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
   SystemConfigTemplateStorageOptionDto,
@@ -134,11 +135,13 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Trigger smart-album re-evaluate',
     description:
-      'Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.',
+      'Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  @ApiResponse({ status: 400, description: 'Smart albums are not enabled.' })
-  triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
-    return this.service.triggerSmartAlbumReevaluate();
+  @ApiResponse({ status: 400, description: 'Smart albums are not enabled, or invalid kind.' })
+  triggerSmartAlbumReevaluate(
+    @Body() dto: SmartAlbumReevaluateRequestDto,
+  ): Promise<SmartAlbumReevaluateResponseDto> {
+    return this.service.triggerSmartAlbumReevaluate(dto);
   }
 }
