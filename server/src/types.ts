@@ -442,8 +442,13 @@ export type JobItem =
   | { name: JobName.NsfwDetectionQueueAll; data: IBaseJob }
   | { name: JobName.NsfwDetection; data: IEntityJob }
 
-  // Smart albums
-  | { name: JobName.SmartAlbumReevaluateAll; data?: IBaseJob }
+  // Smart albums. Optional `kind` scopes the re-evaluate to a single built-in
+  // kind (one of the SystemConfig['smartAlbums']['builtIn'] keys); omit/undefined
+  // means "all kinds".
+  | {
+      name: JobName.SmartAlbumReevaluateAll;
+      data?: IBaseJob & { kind?: keyof SystemConfig['smartAlbums']['builtIn'] };
+    }
 
   // Workflow
   | { name: JobName.WorkflowAssetCreate; data: { workflowId: string; assetId: string } }

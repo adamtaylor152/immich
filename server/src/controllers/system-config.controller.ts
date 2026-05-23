@@ -1,11 +1,12 @@
-import { Body, Controller, Get, Post, Put } from '@nestjs/common';
-import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put } from '@nestjs/common';
+import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
   MachineLearningHardwareResponseDto,
   SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateRequestDto,
   SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
   SystemConfigTemplateStorageOptionDto,
@@ -103,6 +104,20 @@ export class SystemConfigController {
     return this.service.triggerDescriptionRequeue();
   }
 
+  @Post('image-description/defer-requeue')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Authenticated({ permission: Permission.SystemConfigUpdate, admin: true })
+  @Endpoint({
+    summary: 'Defer image description re-queue',
+    description:
+      'Marks the image description config as having a pending re-queue. The persistent banner on the admin Image Description settings page will surface a reminder until the actual re-queue is triggered.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  @ApiResponse({ status: 400, description: 'Image description is not enabled.' })
+  async deferImageDescriptionRequeue(): Promise<void> {
+    await this.service.deferDescriptionRequeue();
+  }
+
   @Get('smart-albums/reevaluate-estimate')
   @Authenticated({ permission: Permission.SystemConfigRead, admin: true })
   @Endpoint({
@@ -120,11 +135,12 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Trigger smart-album re-evaluate',
     description:
-      'Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.',
+      'Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  @ApiResponse({ status: 400, description: 'Smart albums are not enabled.' })
-  triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
-    return this.service.triggerSmartAlbumReevaluate();
+  @ApiResponse({ status: 400, description: 'Smart albums are not enabled, or invalid kind.' })
+  @ApiBody({ required: false, type: SmartAlbumReevaluateRequestDto })
+  triggerSmartAlbumReevaluate(@Body() dto?: SmartAlbumReevaluateRequestDto): Promise<SmartAlbumReevaluateResponseDto> {
+    return this.service.triggerSmartAlbumReevaluate(dto ?? ({} as SmartAlbumReevaluateRequestDto));
   }
 }

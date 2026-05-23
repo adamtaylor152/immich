@@ -16,6 +16,46 @@ class SystemConfigApi {
 
   final ApiClient apiClient;
 
+  /// Defer image description re-queue
+  ///
+  /// Marks the image description config as having a pending re-queue. The persistent banner on the admin Image Description settings page will surface a reminder until the actual re-queue is triggered.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> deferImageDescriptionRequeueWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/system-config/image-description/defer-requeue';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Defer image description re-queue
+  ///
+  /// Marks the image description config as having a pending re-queue. The persistent banner on the admin Image Description settings page will surface a reminder until the actual re-queue is triggered.
+  Future<void> deferImageDescriptionRequeue() async {
+    final response = await deferImageDescriptionRequeueWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Get system configuration
   ///
   /// Retrieve the current system configuration.
@@ -354,21 +394,25 @@ class SystemConfigApi {
 
   /// Trigger smart-album re-evaluate
   ///
-  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.
+  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> triggerSmartAlbumReevaluateWithHttpInfo() async {
+  ///
+  /// Parameters:
+  ///
+  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto:
+  Future<Response> triggerSmartAlbumReevaluateWithHttpInfo({ SmartAlbumReevaluateRequestDto? smartAlbumReevaluateRequestDto, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/system-config/smart-albums/reevaluate';
 
     // ignore: prefer_final_locals
-    Object? postBody;
+    Object? postBody = smartAlbumReevaluateRequestDto;
 
     final queryParams = <QueryParam>[];
     final headerParams = <String, String>{};
     final formParams = <String, String>{};
 
-    const contentTypes = <String>[];
+    const contentTypes = <String>['application/json'];
 
 
     return apiClient.invokeAPI(
@@ -384,9 +428,13 @@ class SystemConfigApi {
 
   /// Trigger smart-album re-evaluate
   ///
-  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.
-  Future<SmartAlbumReevaluateResponseDto?> triggerSmartAlbumReevaluate() async {
-    final response = await triggerSmartAlbumReevaluateWithHttpInfo();
+  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).
+  ///
+  /// Parameters:
+  ///
+  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto:
+  Future<SmartAlbumReevaluateResponseDto?> triggerSmartAlbumReevaluate({ SmartAlbumReevaluateRequestDto? smartAlbumReevaluateRequestDto, }) async {
+    final response = await triggerSmartAlbumReevaluateWithHttpInfo( smartAlbumReevaluateRequestDto: smartAlbumReevaluateRequestDto, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

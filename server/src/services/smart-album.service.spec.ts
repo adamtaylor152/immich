@@ -224,6 +224,60 @@ describe(SmartAlbumService.name, () => {
       expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).toHaveBeenCalledTimes(2);
     });
 
+    it('should pass onlyKind to evaluate when data.kind is set', async () => {
+      const asset1Id = newUuid();
+      const evalOwnerId = newUuid();
+      mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/require-await
+        (async function* () {
+          yield { id: asset1Id, ownerId: evalOwnerId, tags: ['food', 'beach'] };
+        })(),
+      );
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ food: foodAlbumId, travel: travelAlbumId }),
+      );
+
+      const result = await sut.handleReevaluateAll({ kind: 'food' });
+
+      expect(result).toBe(JobStatus.Success);
+      // Only the food album should have the asset added — travel must NOT,
+      // even though "beach" would normally match travel.
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(foodAlbumId, asset1Id, 'tag');
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalledWith(travelAlbumId, asset1Id, 'tag');
+    });
+
+    it('should not strip non-scoped memberships when scoped to a single kind', async () => {
+      const asset1Id = newUuid();
+      const evalOwnerId = newUuid();
+      mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/require-await
+        (async function* () {
+          yield { id: asset1Id, ownerId: evalOwnerId, tags: ['screenshot'] };
+        })(),
+      );
+      // Asset is in travel and food. Re-evaluate kind=food only.
+      mocks.smartAlbum.getMatchingKinds.mockResolvedValue(['travel', 'food']);
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ travel: travelAlbumId, food: foodAlbumId }),
+      );
+
+      await sut.handleReevaluateAll({ kind: 'food' });
+
+      // food no longer matches and should be removed.
+      expect(mocks.smartAlbum.removeAssetFromSmartAlbum).toHaveBeenCalledWith(foodAlbumId, asset1Id);
+      // travel was NOT scoped — it must NOT be touched.
+      expect(mocks.smartAlbum.removeAssetFromSmartAlbum).not.toHaveBeenCalledWith(travelAlbumId, asset1Id);
+    });
+
+    it('should skip with unknown kind', async () => {
+      // Cast to bypass compile-time narrowing — this is intentionally an invalid
+      // value to verify the runtime guard inside handleReevaluateAll.
+      const result = await sut.handleReevaluateAll({ kind: 'not-a-real-kind' as never });
+
+      expect(result).toBe(JobStatus.Skipped);
+      expect(mocks.assetJob.streamForSmartAlbumReevaluation).not.toHaveBeenCalled();
+    });
+
     it('should continue to next asset if one evaluate throws', async () => {
       const asset1Id = newUuid();
       const asset2Id = newUuid();

@@ -14,10 +14,12 @@
   import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
   import { mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
   import {
+    getImageDescriptionRequeueEstimate,
     getMachineLearningHardware,
     MachineLearningHardwareAcceleration,
     PlaceholderValidation,
     Style,
+    type ImageDescriptionRequeueEstimateDto,
     type SystemConfigMachineLearningDto,
   } from '@immich/sdk';
   import { isEqual } from 'lodash-es';
@@ -133,6 +135,7 @@
     void detectMachineLearningHardware();
     void refreshManagedUrl();
     managedUrlTimer = setInterval(() => void refreshManagedUrl(), 10_000);
+    void loadDescriptionStats();
   });
 
   onDestroy(() => {
@@ -197,15 +200,57 @@
   const forbiddenInferencesText = $derived((imageDescription.prompt?.forbiddenInferences ?? []).join('\n'));
   const rawPromptTemplateText = $derived(imageDescription.prompt?.advanced?.rawPromptTemplate ?? '');
 
+  // Description status panel state — loaded on demand when the status
+  // accordion expands (and refreshed after a successful re-queue trigger).
+  let descriptionStats = $state<ImageDescriptionRequeueEstimateDto | undefined>(undefined);
+  let descriptionStatsError = $state<string | undefined>(undefined);
+  let descriptionStatsLoading = $state(false);
+
+  const loadDescriptionStats = async () => {
+    descriptionStatsLoading = true;
+    descriptionStatsError = undefined;
+    try {
+      descriptionStats = await getImageDescriptionRequeueEstimate();
+    } catch {
+      descriptionStatsError = $t('admin.machine_learning_image_description_requeue_modal_error');
+    } finally {
+      descriptionStatsLoading = false;
+    }
+  };
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${Math.round(seconds)}s`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+  };
+
+  const formatTimestamp = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');
+
   const handleRequeueClick = async () => {
     const result = await modalManager.show(ImageDescriptionRequeueModal, {});
-    if (result) {
+    if (!result) {
+      return;
+    }
+    if ('deferred' in result && result.deferred) {
+      toastManager.primary($t('admin.image_description_requeue_deferred_toast'));
+    } else if ('queued' in result) {
       toastManager.primary(
         result.queued
           ? $t('admin.machine_learning_image_description_requeue_started')
           : $t('admin.machine_learning_image_description_requeue_already_in_flight'),
       );
+    } else {
+      return;
     }
+    // Refresh the stats panel so pendingRequeueAt + counts update without a
+    // page reload, regardless of whether the prior fetch completed.
+    void loadDescriptionStats();
   };
 </script>
 
@@ -674,6 +719,32 @@
         subtitle={$t('admin.machine_learning_image_description_description')}
       >
         <div class="mt-4 ml-4 flex flex-col gap-4">
+          {#if savedImageDescription.pendingRequeueAt}
+            <div
+              class="flex flex-col gap-2 rounded-md border border-yellow-500/50 bg-yellow-100/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between dark:bg-yellow-900/20"
+              data-testid="image-description-pending-banner"
+            >
+              <span>
+                {$t('admin.image_description_pending_banner', {
+                  values: {
+                    date: formatTimestamp(savedImageDescription.lastConfigChangeAt),
+                    count: descriptionStats?.totalAssets?.toLocaleString() ?? '—',
+                  },
+                })}
+              </span>
+              <Button
+                shape="round"
+                size="small"
+                color="primary"
+                leadingIcon={mdiRefresh}
+                onclick={handleRequeueClick}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+              >
+                {$t('admin.image_description_pending_banner_action')}
+              </Button>
+            </div>
+          {/if}
+
           <SettingSelect
             label={$t('admin.machine_learning_image_enrichment_hardware')}
             desc={$t('admin.machine_learning_image_enrichment_hardware_description')}
@@ -919,17 +990,78 @@
             </div>
           </SettingAccordion>
 
-          <div class="mt-4 flex justify-end">
-            <Button
-              shape="round"
-              size="small"
-              leadingIcon={mdiRefresh}
-              onclick={handleRequeueClick}
-              disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-            >
-              {$t('admin.machine_learning_image_description_requeue')}
-            </Button>
-          </div>
+          <SettingAccordion
+            key="image-description-status-regen"
+            title={$t('admin.image_description_status_section')}
+            subtitle=""
+          >
+            <div class="ms-4 mt-4 flex flex-col gap-4">
+              {#if descriptionStatsLoading && !descriptionStats}
+                <p class="text-sm text-immich-fg/60 dark:text-immich-dark-fg/60">
+                  {$t('admin.machine_learning_image_description_requeue_modal_loading')}
+                </p>
+              {:else if descriptionStatsError}
+                <p class="text-sm text-red-500">{descriptionStatsError}</p>
+              {:else if descriptionStats}
+                <dl class="flex flex-col gap-2 text-sm">
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_last_config_change')}
+                    </dt>
+                    <dd class="font-medium">{formatTimestamp(savedImageDescription.lastConfigChangeAt)}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_pending_requeue')}
+                    </dt>
+                    <dd class="font-medium">{formatTimestamp(savedImageDescription.pendingRequeueAt)}</dd>
+                  </div>
+                  <hr class="border-primary/20" />
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_eligible_assets')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.totalAssets.toLocaleString()}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_with_description')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.withDescription.toLocaleString()}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_pending')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.withoutDescription.toLocaleString()}</dd>
+                  </div>
+                  <hr class="border-primary/20" />
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_estimated_time')}
+                    </dt>
+                    <dd class="font-medium">{formatDuration(descriptionStats.estimatedTotalSeconds)}</dd>
+                  </div>
+                </dl>
+              {/if}
+
+              {#if descriptionStatsLoading && descriptionStats}
+                <p class="text-xs text-immich-fg/60 dark:text-immich-dark-fg/60">…</p>
+              {/if}
+
+              <div class="flex justify-end">
+                <Button
+                  shape="round"
+                  size="small"
+                  leadingIcon={mdiRefresh}
+                  onclick={handleRequeueClick}
+                  disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                >
+                  {$t('admin.machine_learning_image_description_requeue')}
+                </Button>
+              </div>
+            </div>
+          </SettingAccordion>
         </div>
       </SettingAccordion>
 

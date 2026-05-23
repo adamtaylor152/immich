@@ -18,6 +18,7 @@ export const newJobRepositoryMock = (): Mocked<RepositoryInterface<JobRepository
     isPaused: vitest.fn(),
     getJobCounts: vitest.fn(),
     hasDedupJob: vitest.fn(),
+    getRollingAvgMs: vitest.fn().mockReturnValue(null),
     clear: vitest.fn(),
     waitForQueueCompletion: vitest.fn(),
     removeJob: vitest.fn(),

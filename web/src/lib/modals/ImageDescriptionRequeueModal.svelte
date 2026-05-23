@@ -1,6 +1,7 @@
 <script lang="ts">
   import { handleError } from '$lib/utils/handle-error';
   import {
+    deferImageDescriptionRequeue,
     getImageDescriptionRequeueEstimate,
     triggerImageDescriptionRequeue,
     type ImageDescriptionRequeueEstimateDto,
@@ -8,11 +9,16 @@
   import { Button, LoadingSpinner, Modal, ModalBody, ModalFooter } from '@immich/ui';
   import { t } from 'svelte-i18n';
 
+  type CloseResult = { queued: boolean } | { deferred: true };
+
   interface Props {
-    // Resolves with the trigger response on success (queued=true → newly enqueued,
-    // queued=false → a re-queue job was already in-flight). Resolves with undefined
-    // when the user cancels or the estimate fetch fails.
-    onClose: (result?: { queued: boolean }) => void;
+    // Resolves with one of:
+    //   - { queued: true|false }: re-queue was triggered (true = newly enqueued,
+    //     false = a re-queue was already in-flight).
+    //   - { deferred: true }: admin chose "Re-queue later". The pending marker
+    //     is now set server-side so the banner reminds them.
+    //   - undefined: dismissed/cancelled, or the estimate fetch failed.
+    onClose: (result?: CloseResult) => void;
   }
 
   let { onClose }: Props = $props();
@@ -20,6 +26,7 @@
   let estimate = $state<ImageDescriptionRequeueEstimateDto | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let isTriggering = $state(false);
+  let isDeferring = $state(false);
 
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) {
@@ -51,6 +58,18 @@
       handleError(error, $t('admin.machine_learning_image_description_requeue_modal_error'));
     } finally {
       isTriggering = false;
+    }
+  };
+
+  const handleDefer = async () => {
+    isDeferring = true;
+    try {
+      await deferImageDescriptionRequeue();
+      onClose({ deferred: true });
+    } catch (error) {
+      handleError(error, $t('admin.machine_learning_image_description_requeue_modal_error'));
+    } finally {
+      isDeferring = false;
     }
   };
 </script>
@@ -120,10 +139,26 @@
 
   <ModalFooter>
     <div class="flex w-full justify-end gap-2">
-      <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering}>
+      <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering || isDeferring}>
         {$t('cancel')}
       </Button>
-      <Button shape="round" color="primary" onclick={handleRequeue} disabled={isTriggering || !!loadError || !estimate}>
+      <Button
+        shape="round"
+        color="secondary"
+        onclick={handleDefer}
+        disabled={isTriggering || isDeferring || !!loadError || !estimate}
+      >
+        {#if isDeferring}
+          <LoadingSpinner size="tiny" />
+        {/if}
+        {$t('admin.image_description_requeue_defer_button')}
+      </Button>
+      <Button
+        shape="round"
+        color="primary"
+        onclick={handleRequeue}
+        disabled={isTriggering || isDeferring || !!loadError || !estimate}
+      >
         {#if isTriggering}
           <LoadingSpinner size="tiny" />
         {/if}

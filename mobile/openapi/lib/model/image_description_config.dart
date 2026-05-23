@@ -17,7 +17,9 @@ class ImageDescriptionConfig {
     required this.device,
     required this.enabled,
     required this.fallbackModelName,
+    this.lastConfigChangeAt,
     required this.modelName,
+    this.pendingRequeueAt,
     this.prompt,
   });
 
@@ -38,8 +40,14 @@ class ImageDescriptionConfig {
   /// Name of the fallback model to use
   String fallbackModelName;
 
+  /// ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth).
+  String? lastConfigChangeAt;
+
   /// Name of the model to use
   String modelName;
+
+  /// ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent \"re-queue pending\" banner.
+  String? pendingRequeueAt;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -55,7 +63,9 @@ class ImageDescriptionConfig {
     other.device == device &&
     other.enabled == enabled &&
     other.fallbackModelName == fallbackModelName &&
+    other.lastConfigChangeAt == lastConfigChangeAt &&
     other.modelName == modelName &&
+    other.pendingRequeueAt == pendingRequeueAt &&
     other.prompt == prompt;
 
   @override
@@ -65,11 +75,13 @@ class ImageDescriptionConfig {
     (device.hashCode) +
     (enabled.hashCode) +
     (fallbackModelName.hashCode) +
+    (lastConfigChangeAt == null ? 0 : lastConfigChangeAt!.hashCode) +
     (modelName.hashCode) +
+    (pendingRequeueAt == null ? 0 : pendingRequeueAt!.hashCode) +
     (prompt == null ? 0 : prompt!.hashCode);
 
   @override
-  String toString() => 'ImageDescriptionConfig[acceleration=$acceleration, device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, modelName=$modelName, prompt=$prompt]';
+  String toString() => 'ImageDescriptionConfig[acceleration=$acceleration, device=$device, enabled=$enabled, fallbackModelName=$fallbackModelName, lastConfigChangeAt=$lastConfigChangeAt, modelName=$modelName, pendingRequeueAt=$pendingRequeueAt, prompt=$prompt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -81,7 +93,17 @@ class ImageDescriptionConfig {
       json[r'device'] = this.device;
       json[r'enabled'] = this.enabled;
       json[r'fallbackModelName'] = this.fallbackModelName;
+    if (this.lastConfigChangeAt != null) {
+      json[r'lastConfigChangeAt'] = this.lastConfigChangeAt;
+    } else {
+    //  json[r'lastConfigChangeAt'] = null;
+    }
       json[r'modelName'] = this.modelName;
+    if (this.pendingRequeueAt != null) {
+      json[r'pendingRequeueAt'] = this.pendingRequeueAt;
+    } else {
+    //  json[r'pendingRequeueAt'] = null;
+    }
     if (this.prompt != null) {
       json[r'prompt'] = this.prompt;
     } else {
@@ -103,7 +125,9 @@ class ImageDescriptionConfig {
         device: mapValueOfType<String>(json, r'device')!,
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         fallbackModelName: mapValueOfType<String>(json, r'fallbackModelName')!,
+        lastConfigChangeAt: mapValueOfType<String>(json, r'lastConfigChangeAt'),
         modelName: mapValueOfType<String>(json, r'modelName')!,
+        pendingRequeueAt: mapValueOfType<String>(json, r'pendingRequeueAt'),
         prompt: ImageDescriptionPromptConfig.fromJson(json[r'prompt']),
       );
     }

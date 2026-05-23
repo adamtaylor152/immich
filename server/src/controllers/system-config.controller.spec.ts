@@ -164,6 +164,13 @@ describe(SystemConfigController.name, () => {
     });
   });
 
+  describe('POST /system-config/image-description/defer-requeue', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/system-config/image-description/defer-requeue');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
+
   describe('GET /system-config/smart-albums/reevaluate-estimate', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get('/system-config/smart-albums/reevaluate-estimate');

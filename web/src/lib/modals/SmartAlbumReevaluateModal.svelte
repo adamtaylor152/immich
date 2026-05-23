@@ -2,8 +2,10 @@
   import { handleError } from '$lib/utils/handle-error';
   import {
     getSmartAlbumReevaluateEstimate,
+    Kind,
     triggerSmartAlbumReevaluate,
     type SmartAlbumReevaluateEstimateDto,
+    type SmartAlbumReevaluateRequestDto,
   } from '@immich/sdk';
   import { Button, LoadingSpinner, Modal, ModalBody, ModalFooter } from '@immich/ui';
   import { t } from 'svelte-i18n';
@@ -12,9 +14,15 @@
     // Resolves with the trigger response on success. Resolves with undefined
     // when the user cancels or the estimate fetch fails.
     onClose: (result?: { queued: boolean }) => void;
+    // Optional built-in kind to scope the re-evaluation to (e.g. "food").
+    // When omitted, the job runs against every enabled kind.
+    kind?: Kind;
+    // Human-readable name of the scoped kind, shown in the modal title and
+    // descriptive copy (e.g. "Food"). Falls back to the raw kind id.
+    kindLabel?: string;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, kind, kindLabel }: Props = $props();
 
   let estimate = $state<SmartAlbumReevaluateEstimateDto | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
@@ -36,7 +44,8 @@
   const handleReevaluate = async () => {
     isTriggering = true;
     try {
-      const result = await triggerSmartAlbumReevaluate();
+      const body: SmartAlbumReevaluateRequestDto = kind ? { kind } : {};
+      const result = await triggerSmartAlbumReevaluate({ smartAlbumReevaluateRequestDto: body });
       onClose(result);
     } catch (error) {
       handleError(error, $t('admin.smart_albums_reevaluate_modal_trigger_error'));
@@ -44,9 +53,15 @@
       isTriggering = false;
     }
   };
+
+  const modalTitle = $derived(
+    kind
+      ? $t('admin.smart_albums_reevaluate_modal_title_for_kind', { values: { kind: kindLabel ?? kind } })
+      : $t('admin.smart_albums_reevaluate_modal_title'),
+  );
 </script>
 
-<Modal title={$t('admin.smart_albums_reevaluate_modal_title')} {onClose} size="small">
+<Modal title={modalTitle} {onClose} size="small">
   <ModalBody>
     {#await estimatePromise}
       <div class="flex w-full place-content-center place-items-center py-8">

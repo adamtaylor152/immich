@@ -499,7 +499,7 @@ const ImageDescriptionRequeueEstimateSchema = z
       .meta({ format: 'double' })
       .min(0)
       .describe(
-        'Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.',
+        'Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started.',
       ),
     estimatedTotalSeconds: z
       .number()
@@ -542,6 +542,28 @@ const SmartAlbumReevaluateResponseSchema = z
   .meta({ id: 'SmartAlbumReevaluateResponseDto' });
 
 export class SmartAlbumReevaluateResponseDto extends createZodDto(SmartAlbumReevaluateResponseSchema) {}
+
+/** Known built-in smart-album kinds. Keep aligned with SystemConfig['smartAlbums']['builtIn']. */
+export const SMART_ALBUM_BUILT_IN_KINDS = [
+  'travel',
+  'documents',
+  'screenshots',
+  'food',
+  'pets',
+  'nature',
+] as const satisfies readonly (keyof SystemConfig['smartAlbums']['builtIn'])[];
+export type SmartAlbumBuiltInKind = (typeof SMART_ALBUM_BUILT_IN_KINDS)[number];
+
+const SmartAlbumReevaluateRequestSchema = z
+  .object({
+    kind: z
+      .enum(SMART_ALBUM_BUILT_IN_KINDS)
+      .optional()
+      .describe('Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.'),
+  })
+  .meta({ id: 'SmartAlbumReevaluateRequestDto' });
+
+export class SmartAlbumReevaluateRequestDto extends createZodDto(SmartAlbumReevaluateRequestSchema) {}
 
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   // Redact secrets on read. Writes that come back with an empty string here

@@ -2939,8 +2939,12 @@ export type ImageDescriptionConfig = {
     enabled: boolean;
     /** Name of the fallback model to use */
     fallbackModelName: string;
+    /** ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth). */
+    lastConfigChangeAt?: string | null;
     /** Name of the model to use */
     modelName: string;
+    /** ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent "re-queue pending" banner. */
+    pendingRequeueAt?: string | null;
     prompt?: ImageDescriptionPromptConfig;
 };
 export type NsfwDetectionConfig = {
@@ -3200,7 +3204,7 @@ export type ImageDescriptionRequeueEstimateDto = {
     activeModel: string;
     /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
     estimatedTotalSeconds: number;
-    /** Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented. */
+    /** Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started. */
     rollingAvgSeconds: number;
     /** Total eligible image assets */
     totalAssets: number;
@@ -3220,6 +3224,10 @@ export type MachineLearningHardwareResponseDto = {
     providers: string[];
     /** Whether PyTorch CUDA is available */
     torchCudaAvailable: boolean;
+};
+export type SmartAlbumReevaluateRequestDto = {
+    /** Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind. */
+    kind?: Kind;
 };
 export type SmartAlbumReevaluateResponseDto = {
     /** Whether the re-evaluate job was newly enqueued (false = already in-flight) */
@@ -7060,6 +7068,15 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Defer image description re-queue
+ */
+export function deferImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/system-config/image-description/defer-requeue", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * Trigger image description re-queue
  */
 export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
@@ -7098,16 +7115,19 @@ export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
 /**
  * Trigger smart-album re-evaluate
  */
-export function triggerSmartAlbumReevaluate(opts?: Oazapfts.RequestOpts) {
+export function triggerSmartAlbumReevaluate({ smartAlbumReevaluateRequestDto }: {
+    smartAlbumReevaluateRequestDto?: SmartAlbumReevaluateRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
         data: SmartAlbumReevaluateResponseDto;
     } | {
         status: 400;
-    }>("/system-config/smart-albums/reevaluate", {
+    }>("/system-config/smart-albums/reevaluate", oazapfts.json({
         ...opts,
-        method: "POST"
-    }));
+        method: "POST",
+        body: smartAlbumReevaluateRequestDto
+    })));
 }
 /**
  * Estimate smart-album re-evaluate cost
@@ -8427,6 +8447,14 @@ export enum Style {
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
     ClientSecretBasic = "client_secret_basic"
+}
+export enum Kind {
+    Travel = "travel",
+    Documents = "documents",
+    Screenshots = "screenshots",
+    Food = "food",
+    Pets = "pets",
+    Nature = "nature"
 }
 export enum TimeBucketDateType {
     Added = "added",
