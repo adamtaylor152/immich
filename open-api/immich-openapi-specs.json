@@ -24126,7 +24126,6 @@
             "type": "string"
           },
           "estimatedCostUsd": {
-            "nullable": true,
             "type": "number"
           },
           "gpuTypeId": {
@@ -24146,7 +24145,6 @@
             "type": "string"
           },
           "maxRuntimeHours": {
-            "nullable": true,
             "type": "number"
           },
           "mlUrl": {
@@ -24159,7 +24157,6 @@
             "type": "string"
           },
           "pricePerHour": {
-            "nullable": true,
             "type": "number"
           },
           "runningSince": {

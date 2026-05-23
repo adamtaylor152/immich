@@ -60,6 +60,12 @@ class RunPodStateDto {
   ///
   String? errorMessage;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   num? estimatedCostUsd;
 
   ///
@@ -96,6 +102,12 @@ class RunPodStateDto {
   ///
   String? lastBusyAt;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   num? maxRuntimeHours;
 
   ///
@@ -122,6 +134,12 @@ class RunPodStateDto {
   ///
   String? podId;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
   num? pricePerHour;
 
   ///
@@ -332,9 +350,7 @@ class RunPodStateDto {
         endpointId: mapValueOfType<String>(json, r'endpointId'),
         endpointUrl: mapValueOfType<String>(json, r'endpointUrl'),
         errorMessage: mapValueOfType<String>(json, r'errorMessage'),
-        estimatedCostUsd: json[r'estimatedCostUsd'] == null
-            ? null
-            : num.parse('${json[r'estimatedCostUsd']}'),
+        estimatedCostUsd: num.parse('${json[r'estimatedCostUsd']}'),
         gpuTypeId: mapValueOfType<String>(json, r'gpuTypeId'),
         idleTimeoutSeconds: json[r'idleTimeoutSeconds'] == null
             ? null
@@ -342,15 +358,11 @@ class RunPodStateDto {
         imageName: mapValueOfType<String>(json, r'imageName'),
         instanceTag: mapValueOfType<String>(json, r'instanceTag'),
         lastBusyAt: mapValueOfType<String>(json, r'lastBusyAt'),
-        maxRuntimeHours: json[r'maxRuntimeHours'] == null
-            ? null
-            : num.parse('${json[r'maxRuntimeHours']}'),
+        maxRuntimeHours: num.parse('${json[r'maxRuntimeHours']}'),
         mlUrl: mapValueOfType<String>(json, r'mlUrl'),
         podCreatedAt: mapValueOfType<String>(json, r'podCreatedAt'),
         podId: mapValueOfType<String>(json, r'podId'),
-        pricePerHour: json[r'pricePerHour'] == null
-            ? null
-            : num.parse('${json[r'pricePerHour']}'),
+        pricePerHour: num.parse('${json[r'pricePerHour']}'),
         runningSince: mapValueOfType<String>(json, r'runningSince'),
         status: RunPodStateDtoStatusEnum.fromJson(json[r'status'])!,
         stoppedAt: mapValueOfType<String>(json, r'stoppedAt'),
