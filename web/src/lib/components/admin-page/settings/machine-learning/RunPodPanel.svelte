@@ -13,8 +13,7 @@
   } from '@immich/sdk';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
-  import { notificationController, NotificationType } from '$lib/components/shared-components/notification/notification';
-  import { Button } from '@immich/ui';
+  import { Button, toastManager } from '@immich/ui';
 
   // Hand-rolled fetch instead of the SDK helper so we don't have to plumb additional
   // generated names through. Hits /api/runpod/pods/current with the existing session.
@@ -118,7 +117,7 @@
     try {
       testResult = await testRunPodConnection({ runPodConnectionTestDto: {} });
       if (testResult.ok) {
-        notificationController.show({ message: 'RunPod connection OK', type: NotificationType.Info });
+        toastManager.primary('RunPod connection OK');
         await refreshGpus();
       }
     } catch (error) {
@@ -130,11 +129,11 @@
 
   const handleLaunch = async () => {
     if (!consent) {
-      notificationController.show({ message: 'Please acknowledge the data-privacy notice first.', type: NotificationType.Warning });
+      toastManager.warning('Please acknowledge the data-privacy notice first.');
       return;
     }
     if (!selectedGpu) {
-      notificationController.show({ message: 'Pick a GPU type first.', type: NotificationType.Warning });
+      toastManager.warning('Pick a GPU type first.');
       return;
     }
     provisioning = true;
@@ -146,7 +145,7 @@
         ...(maxHoursOverride ? { maxRuntimeHours: maxHoursOverride } : {}),
       };
       state = await provisionRunPodPod({ runPodProvisionDto: dto });
-      notificationController.show({ message: 'Pod launching. This usually takes 2–3 minutes.', type: NotificationType.Info });
+      toastManager.info('Pod launching. This usually takes 2–3 minutes.');
     } catch (error) {
       handleError(error, 'Failed to launch pod');
     } finally {
@@ -158,7 +157,7 @@
     stopping = true;
     try {
       state = await stopRunPodPod();
-      notificationController.show({ message: 'Stop requested', type: NotificationType.Info });
+      toastManager.info('Stop requested');
     } catch (error) {
       handleError(error, 'Failed to stop pod');
     } finally {
@@ -170,7 +169,7 @@
     provisioning = true;
     try {
       state = await startRunPodPod();
-      notificationController.show({ message: 'Resuming pod', type: NotificationType.Info });
+      toastManager.info('Resuming pod');
     } catch (error) {
       handleError(error, 'Failed to resume pod');
     } finally {
@@ -185,7 +184,7 @@
     terminating = true;
     try {
       state = await terminateRunPodPod();
-      notificationController.show({ message: 'Pod terminated', type: NotificationType.Info });
+      toastManager.primary('Pod terminated');
     } catch (error) {
       handleError(error, 'Failed to terminate pod');
     } finally {
@@ -197,11 +196,9 @@
     backfilling = true;
     try {
       const result = await runBackfill();
-      notificationController.show({
-        message: `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
-        type: NotificationType.Info,
-        timeout: 6000,
-      });
+      toastManager.info(
+        `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
+      );
     } catch (error) {
       handleError(error, 'Failed to enqueue backfill');
     } finally {
