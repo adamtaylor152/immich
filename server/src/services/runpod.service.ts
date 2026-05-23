@@ -1061,7 +1061,16 @@ export class RunPodService extends BaseService {
             // Crucially: no IMMICH_ML_AUTH_TOKEN in serverless mode. RunPod's
             // proxy already auth-gates with the API key; double-auth would
             // require the proxy to forward our header which it doesn't.
-            env: { MACHINE_LEARNING_CACHE_FOLDER: '/cache' },
+            env: {
+              MACHINE_LEARNING_CACHE_FOLDER: '/cache',
+              // RunPod's LB proxy reads PORT/PORT_HEALTH to know which port on
+              // the worker to forward HTTP traffic + health probes to. Without
+              // these, the LB accepts the connection but never reaches the
+              // worker (requests hang forever). Reference:
+              //   github.com/runpod-workers/worker-load-balancing#deployment-steps
+              PORT: String(ML_PORT),
+              PORT_HEALTH: String(ML_PORT),
+            },
             // RunPod rejects pod-flavoured templates from serverless endpoints.
             isServerless: true,
           });
