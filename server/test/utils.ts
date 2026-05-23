@@ -56,6 +56,7 @@ import { ServerInfoRepository } from 'src/repositories/server-info.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { StackRepository } from 'src/repositories/stack.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository';
@@ -252,6 +253,7 @@ export type ServiceOverrides = {
   runPod: RunPodRepository;
   search: SearchRepository;
   serverInfo: ServerInfoRepository;
+  smartAlbum: SmartAlbumRepository;
   session: SessionRepository;
   sharedLink: SharedLinkRepository;
   sharedLinkAsset: SharedLinkAssetRepository;
@@ -338,6 +340,7 @@ export const getMocks = () => {
     search: automock(SearchRepository, { strict: false }),
     // eslint-disable-next-line no-sparse-arrays
     serverInfo: automock(ServerInfoRepository, { args: [, loggerMock], strict: false }),
+    smartAlbum: automock(SmartAlbumRepository, { strict: false }),
     session: automock(SessionRepository),
     sharedLink: automock(SharedLinkRepository),
     sharedLinkAsset: automock(SharedLinkAssetRepository),
@@ -407,6 +410,7 @@ export const newTestService = <T extends BaseService>(
     overrides.runPod || (mocks.runPod as As<RunPodRepository>),
     overrides.search || (mocks.search as As<SearchRepository>),
     overrides.serverInfo || (mocks.serverInfo as As<ServerInfoRepository>),
+    overrides.smartAlbum || (mocks.smartAlbum as As<SmartAlbumRepository>),
     overrides.session || (mocks.session as As<SessionRepository>),
     overrides.sharedLink || (mocks.sharedLink as As<SharedLinkRepository>),
     overrides.sharedLinkAsset || (mocks.sharedLinkAsset as As<SharedLinkAssetRepository>),

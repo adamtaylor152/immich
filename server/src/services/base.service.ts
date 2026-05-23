@@ -45,6 +45,7 @@ import { ServerInfoRepository } from 'src/repositories/server-info.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { StackRepository } from 'src/repositories/stack.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SyncCheckpointRepository } from 'src/repositories/sync-checkpoint.repository';
@@ -102,6 +103,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   RunPodRepository,
   SearchRepository,
   ServerInfoRepository,
+  SmartAlbumRepository,
   SessionRepository,
   SharedLinkRepository,
   SharedLinkAssetRepository,
@@ -163,6 +165,7 @@ export class BaseService {
     protected runPodRepository: RunPodRepository,
     protected searchRepository: SearchRepository,
     protected serverInfoRepository: ServerInfoRepository,
+    protected smartAlbumRepository: SmartAlbumRepository,
     protected sessionRepository: SessionRepository,
     protected sharedLinkRepository: SharedLinkRepository,
     protected sharedLinkAssetRepository: SharedLinkAssetRepository,
@@ -233,6 +236,7 @@ export class BaseService {
       ctx.runPodRepository,
       ctx.searchRepository,
       ctx.serverInfoRepository,
+      ctx.smartAlbumRepository,
       ctx.sessionRepository,
       ctx.sharedLinkRepository,
       ctx.sharedLinkAssetRepository,

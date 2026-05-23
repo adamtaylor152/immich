@@ -69,6 +69,9 @@ import { PluginTable } from 'src/schema/tables/plugin.table';
 import { SessionTable } from 'src/schema/tables/session.table';
 import { SharedLinkAssetTable } from 'src/schema/tables/shared-link-asset.table';
 import { SharedLinkTable } from 'src/schema/tables/shared-link.table';
+import { SmartAlbumAssetTable } from 'src/schema/tables/smart-album-asset.table';
+import { SmartAlbumExclusionTable } from 'src/schema/tables/smart-album-exclusion.table';
+import { SmartAlbumTable } from 'src/schema/tables/smart-album.table';
 import { SmartSearchDescriptionTable } from 'src/schema/tables/smart-search-description.table';
 import { SmartSearchTable } from 'src/schema/tables/smart-search.table';
 import { StackAuditTable } from 'src/schema/tables/stack-audit.table';
@@ -139,6 +142,9 @@ export class ImmichDatabase {
     SessionTable,
     SharedLinkAssetTable,
     SharedLinkTable,
+    SmartAlbumTable,
+    SmartAlbumAssetTable,
+    SmartAlbumExclusionTable,
     SmartSearchTable,
     SmartSearchDescriptionTable,
     StackTable,
@@ -259,6 +265,10 @@ export interface DB {
 
   shared_link: SharedLinkTable;
   shared_link_asset: SharedLinkAssetTable;
+
+  smart_album: SmartAlbumTable;
+  smart_album_asset: SmartAlbumAssetTable;
+  smart_album_exclusion: SmartAlbumExclusionTable;
 
   smart_search: SmartSearchTable;
   smart_search_description: SmartSearchDescriptionTable;
