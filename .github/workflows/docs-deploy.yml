@@ -10,6 +10,8 @@ env:
 
 jobs:
   checks:
+    # Upstream-only: deploys docs.immich.app, a resource the fork doesn't own.
+    if: github.repository == 'immich-app/immich'
     name: Docs Deploy Checks
     runs-on: ubuntu-latest
     permissions:

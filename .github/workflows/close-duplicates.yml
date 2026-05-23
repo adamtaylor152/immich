@@ -9,6 +9,8 @@ permissions: {}
 
 jobs:
   should_run:
+    # Upstream-only: issue/discussion triage for immich-app/immich.
+    if: github.repository == 'immich-app/immich'
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.should_run.outputs.run }}
