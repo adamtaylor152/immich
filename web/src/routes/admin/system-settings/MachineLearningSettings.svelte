@@ -383,38 +383,7 @@
             bind:value={runpod.apiKey}
             disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
             isEdited={runpod.apiKey !== savedRunpod.apiKey}
-          >
-            {#snippet descriptionSnippet()}
-              <p class="pb-2 text-sm immich-form-label">
-                Create your RunPod account from the link above, and then
-                <a
-                  href="https://console.runpod.io/user/settings"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 underline hover:no-underline"
-                >
-                  Get Your API Key
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                    <polyline points="15 3 21 3 21 9"></polyline>
-                    <line x1="10" y1="14" x2="21" y2="3"></line>
-                  </svg>
-                </a>. This API key allows Immich to auto-provision resources and will spend money on your RunPod
-                account.
-              </p>
-            {/snippet}
-          </SettingInputField>
+          />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
@@ -497,18 +466,13 @@
             >
               {#snippet descriptionSnippet()}
                 <p class="pb-2 text-sm immich-form-label">
-                  RunPod serverless uses GPU pool IDs (e.g. <code>AMPERE_48</code>, <code>ADA_48_PRO</code>), not
-                  specific cards. For Qwen2.5-VL-9B image description at fp16 you want ≥48&nbsp;GB VRAM (<code
-                    >AMPERE_48</code
-                  >: A40/A6000, <code>ADA_48_PRO</code>: L40/L40S). Smaller pools work for CLIP and face detection but
-                  Qwen 9B will OOM. See
                   <a
                     href="https://docs.runpod.io/references/gpu-types#gpu-pools"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="inline-flex items-center gap-1 underline hover:no-underline"
                   >
-                    GPU pools reference
+                    GPU pool reference
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       width="12"

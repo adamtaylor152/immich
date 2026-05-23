@@ -337,30 +337,6 @@
               {status}
             </span>
           </div>
-
-          {#if isTransitioning || isRunning || isServerlessReady}
-            <div class="relative mt-2 h-6 w-full max-w-md overflow-hidden rounded-full bg-immich-gray/20">
-              {#if isRunning || isServerlessReady}
-                <div class="size-full bg-green-500 transition-all"></div>
-              {:else}
-                <!-- Indeterminate animated bar during boot. -->
-                <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
-              {/if}
-              <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
-                {#if isRunning || isServerlessReady}
-                  <span class="text-green-900">Ready. RunPod GPU is ready.</span>
-                {:else if status === 'serverless-provisioning'}
-                  <span class="text-yellow-900">Provisioning serverless endpoint…</span>
-                {:else if status === 'provisioning'}
-                  <span class="text-yellow-900">Provisioning pod…</span>
-                {:else if status === 'starting'}
-                  <span class="text-yellow-900">Starting pod…</span>
-                {:else if status === 'stopping'}
-                  <span class="text-yellow-900">Stopping pod…</span>
-                {/if}
-              </div>
-            </div>
-          {/if}
           {#if podState.podId}
             <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
           {/if}
@@ -448,6 +424,29 @@
           {/if}
         </div>
       </div>
+
+      {#if isTransitioning || isRunning || isServerlessReady}
+        <div class="relative mt-3 h-6 w-full overflow-hidden rounded-full bg-immich-gray/20">
+          {#if isRunning || isServerlessReady}
+            <div class="size-full bg-green-500 transition-all"></div>
+          {:else}
+            <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
+          {/if}
+          <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
+            {#if isRunning || isServerlessReady}
+              <span class="text-green-900">Ready. RunPod GPU is ready.</span>
+            {:else if status === 'serverless-provisioning'}
+              <span class="text-yellow-900">Provisioning serverless endpoint…</span>
+            {:else if status === 'provisioning'}
+              <span class="text-yellow-900">Provisioning pod…</span>
+            {:else if status === 'starting'}
+              <span class="text-yellow-900">Starting pod…</span>
+            {:else if status === 'stopping'}
+              <span class="text-yellow-900">Stopping pod…</span>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 
