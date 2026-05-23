@@ -149,7 +149,7 @@ const formatTimestamp = (ms: number): string => {
 
 const videoContextHint = (ctx: VideoContext): string => {
   const cellCount = ctx.cols * ctx.rows;
-  const timestamps = ctx.timestampsMs.map(formatTimestamp).join(', ');
+  const timestamps = ctx.timestampsMs.map((ms) => formatTimestamp(ms)).join(', ');
   const durationFragment = ctx.durationMs ? ` of length ${formatTimestamp(ctx.durationMs)}` : '';
   return [
     `This image is a composite ${ctx.cols}x${ctx.rows} grid of ${cellCount} frames sampled from a video${durationFragment}.`,

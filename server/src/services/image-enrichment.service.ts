@@ -494,7 +494,7 @@ export class ImageEnrichmentService extends BaseService {
       // Composite grid is cheap to regenerate from the persisted
       // duplicate-detection frames; clean up after every run.
       if (videoGrid) {
-        await this.storageRepository.unlink(videoGrid.path).catch(() => undefined);
+        await this.storageRepository.unlink(videoGrid.path).catch(() => {});
       }
     }
 
