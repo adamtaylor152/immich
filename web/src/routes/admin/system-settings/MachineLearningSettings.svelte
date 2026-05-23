@@ -132,7 +132,7 @@
   onMount(() => {
     void detectMachineLearningHardware();
     void refreshManagedUrl();
-    managedUrlTimer = setInterval(refreshManagedUrl, 10000);
+    managedUrlTimer = setInterval(() => void refreshManagedUrl(), 10_000);
   });
 
   onDestroy(() => {
@@ -223,8 +223,8 @@
         <hr />
 
         {#if managedRunPodUrl}
-          <div class="p-2 rounded border border-immich-gray/30 bg-immich-bg/30 text-xs font-mono break-all">
-            <span class="not-italic font-sans text-immich-gray">Managed by RunPod (auto):</span>
+          <div class="rounded-sm border border-immich-gray/30 bg-immich-bg/30 p-2 font-mono text-xs break-all">
+            <span class="font-sans text-immich-gray not-italic">Managed by RunPod (auto):</span>
             {managedRunPodUrl}
           </div>
         {/if}

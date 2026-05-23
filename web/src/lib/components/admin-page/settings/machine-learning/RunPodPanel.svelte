@@ -201,7 +201,7 @@
     try {
       const result = await runBackfill();
       toastManager.info(
-        `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
+        `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length > 0 ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
       );
     } catch (error) {
       handleError(error, 'Failed to enqueue backfill');
@@ -211,29 +211,43 @@
   };
 
   const minutesAgo = (iso?: string) => {
-    if (!iso) return '';
+    if (!iso) {
+      return '';
+    }
     const ms = Date.now() - Date.parse(iso);
-    if (!Number.isFinite(ms)) return '';
+    if (!Number.isFinite(ms)) {
+      return '';
+    }
     const m = Math.floor(ms / 60_000);
-    if (m < 1) return 'just now';
-    if (m < 60) return `${m} min ago`;
+    if (m < 1) {
+      return 'just now';
+    }
+    if (m < 60) {
+      return `${m} min ago`;
+    }
     const h = Math.floor(m / 60);
     return `${h}h ${m % 60}m ago`;
   };
 
   const formatCost = (podState: RunPodStateDto): string | null => {
-    if (podState.status !== 'running' || !podState.runningSince) return null;
+    if (podState.status !== 'running' || !podState.runningSince) {
+      return null;
+    }
     const gpu = gpuTypes.find((g) => g.id === podState.gpuTypeId);
-    if (!gpu?.pricePerHour) return null;
+    if (!gpu?.pricePerHour) {
+      return null;
+    }
     const hours = (Date.now() - Date.parse(podState.runningSince)) / 3_600_000;
-    if (!Number.isFinite(hours)) return null;
+    if (!Number.isFinite(hours)) {
+      return null;
+    }
     return `$${(hours * gpu.pricePerHour).toFixed(3)} (est., ${gpu.pricePerHour.toFixed(2)}/hr)`;
   };
 </script>
 
-<div class="flex flex-col gap-4 my-2">
+<div class="my-2 flex flex-col gap-4">
   {#if !enabled}
-    <div class="p-3 bg-immich-bg/50 rounded text-sm">
+    <div class="rounded-sm bg-immich-bg/50 p-3 text-sm">
       <p>
         Cloud GPU provisioning is off. Enable machine learning above, then turn on
         <strong>Enable RunPod integration</strong> in this section to activate it.
@@ -242,13 +256,13 @@
   {/if}
 
   {#if podState}
-    <div class="p-3 rounded border border-immich-gray/20 bg-immich-bg/30">
-      <div class="flex justify-between items-start gap-4">
+    <div class="rounded-sm border border-immich-gray/20 bg-immich-bg/30 p-3">
+      <div class="flex items-start justify-between gap-4">
         <div>
           <div class="flex items-center gap-2">
             <span class="font-semibold">Status:</span>
             <span
-              class="px-2 py-0.5 rounded text-xs font-mono uppercase tracking-wide"
+              class="rounded-sm px-2 py-0.5 font-mono text-xs tracking-wide uppercase"
               class:bg-green-200={isRunning}
               class:text-green-900={isRunning}
               class:bg-yellow-200={isTransitioning}
@@ -261,40 +275,40 @@
             </span>
           </div>
           {#if podState.podId}
-            <div class="text-xs text-immich-gray font-mono mt-1">pod: {podState.podId}</div>
+            <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
           {/if}
           {#if podState.imageName}
-            <div class="text-xs text-immich-gray mt-1 break-all">image: {podState.imageName}</div>
+            <div class="mt-1 text-xs break-all text-immich-gray">image: {podState.imageName}</div>
           {/if}
           {#if podState.gpuTypeId}
-            <div class="text-xs text-immich-gray mt-1">gpu: {podState.gpuTypeId}</div>
+            <div class="mt-1 text-xs text-immich-gray">gpu: {podState.gpuTypeId}</div>
           {/if}
           {#if podState.mlUrl}
-            <div class="text-xs text-immich-gray font-mono mt-1 break-all">url: {podState.mlUrl}</div>
+            <div class="mt-1 font-mono text-xs break-all text-immich-gray">url: {podState.mlUrl}</div>
           {/if}
           {#if podState.runningSince}
-            <div class="text-xs text-immich-gray mt-1">running since: {minutesAgo(podState.runningSince)}</div>
+            <div class="mt-1 text-xs text-immich-gray">running since: {minutesAgo(podState.runningSince)}</div>
           {/if}
           {#if podState.lastBusyAt && isRunning}
-            <div class="text-xs text-immich-gray mt-1">last ML job: {minutesAgo(podState.lastBusyAt)}</div>
+            <div class="mt-1 text-xs text-immich-gray">last ML job: {minutesAgo(podState.lastBusyAt)}</div>
           {/if}
           {#if isRunning}
             {@const cost = formatCost(podState)}
             {#if cost}
-              <div class="text-xs text-immich-gray mt-1">estimated cost: {cost}</div>
+              <div class="mt-1 text-xs text-immich-gray">estimated cost: {cost}</div>
             {/if}
           {/if}
           {#if podState.stoppedAt}
-            <div class="text-xs text-immich-gray mt-1">stopped: {minutesAgo(podState.stoppedAt)}</div>
+            <div class="mt-1 text-xs text-immich-gray">stopped: {minutesAgo(podState.stoppedAt)}</div>
           {/if}
           {#if podState.errorMessage}
-            <div class="text-xs text-red-700 mt-2 break-words">{podState.errorMessage}</div>
+            <div class="mt-2 text-xs wrap-break-word text-red-700">{podState.errorMessage}</div>
           {/if}
           {#if podState.unhealthySince}
-            <div class="text-xs text-yellow-700 mt-1">pod unresponsive since {minutesAgo(podState.unhealthySince)}</div>
+            <div class="mt-1 text-xs text-yellow-700">pod unresponsive since {minutesAgo(podState.unhealthySince)}</div>
           {/if}
         </div>
-        <div class="flex flex-col gap-1 shrink-0">
+        <div class="flex shrink-0 flex-col gap-1">
           {#if isRunning}
             <Button size="small" onclick={handleStop} disabled={stopping}>{stopping ? 'Stopping…' : 'Stop'}</Button>
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
@@ -319,7 +333,7 @@
 
   {#if enabled}
     {#if status === 'idle' || status === 'error'}
-      <fieldset class="border border-immich-gray/30 rounded p-3 flex flex-col gap-3" disabled={!apiKeyConfigured}>
+      <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
         <legend class="px-1 text-sm font-semibold">Launch new pod</legend>
 
         {#if !apiKeyConfigured}
@@ -330,7 +344,7 @@
 
         <div class="flex flex-col gap-1">
           <label class="text-sm font-medium" for="runpod-gpu-select">GPU type</label>
-          <select id="runpod-gpu-select" bind:value={selectedGpu} class="border rounded px-2 py-1 text-sm">
+          <select id="runpod-gpu-select" bind:value={selectedGpu} class="rounded-sm border px-2 py-1 text-sm">
             {#if gpuLoading}
               <option value="">Loading…</option>
             {:else if gpuTypes.length === 0}
@@ -338,7 +352,7 @@
                 >{rp.defaultGpuTypeId} (default — click Test connection to refresh)</option
               >
             {:else}
-              {#each gpuTypes as g}
+              {#each gpuTypes as g (g.id)}
                 <option value={g.id}
                   >{g.displayName} · {g.memoryInGb} GB{g.pricePerHour
                     ? ` · $${g.pricePerHour.toFixed(2)}/hr`
@@ -359,7 +373,7 @@
             type="text"
             bind:value={imageOverride}
             placeholder={rp.imageName}
-            class="border rounded px-2 py-1 text-sm font-mono"
+            class="rounded-sm border px-2 py-1 font-mono text-sm"
           />
           <span class="text-xs text-immich-gray">Leave blank to use the configured default.</span>
         </div>
@@ -373,7 +387,7 @@
             max="168"
             bind:value={maxHoursOverride}
             placeholder={String(rp.maxRuntimeHours)}
-            class="border rounded px-2 py-1 text-sm w-32"
+            class="w-32 rounded-sm border px-2 py-1 text-sm"
           />
         </div>
 
@@ -385,7 +399,7 @@
           </span>
         </label>
 
-        <div class="flex gap-2 justify-end">
+        <div class="flex justify-end gap-2">
           <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
             {testing ? 'Testing…' : 'Test connection'}
           </Button>
@@ -403,7 +417,7 @@
     {/if}
 
     {#if isRunning}
-      <div class="flex gap-2 items-center">
+      <div class="flex items-center gap-2">
         <Button size="small" onclick={handleBackfill} disabled={!canBackfill}>
           {backfilling ? 'Enqueuing…' : 'Run ML backfill now'}
         </Button>
@@ -414,7 +428,7 @@
       </div>
     {/if}
 
-    <div class="p-3 rounded bg-yellow-50 border border-yellow-200 text-xs text-yellow-900">
+    <div class="rounded-sm border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
       <strong>Security:</strong> The pod's URL is reachable from the public internet. Immich protects it with a
       per-launch bearer token (the server sends <code>Authorization: Bearer ...</code> on every request). Unauthenticated
       requests get a 401. Stopping a pod releases the GPU but keeps the model cache for fast resume.
