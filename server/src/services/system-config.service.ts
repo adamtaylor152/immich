@@ -173,7 +173,7 @@ export class SystemConfigService extends BaseService {
     // or no completions yet). This reflects the user's actual hardware/model,
     // unlike the prior hardcoded 1.5s.
     const avgMs = this.jobRepository.getRollingAvgMs(JobName.ImageDescription);
-    const rollingAvgSeconds = avgMs != null ? avgMs / 1000 : DEFAULT_SECONDS_PER_ASSET;
+    const rollingAvgSeconds = avgMs == null ? DEFAULT_SECONDS_PER_ASSET : avgMs / 1000;
     const estimatedTotalSeconds = stats.totalAssets * rollingAvgSeconds;
 
     return {
@@ -206,7 +206,7 @@ export class SystemConfigService extends BaseService {
       // so the persistent banner disappears. Direct metadata write — no event
       // emission, since this is a server-side bookkeeping bump that doesn't
       // change any user-visible config field.
-      if (machineLearning.imageDescription.pendingRequeueAt !== null) {
+      if (machineLearning.imageDescription.pendingRequeueAt) {
         await this.writeImageDescriptionTimestamps({ pendingRequeueAt: null });
       }
     }

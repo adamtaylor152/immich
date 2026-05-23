@@ -14,6 +14,26 @@ vi.mock('bullmq', async (importOriginal) => ({
   Worker: mocks.worker,
 }));
 
+/**
+ * Drives the worker `completed` listener directly. startWorkers() registers
+ * one Worker per queue; each Worker mock captures its `on(event, handler)`
+ * calls so we can replay synthetic completion events.
+ */
+const completedHandlerFor = (queueName: QueueName): ((job: Record<string, unknown>) => void) => {
+  const workerCalls = mocks.worker.mock.calls as unknown as Array<[QueueName, unknown, unknown]>;
+  const idx = workerCalls.findIndex(([qn]) => qn === queueName);
+  if (idx === -1) {
+    throw new Error(`Worker for ${queueName} was never created`);
+  }
+  const workerInstance = mocks.worker.mock.results[idx].value as { on: ReturnType<typeof vi.fn> };
+  const onCalls = workerInstance.on.mock.calls as unknown as Array<[string, (job: any) => void]>;
+  const completed = onCalls.find(([event]) => event === 'completed');
+  if (!completed) {
+    throw new Error(`No completed listener registered for ${queueName}`);
+  }
+  return completed[1];
+};
+
 describe(JobRepository.name, () => {
   let sut: JobRepository;
 
@@ -59,26 +79,6 @@ describe(JobRepository.name, () => {
   });
 
   describe('getRollingAvgMs (job completion telemetry)', () => {
-    /**
-     * Drives the worker `completed` listener directly. startWorkers() registers
-     * one Worker per queue; each Worker mock captures its `on(event, handler)`
-     * calls so we can replay synthetic completion events.
-     */
-    const completedHandlerFor = (queueName: QueueName): ((job: Record<string, unknown>) => void) => {
-      const workerCalls = mocks.worker.mock.calls as unknown as Array<[QueueName, unknown, unknown]>;
-      const idx = workerCalls.findIndex(([qn]) => qn === queueName);
-      if (idx < 0) {
-        throw new Error(`Worker for ${queueName} was never created`);
-      }
-      const workerInstance = mocks.worker.mock.results[idx].value as { on: ReturnType<typeof vi.fn> };
-      const onCalls = workerInstance.on.mock.calls as unknown as Array<[string, (job: any) => void]>;
-      const completed = onCalls.find(([event]) => event === 'completed');
-      if (!completed) {
-        throw new Error(`No completed listener registered for ${queueName}`);
-      }
-      return completed[1];
-    };
-
     it('returns null when no samples have been recorded', () => {
       sut.startWorkers();
       expect(sut.getRollingAvgMs(JobName.ImageDescription)).toBeNull();
