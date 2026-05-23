@@ -128,8 +128,30 @@ CPU fallback works, but GPU acceleration is strongly recommended for larger libr
 - Admin review tools for generated descriptions
 - Admin review tools for generated tags
 - Admin repair tools for NSFW/sensitive-content decisions
+- Configurable prompt vocabulary, length, and tone
+- Identity injection — recognized named faces are passed into the description prompt so generated text can refer to people by name (e.g. _"Conner playing baseball"_ instead of _"a young boy playing baseball"_)
+- Hallucination-prevention post-validator that strips proper nouns the model invented
+- Admin status panel with live counts, last-config-change timestamp, and a real rolling-average re-queue time estimate
+- Defer-then-remind workflow: "Re-queue later" sets a persistent banner that reminds you to apply prompt changes after a session of edits
 
 Generated descriptions and tags are currently alpha-quality and expected to improve over time.
+
+See the [configurable descriptions, identity, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md) for step-by-step Basic and Advanced setup, prompt examples by library type, and tuning tips.
+
+### Smart auto-albums
+
+Six built-in auto-curated albums populated automatically from generated description tags:
+
+- Travel
+- Documents & Receipts
+- Screenshots
+- Food
+- Pets
+- Nature
+
+Each album has independently configurable tag triggers and a confidence threshold, and supports per-album re-evaluation against an existing library. Admins can also permanently exclude individual assets from a smart album without affecting their other album memberships.
+
+Smart albums are disabled by default. See the [configurable descriptions, identity, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md#smart-album-tag-tuning) for tuning details.
 
 ---
 
