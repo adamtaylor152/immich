@@ -245,12 +245,12 @@
           ? $t('admin.machine_learning_image_description_requeue_started')
           : $t('admin.machine_learning_image_description_requeue_already_in_flight'),
       );
-      // Refresh the stats panel so the pending-asset counts update without a
-      // page reload.
-      if (descriptionStats) {
-        void loadDescriptionStats();
-      }
+    } else {
+      return;
     }
+    // Refresh the stats panel so pendingRequeueAt + counts update without a
+    // page reload, regardless of whether the prior fetch completed.
+    void loadDescriptionStats();
   };
 </script>
 
