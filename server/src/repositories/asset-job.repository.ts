@@ -602,6 +602,41 @@ export class AssetJobRepository {
     return this.streamForImageEnrichmentTask(force, 'description');
   }
 
+  /**
+   * Stream image assets that have a successfully completed description, yielding
+   * the asset id, owner id, and the tag array from the description result. Used
+   * by the smart-album bulk re-evaluate job.
+   */
+  @GenerateSql({ params: [], stream: true })
+  streamForSmartAlbumReevaluation() {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_metadata', (join) =>
+        join
+          .onRef('asset_metadata.assetId', '=', 'asset.id')
+          .on('asset_metadata.key', '=', AssetMetadataKey.MlEnrichment),
+      )
+      .select([
+        'asset.id',
+        'asset.ownerId',
+        sql<string[]>`COALESCE(asset_metadata.value -> 'description' -> 'result' -> 'tags', '[]'::jsonb)`.as('tags'),
+      ])
+      .where('asset.type', '=', sql.lit(AssetType.Image))
+      .where('asset.deletedAt', 'is', null)
+      .$call(withDefaultVisibility)
+      .where((eb) =>
+        eb.exists((qb) =>
+          qb
+            .selectFrom('asset_file')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', sql.lit(AssetFileType.Preview)),
+        ),
+      )
+      .where(sql<string>`asset_metadata.value -> 'description' ->> 'status'`, '=', 'success')
+      .orderBy('asset.fileCreatedAt', 'desc')
+      .stream();
+  }
+
   @GenerateSql({ params: [], stream: true })
   streamForNsfwDetectionJob(force?: boolean) {
     return this.streamForImageEnrichmentTask(force, 'nsfwDetection');

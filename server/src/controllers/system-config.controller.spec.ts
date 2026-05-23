@@ -163,4 +163,18 @@ describe(SystemConfigController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
   });
+
+  describe('GET /system-config/smart-albums/reevaluate-estimate', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/system-config/smart-albums/reevaluate-estimate');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /system-config/smart-albums/reevaluate', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/system-config/smart-albums/reevaluate');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
 });

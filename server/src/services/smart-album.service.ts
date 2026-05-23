@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { SystemConfig } from 'src/config';
-import { OnEvent } from 'src/decorators';
-import { BootstrapEventPriority, ImmichWorker } from 'src/enum';
+import { OnEvent, OnJob } from 'src/decorators';
+import { BootstrapEventPriority, ImmichWorker, JobName, JobStatus, QueueName } from 'src/enum';
+import { ArgOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
+import { JobOf } from 'src/types';
 
 type BuiltInKind = keyof SystemConfig['smartAlbums']['builtIn'];
 
@@ -133,6 +135,69 @@ export class SmartAlbumService extends BaseService {
         if (smartAlbumId) {
           await this.smartAlbumRepository.removeAssetFromSmartAlbum(smartAlbumId, assetId);
         }
+      }
+    }
+  }
+
+  /**
+   * When the master smartAlbums toggle flips from false → true, backfill the
+   * six built-in albums for every existing user so they populate without a
+   * server restart.
+   */
+  @OnEvent({ name: 'ConfigUpdate', server: true })
+  async onConfigUpdate({ newConfig, oldConfig }: ArgOf<'ConfigUpdate'>): Promise<void> {
+    const wasDisabled = !oldConfig.smartAlbums.enabled;
+    const isNowEnabled = newConfig.smartAlbums.enabled;
+    if (wasDisabled && isNowEnabled) {
+      await this.backfillAllUsers();
+    }
+  }
+
+  /**
+   * Bulk re-evaluate every already-described image asset against the smart-album
+   * rules. Called by the admin-triggered re-evaluate endpoint. The evaluation is
+   * cheap (no ML inference — tags are already stored) so we do it inline rather
+   * than fanning out per-asset jobs.
+   */
+  @OnJob({ name: JobName.SmartAlbumReevaluateAll, queue: QueueName.BackgroundTask })
+  async handleReevaluateAll(_data: JobOf<JobName.SmartAlbumReevaluateAll>): Promise<JobStatus> {
+    const { smartAlbums } = await this.getConfig({ withCache: false });
+    if (!smartAlbums.enabled) {
+      return JobStatus.Skipped;
+    }
+
+    const assets = this.assetJobRepository.streamForSmartAlbumReevaluation();
+    for await (const asset of assets) {
+      try {
+        await this.evaluate({
+          assetId: asset.id,
+          ownerId: asset.ownerId,
+          tags: asset.tags ?? [],
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Smart-album re-evaluate failed for asset ${asset.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return JobStatus.Success;
+  }
+
+  /**
+   * Backfill the 6 built-in smart albums for every active user. Called when the
+   * master `smartAlbums.enabled` toggle flips from false → true so that existing
+   * users get their albums without waiting for a server restart.
+   */
+  async backfillAllUsers(): Promise<void> {
+    const users = await this.userRepository.getList({ withDeleted: false });
+    for (const user of users) {
+      try {
+        await this.ensureBuiltInAlbumsForUser(user.id);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to backfill smart albums for user ${user.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }

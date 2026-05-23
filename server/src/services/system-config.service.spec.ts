@@ -883,4 +883,42 @@ describe(SystemConfigService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
   });
+
+  describe('estimateSmartAlbumReevaluate', () => {
+    it('should return the count of assets with a completed description', async () => {
+      mocks.asset.getDescriptionStats.mockResolvedValue({
+        totalAssets: 200,
+        withDescription: 80,
+        withoutDescription: 120,
+      });
+
+      const result = await sut.estimateSmartAlbumReevaluate();
+
+      expect(result).toEqual({ totalAssets: 80 });
+    });
+  });
+
+  describe('triggerSmartAlbumReevaluate', () => {
+    it('should enqueue the re-evaluate job and return queued=true when smartAlbums is enabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: true },
+      });
+
+      const result = await sut.triggerSmartAlbumReevaluate();
+
+      expect(result).toEqual({ queued: true });
+      expect(mocks.job.queue).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'SmartAlbumReevaluateAll' }),
+      );
+    });
+
+    it('should throw BadRequestException when smartAlbums is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: false },
+      });
+
+      await expect(sut.triggerSmartAlbumReevaluate()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+  });
 });

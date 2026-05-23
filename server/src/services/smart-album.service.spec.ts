@@ -1,3 +1,4 @@
+import { defaults } from 'src/config';
 import { SmartAlbumService } from 'src/services/smart-album.service';
 import { newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -185,6 +186,136 @@ describe(SmartAlbumService.name, () => {
 
       await sut.ensureBuiltInAlbumsForUser(ownerId);
 
+      expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleReevaluateAll', () => {
+    it('should return Skipped when smartAlbums.enabled is false', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: false },
+      });
+
+      const { JobStatus } = await import('src/enum');
+      const result = await sut.handleReevaluateAll({});
+
+      expect(result).toBe(JobStatus.Skipped);
+      expect(mocks.assetJob.streamForSmartAlbumReevaluation).not.toHaveBeenCalled();
+    });
+
+    it('should call evaluate for each streamed asset', async () => {
+      const asset1Id = newUuid();
+      const asset2Id = newUuid();
+      const ownerId = newUuid();
+      mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        (async function* () {
+          yield { id: asset1Id, ownerId, tags: ['beach'] };
+          yield { id: asset2Id, ownerId, tags: ['food'] };
+        })(),
+      );
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(new Map());
+
+      const { JobStatus } = await import('src/enum');
+      const result = await sut.handleReevaluateAll({});
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.assetJob.streamForSmartAlbumReevaluation).toHaveBeenCalledTimes(1);
+      // evaluate() is called for each asset (we call getAllSmartAlbumIdsForOwner per evaluate call)
+      expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).toHaveBeenCalledTimes(2);
+    });
+
+    it('should continue to next asset if one evaluate throws', async () => {
+      const asset1Id = newUuid();
+      const asset2Id = newUuid();
+      const ownerId = newUuid();
+      mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        (async function* () {
+          yield { id: asset1Id, ownerId, tags: ['beach'] };
+          yield { id: asset2Id, ownerId, tags: ['food'] };
+        })(),
+      );
+      // First call throws, second succeeds
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner
+        .mockRejectedValueOnce(new Error('db error'))
+        .mockResolvedValueOnce(new Map());
+
+      const { JobStatus } = await import('src/enum');
+      const result = await sut.handleReevaluateAll({});
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.logger.warn).toHaveBeenCalledTimes(1);
+      // Both assets attempted — second one got the successful mock call
+      expect(mocks.smartAlbum.getAllSmartAlbumIdsForOwner).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('backfillAllUsers', () => {
+    it('should call ensureBuiltInAlbumsForUser for each user', async () => {
+      const userId1 = newUuid();
+      const userId2 = newUuid();
+      mocks.user.getList.mockResolvedValue([{ id: userId1 }, { id: userId2 }] as never);
+      mocks.smartAlbum.ensureForUser.mockResolvedValue();
+
+      await sut.backfillAllUsers();
+
+      expect(mocks.smartAlbum.ensureForUser).toHaveBeenCalledTimes(2);
+    });
+
+    it('should continue if one user backfill fails', async () => {
+      const userId1 = newUuid();
+      const userId2 = newUuid();
+      mocks.user.getList.mockResolvedValue([{ id: userId1 }, { id: userId2 }] as never);
+      mocks.smartAlbum.ensureForUser.mockRejectedValueOnce(new Error('db error')).mockResolvedValueOnce();
+
+      await expect(sut.backfillAllUsers()).resolves.not.toThrow();
+
+      expect(mocks.smartAlbum.ensureForUser).toHaveBeenCalledTimes(2);
+      expect(mocks.logger.warn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('onConfigUpdate', () => {
+    it('should backfill all users when smartAlbums.enabled flips from false to true', async () => {
+      const userId1 = newUuid();
+      mocks.user.getList.mockResolvedValue([{ id: userId1 }] as never);
+      mocks.smartAlbum.ensureForUser.mockResolvedValue();
+
+      await sut.onConfigUpdate({
+        oldConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: false } },
+        newConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: true } },
+      });
+
+      expect(mocks.user.getList).toHaveBeenCalledTimes(1);
+      expect(mocks.smartAlbum.ensureForUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not backfill when smartAlbums.enabled remains true', async () => {
+      await sut.onConfigUpdate({
+        oldConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: true } },
+        newConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: true } },
+      });
+
+      expect(mocks.user.getList).not.toHaveBeenCalled();
+      expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
+    });
+
+    it('should not backfill when smartAlbums.enabled remains false', async () => {
+      await sut.onConfigUpdate({
+        oldConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: false } },
+        newConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: false } },
+      });
+
+      expect(mocks.user.getList).not.toHaveBeenCalled();
+      expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
+    });
+
+    it('should not backfill when smartAlbums.enabled flips from true to false', async () => {
+      await sut.onConfigUpdate({
+        oldConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: true } },
+        newConfig: { ...defaults, smartAlbums: { ...defaults.smartAlbums, enabled: false } },
+      });
+
+      expect(mocks.user.getList).not.toHaveBeenCalled();
       expect(mocks.smartAlbum.ensureForUser).not.toHaveBeenCalled();
     });
   });

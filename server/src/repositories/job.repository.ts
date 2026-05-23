@@ -272,6 +272,9 @@ export class JobRepository {
       case JobName.ImageDescriptionQueueAll: {
         return { deduplication: { id: JobName.ImageDescriptionQueueAll } };
       }
+      case JobName.SmartAlbumReevaluateAll: {
+        return { deduplication: { id: JobName.SmartAlbumReevaluateAll } };
+      }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };
       }

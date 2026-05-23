@@ -13,6 +13,7 @@
   import NightlyTasksSettings from './NightlyTasksSettings.svelte';
   import NotificationSettings from './NotificationSettings.svelte';
   import ServerSettings from './ServerSettings.svelte';
+  import SmartAlbumsSettings from './SmartAlbumsSettings.svelte';
   import StorageTemplateSettings from '$lib/components/admin-settings/StorageTemplateSettings.svelte';
   import ThemeSettings from './ThemeSettings.svelte';
   import TrashSettings from './TrashSettings.svelte';
@@ -43,6 +44,7 @@
     mdiTrashCanOutline,
     mdiUpdate,
     mdiVideoOutline,
+    mdiImageMultipleOutline,
   } from '@mdi/js';
   import type { Component } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -144,6 +146,13 @@
       subtitle: $t('admin.server_settings_description'),
       key: 'server',
       icon: mdiServerOutline,
+    },
+    {
+      component: SmartAlbumsSettings,
+      title: $t('admin.smart_albums_settings'),
+      subtitle: $t('admin.smart_albums_settings_description'),
+      key: 'smart-albums',
+      icon: mdiImageMultipleOutline,
     },
     {
       component: StorageTemplateSettings,

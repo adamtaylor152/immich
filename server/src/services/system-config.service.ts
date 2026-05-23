@@ -6,6 +6,8 @@ import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
   mapConfig,
+  SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
 } from 'src/dtos/system-config.dto';
 import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
@@ -169,5 +171,22 @@ export class SystemConfigService extends BaseService {
     }
 
     return { queued: !alreadyInFlight };
+  }
+
+  async estimateSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateEstimateDto> {
+    const stats = await this.assetRepository.getDescriptionStats();
+    return { totalAssets: stats.withDescription };
+  }
+
+  async triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
+    const { smartAlbums } = await this.getConfig({ withCache: false });
+    if (!smartAlbums.enabled) {
+      throw new BadRequestException('Smart albums are not enabled');
+    }
+
+    // BullMQ deduplication (configured in job.repository.ts) prevents
+    // double-enqueueing the re-evaluate-all job even when called concurrently.
+    await this.jobRepository.queue({ name: JobName.SmartAlbumReevaluateAll });
+    return { queued: true };
   }
 }

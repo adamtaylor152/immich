@@ -523,6 +523,22 @@ const ImageDescriptionRequeueResponseSchema = z
 
 export class ImageDescriptionRequeueResponseDto extends createZodDto(ImageDescriptionRequeueResponseSchema) {}
 
+const SmartAlbumReevaluateEstimateSchema = z
+  .object({
+    totalAssets: z.int().min(0).describe('Total image assets with a successfully completed description'),
+  })
+  .meta({ id: 'SmartAlbumReevaluateEstimateDto' });
+
+export class SmartAlbumReevaluateEstimateDto extends createZodDto(SmartAlbumReevaluateEstimateSchema) {}
+
+const SmartAlbumReevaluateResponseSchema = z
+  .object({
+    queued: z.boolean().describe('Whether the re-evaluate job was newly enqueued (false = already in-flight)'),
+  })
+  .meta({ id: 'SmartAlbumReevaluateResponseDto' });
+
+export class SmartAlbumReevaluateResponseDto extends createZodDto(SmartAlbumReevaluateResponseSchema) {}
+
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   // Redact secrets on read. Writes that come back with an empty string here
   // preserve the stored value (see utils/config.ts:updateConfig).

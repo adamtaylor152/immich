@@ -3130,6 +3130,14 @@ export type SystemConfigSmartAlbumsDto = {
     /** Master smart-album enabled toggle */
     enabled: boolean;
 };
+export type SmartAlbumReevaluateEstimateDto = {
+    /** Total image assets that have a successfully completed description and will be evaluated */
+    totalAssets: number;
+};
+export type SmartAlbumReevaluateResponseDto = {
+    /** Whether the re-evaluate job was newly enqueued (deduplication: always true if not already running) */
+    queued: boolean;
+};
 export type SystemConfigStorageTemplateDto = {
     /** Enabled */
     enabled: boolean;
@@ -7072,6 +7080,31 @@ export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) 
         data: ImageDescriptionRequeueEstimateDto;
     }>("/system-config/image-description/requeue-estimate", {
         ...opts
+    }));
+}
+/**
+ * Estimate smart-album re-evaluate cost
+ */
+export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SmartAlbumReevaluateEstimateDto;
+    }>("/system-config/smart-albums/reevaluate-estimate", {
+        ...opts
+    }));
+}
+/**
+ * Trigger smart-album re-evaluate
+ */
+export function triggerSmartAlbumReevaluate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: SmartAlbumReevaluateResponseDto;
+    } | {
+        status: 400;
+    }>("/system-config/smart-albums/reevaluate", {
+        ...opts,
+        method: "POST"
     }));
 }
 /**

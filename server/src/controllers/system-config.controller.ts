@@ -5,6 +5,8 @@ import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
   MachineLearningHardwareResponseDto,
+  SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
   SystemConfigTemplateStorageOptionDto,
 } from 'src/dtos/system-config.dto';
@@ -99,5 +101,30 @@ export class SystemConfigController {
   @ApiResponse({ status: 400, description: 'Image description is not enabled.' })
   triggerImageDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
     return this.service.triggerDescriptionRequeue();
+  }
+
+  @Get('smart-albums/reevaluate-estimate')
+  @Authenticated({ permission: Permission.SystemConfigRead, admin: true })
+  @Endpoint({
+    summary: 'Estimate smart-album re-evaluate cost',
+    description:
+      'Returns the number of image assets that have a completed description and will be re-evaluated by the re-evaluate job.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  getSmartAlbumReevaluateEstimate(): Promise<SmartAlbumReevaluateEstimateDto> {
+    return this.service.estimateSmartAlbumReevaluate();
+  }
+
+  @Post('smart-albums/reevaluate')
+  @Authenticated({ permission: Permission.SystemConfigUpdate, admin: true })
+  @Endpoint({
+    summary: 'Trigger smart-album re-evaluate',
+    description:
+      'Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  @ApiResponse({ status: 400, description: 'Smart albums are not enabled.' })
+  triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
+    return this.service.triggerSmartAlbumReevaluate();
   }
 }
