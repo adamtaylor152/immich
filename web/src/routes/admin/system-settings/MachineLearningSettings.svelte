@@ -10,7 +10,7 @@
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import ImageDescriptionRequeueModal from '$lib/modals/ImageDescriptionRequeueModal.svelte';
-  import { Button, IconButton, modalManager } from '@immich/ui';
+  import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
   import { mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
   import {
     getMachineLearningHardware,
@@ -147,42 +147,27 @@
   const isMachineLearningConfigEdited = (machineLearning: SystemConfigMachineLearningDto) =>
     !isEqual(machineLearning, config.machineLearning);
 
-  // Textarea state mirrors for list-type prompt fields (string ↔ array, no two-way reactive loop).
-  // We initialise from configToEdit and write back on blur only.
-  let lookForText = $state((imageDescription.prompt?.lookFor ?? []).join('\n'));
-  let customVocabularyText = $state((imageDescription.prompt?.customVocabulary ?? []).join('\n'));
-  let nsfwIndicatorsText = $state((imageDescription.prompt?.nsfwIndicators ?? []).join('\n'));
-  let medicalIndicatorsText = $state((imageDescription.prompt?.medicalIndicators ?? []).join('\n'));
-  let forbiddenInferencesText = $state((imageDescription.prompt?.forbiddenInferences ?? []).join('\n'));
-  let rawPromptTemplateText = $state(imageDescription.prompt?.advanced?.rawPromptTemplate ?? '');
-
+  // List-type prompt fields are displayed as newline-joined text and parsed back on input.
+  // Using $derived (not $state) ensures the textareas always reflect the live config — including
+  // after a Reset (which replaces configToEdit wholesale via SystemConfigButtonRow).
   const parseLines = (text: string): string[] => text.split('\n').map((l) => l.trim()).filter(Boolean);
 
-  // Sync textarea strings → config arrays. Each effect is gated on its own text variable only,
-  // so there is no write-back loop (config arrays are plain object props, not reactive signals).
-  $effect(() => {
-    imageDescription.prompt!.lookFor = parseLines(lookForText);
-  });
-  $effect(() => {
-    imageDescription.prompt!.customVocabulary = parseLines(customVocabularyText);
-  });
-  $effect(() => {
-    imageDescription.prompt!.nsfwIndicators = parseLines(nsfwIndicatorsText);
-  });
-  $effect(() => {
-    imageDescription.prompt!.medicalIndicators = parseLines(medicalIndicatorsText);
-  });
-  $effect(() => {
-    imageDescription.prompt!.forbiddenInferences = parseLines(forbiddenInferencesText);
-  });
-  $effect(() => {
-    if (imageDescription.prompt?.advanced) {
-      imageDescription.prompt.advanced.rawPromptTemplate = rawPromptTemplateText;
-    }
-  });
+  const lookForText = $derived((imageDescription.prompt?.lookFor ?? []).join('\n'));
+  const customVocabularyText = $derived((imageDescription.prompt?.customVocabulary ?? []).join('\n'));
+  const nsfwIndicatorsText = $derived((imageDescription.prompt?.nsfwIndicators ?? []).join('\n'));
+  const medicalIndicatorsText = $derived((imageDescription.prompt?.medicalIndicators ?? []).join('\n'));
+  const forbiddenInferencesText = $derived((imageDescription.prompt?.forbiddenInferences ?? []).join('\n'));
+  const rawPromptTemplateText = $derived(imageDescription.prompt?.advanced?.rawPromptTemplate ?? '');
 
   const handleRequeueClick = async () => {
-    await modalManager.show(ImageDescriptionRequeueModal, {});
+    const result = await modalManager.show(ImageDescriptionRequeueModal, {});
+    if (result) {
+      toastManager.primary(
+        result.queued
+          ? $t('admin.machine_learning_image_description_requeue_started')
+          : $t('admin.machine_learning_image_description_requeue_already_in_flight'),
+      );
+    }
   };
 </script>
 
@@ -629,7 +614,8 @@
               <SettingTextarea
                 label={$t('admin.machine_learning_image_description_look_for')}
                 description={$t('admin.machine_learning_image_description_look_for_description')}
-                bind:value={lookForText}
+                value={lookForText}
+                onChange={(text) => (imageDescription.prompt!.lookFor = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                 isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !== JSON.stringify(savedImageDescription.prompt?.lookFor)}
               />
@@ -637,7 +623,8 @@
               <SettingTextarea
                 label={$t('admin.machine_learning_image_description_custom_vocabulary')}
                 description={$t('admin.machine_learning_image_description_custom_vocabulary_description')}
-                bind:value={customVocabularyText}
+                value={customVocabularyText}
+                onChange={(text) => (imageDescription.prompt!.customVocabulary = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                 isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !== JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
               />
@@ -645,7 +632,8 @@
               <SettingTextarea
                 label={$t('admin.machine_learning_image_description_forbidden_inferences')}
                 description={$t('admin.machine_learning_image_description_forbidden_inferences_description')}
-                bind:value={forbiddenInferencesText}
+                value={forbiddenInferencesText}
+                onChange={(text) => (imageDescription.prompt!.forbiddenInferences = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                 isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !== JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
               />
@@ -658,7 +646,8 @@
                 <div class="ms-4 mt-4">
                   <SettingTextarea
                     label={$t('admin.machine_learning_image_description_nsfw_indicators')}
-                    bind:value={nsfwIndicatorsText}
+                    value={nsfwIndicatorsText}
+                    onChange={(text) => (imageDescription.prompt!.nsfwIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                     isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !== JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
                   />
@@ -673,7 +662,8 @@
                 <div class="ms-4 mt-4">
                   <SettingTextarea
                     label={$t('admin.machine_learning_image_description_medical_indicators')}
-                    bind:value={medicalIndicatorsText}
+                    value={medicalIndicatorsText}
+                    onChange={(text) => (imageDescription.prompt!.medicalIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                     isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !== JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
                   />
@@ -736,7 +726,8 @@
                     <SettingTextarea
                       label={$t('admin.machine_learning_image_description_advanced_raw_prompt')}
                       description={$t('admin.machine_learning_image_description_advanced_raw_prompt_description')}
-                      bind:value={rawPromptTemplateText}
+                      value={rawPromptTemplateText}
+                      onChange={(text) => (imageDescription.prompt!.advanced!.rawPromptTemplate = text)}
                       disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                       isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !== savedImageDescription.prompt?.advanced?.rawPromptTemplate}
                     />

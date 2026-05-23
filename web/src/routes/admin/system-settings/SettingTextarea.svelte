@@ -12,6 +12,7 @@
     disabled?: boolean;
     isEdited?: boolean;
     descriptionSnippet?: Snippet;
+    onChange?: (value: string) => void;
   }
 
   let {
@@ -22,10 +23,13 @@
     disabled = false,
     isEdited = false,
     descriptionSnippet,
+    onChange,
   }: Props = $props();
 
   const handleInput = (e: Event) => {
-    value = (e.target as HTMLInputElement).value;
+    const next = (e.target as HTMLInputElement).value;
+    value = next;
+    onChange?.(next);
   };
 </script>
 

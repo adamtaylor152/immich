@@ -9,7 +9,10 @@
   import { t } from 'svelte-i18n';
 
   interface Props {
-    onClose: (confirmed?: boolean) => void;
+    // Resolves with the trigger response on success (queued=true → newly enqueued,
+    // queued=false → a re-queue job was already in-flight). Resolves with undefined
+    // when the user cancels or the estimate fetch fails.
+    onClose: (result?: { queued: boolean }) => void;
   }
 
   let { onClose }: Props = $props();
@@ -17,7 +20,6 @@
   let estimate = $state<ImageDescriptionRequeueEstimateDto | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let isTriggering = $state(false);
-  let alreadyQueued = $state(false);
 
   const formatDuration = (seconds: number): string => {
     if (seconds < 60) {
@@ -44,8 +46,7 @@
     isTriggering = true;
     try {
       const result = await triggerImageDescriptionRequeue();
-      alreadyQueued = !result.queued;
-      onClose(true);
+      onClose(result);
     } catch (error) {
       handleError(error, $t('admin.machine_learning_image_description_requeue_modal_error'));
     } finally {
@@ -91,7 +92,7 @@
             <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
               {$t('admin.machine_learning_image_description_requeue_modal_rolling_avg')}
             </dt>
-            <dd class="font-medium">{estimate.rollingAvgSeconds.toFixed(1)}s <span class="text-xs text-immich-fg/50 dark:text-immich-dark-fg/50">(placeholder)</span></dd>
+            <dd class="font-medium">{estimate.rollingAvgSeconds.toFixed(1)}s</dd>
           </div>
           <div class="flex justify-between">
             <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
@@ -113,18 +114,13 @@
             <dd class="font-medium font-mono text-xs">{estimate.activeModel}</dd>
           </div>
         </dl>
-        {#if alreadyQueued}
-          <p class="mt-4 text-sm text-amber-600 dark:text-amber-400">
-            {$t('admin.machine_learning_image_description_requeue_modal_already_queued')}
-          </p>
-        {/if}
       {/if}
     {/await}
   </ModalBody>
 
   <ModalFooter>
     <div class="flex w-full justify-end gap-2">
-      <Button shape="round" color="secondary" onclick={() => onClose(false)} disabled={isTriggering}>
+      <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering}>
         {$t('cancel')}
       </Button>
       <Button
