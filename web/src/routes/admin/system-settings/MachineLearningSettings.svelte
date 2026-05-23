@@ -1209,10 +1209,11 @@
               <SettingTextarea
                 label={$t('admin.machine_learning_image_description_custom_instructions')}
                 description={$t('admin.machine_learning_image_description_custom_instructions_description')}
-                bind:value={imageDescription.prompt!.customInstructions}
+                value={imageDescription.prompt?.customInstructions ?? ''}
+                onChange={(text) => (imageDescription.prompt!.customInstructions = text)}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={imageDescription.prompt?.customInstructions !==
-                  savedImageDescription.prompt?.customInstructions}
+                isEdited={(imageDescription.prompt?.customInstructions ?? '') !==
+                  (savedImageDescription.prompt?.customInstructions ?? '')}
               />
 
               <SettingTextarea
