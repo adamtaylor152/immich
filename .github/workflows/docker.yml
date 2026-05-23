@@ -109,7 +109,10 @@ jobs:
   machine-learning:
     name: Build and Push ML
     needs: pre-job
-    if: ${{ fromJSON(needs.pre-job.outputs.should_run).machine-learning == true }}
+    # Skip the heavyweight build+push on fork PRs — the fork's restricted
+    # PR token can't authenticate mise/GHCR and the job inevitably 401s.
+    # Push events to fork/main (post-merge) still rebuild + retag normally.
+    if: ${{ fromJSON(needs.pre-job.outputs.should_run).machine-learning == true && github.event_name != 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
@@ -176,7 +179,8 @@ jobs:
   server:
     name: Build and Push Server
     needs: pre-job
-    if: ${{ fromJSON(needs.pre-job.outputs.should_run).server == true }}
+    # See machine-learning job comment — same fork-PR auth limitation.
+    if: ${{ fromJSON(needs.pre-job.outputs.should_run).server == true && github.event_name != 'pull_request' }}
     uses: ./.github/workflows/local-multi-runner-build.yml
     permissions:
       contents: read
