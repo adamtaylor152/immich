@@ -442,9 +442,15 @@ describe(RunPodService.name, () => {
       expect(result.endpointUrl).toBe(ENDPOINT_URL);
       expect(mocks.runPod.createTemplate).toHaveBeenCalledTimes(1);
       // The template MUST NOT include IMMICH_ML_AUTH_TOKEN — RunPod's proxy already auth-gates
-      // and adding our middleware would double-bearer.
+      // and adding our middleware would double-bearer. PORT/PORT_HEALTH are required so the LB
+      // proxy knows which port on the worker to forward to — without them requests hang.
       const templatePayload = (mocks.runPod.createTemplate as ReturnType<typeof vi.fn>).mock.calls[0][1];
-      expect(templatePayload.env).toEqual({ MACHINE_LEARNING_CACHE_FOLDER: '/cache' });
+      expect(templatePayload.env).toEqual({
+        MACHINE_LEARNING_CACHE_FOLDER: '/cache',
+        PORT: '3003',
+        PORT_HEALTH: '3003',
+      });
+      expect(templatePayload.env).not.toHaveProperty('IMMICH_ML_AUTH_TOKEN');
       expect(mocks.runPod.createEndpoint).toHaveBeenCalledTimes(1);
       expect(mocks.systemMetadata.set).toHaveBeenCalledWith(
         SystemMetadataKey.RunPodState,
