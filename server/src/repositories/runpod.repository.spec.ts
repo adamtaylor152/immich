@@ -35,11 +35,24 @@ describe(RunPodRepository.name, () => {
     expect(init.headers.Authorization).toBe(`Bearer ${apiKey}`);
   });
 
-  it('parses GPU type list', async () => {
+  it('parses GPU type list from GraphQL', async () => {
+    // RunPod's REST API doesn't expose GPU types — we have to hit the GraphQL
+    // endpoint. Mock the GraphQL response shape (data.gpuTypes[]).
     const fetchMock = vi.fn().mockResolvedValue(
-      Response.json([
-        { id: 'NVIDIA RTX A5000', displayName: 'RTX A5000', memoryInGb: 24, pricePerHour: 0.16 },
-      ]),
+      Response.json({
+        data: {
+          gpuTypes: [
+            {
+              id: 'NVIDIA RTX A5000',
+              displayName: 'RTX A5000',
+              memoryInGb: 24,
+              secureCloud: true,
+              communityCloud: true,
+              lowestPrice: { uninterruptablePrice: 0.16, minimumBidPrice: 0.16 },
+            },
+          ],
+        },
+      }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -47,18 +60,41 @@ describe(RunPodRepository.name, () => {
     expect(gpus).toHaveLength(1);
     expect(gpus[0]?.id).toBe('NVIDIA RTX A5000');
     expect(gpus[0]?.pricePerHour).toBe(0.16);
+    // The request must have been a POST to the GraphQL endpoint, not REST /gputypes.
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.runpod.io/graphql');
+    expect(init.method).toBe('POST');
   });
 
-  it('accepts {data: [...]} wrapper from GPU list endpoint', async () => {
+  it('falls back to minimumBidPrice when uninterruptablePrice is null', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       Response.json({
-        data: [{ id: 'NVIDIA RTX 4090', displayName: '4090', memoryInGb: 24, pricePerHour: 0.34 }],
+        data: {
+          gpuTypes: [
+            {
+              id: 'NVIDIA L4',
+              displayName: 'L4',
+              memoryInGb: 24,
+              secureCloud: true,
+              communityCloud: false,
+              lowestPrice: { uninterruptablePrice: null, minimumBidPrice: 0.44 },
+            },
+          ],
+        },
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     const gpus = await sut.listGpuTypes(apiKey);
-    expect(gpus[0]?.displayName).toBe('4090');
+    expect(gpus[0]?.pricePerHour).toBe(0.44);
+  });
+
+  it('surfaces GraphQL errors as RunPodApiError', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ errors: [{ message: 'Unauthorized' }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(sut.listGpuTypes(apiKey)).rejects.toBeInstanceOf(RunPodApiError);
   });
 
   it('creates a pod with the expected payload', async () => {

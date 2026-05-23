@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 
 const RUNPOD_API_BASE = 'https://rest.runpod.io/v1';
+// The REST API does not currently expose GPU types; that endpoint is only
+// available through the legacy GraphQL endpoint. Documented at
+// https://docs.runpod.io/references/gpu-types.
+const RUNPOD_GRAPHQL_URL = 'https://api.runpod.io/graphql';
 
 export type RunPodGpuType = {
   id: string;
@@ -85,14 +89,42 @@ export class RunPodRepository {
   }
 
   async listGpuTypes(apiKey: string): Promise<RunPodGpuType[]> {
-    const data = await this.request<RunPodGpuType[] | { data: RunPodGpuType[] }>(
+    // RunPod's REST API has no GPU-types endpoint. Fall back to the GraphQL
+    // endpoint (the only place these are exposed). Schema documented at
+    // https://docs.runpod.io/references/gpu-types.
+    type GqlGpuType = {
+      id: string;
+      displayName: string;
+      memoryInGb: number;
+      secureCloud: boolean;
+      communityCloud: boolean;
+      lowestPrice?: { uninterruptablePrice?: number | null; minimumBidPrice?: number | null } | null;
+    };
+    const response = await this.graphql<{ gpuTypes: GqlGpuType[] }>(
       apiKey,
-      'GET',
-      '/gputypes',
-      undefined,
+      `query GpuTypes {
+        gpuTypes {
+          id
+          displayName
+          memoryInGb
+          secureCloud
+          communityCloud
+          lowestPrice(input: { gpuCount: 1 }) {
+            uninterruptablePrice
+            minimumBidPrice
+          }
+        }
+      }`,
       15_000,
     );
-    return Array.isArray(data) ? data : (data?.data ?? []);
+    return (response.gpuTypes ?? []).map((t) => ({
+      id: t.id,
+      displayName: t.displayName,
+      memoryInGb: t.memoryInGb,
+      secureCloud: t.secureCloud,
+      communityCloud: t.communityCloud,
+      pricePerHour: t.lowestPrice?.uninterruptablePrice ?? t.lowestPrice?.minimumBidPrice ?? undefined,
+    }));
   }
 
   async createPod(apiKey: string, input: CreatePodInput): Promise<RunPodPodSummary> {
@@ -117,6 +149,43 @@ export class RunPodRepository {
 
   buildProxyUrl(podId: string, port = 3003): string {
     return `https://${podId}-${port}.proxy.runpod.net/`;
+  }
+
+  private async graphql<T>(apiKey: string, query: string, timeoutMs: number): Promise<T> {
+    if (!apiKey) {
+      throw new RunPodApiError('RunPod API key is not configured');
+    }
+    let response: Response;
+    try {
+      response = await fetch(RUNPOD_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ query }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`RunPod GraphQL network error: ${message}`);
+      throw new RunPodApiError(`RunPod GraphQL request failed: ${message}`);
+    }
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      this.logger.warn(`RunPod GraphQL failed: ${response.status} ${response.statusText} ${text}`);
+      throw new RunPodApiError(`RunPod GraphQL failed: ${response.status} ${response.statusText}`, response.status);
+    }
+    const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
+    if (body.errors?.length) {
+      const message = body.errors.map((e) => e.message).join('; ');
+      throw new RunPodApiError(`RunPod GraphQL returned errors: ${message}`);
+    }
+    if (!body.data) {
+      throw new RunPodApiError('RunPod GraphQL returned no data');
+    }
+    return body.data;
   }
 
   private async request<T>(
