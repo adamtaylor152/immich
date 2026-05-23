@@ -14,6 +14,7 @@ class ImageDescriptionPromptConfig {
   /// Returns a new [ImageDescriptionPromptConfig] instance.
   ImageDescriptionPromptConfig({
     this.advanced,
+    this.customInstructions = '',
     this.customVocabulary = const [],
     this.forbiddenInferences = const [],
     this.identityInjection,
@@ -31,6 +32,9 @@ class ImageDescriptionPromptConfig {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   AdvancedPromptConfig? advanced;
+
+  /// Free-form additional natural-language instructions appended to the description prompt. Example: \"If you see a car, identify the make and model. If people are playing a sport, name the sport.\"
+  String customInstructions;
 
   /// Tag values the model should prefer when applicable
   List<String> customVocabulary;
@@ -67,6 +71,7 @@ class ImageDescriptionPromptConfig {
   @override
   bool operator ==(Object other) => identical(this, other) || other is ImageDescriptionPromptConfig &&
     other.advanced == advanced &&
+    other.customInstructions == customInstructions &&
     _deepEquality.equals(other.customVocabulary, customVocabulary) &&
     _deepEquality.equals(other.forbiddenInferences, forbiddenInferences) &&
     other.identityInjection == identityInjection &&
@@ -80,6 +85,7 @@ class ImageDescriptionPromptConfig {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (advanced == null ? 0 : advanced!.hashCode) +
+    (customInstructions.hashCode) +
     (customVocabulary.hashCode) +
     (forbiddenInferences.hashCode) +
     (identityInjection == null ? 0 : identityInjection!.hashCode) +
@@ -90,7 +96,7 @@ class ImageDescriptionPromptConfig {
     (style.hashCode);
 
   @override
-  String toString() => 'ImageDescriptionPromptConfig[advanced=$advanced, customVocabulary=$customVocabulary, forbiddenInferences=$forbiddenInferences, identityInjection=$identityInjection, lookFor=$lookFor, medicalIndicators=$medicalIndicators, nsfwIndicators=$nsfwIndicators, sentenceCountTarget=$sentenceCountTarget, style=$style]';
+  String toString() => 'ImageDescriptionPromptConfig[advanced=$advanced, customInstructions=$customInstructions, customVocabulary=$customVocabulary, forbiddenInferences=$forbiddenInferences, identityInjection=$identityInjection, lookFor=$lookFor, medicalIndicators=$medicalIndicators, nsfwIndicators=$nsfwIndicators, sentenceCountTarget=$sentenceCountTarget, style=$style]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -99,6 +105,7 @@ class ImageDescriptionPromptConfig {
     } else {
     //  json[r'advanced'] = null;
     }
+      json[r'customInstructions'] = this.customInstructions;
       json[r'customVocabulary'] = this.customVocabulary;
       json[r'forbiddenInferences'] = this.forbiddenInferences;
     if (this.identityInjection != null) {
@@ -124,6 +131,7 @@ class ImageDescriptionPromptConfig {
 
       return ImageDescriptionPromptConfig(
         advanced: AdvancedPromptConfig.fromJson(json[r'advanced']),
+        customInstructions: mapValueOfType<String>(json, r'customInstructions') ?? '',
         customVocabulary: json[r'customVocabulary'] is Iterable
             ? (json[r'customVocabulary'] as Iterable).cast<String>().toList(growable: false)
             : const [],

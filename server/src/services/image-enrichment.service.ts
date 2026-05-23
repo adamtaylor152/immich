@@ -26,11 +26,7 @@ import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
 import { IdentityPostValidator } from 'src/services/identity-post-validator.service';
-import {
-  ImageDescriptionPromptAssembler,
-  KnownPerson,
-  VideoContext,
-} from 'src/services/prompt-assembler.service';
+import { ImageDescriptionPromptAssembler, KnownPerson, VideoContext } from 'src/services/prompt-assembler.service';
 import { SmartAlbumService } from 'src/services/smart-album.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
@@ -1184,11 +1180,7 @@ export class ImageEnrichmentService extends BaseService {
     const totalCells = layout.cols * layout.rows;
     const selected = subsampleFrames(frames, totalCells);
 
-    const outputPath = StorageCore.getNestedPath(
-      StorageFolder.Thumbnails,
-      ownerId,
-      `${assetId}_description_grid.jpeg`,
-    );
+    const outputPath = StorageCore.getNestedPath(StorageFolder.Thumbnails, ownerId, `${assetId}_description_grid.jpeg`);
     this.storageCore.ensureFolders(outputPath);
 
     try {

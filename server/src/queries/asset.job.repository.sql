@@ -1084,8 +1084,21 @@ where
       "assetId" = "asset"."id"
       and "asset_file"."type" = $2
   )
-  and "asset"."type" = 'IMAGE'
   and "asset"."visibility" in ('archive', 'timeline')
+  and (
+    "asset"."type" = 'IMAGE'
+    or (
+      "asset"."type" = 'VIDEO'
+      and exists (
+        select
+          "asset_video_duplicate_frame"."assetId"
+        from
+          "asset_video_duplicate_frame"
+        where
+          "asset_video_duplicate_frame"."assetId" = "asset"."id"
+      )
+    )
+  )
   and not exists (
     select
       "asset_metadata"."assetId"
@@ -1094,7 +1107,7 @@ where
     where
       "asset_metadata"."assetId" = "asset"."id"
       and "asset_metadata"."key" = $3
-      and asset_metadata.value -> $4 ->> 'status' = $5
+      and asset_metadata.value -> 'description' ->> 'status' = $4
   )
 order by
   "asset"."fileCreatedAt" desc

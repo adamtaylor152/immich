@@ -13,6 +13,7 @@ part of openapi.api;
 class ServerConfigDto {
   /// Returns a new [ServerConfigDto] instance.
   ServerConfigDto({
+    required this.defaultImageDescriptionRawPromptTemplate,
     required this.externalDomain,
     required this.isInitialized,
     required this.isOnboarded,
@@ -25,6 +26,9 @@ class ServerConfigDto {
     required this.trashDays,
     required this.userDeleteDelay,
   });
+
+  /// Canonical default for the image-description advanced raw prompt template
+  String defaultImageDescriptionRawPromptTemplate;
 
   /// External domain URL
   String externalDomain;
@@ -67,6 +71,7 @@ class ServerConfigDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is ServerConfigDto &&
+    other.defaultImageDescriptionRawPromptTemplate == defaultImageDescriptionRawPromptTemplate &&
     other.externalDomain == externalDomain &&
     other.isInitialized == isInitialized &&
     other.isOnboarded == isOnboarded &&
@@ -82,6 +87,7 @@ class ServerConfigDto {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (defaultImageDescriptionRawPromptTemplate.hashCode) +
     (externalDomain.hashCode) +
     (isInitialized.hashCode) +
     (isOnboarded.hashCode) +
@@ -95,10 +101,11 @@ class ServerConfigDto {
     (userDeleteDelay.hashCode);
 
   @override
-  String toString() => 'ServerConfigDto[externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
+  String toString() => 'ServerConfigDto[defaultImageDescriptionRawPromptTemplate=$defaultImageDescriptionRawPromptTemplate, externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'defaultImageDescriptionRawPromptTemplate'] = this.defaultImageDescriptionRawPromptTemplate;
       json[r'externalDomain'] = this.externalDomain;
       json[r'isInitialized'] = this.isInitialized;
       json[r'isOnboarded'] = this.isOnboarded;
@@ -122,6 +129,7 @@ class ServerConfigDto {
       final json = value.cast<String, dynamic>();
 
       return ServerConfigDto(
+        defaultImageDescriptionRawPromptTemplate: mapValueOfType<String>(json, r'defaultImageDescriptionRawPromptTemplate')!,
         externalDomain: mapValueOfType<String>(json, r'externalDomain')!,
         isInitialized: mapValueOfType<bool>(json, r'isInitialized')!,
         isOnboarded: mapValueOfType<bool>(json, r'isOnboarded')!,
@@ -180,6 +188,7 @@ class ServerConfigDto {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'defaultImageDescriptionRawPromptTemplate',
     'externalDomain',
     'isInitialized',
     'isOnboarded',

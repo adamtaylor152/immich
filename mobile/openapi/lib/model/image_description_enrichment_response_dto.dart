@@ -22,6 +22,7 @@ class ImageDescriptionEnrichmentResponseDto {
     this.modelName,
     this.objects = const [],
     this.people = const [],
+    this.skipReason,
     required this.status,
     this.tags = const [],
     this.updatedAt,
@@ -76,6 +77,15 @@ class ImageDescriptionEnrichmentResponseDto {
 
   List<ImageDescriptionEnrichmentResponseDtoPeopleInner> people;
 
+  /// Machine-readable reason when status === \"skipped\"
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? skipReason;
+
   ImageDescriptionEnrichmentResponseDtoStatusEnum status;
 
   List<String> tags;
@@ -101,6 +111,7 @@ class ImageDescriptionEnrichmentResponseDto {
     other.modelName == modelName &&
     _deepEquality.equals(other.objects, objects) &&
     _deepEquality.equals(other.people, people) &&
+    other.skipReason == skipReason &&
     other.status == status &&
     _deepEquality.equals(other.tags, tags) &&
     other.updatedAt == updatedAt &&
@@ -118,13 +129,14 @@ class ImageDescriptionEnrichmentResponseDto {
     (modelName == null ? 0 : modelName!.hashCode) +
     (objects.hashCode) +
     (people.hashCode) +
+    (skipReason == null ? 0 : skipReason!.hashCode) +
     (status.hashCode) +
     (tags.hashCode) +
     (updatedAt == null ? 0 : updatedAt!.hashCode) +
     (visibleText.hashCode);
 
   @override
-  String toString() => 'ImageDescriptionEnrichmentResponseDto[appliedDescription=$appliedDescription, appliedTags=$appliedTags, context=$context, description=$description, environment=$environment, error=$error, modelName=$modelName, objects=$objects, people=$people, status=$status, tags=$tags, updatedAt=$updatedAt, visibleText=$visibleText]';
+  String toString() => 'ImageDescriptionEnrichmentResponseDto[appliedDescription=$appliedDescription, appliedTags=$appliedTags, context=$context, description=$description, environment=$environment, error=$error, modelName=$modelName, objects=$objects, people=$people, skipReason=$skipReason, status=$status, tags=$tags, updatedAt=$updatedAt, visibleText=$visibleText]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -157,6 +169,11 @@ class ImageDescriptionEnrichmentResponseDto {
     }
       json[r'objects'] = this.objects;
       json[r'people'] = this.people;
+    if (this.skipReason != null) {
+      json[r'skipReason'] = this.skipReason;
+    } else {
+    //  json[r'skipReason'] = null;
+    }
       json[r'status'] = this.status;
       json[r'tags'] = this.tags;
     if (this.updatedAt != null) {
@@ -188,6 +205,7 @@ class ImageDescriptionEnrichmentResponseDto {
             ? (json[r'objects'] as Iterable).cast<String>().toList(growable: false)
             : const [],
         people: ImageDescriptionEnrichmentResponseDtoPeopleInner.listFromJson(json[r'people']),
+        skipReason: mapValueOfType<String>(json, r'skipReason'),
         status: ImageDescriptionEnrichmentResponseDtoStatusEnum.fromJson(json[r'status'])!,
         tags: json[r'tags'] is Iterable
             ? (json[r'tags'] as Iterable).cast<String>().toList(growable: false)
@@ -265,12 +283,14 @@ class ImageDescriptionEnrichmentResponseDtoStatusEnum {
   static const missing = ImageDescriptionEnrichmentResponseDtoStatusEnum._(r'missing');
   static const success = ImageDescriptionEnrichmentResponseDtoStatusEnum._(r'success');
   static const failed = ImageDescriptionEnrichmentResponseDtoStatusEnum._(r'failed');
+  static const skipped = ImageDescriptionEnrichmentResponseDtoStatusEnum._(r'skipped');
 
   /// List of all possible values in this [enum][ImageDescriptionEnrichmentResponseDtoStatusEnum].
   static const values = <ImageDescriptionEnrichmentResponseDtoStatusEnum>[
     missing,
     success,
     failed,
+    skipped,
   ];
 
   static ImageDescriptionEnrichmentResponseDtoStatusEnum? fromJson(dynamic value) => ImageDescriptionEnrichmentResponseDtoStatusEnumTypeTransformer().decode(value);
@@ -312,6 +332,7 @@ class ImageDescriptionEnrichmentResponseDtoStatusEnumTypeTransformer {
         case r'missing': return ImageDescriptionEnrichmentResponseDtoStatusEnum.missing;
         case r'success': return ImageDescriptionEnrichmentResponseDtoStatusEnum.success;
         case r'failed': return ImageDescriptionEnrichmentResponseDtoStatusEnum.failed;
+        case r'skipped': return ImageDescriptionEnrichmentResponseDtoStatusEnum.skipped;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
