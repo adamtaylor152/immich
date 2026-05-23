@@ -11,8 +11,15 @@ export class SmartAlbumRepository {
   /**
    * Idempotent: for each (ownerId, kind) pair that doesn't already have a
    * smart_album row, create the backing album + album_user (owner) + smart_album
-   * in a single CTE chain. Relies on the unique constraint on (ownerId, kind)
-   * to handle race conditions between concurrent calls.
+   * in a single transaction guarded by a per-(ownerId, kind) advisory lock.
+   *
+   * The advisory lock is required because ON CONFLICT DO NOTHING on the
+   * smart_album insert silently skips the row on conflict, but the data-modifying
+   * CTEs above it (new_album, new_album_owner) have already executed by then.
+   * Without serialization, two concurrent callers would each create an album +
+   * album_user row, only one of which ends up referenced by smart_album — the
+   * other becomes orphaned. The advisory lock serializes per (ownerId, kind),
+   * so the SELECT-then-INSERT path is race-safe.
    */
   async ensureForUser(ownerId: string, kinds: { kind: string; name: string }[]): Promise<void> {
     if (kinds.length === 0) {
@@ -20,53 +27,55 @@ export class SmartAlbumRepository {
     }
 
     for (const { kind, name } of kinds) {
-      const existing = await this.db
-        .selectFrom('smart_album')
-        .select('id')
-        .where('ownerId', '=', ownerId)
-        .where('kind', '=', kind)
-        .executeTakeFirst();
+      await this.db.transaction().execute(async (trx) => {
+        // Serialize this (ownerId, kind) pair across concurrent callers. Released
+        // automatically at end-of-transaction.
+        await sql`SELECT pg_advisory_xact_lock(hashtext(${`${ownerId}:${kind}`}))`.execute(trx);
 
-      if (existing) {
-        continue;
-      }
+        const existing = await trx
+          .selectFrom('smart_album')
+          .select('id')
+          .where('ownerId', '=', ownerId)
+          .where('kind', '=', kind)
+          .executeTakeFirst();
 
-      // Create backing album + album_user (owner) + smart_album in one CTE
-      // chain. The final INSERT references both `new_album` and `new_album_owner`
-      // so PostgreSQL is forced to execute every data-modifying CTE.
-      // ON CONFLICT (ownerId, kind) DO NOTHING absorbs the rare race where a
-      // concurrent ensureForUser inserted the same kind between the SELECT
-      // above and this INSERT.
-      await this.db
-        .with('new_album', (qb) => qb.insertInto('album').values({ albumName: name }).returning('id'))
-        .with('new_album_owner', (qb) =>
-          qb
-            .insertInto('album_user')
-            .expression((eb) =>
-              eb
-                .selectFrom('new_album')
-                .select((eb) => [
-                  eb.ref('new_album.id').as('albumId'),
-                  sql`${ownerId}::uuid`.as('userId'),
-                  sql`${AlbumUserRole.Owner}::album_user_role_enum`.as('role'),
-                ]),
-            )
-            .returning('albumId'),
-        )
-        .insertInto('smart_album')
-        .columns(['albumId', 'ownerId', 'kind'])
-        .expression((eb) =>
-          eb
-            .selectFrom('new_album_owner')
-            .innerJoin('new_album', 'new_album.id', 'new_album_owner.albumId')
-            .select((eb) => [
-              eb.ref('new_album_owner.albumId').as('albumId'),
-              sql`${ownerId}::uuid`.as('ownerId'),
-              sql`${kind}`.as('kind'),
-            ]),
-        )
-        .onConflict((oc) => oc.columns(['ownerId', 'kind']).doNothing())
-        .execute();
+        if (existing) {
+          return;
+        }
+
+        // Create backing album + album_user (owner) + smart_album in one CTE
+        // chain. The final INSERT references both `new_album` and `new_album_owner`
+        // so PostgreSQL is forced to execute every data-modifying CTE.
+        await trx
+          .with('new_album', (qb) => qb.insertInto('album').values({ albumName: name }).returning('id'))
+          .with('new_album_owner', (qb) =>
+            qb
+              .insertInto('album_user')
+              .expression((eb) =>
+                eb
+                  .selectFrom('new_album')
+                  .select((eb) => [
+                    eb.ref('new_album.id').as('albumId'),
+                    sql`${ownerId}::uuid`.as('userId'),
+                    sql`${AlbumUserRole.Owner}::album_user_role_enum`.as('role'),
+                  ]),
+              )
+              .returning('albumId'),
+          )
+          .insertInto('smart_album')
+          .columns(['albumId', 'ownerId', 'kind'])
+          .expression((eb) =>
+            eb
+              .selectFrom('new_album_owner')
+              .innerJoin('new_album', 'new_album.id', 'new_album_owner.albumId')
+              .select((eb) => [
+                eb.ref('new_album_owner.albumId').as('albumId'),
+                sql`${ownerId}::uuid`.as('ownerId'),
+                sql`${kind}`.as('kind'),
+              ]),
+          )
+          .execute();
+      });
     }
   }
 

@@ -40,11 +40,11 @@ const KINDS = [
   { kind: 'nature', name: 'Nature' },
 ];
 
-describe(SmartAlbumRepository.name, () => {
-  beforeEach(async () => {
-    defaultDatabase = await getKyselyDB();
-  });
+beforeAll(async () => {
+  defaultDatabase = await getKyselyDB();
+});
 
+describe(SmartAlbumRepository.name, () => {
   describe('ensureForUser', () => {
     it('should create album + album_user (owner) + smart_album for each missing kind', async () => {
       const { sut, database, userRepository } = setup();
