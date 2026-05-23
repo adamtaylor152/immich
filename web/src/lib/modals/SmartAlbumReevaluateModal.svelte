@@ -29,13 +29,17 @@
     }
   };
 
+  // Hoist out of the markup so Svelte 5 doesn't re-invoke loadEstimate on
+  // every reactive update to the await block.
+  const estimatePromise = loadEstimate();
+
   const handleReevaluate = async () => {
     isTriggering = true;
     try {
       const result = await triggerSmartAlbumReevaluate();
       onClose(result);
     } catch (error) {
-      handleError(error, $t('admin.smart_albums_reevaluate_modal_error'));
+      handleError(error, $t('admin.smart_albums_reevaluate_modal_trigger_error'));
     } finally {
       isTriggering = false;
     }
@@ -44,7 +48,7 @@
 
 <Modal title={$t('admin.smart_albums_reevaluate_modal_title')} {onClose} size="small">
   <ModalBody>
-    {#await loadEstimate()}
+    {#await estimatePromise}
       <div class="flex w-full place-content-center place-items-center py-8">
         <LoadingSpinner />
       </div>
@@ -75,7 +79,12 @@
       <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering}>
         {$t('cancel')}
       </Button>
-      <Button shape="round" color="primary" onclick={handleReevaluate} disabled={isTriggering || !!loadError || !estimate}>
+      <Button
+        shape="round"
+        color="primary"
+        onclick={handleReevaluate}
+        disabled={isTriggering || !!loadError || !estimate}
+      >
         {#if isTriggering}
           <LoadingSpinner size="tiny" />
         {/if}
