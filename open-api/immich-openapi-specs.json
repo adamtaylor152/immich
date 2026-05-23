@@ -28719,8 +28719,9 @@
             "default": {
               "executionTimeoutMs": 600000,
               "gpuTypeIds": [
-                "AMPERE_24",
-                "ADA_24"
+                "AMPERE_48",
+                "ADA_48_PRO",
+                "AMPERE_80"
               ],
               "idleTimeoutSeconds": 30,
               "scalerType": "REQUEST_COUNT",

@@ -71,6 +71,16 @@
   const isServerlessReady = $derived(status === 'serverless-ready');
   const canBackfill = $derived((isRunning || isServerlessReady) && !backfilling);
   let endpointBusy = $state(false);
+  let consentError = $state(false);
+
+  const attemptServerlessLaunch = () => {
+    if (!consent) {
+      consentError = true;
+      return;
+    }
+    consentError = false;
+    void handleServerlessSetup();
+  };
 
   const setupServerlessEndpoint = async (): Promise<RunPodStateDto> => {
     const response = await fetch('/api/runpod/endpoint/setup', { method: 'POST', credentials: 'include' });
@@ -327,6 +337,30 @@
               {status}
             </span>
           </div>
+
+          {#if isTransitioning || isRunning || isServerlessReady}
+            <div class="relative mt-2 h-6 w-full max-w-md overflow-hidden rounded-full bg-immich-gray/20">
+              {#if isRunning || isServerlessReady}
+                <div class="size-full bg-green-500 transition-all"></div>
+              {:else}
+                <!-- Indeterminate animated bar during boot. -->
+                <div class="runpod-boot-bar absolute inset-y-0 h-full w-1/3 rounded-full bg-yellow-400"></div>
+              {/if}
+              <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
+                {#if isRunning || isServerlessReady}
+                  <span class="text-green-900">Ready. RunPod GPU is ready.</span>
+                {:else if status === 'serverless-provisioning'}
+                  <span class="text-yellow-900">Provisioning serverless endpoint…</span>
+                {:else if status === 'provisioning'}
+                  <span class="text-yellow-900">Provisioning pod…</span>
+                {:else if status === 'starting'}
+                  <span class="text-yellow-900">Starting pod…</span>
+                {:else if status === 'stopping'}
+                  <span class="text-yellow-900">Stopping pod…</span>
+                {/if}
+              </div>
+            </div>
+          {/if}
           {#if podState.podId}
             <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
           {/if}
@@ -432,20 +466,37 @@
         </p>
       {/if}
 
-      <label class="flex items-start gap-2 text-sm">
-        <input type="checkbox" bind:checked={consent} class="mt-0.5" />
+      <label
+        class="flex items-start gap-2 rounded-sm p-1 text-sm transition"
+        class:ring-2={consentError}
+        class:ring-red-500={consentError}
+      >
+        <input type="checkbox" bind:checked={consent} onchange={() => (consentError = false)} class="mt-0.5" />
         <span>
           I understand that image previews will be sent to RunPod (an external service) and that the configured API key
-          can spin up paid serverless workers.
+          can spin up paid serverless workers. Your images are not stored and are processed in memory, then discarded.
         </span>
       </label>
+      {#if consentError}
+        <p class="-mt-2 text-xs text-red-600">Must consent before GPU can be launched.</p>
+      {/if}
 
       <div class="flex justify-end gap-2">
         <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
           {testing ? 'Testing…' : 'Test connection'}
         </Button>
-        <Button size="small" onclick={handleServerlessSetup} disabled={endpointBusy || !consent}>
-          {endpointBusy ? 'Setting up…' : 'Set up endpoint'}
+        {#if isServerlessReady || status === 'serverless-provisioning'}
+          <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
+            {endpointBusy ? 'Terminating…' : 'Terminate Pod'}
+          </Button>
+        {/if}
+        <Button
+          size="small"
+          onclick={attemptServerlessLaunch}
+          disabled={endpointBusy}
+          title={consent ? undefined : 'Must consent before GPU can be launched'}
+        >
+          {endpointBusy ? 'Launching…' : 'Launch RunPod GPU'}
         </Button>
       </div>
 
@@ -579,3 +630,18 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Indeterminate progress bar used during pod/endpoint boot transitions. */
+  .runpod-boot-bar {
+    animation: runpod-boot-slide 1.4s ease-in-out infinite;
+  }
+  @keyframes runpod-boot-slide {
+    0% {
+      left: -33%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+</style>

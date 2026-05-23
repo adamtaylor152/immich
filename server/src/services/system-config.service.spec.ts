@@ -223,7 +223,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
       autoBackfillOnLaunch: false,
       maxRuntimeHours: 24,
       serverless: {
-        gpuTypeIds: ['AMPERE_24', 'ADA_24'],
+        gpuTypeIds: ['AMPERE_48', 'ADA_48_PRO', 'AMPERE_80'],
         workersMin: 0,
         workersMax: 3,
         idleTimeoutSeconds: 30,
