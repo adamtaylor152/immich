@@ -33,7 +33,7 @@
     return response.json() as Promise<{ enqueued: string[]; skipped: string[] }>;
   };
 
-  let state = $state<RunPodStateDto | null>(null);
+  let podState = $state<RunPodStateDto | null>(null);
   let gpuTypes = $state<RunPodGpuTypeDto[]>([]);
   let gpuLoading = $state(false);
   let gpuError = $state<string | null>(null);
@@ -51,10 +51,12 @@
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   const config = $derived(systemConfigManager.value);
-  const rp = $derived(config.machineLearning.runpod);
+  // Zod's `.default(...)` on runpod makes it optional in the DTO type even
+  // though the server always materialises it; assert non-null here.
+  const rp = $derived(config.machineLearning.runpod!);
   const enabled = $derived(config.machineLearning.enabled && rp.enabled);
   const apiKeyConfigured = $derived(rp.apiKey.length > 0);
-  const status = $derived(state?.status ?? 'idle');
+  const status = $derived(podState?.status ?? 'idle');
   const isTransitioning = $derived(['provisioning', 'starting', 'stopping'].includes(status));
   const isRunning = $derived(status === 'running');
   const isStopped = $derived(status === 'stopped');
@@ -68,7 +70,7 @@
   const refresh = async (options: { notifyOnError?: boolean } = {}) => {
     const notify = options.notifyOnError ?? true;
     try {
-      state = await fetchCurrent();
+      podState = await fetchCurrent();
       pollErrorShown = false;
     } catch (error) {
       if (notify && !pollErrorShown) {
@@ -144,7 +146,7 @@
         ...(imageOverride.trim() ? { imageName: imageOverride.trim() } : {}),
         ...(maxHoursOverride ? { maxRuntimeHours: maxHoursOverride } : {}),
       };
-      state = await provisionRunPodPod({ runPodProvisionDto: dto });
+      podState = await provisionRunPodPod({ runPodProvisionDto: dto });
       toastManager.info('Pod launching. This usually takes 2–3 minutes.');
     } catch (error) {
       handleError(error, 'Failed to launch pod');
@@ -156,7 +158,7 @@
   const handleStop = async () => {
     stopping = true;
     try {
-      state = await stopRunPodPod();
+      podState = await stopRunPodPod();
       toastManager.info('Stop requested');
     } catch (error) {
       handleError(error, 'Failed to stop pod');
@@ -168,7 +170,7 @@
   const handleStart = async () => {
     provisioning = true;
     try {
-      state = await startRunPodPod();
+      podState = await startRunPodPod();
       toastManager.info('Resuming pod');
     } catch (error) {
       handleError(error, 'Failed to resume pod');
@@ -185,7 +187,7 @@
     }
     terminating = true;
     try {
-      state = await terminateRunPodPod();
+      podState = await terminateRunPodPod();
       toastManager.primary('Pod terminated');
     } catch (error) {
       handleError(error, 'Failed to terminate pod');
@@ -219,11 +221,11 @@
     return `${h}h ${m % 60}m ago`;
   };
 
-  const formatCost = (state: RunPodStateDto): string | null => {
-    if (state.status !== 'running' || !state.runningSince) return null;
-    const gpu = gpuTypes.find((g) => g.id === state.gpuTypeId);
+  const formatCost = (podState: RunPodStateDto): string | null => {
+    if (podState.status !== 'running' || !podState.runningSince) return null;
+    const gpu = gpuTypes.find((g) => g.id === podState.gpuTypeId);
     if (!gpu?.pricePerHour) return null;
-    const hours = (Date.now() - Date.parse(state.runningSince)) / 3_600_000;
+    const hours = (Date.now() - Date.parse(podState.runningSince)) / 3_600_000;
     if (!Number.isFinite(hours)) return null;
     return `$${(hours * gpu.pricePerHour).toFixed(3)} (est., ${gpu.pricePerHour.toFixed(2)}/hr)`;
   };
@@ -239,7 +241,7 @@
     </div>
   {/if}
 
-  {#if state}
+  {#if podState}
     <div class="p-3 rounded border border-immich-gray/20 bg-immich-bg/30">
       <div class="flex justify-between items-start gap-4">
         <div>
@@ -258,38 +260,38 @@
               {status}
             </span>
           </div>
-          {#if state.podId}
-            <div class="text-xs text-immich-gray font-mono mt-1">pod: {state.podId}</div>
+          {#if podState.podId}
+            <div class="text-xs text-immich-gray font-mono mt-1">pod: {podState.podId}</div>
           {/if}
-          {#if state.imageName}
-            <div class="text-xs text-immich-gray mt-1 break-all">image: {state.imageName}</div>
+          {#if podState.imageName}
+            <div class="text-xs text-immich-gray mt-1 break-all">image: {podState.imageName}</div>
           {/if}
-          {#if state.gpuTypeId}
-            <div class="text-xs text-immich-gray mt-1">gpu: {state.gpuTypeId}</div>
+          {#if podState.gpuTypeId}
+            <div class="text-xs text-immich-gray mt-1">gpu: {podState.gpuTypeId}</div>
           {/if}
-          {#if state.mlUrl}
-            <div class="text-xs text-immich-gray font-mono mt-1 break-all">url: {state.mlUrl}</div>
+          {#if podState.mlUrl}
+            <div class="text-xs text-immich-gray font-mono mt-1 break-all">url: {podState.mlUrl}</div>
           {/if}
-          {#if state.runningSince}
-            <div class="text-xs text-immich-gray mt-1">running since: {minutesAgo(state.runningSince)}</div>
+          {#if podState.runningSince}
+            <div class="text-xs text-immich-gray mt-1">running since: {minutesAgo(podState.runningSince)}</div>
           {/if}
-          {#if state.lastBusyAt && isRunning}
-            <div class="text-xs text-immich-gray mt-1">last ML job: {minutesAgo(state.lastBusyAt)}</div>
+          {#if podState.lastBusyAt && isRunning}
+            <div class="text-xs text-immich-gray mt-1">last ML job: {minutesAgo(podState.lastBusyAt)}</div>
           {/if}
           {#if isRunning}
-            {@const cost = formatCost(state)}
+            {@const cost = formatCost(podState)}
             {#if cost}
               <div class="text-xs text-immich-gray mt-1">estimated cost: {cost}</div>
             {/if}
           {/if}
-          {#if state.stoppedAt}
-            <div class="text-xs text-immich-gray mt-1">stopped: {minutesAgo(state.stoppedAt)}</div>
+          {#if podState.stoppedAt}
+            <div class="text-xs text-immich-gray mt-1">stopped: {minutesAgo(podState.stoppedAt)}</div>
           {/if}
-          {#if state.errorMessage}
-            <div class="text-xs text-red-700 mt-2 break-words">{state.errorMessage}</div>
+          {#if podState.errorMessage}
+            <div class="text-xs text-red-700 mt-2 break-words">{podState.errorMessage}</div>
           {/if}
-          {#if state.unhealthySince}
-            <div class="text-xs text-yellow-700 mt-1">pod unresponsive since {minutesAgo(state.unhealthySince)}</div>
+          {#if podState.unhealthySince}
+            <div class="text-xs text-yellow-700 mt-1">pod unresponsive since {minutesAgo(podState.unhealthySince)}</div>
           {/if}
         </div>
         <div class="flex flex-col gap-1 shrink-0">

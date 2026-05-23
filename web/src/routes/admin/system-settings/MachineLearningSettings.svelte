@@ -33,6 +33,12 @@
   const savedImageDescription = $derived(config.machineLearning.imageDescription!);
   const nsfwDetection = $derived(configToEdit.machineLearning.nsfwDetection!);
   const savedNsfwDetection = $derived(config.machineLearning.nsfwDetection!);
+  // Zod's `.default(...)` on runpod makes it optional in the generated DTO
+  // type even though the server always materialises it. Mirror the
+  // imageDescription/nsfwDetection pattern above so the template doesn't
+  // need to repeat the non-null assertion everywhere.
+  const runpod = $derived(configToEdit.machineLearning.runpod!);
+  const savedRunpod = $derived(config.machineLearning.runpod!);
 
   $effect(() => {
     const enhancedVideo = configToEdit.machineLearning.duplicateDetection.enhancedVideo;
@@ -269,7 +275,7 @@
           <SettingSwitch
             title="Enable RunPod integration"
             subtitle="When on, Immich can provision and route ML traffic to a RunPod pod."
-            bind:checked={configToEdit.machineLearning.runpod.enabled}
+            bind:checked={runpod.enabled}
             disabled={disabled || !configToEdit.machineLearning.enabled}
           />
 
@@ -279,83 +285,83 @@
             inputType={SettingInputFieldType.PASSWORD}
             label="API key"
             description="Anyone with admin access to Immich (or database read access) can spend money with this key. Generate one with pod create/read/delete scope."
-            bind:value={configToEdit.machineLearning.runpod.apiKey}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.apiKey !== config.machineLearning.runpod.apiKey}
+            bind:value={runpod.apiKey}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.apiKey !== savedRunpod.apiKey}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label="Container image"
             description="The ML container image to run on RunPod. Defaults to the fork's RunPod-tuned CUDA build."
-            bind:value={configToEdit.machineLearning.runpod.imageName}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.imageName !== config.machineLearning.runpod.imageName}
+            bind:value={runpod.imageName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.imageName !== savedRunpod.imageName}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label="Default GPU type"
             description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
-            bind:value={configToEdit.machineLearning.runpod.defaultGpuTypeId}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.defaultGpuTypeId !==
-              config.machineLearning.runpod.defaultGpuTypeId}
+            bind:value={runpod.defaultGpuTypeId}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.defaultGpuTypeId !==
+              savedRunpod.defaultGpuTypeId}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label="Container disk (GB)"
-            bind:value={configToEdit.machineLearning.runpod.containerDiskGb}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.containerDiskGb !==
-              config.machineLearning.runpod.containerDiskGb}
+            bind:value={runpod.containerDiskGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.containerDiskGb !==
+              savedRunpod.containerDiskGb}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label="Persistent volume (GB)"
             description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
-            bind:value={configToEdit.machineLearning.runpod.volumeGb}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.volumeGb !== config.machineLearning.runpod.volumeGb}
+            bind:value={runpod.volumeGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.volumeGb !== savedRunpod.volumeGb}
           />
 
           <SettingSwitch
             title="Auto-stop when idle"
             subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
-            bind:checked={configToEdit.machineLearning.runpod.autoStopEnabled}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            bind:checked={runpod.autoStopEnabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label="Idle grace (minutes)"
             description="How long the pod can stay idle before auto-stop fires."
-            bind:value={configToEdit.machineLearning.runpod.autoStopGraceMinutes}
+            bind:value={runpod.autoStopGraceMinutes}
             disabled={disabled ||
               !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.runpod.enabled ||
-              !configToEdit.machineLearning.runpod.autoStopEnabled}
-            isEdited={configToEdit.machineLearning.runpod.autoStopGraceMinutes !==
-              config.machineLearning.runpod.autoStopGraceMinutes}
+              !runpod.enabled ||
+              !runpod.autoStopEnabled}
+            isEdited={runpod.autoStopGraceMinutes !==
+              savedRunpod.autoStopGraceMinutes}
           />
 
           <SettingSwitch
             title="Auto-backfill on launch"
             subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
-            bind:checked={configToEdit.machineLearning.runpod.autoBackfillOnLaunch}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
+            bind:checked={runpod.autoBackfillOnLaunch}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
           />
 
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label="Max runtime (hours)"
             description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
-            bind:value={configToEdit.machineLearning.runpod.maxRuntimeHours}
-            disabled={disabled || !configToEdit.machineLearning.enabled || !configToEdit.machineLearning.runpod.enabled}
-            isEdited={configToEdit.machineLearning.runpod.maxRuntimeHours !==
-              config.machineLearning.runpod.maxRuntimeHours}
+            bind:value={runpod.maxRuntimeHours}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.maxRuntimeHours !==
+              savedRunpod.maxRuntimeHours}
           />
 
           <hr />

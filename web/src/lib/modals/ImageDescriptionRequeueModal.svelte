@@ -125,7 +125,7 @@
       </Button>
       <Button shape="round" color="primary" onclick={handleRequeue} disabled={isTriggering || !!loadError || !estimate}>
         {#if isTriggering}
-          <LoadingSpinner size="16" />
+          <LoadingSpinner size="tiny" />
         {/if}
         {$t('admin.machine_learning_image_description_requeue_modal_confirm')}
       </Button>
