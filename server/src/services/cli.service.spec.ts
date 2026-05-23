@@ -198,4 +198,41 @@ describe(CliService.name, () => {
       expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', { oauth: { enabled: true } });
     });
   });
+
+  describe('revertSchemaToUpstream', () => {
+    it('should no-op when the fork marker migration is not applied', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1778614946174-UpdateWorkflowTables', timestamp: '2026-01-02T00:00:00Z' },
+      ]);
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: true,
+        reverted: [],
+        workflowAliasInserted: false,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).not.toHaveBeenCalled();
+    });
+
+    it('should delegate to the database repository when the fork marker is applied', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1779400000000-UpdateWorkflowTables', timestamp: '2026-02-01T00:00:00Z' },
+        { name: '1779500000000-ReconcileSchemaDrift', timestamp: '2026-02-02T00:00:00Z' },
+      ]);
+      mocks.database.revertSchemaToUpstream.mockResolvedValue({
+        reverted: ['1779500000000-ReconcileSchemaDrift', '1779400000000-UpdateWorkflowTables'],
+        workflowAliasInserted: true,
+      });
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: false,
+        reverted: ['1779500000000-ReconcileSchemaDrift', '1779400000000-UpdateWorkflowTables'],
+        workflowAliasInserted: true,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).toHaveBeenCalledTimes(1);
+    });
+  });
 });

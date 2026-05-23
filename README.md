@@ -38,7 +38,7 @@ This fork is actively maintained and kept up to date with upstream Immich while 
 > [!CAUTION]
 > This is a downstream fork, not upstream Immich. It includes database changes and fork-only features that are not part of `immich-app/immich`.
 >
-> These database changes are designed to be reversible back to the main Immich branch, so users can switch back if needed. However, as with any fork that modifies application behavior and database state, you should back up your database and media library before upgrading.
+> These database changes are designed to be reversible back to the main Immich branch, so users can switch back if needed — see [Reverting Back to Upstream Immich](docs/docs/features/revert-to-upstream.md) for the exact command and what data is preserved vs. dropped. As with any fork that modifies application behavior and database state, you should back up your database and media library before upgrading.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for setup notes, recommended rollout steps, physical deduplication guidance, and differences from upstream Immich.
 

@@ -557,6 +557,55 @@ export class DatabaseRepository {
     return reverted.migrationName;
   }
 
+  /**
+   * Rolls every fork-only migration back to the last migration shared with
+   * upstream immich-app/immich, then records upstream's
+   * `1778614946174-UpdateWorkflowTables` as applied (our fork's
+   * `1779400000000-UpdateWorkflowTables` is byte-identical) so upstream's
+   * migrator sees the database as fully up to date when the user switches
+   * back to the official image.
+   */
+  async revertSchemaToUpstream(): Promise<{
+    reverted: string[];
+    workflowAliasInserted: boolean;
+  }> {
+    const sharedTarget = '1777897107000-PartnerAssetSyncReset';
+    const upstreamWorkflowName = '1778614946174-UpdateWorkflowTables';
+
+    this.logger.log(`Reverting fork migrations down to ${sharedTarget}`);
+
+    const migrator = this.createMigrator();
+    const { error, results } = await migrator.migrateTo(sharedTarget);
+
+    const reverted: string[] = [];
+    for (const result of results ?? []) {
+      if (result.status === 'Success' && result.direction === 'Down') {
+        this.logger.log(`Reverted migration "${result.migrationName}"`);
+        reverted.push(result.migrationName);
+      } else if (result.status === 'Error') {
+        this.logger.error(`Failed to revert migration "${result.migrationName}"`);
+      }
+    }
+
+    if (error) {
+      this.logger.error(`Failed to revert migrations: ${error}`);
+      throw error;
+    }
+
+    const insertResult = await this.db
+      .insertInto('kysely_migrations')
+      .values({ name: upstreamWorkflowName, timestamp: new Date().toISOString() })
+      .onConflict((oc) => oc.column('name').doNothing())
+      .executeTakeFirst();
+
+    const workflowAliasInserted = Number(insertResult?.numInsertedOrUpdatedRows ?? 0n) > 0;
+    if (workflowAliasInserted) {
+      this.logger.log(`Recorded upstream alias "${upstreamWorkflowName}" in kysely_migrations`);
+    }
+
+    return { reverted, workflowAliasInserted };
+  }
+
   private createMigrator(): Migrator {
     return new Migrator({
       db: this.db,

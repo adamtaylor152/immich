@@ -227,6 +227,30 @@ export class CliService extends BaseService {
     return true;
   }
 
+  /**
+   * Reverts every fork-only DB migration so the database can be served by
+   * the upstream immich-app/immich image. Pre-flight checks that this DB
+   * was actually migrated by our fork — bails early on a stock upstream DB
+   * to avoid no-op confusion or accidental rename of an upstream row.
+   */
+  async revertSchemaToUpstream(): Promise<{
+    alreadyAtUpstream: boolean;
+    reverted: string[];
+    workflowAliasInserted: boolean;
+  }> {
+    const forkMarker = '1779400000000-UpdateWorkflowTables';
+
+    const applied = await this.databaseRepository.getMigrations();
+    const appliedNames = new Set(applied.map((row) => row.name));
+
+    if (!appliedNames.has(forkMarker)) {
+      return { alreadyAtUpstream: true, reverted: [], workflowAliasInserted: false };
+    }
+
+    const { reverted, workflowAliasInserted } = await this.databaseRepository.revertSchemaToUpstream();
+    return { alreadyAtUpstream: false, reverted, workflowAliasInserted };
+  }
+
   cleanup() {
     return this.databaseRepository.shutdown();
   }
