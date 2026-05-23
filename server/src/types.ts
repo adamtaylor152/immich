@@ -442,6 +442,9 @@ export type JobItem =
   | { name: JobName.NsfwDetectionQueueAll; data: IBaseJob }
   | { name: JobName.NsfwDetection; data: IEntityJob }
 
+  // Smart albums
+  | { name: JobName.SmartAlbumReevaluateAll; data?: IBaseJob }
+
   // Workflow
   | { name: JobName.WorkflowAssetCreate; data: { workflowId: string; assetId: string } }
 

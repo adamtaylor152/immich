@@ -92,6 +92,7 @@ class JobName {
   static const imageDescription = JobName._(r'ImageDescription');
   static const nsfwDetectionQueueAll = JobName._(r'NsfwDetectionQueueAll');
   static const nsfwDetection = JobName._(r'NsfwDetection');
+  static const smartAlbumReevaluateAll = JobName._(r'SmartAlbumReevaluateAll');
   static const workflowAssetCreate = JobName._(r'WorkflowAssetCreate');
 
   /// List of all possible values in this [enum][JobName].
@@ -165,6 +166,7 @@ class JobName {
     imageDescription,
     nsfwDetectionQueueAll,
     nsfwDetection,
+    smartAlbumReevaluateAll,
     workflowAssetCreate,
   ];
 
@@ -273,6 +275,7 @@ class JobNameTypeTransformer {
         case r'ImageDescription': return JobName.imageDescription;
         case r'NsfwDetectionQueueAll': return JobName.nsfwDetectionQueueAll;
         case r'NsfwDetection': return JobName.nsfwDetection;
+        case r'SmartAlbumReevaluateAll': return JobName.smartAlbumReevaluateAll;
         case r'WorkflowAssetCreate': return JobName.workflowAssetCreate;
         default:
           if (!allowNull) {

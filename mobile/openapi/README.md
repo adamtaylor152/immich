@@ -284,8 +284,10 @@ Class | Method | HTTP request | Description
 *SystemConfigApi* | [**getConfigDefaults**](doc//SystemConfigApi.md#getconfigdefaults) | **GET** /system-config/defaults | Get system configuration defaults
 *SystemConfigApi* | [**getImageDescriptionRequeueEstimate**](doc//SystemConfigApi.md#getimagedescriptionrequeueestimate) | **GET** /system-config/image-description/requeue-estimate | Estimate image description re-queue cost
 *SystemConfigApi* | [**getMachineLearningHardware**](doc//SystemConfigApi.md#getmachinelearninghardware) | **GET** /system-config/machine-learning/hardware | Get machine learning hardware
+*SystemConfigApi* | [**getSmartAlbumReevaluateEstimate**](doc//SystemConfigApi.md#getsmartalbumreevaluateestimate) | **GET** /system-config/smart-albums/reevaluate-estimate | Estimate smart-album re-evaluate cost
 *SystemConfigApi* | [**getStorageTemplateOptions**](doc//SystemConfigApi.md#getstoragetemplateoptions) | **GET** /system-config/storage-template-options | Get storage template options
 *SystemConfigApi* | [**triggerImageDescriptionRequeue**](doc//SystemConfigApi.md#triggerimagedescriptionrequeue) | **POST** /system-config/image-description/requeue | Trigger image description re-queue
+*SystemConfigApi* | [**triggerSmartAlbumReevaluate**](doc//SystemConfigApi.md#triggersmartalbumreevaluate) | **POST** /system-config/smart-albums/reevaluate | Trigger smart-album re-evaluate
 *SystemConfigApi* | [**updateConfig**](doc//SystemConfigApi.md#updateconfig) | **PUT** /system-config | Update system configuration
 *SystemMetadataApi* | [**getAdminOnboarding**](doc//SystemMetadataApi.md#getadminonboarding) | **GET** /system-metadata/admin-onboarding | Retrieve admin onboarding
 *SystemMetadataApi* | [**getReverseGeocodingState**](doc//SystemMetadataApi.md#getreversegeocodingstate) | **GET** /system-metadata/reverse-geocoding-state | Retrieve reverse geocoding state
@@ -616,6 +618,8 @@ Class | Method | HTTP request | Description
  - [SharedLinksUpdate](doc//SharedLinksUpdate.md)
  - [SignUpDto](doc//SignUpDto.md)
  - [SmartAlbumKindConfig](doc//SmartAlbumKindConfig.md)
+ - [SmartAlbumReevaluateEstimateDto](doc//SmartAlbumReevaluateEstimateDto.md)
+ - [SmartAlbumReevaluateResponseDto](doc//SmartAlbumReevaluateResponseDto.md)
  - [SmartSearchDto](doc//SmartSearchDto.md)
  - [SourceType](doc//SourceType.md)
  - [SpeedParameters](doc//SpeedParameters.md)

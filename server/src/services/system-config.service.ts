@@ -6,6 +6,8 @@ import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
   mapConfig,
+  SmartAlbumReevaluateEstimateDto,
+  SmartAlbumReevaluateResponseDto,
   SystemConfigDto,
 } from 'src/dtos/system-config.dto';
 import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
@@ -166,6 +168,33 @@ export class SystemConfigService extends BaseService {
 
     if (!alreadyInFlight) {
       await this.jobRepository.queue({ name: JobName.ImageDescriptionQueueAll, data: { force: true } });
+    }
+
+    return { queued: !alreadyInFlight };
+  }
+
+  async estimateSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateEstimateDto> {
+    const stats = await this.assetRepository.getDescriptionStats();
+    return { totalAssets: stats.withDescription, withDescription: stats.withDescription };
+  }
+
+  async triggerSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateResponseDto> {
+    const { smartAlbums } = await this.getConfig({ withCache: false });
+    if (!smartAlbums.enabled) {
+      throw new BadRequestException('Smart albums are not enabled');
+    }
+
+    // The re-evaluate-all job runs on the shared BackgroundTask queue, so
+    // getJobCounts would over-report. Instead, look up the BullMQ dedup id
+    // directly to detect an in-flight job. Matching dedup id is set in
+    // job.repository.ts getJobOptions().
+    const alreadyInFlight = await this.jobRepository.hasDedupJob(
+      QueueName.BackgroundTask,
+      JobName.SmartAlbumReevaluateAll,
+    );
+
+    if (!alreadyInFlight) {
+      await this.jobRepository.queue({ name: JobName.SmartAlbumReevaluateAll });
     }
 
     return { queued: !alreadyInFlight };

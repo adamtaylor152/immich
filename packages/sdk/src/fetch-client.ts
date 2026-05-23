@@ -3221,6 +3221,16 @@ export type MachineLearningHardwareResponseDto = {
     /** Whether PyTorch CUDA is available */
     torchCudaAvailable: boolean;
 };
+export type SmartAlbumReevaluateResponseDto = {
+    /** Whether the re-evaluate job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type SmartAlbumReevaluateEstimateDto = {
+    /** Total image assets that will be evaluated (currently equals withDescription) */
+    totalAssets: number;
+    /** Image assets with a successfully completed description */
+    withDescription: number;
+};
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
     dayOptions: string[];
@@ -7086,6 +7096,31 @@ export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Trigger smart-album re-evaluate
+ */
+export function triggerSmartAlbumReevaluate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: SmartAlbumReevaluateResponseDto;
+    } | {
+        status: 400;
+    }>("/system-config/smart-albums/reevaluate", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Estimate smart-album re-evaluate cost
+ */
+export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SmartAlbumReevaluateEstimateDto;
+    }>("/system-config/smart-albums/reevaluate-estimate", {
+        ...opts
+    }));
+}
+/**
  * Get storage template options
  */
 export function getStorageTemplateOptions(opts?: Oazapfts.RequestOpts) {
@@ -8185,6 +8220,7 @@ export enum JobName {
     ImageDescription = "ImageDescription",
     NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
     NsfwDetection = "NsfwDetection",
+    SmartAlbumReevaluateAll = "SmartAlbumReevaluateAll",
     WorkflowAssetCreate = "WorkflowAssetCreate"
 }
 export enum Status2 {

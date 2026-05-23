@@ -342,6 +342,8 @@ part 'model/shared_links_response.dart';
 part 'model/shared_links_update.dart';
 part 'model/sign_up_dto.dart';
 part 'model/smart_album_kind_config.dart';
+part 'model/smart_album_reevaluate_estimate_dto.dart';
+part 'model/smart_album_reevaluate_response_dto.dart';
 part 'model/smart_search_dto.dart';
 part 'model/source_type.dart';
 part 'model/speed_parameters.dart';

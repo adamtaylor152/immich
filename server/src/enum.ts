@@ -977,6 +977,9 @@ export enum JobName {
   NsfwDetectionQueueAll = 'NsfwDetectionQueueAll',
   NsfwDetection = 'NsfwDetection',
 
+  // Smart albums
+  SmartAlbumReevaluateAll = 'SmartAlbumReevaluateAll',
+
   // Workflow
   WorkflowAssetCreate = 'WorkflowAssetCreate',
 }
