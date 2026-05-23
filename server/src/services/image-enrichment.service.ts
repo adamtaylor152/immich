@@ -23,7 +23,8 @@ import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/ma
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
-import { ImageDescriptionPromptAssembler } from 'src/services/prompt-assembler.service';
+import { IdentityPostValidator } from 'src/services/identity-post-validator.service';
+import { ImageDescriptionPromptAssembler, KnownPerson } from 'src/services/prompt-assembler.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
 import { isImageDescriptionEnabled, isNsfwDetectionEnabled, isSmartSearchEnabled } from 'src/utils/misc';
@@ -47,6 +48,8 @@ type EnrichmentTask<T> =
       appliedDescriptionHash?: string;
       appliedTagHash?: string;
       appliedTagValues?: string[];
+      /** Identity validation flags recorded after post-processing the ML description. */
+      identityFlags?: { hallucinatedNames?: string[]; ambiguousReferences?: string[] };
     }
   | {
       status: 'failed';
@@ -141,6 +144,7 @@ const normalizeTag = (tag: string) =>
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
   private readonly promptAssembler = new ImageDescriptionPromptAssembler();
+  private readonly identityPostValidator = new IdentityPostValidator();
 
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
@@ -409,11 +413,13 @@ export class ImageEnrichmentService extends BaseService {
       }
     }
 
+    const knownPersons = await this.getKnownPersonsForAsset(asset.id);
+
     let result: ImageDescriptionResult;
     try {
       const { prompt } = this.promptAssembler.build({
         config: machineLearning.imageDescription.prompt,
-        knownPersons: [], // PR 5 will populate from face data
+        knownPersons,
         nsfw: nsfw ? { isNsfw: nsfw.isNsfw } : null,
       });
       result = await this.machineLearningRepository.describeImage(
@@ -434,6 +440,22 @@ export class ImageEnrichmentService extends BaseService {
         await this.saveEnrichmentMetadata(id, m, trx);
       });
       return JobStatus.Failed;
+    }
+
+    // Post-validate the ML description against known persons: strip any
+    // hallucinated names and substitute unambiguous generic person references.
+    // Only runs when there is at least one known person and a non-empty
+    // description — the validator is a no-op otherwise.
+    let identityFlags: { hallucinatedNames?: string[]; ambiguousReferences?: string[] } | undefined;
+    if (result.description && knownPersons.length > 0) {
+      const { description: validatedDescription, flags } = this.identityPostValidator.validate(
+        result.description,
+        knownPersons,
+      );
+      result = { ...result, description: validatedDescription };
+      if (flags.hallucinatedNames || flags.ambiguousReferences) {
+        identityFlags = flags;
+      }
     }
 
     // Phase: serialize the RMW so reviewer / NSFW writes can't clobber the
@@ -467,6 +489,7 @@ export class ImageEnrichmentService extends BaseService {
           updatedAt: new Date().toISOString(),
           result,
           configHash: promptConfigHash(machineLearning.imageDescription.prompt),
+          ...(identityFlags ? { identityFlags } : {}),
         };
         await this.saveEnrichmentMetadata(id, m, trx);
         return { metadata: m, previousDescription, previousTagValues };
@@ -991,5 +1014,49 @@ export class ImageEnrichmentService extends BaseService {
       exif: updateLockedColumns({ assetId, tags: tags.map(({ value }) => value) }),
       lockedPropertiesBehavior: 'append',
     });
+  }
+
+  /**
+   * Build the list of named persons detected in the asset for identity-aware
+   * prompt assembly.
+   *
+   * Faces are only included when:
+   * - `personId` is set (face is linked to a person record)
+   * - `person.name` is non-empty (the person has been given a name)
+   * - `person.isHidden` is false (hidden persons are not surfaced)
+   * - Both `imageWidth` and `imageHeight` are non-zero (avoids NaN in boxCenter)
+   *
+   * `faceConfidence` is always 1.0 because Immich's `asset_face` table has no
+   * per-face recognition-confidence column; named faces are considered
+   * user-curated ground truth.
+   */
+  private async getKnownPersonsForAsset(assetId: string): Promise<KnownPerson[]> {
+    const faces = await this.personRepository.getFaces(assetId, { isVisible: true });
+    const knownPersons: KnownPerson[] = [];
+
+    for (const face of faces) {
+      if (!face.personId || !face.person?.name || face.person.isHidden) {
+        continue;
+      }
+
+      const { imageWidth, imageHeight, boundingBoxX1, boundingBoxX2, boundingBoxY1, boundingBoxY2 } = face;
+
+      // Skip faces with degenerate dimensions to avoid division by zero or NaN.
+      if (!imageWidth || !imageHeight) {
+        continue;
+      }
+
+      knownPersons.push({
+        name: face.person.name,
+        // Always 1 — see method docstring (Immich has no per-face confidence column).
+        faceConfidence: 1,
+        boxCenter: [
+          (boundingBoxX1 + boundingBoxX2) / 2 / imageWidth,
+          (boundingBoxY1 + boundingBoxY2) / 2 / imageHeight,
+        ],
+      });
+    }
+
+    return knownPersons;
   }
 }
