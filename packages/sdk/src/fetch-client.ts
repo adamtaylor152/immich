@@ -1869,24 +1869,24 @@ export type RunPodStateDto = {
     endpointId?: string;
     endpointUrl?: string;
     errorMessage?: string;
-    estimatedCostUsd?: number;
+    estimatedCostUsd?: number | null;
     gpuTypeId?: string;
-    idleTimeoutSeconds?: number;
+    idleTimeoutSeconds?: number | null;
     imageName?: string;
     instanceTag?: string;
     lastBusyAt?: string;
-    maxRuntimeHours?: number;
+    maxRuntimeHours?: number | null;
     mlUrl?: string;
     podCreatedAt?: string;
     podId?: string;
-    pricePerHour?: number;
+    pricePerHour?: number | null;
     runningSince?: string;
     status: Status2;
     stoppedAt?: string;
     templateId?: string;
     unhealthySince?: string;
-    workersMax?: number;
-    workersMin?: number;
+    workersMax?: number | null;
+    workersMin?: number | null;
 };
 export type RunPodGpuTypeDto = {
     communityCloud?: boolean;
@@ -2976,7 +2976,7 @@ export type OcrConfig = {
 export type SystemConfigRunPodServerlessDto = {
     /** Max time per request (ms) */
     executionTimeoutMs: number;
-    /** Ranked GPU type IDs the endpoint can use (cheapest first) */
+    /** Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required. */
     gpuTypeIds: string[];
     /** Seconds before an idle worker scales down */
     idleTimeoutSeconds: number;
@@ -3010,8 +3010,8 @@ export type SystemConfigRunPodDto = {
     imageName: string;
     /** Hard runtime ceiling (hours) (Pod mode) */
     maxRuntimeHours: number;
-    /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint */
-    mode: Mode2;
+    /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients. */
+    mode?: Mode2;
     serverless?: SystemConfigRunPodServerlessDto;
     /** Persistent volume size (GB) (Pod mode) */
     volumeGb: number;

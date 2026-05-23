@@ -19,6 +19,16 @@ import { toPlainObject } from 'src/utils/object';
 /** Default per-asset estimate when no telemetry data is available. */
 const DEFAULT_SECONDS_PER_ASSET = 1.5;
 
+/**
+ * Back-compat-aware mode resolver. Mirrors `RunPodService.effectiveMode`:
+ * legacy configs may have `enabled: true` while `mode` is still 'disabled'
+ * (the field didn't exist before this PR). Such configs are treated as Pod
+ * mode — otherwise the "terminate the pod first" guard would be bypassed and
+ * a billable resource orphaned.
+ */
+const effectiveRunPodMode = (rp: { mode?: string; enabled: boolean }): 'disabled' | 'pod' | 'serverless' =>
+  rp.mode && rp.mode !== 'disabled' ? (rp.mode as 'pod' | 'serverless') : rp.enabled ? 'pod' : 'disabled';
+
 @Injectable()
 export class SystemConfigService extends BaseService {
   @OnEvent({ name: 'AppBootstrap', priority: BootstrapEventPriority.SystemConfig })
@@ -83,10 +93,12 @@ export class SystemConfigService extends BaseService {
 
     const oldRunpod = oldConfig.machineLearning.runpod;
     const newRunpod = newConfig.machineLearning.runpod;
+    const oldEffective = effectiveRunPodMode(oldRunpod);
+    const newEffective = effectiveRunPodMode(newRunpod);
     const sensitiveChange =
       oldRunpod.apiKey !== newRunpod.apiKey ||
       oldRunpod.imageName !== newRunpod.imageName ||
-      oldRunpod.mode !== newRunpod.mode;
+      oldEffective !== newEffective;
     if (sensitiveChange) {
       const runpodState = await this.systemMetadataRepository.get(SystemMetadataKey.RunPodState);
       const inFlight =
@@ -99,8 +111,8 @@ export class SystemConfigService extends BaseService {
       // Block switching FROM Pod mode WHILE a pod is running. The admin must
       // terminate the pod first — otherwise we'd orphan a billable resource.
       if (
-        oldRunpod.mode === 'pod' &&
-        newRunpod.mode !== 'pod' &&
+        oldEffective === 'pod' &&
+        newEffective !== 'pod' &&
         runpodState &&
         ['running', 'stopped'].includes(runpodState.status)
       ) {

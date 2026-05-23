@@ -579,5 +579,33 @@ describe(RunPodService.name, () => {
 
       expect(mocks.machineLearning.setManagedUrl).toHaveBeenCalledWith(ENDPOINT_URL, 'rp_test');
     });
+
+    it('syncManagedUrl refreshes bearer even when endpoint URL is unchanged (API key rotation)', async () => {
+      // Regression: admin rotates the RunPod API key. The endpoint URL stays
+      // the same but the bearer changes — we must call setManagedUrl so the
+      // worker picks up the new token instead of failing requests with 401.
+      stubServerlessConfig({ apiKey: 'rp_rotated' });
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_xyz',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+      // Same URL already cached on this worker.
+      (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(ENDPOINT_URL);
+
+      await sut.onConfigInit({
+        newConfig: _systemConfigWithRunPod({ mode: 'serverless', apiKey: 'rp_rotated' }),
+      } as never);
+
+      expect(mocks.machineLearning.setManagedUrl).toHaveBeenCalledWith(ENDPOINT_URL, 'rp_rotated');
+    });
   });
 });

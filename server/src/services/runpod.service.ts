@@ -831,10 +831,16 @@ export class RunPodService extends BaseService {
     } else if (state.status === 'serverless-ready') {
       // For serverless, the bearer is the user's RunPod API key — that's
       // what RunPod's proxy enforces at the `.api.runpod.ai` URL.
+      //
+      // Always refresh: URL equality does NOT imply bearer equality. If the
+      // admin rotates the RunPod API key, the endpoint URL stays the same
+      // but the bearer changes — skipping the update here would leave the
+      // worker holding a stale 401-causing token until next restart.
       const apiKey = await this.getApiKey();
-      const existing = this.machineLearningRepository.getManagedUrl();
-      if (apiKey && existing !== state.endpointUrl) {
+      if (apiKey) {
         this.machineLearningRepository.setManagedUrl(state.endpointUrl, apiKey);
+      } else if (this.machineLearningRepository.getManagedUrl()) {
+        this.machineLearningRepository.clearManagedUrl();
       }
     } else if (this.machineLearningRepository.getManagedUrl()) {
       this.machineLearningRepository.clearManagedUrl();
@@ -1040,6 +1046,11 @@ export class RunPodService extends BaseService {
       }
 
       if (!endpoint) {
+        // Track whether *this* invocation created the template, so we can
+        // roll it back if the subsequent endpoint create fails. Adopted
+        // orphan templates are NOT rolled back (they belonged to a previous
+        // failed setup that the user may have intended to retain).
+        let createdTemplateThisRun = false;
         if (!templateId) {
           // Create template fresh.
           const template = await this.runPodRepository.createTemplate(apiKey, {
@@ -1055,23 +1066,40 @@ export class RunPodService extends BaseService {
             isServerless: true,
           });
           templateId = template.id;
+          createdTemplateThisRun = true;
         }
-        endpoint = await this.runPodRepository.createEndpoint(apiKey, {
-          name: `${prefix}-endpoint`,
-          templateId,
-          gpuTypeIds: runpod.serverless.gpuTypeIds,
-          workersMin: runpod.serverless.workersMin,
-          workersMax: runpod.serverless.workersMax,
-          idleTimeout: runpod.serverless.idleTimeoutSeconds,
-          executionTimeoutMs: runpod.serverless.executionTimeoutMs,
-          scalerType: runpod.serverless.scalerType,
-          scalerValue: runpod.serverless.scalerValue,
-          // 'LB' = load-balancer endpoint. RunPod forwards arbitrary HTTP
-          // (including our /predict, /ping, /hardware) directly to a worker
-          // instead of wrapping it in a queue. Required for Immich's existing
-          // ML predict flow to work unchanged.
-          type: 'LB',
-        });
+        try {
+          endpoint = await this.runPodRepository.createEndpoint(apiKey, {
+            name: `${prefix}-endpoint`,
+            templateId,
+            gpuTypeIds: runpod.serverless.gpuTypeIds,
+            workersMin: runpod.serverless.workersMin,
+            workersMax: runpod.serverless.workersMax,
+            idleTimeout: runpod.serverless.idleTimeoutSeconds,
+            executionTimeoutMs: runpod.serverless.executionTimeoutMs,
+            scalerType: runpod.serverless.scalerType,
+            scalerValue: runpod.serverless.scalerValue,
+            // 'LB' = load-balancer endpoint. RunPod forwards arbitrary HTTP
+            // (including our /predict, /ping, /hardware) directly to a worker
+            // instead of wrapping it in a queue. Required for Immich's existing
+            // ML predict flow to work unchanged.
+            type: 'LB',
+          });
+        } catch (endpointError) {
+          // Roll back the template we just created so a retry doesn't see
+          // an unrelated orphan blocking the unique-name constraint.
+          if (createdTemplateThisRun && templateId) {
+            try {
+              await this.runPodRepository.deleteTemplate(apiKey, templateId);
+              this.logger.log(`Rolled back template ${templateId} after endpoint create failed`);
+            } catch (rollbackError) {
+              if (!(rollbackError instanceof RunPodNotFoundError)) {
+                this.logger.warn(`Failed to roll back template ${templateId}: ${rollbackError}`);
+              }
+            }
+          }
+          throw endpointError;
+        }
         this.logger.log(`Created serverless endpoint ${endpoint.id} (template ${templateId}) tag=${instanceTag}`);
       }
 

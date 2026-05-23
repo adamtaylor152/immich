@@ -60,9 +60,12 @@ const RunPodStateSchema = z
     runningSince: z.string().optional(),
     lastBusyAt: z.string().optional(),
     stoppedAt: z.string().optional(),
-    maxRuntimeHours: z.number().optional(),
-    estimatedCostUsd: z.number().optional(),
-    pricePerHour: z.number().optional(),
+    // Numeric fields are .nullish() — only `nullable: true` triggers the
+    // openapi-generator's null-safe Dart parse path (otherwise it generates
+    // `num.parse('${json[...]}')` which throws on missing fields).
+    maxRuntimeHours: z.number().nullish(),
+    estimatedCostUsd: z.number().nullish(),
+    pricePerHour: z.number().nullish(),
     instanceTag: z.string().optional(),
     errorMessage: z.string().optional(),
     unhealthySince: z.string().optional(),
@@ -70,9 +73,9 @@ const RunPodStateSchema = z
     endpointId: z.string().optional(),
     endpointUrl: z.string().optional(),
     templateId: z.string().optional(),
-    workersMin: z.number().optional(),
-    workersMax: z.number().optional(),
-    idleTimeoutSeconds: z.number().optional(),
+    workersMin: z.number().nullish(),
+    workersMax: z.number().nullish(),
+    idleTimeoutSeconds: z.number().nullish(),
   })
   .meta({ id: 'RunPodStateDto' });
 

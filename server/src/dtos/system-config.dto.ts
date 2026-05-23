@@ -153,7 +153,10 @@ const MachineLearningHardwareResponseSchema = z
 
 const SystemConfigRunPodServerlessSchema = z
   .object({
-    gpuTypeIds: z.array(z.string()).describe('Ranked GPU type IDs the endpoint can use (cheapest first)'),
+    gpuTypeIds: z
+      .array(z.string())
+      .min(1)
+      .describe('Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.'),
     workersMin: z.int().min(0).max(10).describe('Always-warm workers (0 = scale to zero)'),
     workersMax: z.int().min(1).max(20).describe('Max concurrent workers'),
     idleTimeoutSeconds: z.int().min(5).max(3600).describe('Seconds before an idle worker scales down'),
@@ -161,15 +164,27 @@ const SystemConfigRunPodServerlessSchema = z
     scalerType: z.enum(['QUEUE_DELAY', 'REQUEST_COUNT']).describe('Worker autoscaler strategy'),
     scalerValue: z.int().min(1).max(60).describe('Scaler threshold (queue seconds or request count)'),
   })
+  // Cross-field guard — reject configs where workersMin > workersMax instead
+  // of letting RunPod's endpoint create fail at provisioning time with a less
+  // obvious error.
+  .refine((data) => data.workersMax >= data.workersMin, {
+    message: 'workersMax must be greater than or equal to workersMin',
+    path: ['workersMax'],
+  })
   .meta({ id: 'SystemConfigRunPodServerlessDto' });
 
 const SystemConfigRunPodSchema = z
   .object({
     enabled: configBool.describe('Enabled'),
+    // Optional in the wire DTO so older clients that don't know about the
+    // discriminator can still PUT the legacy shape. Server back-compat
+    // infers the effective mode from `enabled` when this is undefined or
+    // 'disabled' (see `effectiveMode` in runpod.service.ts).
     mode: z
       .enum(['disabled', 'pod', 'serverless'])
+      .default('disabled')
       .describe(
-        'disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint',
+        'disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.',
       ),
     // apiKey is a billing credential. mapConfig() redacts it to '' on every
     // GET response, and updateSystemConfig() interprets an empty incoming

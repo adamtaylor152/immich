@@ -28,7 +28,7 @@ class SystemConfigRunPodServerlessDto {
   /// Maximum value: 3600000
   int executionTimeoutMs;
 
-  /// Ranked GPU type IDs the endpoint can use (cheapest first)
+  /// Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.
   List<String> gpuTypeIds;
 
   /// Seconds before an idle worker scales down

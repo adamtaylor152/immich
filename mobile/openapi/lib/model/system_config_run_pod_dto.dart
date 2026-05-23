@@ -23,7 +23,7 @@ class SystemConfigRunPodDto {
     required this.enabled,
     required this.imageName,
     required this.maxRuntimeHours,
-    required this.mode,
+    this.mode = const SystemConfigRunPodDtoModeEnum._('disabled'),
     this.serverless,
     required this.volumeGb,
   });
@@ -67,7 +67,7 @@ class SystemConfigRunPodDto {
   /// Maximum value: 168
   int maxRuntimeHours;
 
-  /// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint
+  /// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.
   SystemConfigRunPodDtoModeEnum mode;
 
   ///
@@ -161,7 +161,7 @@ class SystemConfigRunPodDto {
         enabled: mapValueOfType<bool>(json, r'enabled')!,
         imageName: mapValueOfType<String>(json, r'imageName')!,
         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
-        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode'])!,
+        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? 'disabled',
         serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
         volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
       );
@@ -221,12 +221,11 @@ class SystemConfigRunPodDto {
     'enabled',
     'imageName',
     'maxRuntimeHours',
-    'mode',
     'volumeGb',
   };
 }
 
-/// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint
+/// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.
 class SystemConfigRunPodDtoModeEnum {
   /// Instantiate a new enum with the provided [value].
   const SystemConfigRunPodDtoModeEnum._(this.value);

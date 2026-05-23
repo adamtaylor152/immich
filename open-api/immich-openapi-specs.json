@@ -24126,12 +24126,14 @@
             "type": "string"
           },
           "estimatedCostUsd": {
+            "nullable": true,
             "type": "number"
           },
           "gpuTypeId": {
             "type": "string"
           },
           "idleTimeoutSeconds": {
+            "nullable": true,
             "type": "number"
           },
           "imageName": {
@@ -24144,6 +24146,7 @@
             "type": "string"
           },
           "maxRuntimeHours": {
+            "nullable": true,
             "type": "number"
           },
           "mlUrl": {
@@ -24156,6 +24159,7 @@
             "type": "string"
           },
           "pricePerHour": {
+            "nullable": true,
             "type": "number"
           },
           "runningSince": {
@@ -24185,9 +24189,11 @@
             "type": "string"
           },
           "workersMax": {
+            "nullable": true,
             "type": "number"
           },
           "workersMin": {
+            "nullable": true,
             "type": "number"
           }
         },
@@ -28487,7 +28493,8 @@
             "type": "integer"
           },
           "mode": {
-            "description": "disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint",
+            "default": "disabled",
+            "description": "disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.",
             "enum": [
               "disabled",
               "pod",
@@ -28528,7 +28535,6 @@
           "enabled",
           "imageName",
           "maxRuntimeHours",
-          "mode",
           "volumeGb"
         ],
         "type": "object"
@@ -28542,10 +28548,11 @@
             "type": "integer"
           },
           "gpuTypeIds": {
-            "description": "Ranked GPU type IDs the endpoint can use (cheapest first)",
+            "description": "Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.",
             "items": {
               "type": "string"
             },
+            "minItems": 1,
             "type": "array"
           },
           "idleTimeoutSeconds": {
