@@ -1099,6 +1099,34 @@ where
 order by
   "asset"."fileCreatedAt" desc
 
+-- AssetJobRepository.streamForSmartAlbumReevaluation
+select
+  "asset"."id",
+  "asset"."ownerId",
+  COALESCE(
+    asset_metadata.value -> 'description' -> 'result' -> 'tags',
+    '[]'::jsonb
+  ) as "tags"
+from
+  "asset"
+  inner join "asset_metadata" on "asset_metadata"."assetId" = "asset"."id"
+  and "asset_metadata"."key" = $1
+where
+  "asset"."type" = 'IMAGE'
+  and "asset"."deletedAt" is null
+  and "asset"."visibility" in ('archive', 'timeline')
+  and exists (
+    select
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = 'preview'
+  )
+  and asset_metadata.value -> 'description' ->> 'status' = $2
+order by
+  "asset"."fileCreatedAt" desc
+
 -- AssetJobRepository.streamForNsfwDetectionJob
 select
   "asset"."id"
