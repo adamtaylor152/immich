@@ -76,7 +76,9 @@ class AudioParameters {
 
       return AudioParameters(
         muted: mapValueOfType<bool>(json, r'muted'),
-        volume: num.parse('${json[r'volume']}'),
+        volume: json[r'volume'] == null
+            ? null
+            : num.parse('${json[r'volume']}'),
       );
     }
     return null;

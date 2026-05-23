@@ -166,7 +166,9 @@ class NsfwDetectionEnrichmentResponseDto {
         labels: mapCastOfType<String, num>(json, r'labels') ?? const {},
         modelName: mapValueOfType<String>(json, r'modelName'),
         review: ImageEnrichmentReview.fromJson(json[r'review']),
-        score: num.parse('${json[r'score']}'),
+        score: json[r'score'] == null
+            ? null
+            : num.parse('${json[r'score']}'),
         status: NsfwDetectionEnrichmentResponseDtoStatusEnum.fromJson(json[r'status'])!,
         updatedAt: mapValueOfType<String>(json, r'updatedAt'),
       );

@@ -273,19 +273,45 @@ class AdjustParameters {
       final json = value.cast<String, dynamic>();
 
       return AdjustParameters(
-        blackPoint: num.parse('${json[r'blackPoint']}'),
-        blueTone: num.parse('${json[r'blueTone']}'),
-        brightness: num.parse('${json[r'brightness']}'),
-        contrast: num.parse('${json[r'contrast']}'),
-        hdr: num.parse('${json[r'hdr']}'),
-        highlights: num.parse('${json[r'highlights']}'),
-        saturation: num.parse('${json[r'saturation']}'),
-        shadows: num.parse('${json[r'shadows']}'),
-        skinTone: num.parse('${json[r'skinTone']}'),
-        tint: num.parse('${json[r'tint']}'),
-        vignette: num.parse('${json[r'vignette']}'),
-        warmth: num.parse('${json[r'warmth']}'),
-        whitePoint: num.parse('${json[r'whitePoint']}'),
+        blackPoint: json[r'blackPoint'] == null
+            ? null
+            : num.parse('${json[r'blackPoint']}'),
+        blueTone: json[r'blueTone'] == null
+            ? null
+            : num.parse('${json[r'blueTone']}'),
+        brightness: json[r'brightness'] == null
+            ? null
+            : num.parse('${json[r'brightness']}'),
+        contrast: json[r'contrast'] == null
+            ? null
+            : num.parse('${json[r'contrast']}'),
+        hdr: json[r'hdr'] == null
+            ? null
+            : num.parse('${json[r'hdr']}'),
+        highlights: json[r'highlights'] == null
+            ? null
+            : num.parse('${json[r'highlights']}'),
+        saturation: json[r'saturation'] == null
+            ? null
+            : num.parse('${json[r'saturation']}'),
+        shadows: json[r'shadows'] == null
+            ? null
+            : num.parse('${json[r'shadows']}'),
+        skinTone: json[r'skinTone'] == null
+            ? null
+            : num.parse('${json[r'skinTone']}'),
+        tint: json[r'tint'] == null
+            ? null
+            : num.parse('${json[r'tint']}'),
+        vignette: json[r'vignette'] == null
+            ? null
+            : num.parse('${json[r'vignette']}'),
+        warmth: json[r'warmth'] == null
+            ? null
+            : num.parse('${json[r'warmth']}'),
+        whitePoint: json[r'whitePoint'] == null
+            ? null
+            : num.parse('${json[r'whitePoint']}'),
       );
     }
     return null;

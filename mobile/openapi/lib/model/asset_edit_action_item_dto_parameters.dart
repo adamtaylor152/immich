@@ -449,27 +449,59 @@ class AssetEditActionItemDtoParameters {
         axis: MirrorAxis.fromJson(json[r'axis'])!,
         endMs: mapValueOfType<int>(json, r'endMs')!,
         startMs: mapValueOfType<int>(json, r'startMs')!,
-        blackPoint: num.parse('${json[r'blackPoint']}'),
-        blueTone: num.parse('${json[r'blueTone']}'),
-        brightness: num.parse('${json[r'brightness']}'),
-        contrast: num.parse('${json[r'contrast']}'),
-        hdr: num.parse('${json[r'hdr']}'),
-        highlights: num.parse('${json[r'highlights']}'),
-        saturation: num.parse('${json[r'saturation']}'),
-        shadows: num.parse('${json[r'shadows']}'),
-        skinTone: num.parse('${json[r'skinTone']}'),
-        tint: num.parse('${json[r'tint']}'),
-        vignette: num.parse('${json[r'vignette']}'),
-        warmth: num.parse('${json[r'warmth']}'),
-        whitePoint: num.parse('${json[r'whitePoint']}'),
-        intensity: num.parse('${json[r'intensity']}'),
+        blackPoint: json[r'blackPoint'] == null
+            ? null
+            : num.parse('${json[r'blackPoint']}'),
+        blueTone: json[r'blueTone'] == null
+            ? null
+            : num.parse('${json[r'blueTone']}'),
+        brightness: json[r'brightness'] == null
+            ? null
+            : num.parse('${json[r'brightness']}'),
+        contrast: json[r'contrast'] == null
+            ? null
+            : num.parse('${json[r'contrast']}'),
+        hdr: json[r'hdr'] == null
+            ? null
+            : num.parse('${json[r'hdr']}'),
+        highlights: json[r'highlights'] == null
+            ? null
+            : num.parse('${json[r'highlights']}'),
+        saturation: json[r'saturation'] == null
+            ? null
+            : num.parse('${json[r'saturation']}'),
+        shadows: json[r'shadows'] == null
+            ? null
+            : num.parse('${json[r'shadows']}'),
+        skinTone: json[r'skinTone'] == null
+            ? null
+            : num.parse('${json[r'skinTone']}'),
+        tint: json[r'tint'] == null
+            ? null
+            : num.parse('${json[r'tint']}'),
+        vignette: json[r'vignette'] == null
+            ? null
+            : num.parse('${json[r'vignette']}'),
+        warmth: json[r'warmth'] == null
+            ? null
+            : num.parse('${json[r'warmth']}'),
+        whitePoint: json[r'whitePoint'] == null
+            ? null
+            : num.parse('${json[r'whitePoint']}'),
+        intensity: json[r'intensity'] == null
+            ? 100
+            : num.parse('${json[r'intensity']}'),
         name: mapValueOfType<String>(json, r'name')!,
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
         color: mapValueOfType<String>(json, r'color') ?? '#ffffff',
-        size: num.parse('${json[r'size']}'),
+        size: json[r'size'] == null
+            ? 0.06
+            : num.parse('${json[r'size']}'),
         text: mapValueOfType<String>(json, r'text')!,
         muted: mapValueOfType<bool>(json, r'muted'),
-        volume: num.parse('${json[r'volume']}'),
+        volume: json[r'volume'] == null
+            ? null
+            : num.parse('${json[r'volume']}'),
         rate: num.parse('${json[r'rate']}'),
       );
     }
