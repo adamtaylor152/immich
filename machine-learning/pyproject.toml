@@ -52,6 +52,13 @@ cuda = [
     "onnxruntime-gpu>=1.23.2,<2",
     "qwen-vl-utils>=0.0.11,<1",
     "torch>=2.5,<2.6",
+    # Required by transformers 5.x's Qwen2VLVideoProcessor, which is
+    # eagerly imported during Qwen2.5-VL auto-config even when we only
+    # process still images. Without this, Qwen image description fails
+    # at HTTPException 500 with `ImportError: Qwen2VLVideoProcessor
+    # requires the Torchvision library`. Version pinned to the line
+    # that ships with torch 2.5.x.
+    "torchvision>=0.20,<0.21",
     "transformers>=5,<6",
 ]
 openvino = ["onnxruntime-openvino>=1.24.1,<2", "openvino-genai>=2025.4,<2027"]
