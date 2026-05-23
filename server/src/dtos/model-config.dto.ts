@@ -197,6 +197,20 @@ export const ImageDescriptionConfigSchema = ModelConfigSchema.extend({
   fallbackModelName: z.string().describe('Name of the fallback model to use'),
   device: z.string().describe('Hardware device to use'),
   prompt: ImageDescriptionPromptSchema.default(() => ImageDescriptionPromptSchema.parse({})),
+  pendingRequeueAt: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent "re-queue pending" banner.',
+    ),
+  lastConfigChangeAt: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth).',
+    ),
 }).meta({ id: 'ImageDescriptionConfig' });
 
 export const NsfwDetectionConfigSchema = ModelConfigSchema.extend({

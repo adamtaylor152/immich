@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import _ from 'lodash';
-import { defaults } from 'src/config';
+import { defaults, SystemConfig } from 'src/config';
 import { OnEvent } from 'src/decorators';
 import {
   ImageDescriptionRequeueEstimateDto,
@@ -115,6 +115,34 @@ export class SystemConfigService extends BaseService {
       dto.machineLearning.runpod.apiKey = oldConfig.machineLearning.runpod.apiKey;
     }
 
+    // The two timestamp fields below are server-managed (set by this service,
+    // by the cost modal's defer endpoint, or by the re-queue trigger).
+    // Inbound writes must not be allowed to clobber them — always overwrite
+    // whatever the client sent with the stored values BEFORE comparing the
+    // imageDescription block, then maybe bump lastConfigChangeAt below.
+    if (dto.machineLearning?.imageDescription) {
+      dto.machineLearning.imageDescription.pendingRequeueAt = oldConfig.machineLearning.imageDescription.pendingRequeueAt;
+      dto.machineLearning.imageDescription.lastConfigChangeAt =
+        oldConfig.machineLearning.imageDescription.lastConfigChangeAt;
+    }
+
+    // Bump lastConfigChangeAt when the imageDescription block changed, ignoring
+    // the two server-managed timestamp fields themselves (otherwise we'd ratchet
+    // the timestamp on every save). The bump happens BEFORE updateConfig() so
+    // the new timestamp is persisted along with the rest of the config in a
+    // single round-trip.
+    const oldDescription = _.omit(oldConfig.machineLearning.imageDescription, [
+      'pendingRequeueAt',
+      'lastConfigChangeAt',
+    ]);
+    const newDescription = _.omit(dto.machineLearning?.imageDescription ?? {}, [
+      'pendingRequeueAt',
+      'lastConfigChangeAt',
+    ]);
+    if (dto.machineLearning?.imageDescription && !_.isEqual(toPlainObject(oldDescription), toPlainObject(newDescription))) {
+      dto.machineLearning.imageDescription.lastConfigChangeAt = new Date().toISOString();
+    }
+
     try {
       await this.eventRepository.emit('ConfigValidate', { newConfig: toPlainObject(dto), oldConfig });
     } catch (error) {
@@ -138,10 +166,13 @@ export class SystemConfigService extends BaseService {
     const { machineLearning } = await this.getConfig({ withCache: false });
     const stats = await this.assetRepository.getDescriptionStats();
 
-    // TODO(PR 4a): replace with a real rolling-average query over job completion
-    // telemetry once per-job duration tracking is added. For now, use a
-    // conservative default that is clearly labelled as an estimate.
-    const rollingAvgSeconds = DEFAULT_SECONDS_PER_ASSET;
+    // Real per-job rolling-average duration, populated by the BullMQ Worker
+    // `completed` listener in JobRepository. Resets on process restart; falls
+    // back to the conservative default when the buffer is empty (cold start
+    // or no completions yet). This reflects the user's actual hardware/model,
+    // unlike the prior hardcoded 1.5s.
+    const avgMs = this.jobRepository.getRollingAvgMs(JobName.ImageDescription);
+    const rollingAvgSeconds = avgMs != null ? avgMs / 1000 : DEFAULT_SECONDS_PER_ASSET;
     const estimatedTotalSeconds = stats.totalAssets * rollingAvgSeconds;
 
     return {
@@ -156,7 +187,8 @@ export class SystemConfigService extends BaseService {
   }
 
   async triggerDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
-    const { machineLearning } = await this.getConfig({ withCache: false });
+    const oldConfig = await this.getConfig({ withCache: false });
+    const { machineLearning } = oldConfig;
     if (!isImageDescriptionEnabled(machineLearning)) {
       throw new BadRequestException('Image description is not enabled');
     }
@@ -168,9 +200,62 @@ export class SystemConfigService extends BaseService {
 
     if (!alreadyInFlight) {
       await this.jobRepository.queue({ name: JobName.ImageDescriptionQueueAll, data: { force: true } });
+
+      // The deferred re-queue (if any) has now actually run. Clear the marker
+      // so the persistent banner disappears. Direct metadata write — no event
+      // emission, since this is a server-side bookkeeping bump that doesn't
+      // change any user-visible config field.
+      if (machineLearning.imageDescription.pendingRequeueAt !== null) {
+        await this.writeImageDescriptionTimestamps({ pendingRequeueAt: null });
+      }
     }
 
     return { queued: !alreadyInFlight };
+  }
+
+  /**
+   * Set pendingRequeueAt to "now" so the persistent banner can remind the
+   * admin to re-queue later. Called by the cost modal's "Re-queue later"
+   * button — a lightweight write that doesn't go through the full
+   * updateSystemConfig path.
+   */
+  async deferDescriptionRequeue(): Promise<void> {
+    const { machineLearning } = await this.getConfig({ withCache: false });
+    if (!isImageDescriptionEnabled(machineLearning)) {
+      throw new BadRequestException('Image description is not enabled');
+    }
+
+    await this.writeImageDescriptionTimestamps({ pendingRequeueAt: new Date().toISOString() });
+  }
+
+  /**
+   * Direct write of one or both server-managed timestamps in the
+   * imageDescription block, bypassing the validation-heavy full-config update
+   * path. Used by:
+   *   - deferDescriptionRequeue() — sets pendingRequeueAt
+   *   - triggerDescriptionRequeue() — clears pendingRequeueAt on successful enqueue
+   *
+   * Re-emits ConfigUpdate so any caches (clearConfigCache) and listeners stay
+   * in sync.
+   */
+  private async writeImageDescriptionTimestamps(timestamps: {
+    pendingRequeueAt?: string | null;
+    lastConfigChangeAt?: string | null;
+  }): Promise<void> {
+    const oldConfig = await this.getConfig({ withCache: false });
+    const newConfig: SystemConfig = {
+      ...oldConfig,
+      machineLearning: {
+        ...oldConfig.machineLearning,
+        imageDescription: {
+          ...oldConfig.machineLearning.imageDescription,
+          ...timestamps,
+        },
+      },
+    };
+
+    const updated = await this.updateConfig(newConfig);
+    await this.eventRepository.emit('ConfigUpdate', { newConfig: updated, oldConfig });
   }
 
   async estimateSmartAlbumReevaluate(): Promise<SmartAlbumReevaluateEstimateDto> {

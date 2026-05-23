@@ -110,6 +110,8 @@ export type SystemConfig = {
         identityInjection: { enabled: boolean; maxNames: number; minFaceConfidence: number };
         advanced: { enabled: boolean; rawPromptTemplate: string; placeholderValidation: 'strict' | 'warn' };
       };
+      pendingRequeueAt: string | null;
+      lastConfigChangeAt: string | null;
     };
     nsfwDetection: {
       enabled: boolean;
@@ -424,6 +426,8 @@ export const defaults = Object.freeze<SystemConfig>({
         identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.7 },
         advanced: { enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' },
       },
+      pendingRequeueAt: null,
+      lastConfigChangeAt: null,
     },
     nsfwDetection: {
       enabled: false,

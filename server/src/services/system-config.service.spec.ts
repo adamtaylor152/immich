@@ -199,6 +199,8 @@ const updatedConfig = Object.freeze<SystemConfig>({
         identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.7 },
         advanced: { enabled: false, rawPromptTemplate: '', placeholderValidation: 'strict' },
       },
+      pendingRequeueAt: null,
+      lastConfigChangeAt: null,
     },
     nsfwDetection: {
       enabled: false,
@@ -763,6 +765,133 @@ describe(SystemConfigService.name, () => {
       expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_secret_value');
     });
 
+    describe('imageDescription lastConfigChangeAt bump', () => {
+      const baselineDescription = defaults.machineLearning.imageDescription;
+
+      it('should bump lastConfigChangeAt when an imageDescription field changes', async () => {
+        // Old config has the baseline.
+        mocks.systemMetadata.get.mockResolvedValue({});
+
+        const newConfig: SystemConfig = {
+          ...defaults,
+          machineLearning: {
+            ...defaults.machineLearning,
+            imageDescription: {
+              ...baselineDescription,
+              modelName: 'some-new-model',
+            },
+          },
+        };
+
+        const before = Date.now();
+        await sut.updateSystemConfig(newConfig);
+        const after = Date.now();
+
+        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([key]) => key === 'system-config',
+        );
+        expect(persisted).toBeDefined();
+        const partial = persisted![1] as {
+          machineLearning?: { imageDescription?: { lastConfigChangeAt?: string | null } };
+        };
+        const bumped = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
+        expect(bumped).toBeTypeOf('string');
+        const bumpedTime = Date.parse(bumped!);
+        expect(bumpedTime).toBeGreaterThanOrEqual(before);
+        expect(bumpedTime).toBeLessThanOrEqual(after);
+      });
+
+      it('should NOT bump lastConfigChangeAt when only non-imageDescription fields change', async () => {
+        mocks.systemMetadata.get.mockResolvedValue({
+          machineLearning: {
+            imageDescription: { lastConfigChangeAt: '2024-01-01T00:00:00.000Z' },
+          },
+        });
+
+        // Change only an FFmpeg setting.
+        const newConfig: SystemConfig = {
+          ...defaults,
+          machineLearning: {
+            ...defaults.machineLearning,
+            imageDescription: {
+              ...baselineDescription,
+              // Client sends an empty/null pendingRequeueAt; server must
+              // overwrite with the stored value (null in defaults).
+              lastConfigChangeAt: '2024-01-01T00:00:00.000Z',
+            },
+          },
+          ffmpeg: { ...defaults.ffmpeg, crf: 42 },
+        };
+
+        await sut.updateSystemConfig(newConfig);
+
+        // The persisted partial config should NOT include a new
+        // imageDescription.lastConfigChangeAt different from the stored one
+        // (updateConfig diffs against defaults, so the existing 2024 value
+        // would be persisted only if it differs from null — which it does).
+        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([key]) => key === 'system-config',
+        );
+        const partial = persisted![1] as {
+          machineLearning?: { imageDescription?: { lastConfigChangeAt?: string | null } };
+        };
+        // The stored value should be preserved exactly (no fresh bump).
+        const lastChange = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
+        // Either undefined (means no override, still the original 2024) or the
+        // exact 2024 value — but NOT a fresh ISO string from "now".
+        if (lastChange !== undefined) {
+          expect(lastChange).toBe('2024-01-01T00:00:00.000Z');
+        }
+      });
+
+      it('should NOT ratchet on bare timestamp-only diffs (pendingRequeueAt/lastConfigChangeAt are ignored in the compare)', async () => {
+        // Old config has timestamps set; client sends back the exact same
+        // imageDescription block but with different timestamp values.
+        mocks.systemMetadata.get.mockResolvedValue({
+          machineLearning: {
+            imageDescription: {
+              pendingRequeueAt: '2024-01-01T00:00:00.000Z',
+              lastConfigChangeAt: '2023-12-31T00:00:00.000Z',
+            },
+          },
+        });
+
+        // Client tries to send different timestamps — the service must ignore
+        // them on input AND must not bump again because the rest of the block
+        // is unchanged.
+        const newConfig: SystemConfig = {
+          ...defaults,
+          machineLearning: {
+            ...defaults.machineLearning,
+            imageDescription: {
+              ...baselineDescription,
+              pendingRequeueAt: null,
+              lastConfigChangeAt: null,
+            },
+          },
+        };
+
+        await sut.updateSystemConfig(newConfig);
+
+        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+          ([key]) => key === 'system-config',
+        );
+        const partial = persisted![1] as {
+          machineLearning?: {
+            imageDescription?: { lastConfigChangeAt?: string | null; pendingRequeueAt?: string | null };
+          };
+        };
+        // The pre-existing stored timestamps must be preserved (server is the
+        // source of truth for these two fields).
+        if (partial.machineLearning?.imageDescription?.lastConfigChangeAt !== undefined) {
+          expect(partial.machineLearning.imageDescription.lastConfigChangeAt).toBe('2023-12-31T00:00:00.000Z');
+        }
+        if (partial.machineLearning?.imageDescription?.pendingRequeueAt !== undefined) {
+          expect(partial.machineLearning.imageDescription.pendingRequeueAt).toBe('2024-01-01T00:00:00.000Z');
+        }
+      });
+    });
+
     it('should accept a non-empty new runpod.apiKey on write (rotation)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: { runpod: { apiKey: 'rp_old_value', enabled: true } },
@@ -793,7 +922,7 @@ describe(SystemConfigService.name, () => {
   });
 
   describe('estimateDescriptionRequeue', () => {
-    it('should return asset counts and a fixed rolling average when no telemetry is available', async () => {
+    it('should fall back to the default rolling average when no telemetry is available', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: {
           imageDescription: {
@@ -808,6 +937,7 @@ describe(SystemConfigService.name, () => {
         withDescription: 40,
         withoutDescription: 60,
       });
+      mocks.job.getRollingAvgMs.mockReturnValue(null);
 
       const result = await sut.estimateDescriptionRequeue();
 
@@ -820,6 +950,30 @@ describe(SystemConfigService.name, () => {
         activeModel: 'Qwen/Qwen2.5-VL-3B-Instruct',
       });
       expect(typeof result.activeBackend).toBe('string');
+    });
+
+    it('should use the real rolling average when telemetry is available', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          imageDescription: {
+            enabled: true,
+            modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+            acceleration: MachineLearningHardwareAcceleration.Auto,
+          },
+        },
+      });
+      mocks.asset.getDescriptionStats.mockResolvedValue({
+        totalAssets: 50,
+        withDescription: 10,
+        withoutDescription: 40,
+      });
+      // 2500 ms / job → 2.5 s
+      mocks.job.getRollingAvgMs.mockReturnValue(2500);
+
+      const result = await sut.estimateDescriptionRequeue();
+
+      expect(result.rollingAvgSeconds).toBe(2.5);
+      expect(result.estimatedTotalSeconds).toBe(50 * 2.5);
     });
   });
 
@@ -845,6 +999,36 @@ describe(SystemConfigService.name, () => {
           data: { force: true },
         }),
       );
+    });
+
+    it('should clear pendingRequeueAt when the requeue successfully enqueues', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          imageDescription: { enabled: true, pendingRequeueAt: '2024-01-01T00:00:00.000Z' },
+        },
+      });
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        waiting: 0,
+        paused: 0,
+      });
+
+      await sut.triggerDescriptionRequeue();
+
+      // The system-config write that clears pendingRequeueAt should be the
+      // most-recent persist call.
+      const persistCalls = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([key]) => key === 'system-config',
+      );
+      expect(persistCalls.length).toBeGreaterThan(0);
+      const latest = persistCalls.at(-1)![1] as {
+        machineLearning?: { imageDescription?: { pendingRequeueAt?: string | null } };
+      };
+      // Confirm the cleared value made it into the persisted partial diff.
+      expect(latest.machineLearning?.imageDescription?.pendingRequeueAt ?? null).toBeNull();
     });
 
     it('should return queued=false and not re-enqueue when the queue is already active', async () => {
@@ -881,6 +1065,38 @@ describe(SystemConfigService.name, () => {
 
       await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deferDescriptionRequeue', () => {
+    it('should set pendingRequeueAt to an ISO timestamp', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: true } },
+      });
+
+      const before = Date.now();
+      await sut.deferDescriptionRequeue();
+      const after = Date.now();
+
+      const persistCalls = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([key]) => key === 'system-config',
+      );
+      const latest = persistCalls.at(-1)![1] as {
+        machineLearning?: { imageDescription?: { pendingRequeueAt?: string | null } };
+      };
+      const written = latest.machineLearning?.imageDescription?.pendingRequeueAt;
+      expect(written).toBeTypeOf('string');
+      const parsed = Date.parse(written!);
+      expect(parsed).toBeGreaterThanOrEqual(before);
+      expect(parsed).toBeLessThanOrEqual(after);
+    });
+
+    it('should throw BadRequestException when image description is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: false } },
+      });
+
+      await expect(sut.deferDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

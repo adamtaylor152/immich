@@ -21,10 +21,33 @@ type JobMapItem = {
 
 const DATABASE_BACKUP_LOCK_DURATION = 30 * 60_000;
 
+/**
+ * Size of the per-job-name ring buffer used to compute a rolling average of
+ * job completion duration. Sized for steady-state image-description workloads
+ * (~10s/job, 100 samples ≈ last ~16 minutes of activity) — large enough to
+ * smooth out outliers, small enough that fresh hardware/model changes are
+ * reflected in the estimate within a few minutes of activity.
+ */
+const ROLLING_AVG_BUFFER_SIZE = 100;
+
 @Injectable()
 export class JobRepository {
   private workers: Partial<Record<QueueName, Worker>> = {};
   private handlers: Partial<Record<JobName, JobMapItem>> = {};
+
+  /**
+   * In-memory ring buffer of per-job-name completion durations (ms).
+   *
+   * - Populated by the BullMQ Worker `completed` event (finishedOn - processedOn).
+   * - Bounded to ROLLING_AVG_BUFFER_SIZE entries; oldest entries are dropped first.
+   * - Resets on process restart — acceptable for v1. A persistent store would
+   *   require schema churn for marginal value (admin only consults this when
+   *   estimating the cost of a one-shot re-queue).
+   * - Not shared across workers; each Node process keeps its own buffer. The
+   *   single-process default deployment means the API process happens to see
+   *   every completion event it owns, which is good enough for an estimate.
+   */
+  private rollingAvgBuffers: Partial<Record<JobName, number[]>> = {};
 
   constructor(
     private moduleRef: ModuleRef,
@@ -130,6 +153,53 @@ export class JobRepository {
     worker?.on('stalled', (jobId, previous) => {
       this.logger.warn(`Job ${jobId} stalled in queue ${queueName} from ${previous}`);
     });
+
+    worker?.on('completed', (job) => {
+      // BullMQ sets processedOn when the worker picks the job up and
+      // finishedOn when the handler resolves. Both are present on `completed`
+      // events; guard defensively to avoid crashing on any future BullMQ
+      // changes.
+      const startedAt = job.processedOn;
+      const finishedAt = job.finishedOn;
+      if (startedAt == null || finishedAt == null || finishedAt < startedAt) {
+        return;
+      }
+      const duration = finishedAt - startedAt;
+      this.recordRollingAvgSample(job.name as JobName, duration);
+    });
+  }
+
+  private recordRollingAvgSample(name: JobName, durationMs: number) {
+    let buffer = this.rollingAvgBuffers[name];
+    if (!buffer) {
+      buffer = [];
+      this.rollingAvgBuffers[name] = buffer;
+    }
+    buffer.push(durationMs);
+    if (buffer.length > ROLLING_AVG_BUFFER_SIZE) {
+      // Drop the oldest sample. shift() is O(n) but n is bounded at 100, so
+      // even a hot description queue won't notice. If this gets hot we can
+      // swap in a true ring buffer with a write index.
+      buffer.shift();
+    }
+  }
+
+  /**
+   * Returns the rolling-average completion duration (ms) for the given job
+   * name, or `null` if no samples have been recorded since process start.
+   * Used by the admin re-queue cost estimator to show a realistic wall-clock
+   * estimate that reflects the user's actual hardware.
+   */
+  getRollingAvgMs(name: JobName): number | null {
+    const buffer = this.rollingAvgBuffers[name];
+    if (!buffer || buffer.length === 0) {
+      return null;
+    }
+    let sum = 0;
+    for (const sample of buffer) {
+      sum += sample;
+    }
+    return sum / buffer.length;
   }
 
   async run({ name, data }: JobItem) {
