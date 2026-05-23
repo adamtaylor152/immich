@@ -140,9 +140,7 @@ export class SystemConfigController {
   })
   @ApiResponse({ status: 400, description: 'Smart albums are not enabled, or invalid kind.' })
   @ApiBody({ required: false, type: SmartAlbumReevaluateRequestDto })
-  triggerSmartAlbumReevaluate(
-    @Body() dto?: SmartAlbumReevaluateRequestDto,
-  ): Promise<SmartAlbumReevaluateResponseDto> {
+  triggerSmartAlbumReevaluate(@Body() dto?: SmartAlbumReevaluateRequestDto): Promise<SmartAlbumReevaluateResponseDto> {
     return this.service.triggerSmartAlbumReevaluate(dto ?? ({} as SmartAlbumReevaluateRequestDto));
   }
 }
