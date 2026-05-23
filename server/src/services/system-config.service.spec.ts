@@ -652,4 +652,96 @@ describe(SystemConfigService.name, () => {
       await expect(sut.getCustomCss()).resolves.toEqual(defaults.theme.customCss);
     });
   });
+
+  describe('estimateDescriptionRequeue', () => {
+    it('should return asset counts and a fixed rolling average when no telemetry is available', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          imageDescription: {
+            enabled: true,
+            modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+            acceleration: MachineLearningHardwareAcceleration.Auto,
+          },
+        },
+      });
+      mocks.asset.getDescriptionStats.mockResolvedValue({
+        totalAssets: 100,
+        withDescription: 40,
+        withoutDescription: 60,
+      });
+
+      const result = await sut.estimateDescriptionRequeue();
+
+      expect(result).toMatchObject({
+        totalAssets: 100,
+        withDescription: 40,
+        withoutDescription: 60,
+        rollingAvgSeconds: 1.5,
+        estimatedTotalSeconds: 100 * 1.5,
+        activeModel: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      });
+      expect(typeof result.activeBackend).toBe('string');
+    });
+  });
+
+  describe('triggerDescriptionRequeue', () => {
+    it('should enqueue the queue-all job and return queued=true when the queue is idle', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: true } },
+      });
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        waiting: 0,
+        paused: 0,
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).resolves.toEqual({ queued: true });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'ImageDescriptionQueueAll',
+          data: { force: true },
+        }),
+      );
+    });
+
+    it('should return queued=false and not re-enqueue when the queue is already active', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: true } },
+      });
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 1,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+        waiting: 50,
+        paused: 0,
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).resolves.toEqual({ queued: false });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when image description is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { imageDescription: { enabled: false } },
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when global machine learning is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { enabled: false, imageDescription: { enabled: true } },
+      });
+
+      await expect(sut.triggerDescriptionRequeue()).rejects.toBeInstanceOf(BadRequestException);
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+  });
 });

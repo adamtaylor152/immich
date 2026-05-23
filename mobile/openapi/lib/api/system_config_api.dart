@@ -112,6 +112,54 @@ class SystemConfigApi {
     return null;
   }
 
+  /// Estimate image description re-queue cost
+  ///
+  /// Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getImageDescriptionRequeueEstimateWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/system-config/image-description/requeue-estimate';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Estimate image description re-queue cost
+  ///
+  /// Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.
+  Future<ImageDescriptionRequeueEstimateDto?> getImageDescriptionRequeueEstimate() async {
+    final response = await getImageDescriptionRequeueEstimateWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'ImageDescriptionRequeueEstimateDto',) as ImageDescriptionRequeueEstimateDto;
+    
+    }
+    return null;
+  }
+
   /// Get machine learning hardware
   ///
   /// Retrieve available hardware acceleration providers from the machine learning service.
@@ -203,6 +251,54 @@ class SystemConfigApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SystemConfigTemplateStorageOptionDto',) as SystemConfigTemplateStorageOptionDto;
+    
+    }
+    return null;
+  }
+
+  /// Trigger image description re-queue
+  ///
+  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> triggerImageDescriptionRequeueWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/system-config/image-description/requeue';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Trigger image description re-queue
+  ///
+  /// Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.
+  Future<ImageDescriptionRequeueResponseDto?> triggerImageDescriptionRequeue() async {
+    final response = await triggerImageDescriptionRequeueWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'ImageDescriptionRequeueResponseDto',) as ImageDescriptionRequeueResponseDto;
     
     }
     return null;

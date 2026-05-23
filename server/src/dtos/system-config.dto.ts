@@ -452,6 +452,43 @@ export class SystemConfigSmtpDto extends createZodDto(SystemConfigSmtpSchema) {}
 export class SystemConfigTemplateStorageOptionDto extends createZodDto(SystemConfigTemplateStorageOptionSchema) {}
 export class SystemConfigDto extends createZodDto(SystemConfigSchema) {}
 
+const ImageDescriptionRequeueEstimateSchema = z
+  .object({
+    totalAssets: z.int().min(0).describe('Total eligible image assets'),
+    withDescription: z
+      .int()
+      .min(0)
+      .describe('Number of eligible assets that currently have a description (will be re-run on force-requeue).'),
+    withoutDescription: z.int().min(0).describe('Number of eligible assets that currently have no description.'),
+    rollingAvgSeconds: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .describe(
+        'Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.',
+      ),
+    estimatedTotalSeconds: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .describe(
+        'Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).',
+      ),
+    activeBackend: z.string().describe('Configured hardware acceleration backend (e.g. "auto", "cuda")'),
+    activeModel: z.string().describe('Configured image description model name'),
+  })
+  .meta({ id: 'ImageDescriptionRequeueEstimateDto' });
+
+export class ImageDescriptionRequeueEstimateDto extends createZodDto(ImageDescriptionRequeueEstimateSchema) {}
+
+const ImageDescriptionRequeueResponseSchema = z
+  .object({
+    queued: z.boolean().describe('Whether the queue-all job was newly enqueued (false = already in-flight)'),
+  })
+  .meta({ id: 'ImageDescriptionRequeueResponseDto' });
+
+export class ImageDescriptionRequeueResponseDto extends createZodDto(ImageDescriptionRequeueResponseSchema) {}
+
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   return config;
 }

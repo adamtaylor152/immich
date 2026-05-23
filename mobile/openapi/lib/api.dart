@@ -188,6 +188,8 @@ part 'model/image_description_config.dart';
 part 'model/image_description_enrichment_response_dto.dart';
 part 'model/image_description_enrichment_response_dto_people_inner.dart';
 part 'model/image_description_prompt_config.dart';
+part 'model/image_description_requeue_estimate_dto.dart';
+part 'model/image_description_requeue_response_dto.dart';
 part 'model/image_enrichment_filter.dart';
 part 'model/image_enrichment_review.dart';
 part 'model/image_format.dart';
