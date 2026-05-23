@@ -1045,7 +1045,10 @@ export class ImageEnrichmentService extends BaseService {
     const knownPersons: KnownPerson[] = [];
 
     for (const face of faces) {
-      if (!face.personId || !face.person?.name || face.person.isHidden) {
+      // Trim before checking so whitespace-only names ('   ') are rejected the same
+      // as empty strings — both would degrade the identity hint to "Known people: -".
+      const name = face.person?.name?.trim();
+      if (!face.personId || !name || face.person?.isHidden) {
         continue;
       }
 
@@ -1057,7 +1060,7 @@ export class ImageEnrichmentService extends BaseService {
       }
 
       knownPersons.push({
-        name: face.person.name,
+        name,
         // Always 1 — see method docstring (Immich has no per-face confidence column).
         faceConfidence: 1,
         boxCenter: [

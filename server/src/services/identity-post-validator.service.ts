@@ -99,6 +99,8 @@ const isAfterSentenceEnd = (text: string, index: number): boolean => {
   return true; // reached start
 };
 
+const escapeRegExp = (value: string) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+
 export class IdentityPostValidator {
   /**
    * Post-process an ML-generated description against the set of known persons
@@ -155,8 +157,14 @@ export class IdentityPostValidator {
       flags.hallucinatedNames = [...new Set(hallucinatedNames)];
     }
 
-    // ---- Step 2: check whether any known name now appears in the description ----
-    const descriptionContainsKnownName = knownPersons.some((p) => stripped.includes(p.name));
+    // ---- Step 2: check whether any known name token now appears in the description ----
+    // Word-boundary regex (not substring) so a known person "Anne" doesn't false-positive
+    // against "Annette". Iterates tokens from `knownNames` (which was built by splitting
+    // each full name on whitespace), so a description mentioning just "Mary" or "Jane"
+    // still counts as referencing the person "Mary Jane".
+    const descriptionContainsKnownName = [...knownNames].some((token) =>
+      new RegExp(String.raw`\b${escapeRegExp(token)}\b`, 'i').test(stripped),
+    );
 
     // ---- Step 3: substitute / flag generic references ----
     if (!descriptionContainsKnownName && knownPersons.length > 0) {

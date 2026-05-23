@@ -878,6 +878,37 @@ describe(ImageEnrichmentService.name, () => {
       );
     });
 
+    it('excludes faces linked to persons whose name is only whitespace', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: '   ', isHidden: false } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
     it('excludes faces linked to hidden persons', async () => {
       mocks.person.getFaces.mockResolvedValue([
         {

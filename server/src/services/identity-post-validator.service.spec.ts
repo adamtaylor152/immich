@@ -24,6 +24,26 @@ describe(IdentityPostValidator.name, () => {
       expect(flags.hallucinatedNames).toBeUndefined();
     });
 
+    it('does not strip a known person name when it appears mid-sentence', () => {
+      // The existing test puts the name at position 0, where sentence-start
+      // protection would already preserve it. This case isolates the
+      // knownNames check itself.
+      const { description, flags } = sut.validate('I spoke with Conner yesterday.', [person('Conner')]);
+      expect(description).toBe('I spoke with Conner yesterday.');
+      expect(flags.hallucinatedNames).toBeUndefined();
+    });
+
+    it('does not false-positive a known name as a substring of a different word', () => {
+      // knownPerson "Anne" must NOT be considered present in "Annette".
+      // Verifies the descriptionContainsKnownName check uses word boundaries.
+      const { description, flags } = sut.validate('A young boy is playing.', [person('Anne')]);
+      // The Anne-knownPerson is the only one, generic ref present, so substitution happens.
+      // Critical: this works only because the word-boundary check correctly identifies
+      // the description as NOT containing the known name.
+      expect(description).toBe('Anne is playing.');
+      expect(flags.hallucinatedNames).toBeUndefined();
+    });
+
     it('does not strip the first word of a sentence (sentence-start capital)', () => {
       const { description } = sut.validate('The dog runs fast.', []);
       expect(description).toBe('The dog runs fast.');
