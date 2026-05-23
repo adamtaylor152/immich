@@ -123,12 +123,7 @@
       <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering}>
         {$t('cancel')}
       </Button>
-      <Button
-        shape="round"
-        color="primary"
-        onclick={handleRequeue}
-        disabled={isTriggering || !!loadError || !estimate}
-      >
+      <Button shape="round" color="primary" onclick={handleRequeue} disabled={isTriggering || !!loadError || !estimate}>
         {#if isTriggering}
           <LoadingSpinner size="16" />
         {/if}
