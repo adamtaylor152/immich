@@ -221,6 +221,14 @@ Class | Method | HTTP request | Description
 *QueuesApi* | [**getQueueJobs**](doc//QueuesApi.md#getqueuejobs) | **GET** /queues/{name}/jobs | Retrieve queue jobs
 *QueuesApi* | [**getQueues**](doc//QueuesApi.md#getqueues) | **GET** /queues | List all queues
 *QueuesApi* | [**updateQueue**](doc//QueuesApi.md#updatequeue) | **PUT** /queues/{name} | Update a queue
+*RunPodAdminApi* | [**backfill**](doc//RunPodAdminApi.md#backfill) | **POST** /runpod/backfill | Enqueue all ML backfill jobs
+*RunPodAdminApi* | [**getCurrent**](doc//RunPodAdminApi.md#getcurrent) | **GET** /runpod/pods/current | Get current RunPod state
+*RunPodAdminApi* | [**listGpus**](doc//RunPodAdminApi.md#listgpus) | **GET** /runpod/gpus | List RunPod GPU types
+*RunPodAdminApi* | [**provision**](doc//RunPodAdminApi.md#provision) | **POST** /runpod/pods | Provision a RunPod pod
+*RunPodAdminApi* | [**start**](doc//RunPodAdminApi.md#start) | **POST** /runpod/pods/current/start | Resume the current RunPod pod
+*RunPodAdminApi* | [**stop**](doc//RunPodAdminApi.md#stop) | **POST** /runpod/pods/current/stop | Stop the current RunPod pod
+*RunPodAdminApi* | [**terminate**](doc//RunPodAdminApi.md#terminate) | **DELETE** /runpod/pods/current | Terminate the current RunPod pod
+*RunPodAdminApi* | [**testConnection**](doc//RunPodAdminApi.md#testconnection) | **POST** /runpod/connect | Test RunPod connection
 *SearchApi* | [**askSearch**](doc//SearchApi.md#asksearch) | **POST** /search/ask | Ask Search
 *SearchApi* | [**getAssetsByCity**](doc//SearchApi.md#getassetsbycity) | **GET** /search/cities | Retrieve assets by city
 *SearchApi* | [**getExploreData**](doc//SearchApi.md#getexploredata) | **GET** /search/explore | Retrieve explore data
@@ -568,6 +576,12 @@ Class | Method | HTTP request | Description
  - [ReactionType](doc//ReactionType.md)
  - [ReverseGeocodingStateResponseDto](doc//ReverseGeocodingStateResponseDto.md)
  - [RotateParameters](doc//RotateParameters.md)
+ - [RunPodBackfillResultDto](doc//RunPodBackfillResultDto.md)
+ - [RunPodConnectionResultDto](doc//RunPodConnectionResultDto.md)
+ - [RunPodConnectionTestDto](doc//RunPodConnectionTestDto.md)
+ - [RunPodGpuTypeDto](doc//RunPodGpuTypeDto.md)
+ - [RunPodProvisionDto](doc//RunPodProvisionDto.md)
+ - [RunPodStateDto](doc//RunPodStateDto.md)
  - [SearchAlbumResponseDto](doc//SearchAlbumResponseDto.md)
  - [SearchAssetResponseDto](doc//SearchAssetResponseDto.md)
  - [SearchExploreItem](doc//SearchExploreItem.md)
@@ -678,6 +692,7 @@ Class | Method | HTTP request | Description
  - [SystemConfigPasswordLoginDto](doc//SystemConfigPasswordLoginDto.md)
  - [SystemConfigPhysicalDeduplicationDto](doc//SystemConfigPhysicalDeduplicationDto.md)
  - [SystemConfigReverseGeocodingDto](doc//SystemConfigReverseGeocodingDto.md)
+ - [SystemConfigRunPodDto](doc//SystemConfigRunPodDto.md)
  - [SystemConfigServerDto](doc//SystemConfigServerDto.md)
  - [SystemConfigSmartAlbumsDto](doc//SystemConfigSmartAlbumsDto.md)
  - [SystemConfigSmartAlbumsDtoBuiltIn](doc//SystemConfigSmartAlbumsDtoBuiltIn.md)

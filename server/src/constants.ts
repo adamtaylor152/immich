@@ -168,6 +168,8 @@ export const endpointTags: Record<ApiTag, string> = {
     'A plugin is an installed module that makes filters and actions available for the workflow feature.',
   [ApiTag.Queues]:
     'Queues and background jobs are used for processing tasks asynchronously. Queues can be paused and resumed as needed.',
+  [ApiTag.RunPod]:
+    'Provision the Immich machine-learning container on RunPod cloud GPUs. The integration manages a single pod, transparently routes ML jobs to it, and stops it when idle to control cost.',
   [ApiTag.Search]:
     'Endpoints related to searching assets via text, smart search, optical character recognition (OCR), and other filters like person, album, and other metadata. Search endpoints usually support pagination and sorting.',
   [ApiTag.Server]:

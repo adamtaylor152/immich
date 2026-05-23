@@ -170,11 +170,15 @@ const isFlorenceImageDescriptionModel = (modelName: string) => {
   return cleanModelName.startsWith('florence-2-');
 };
 
+type ManagedUrlEntry = { url: string; authToken?: string };
+
 @Injectable()
 export class MachineLearningRepository {
   private healthyMap: Record<string, boolean> = {};
   private interval?: ReturnType<typeof setInterval>;
   private _config?: MachineLearningConfig;
+  // Held on the instance — NOT on _config — so ConfigUpdate's rebuild of _config doesn't wipe it.
+  private managed: ManagedUrlEntry | null = null;
 
   private get config(): MachineLearningConfig {
     if (!this._config) {
@@ -188,13 +192,49 @@ export class MachineLearningRepository {
     this.logger.setContext(MachineLearningRepository.name);
   }
 
+  setManagedUrl(url: string, authToken?: string) {
+    this.managed = { url, authToken };
+    this.logger.log(`Managed ML URL set (auth=${authToken ? 'yes' : 'no'}): ${url}`);
+  }
+
+  clearManagedUrl() {
+    if (this.managed) {
+      delete this.healthyMap[this.managed.url];
+      this.logger.log(`Managed ML URL cleared: ${this.managed.url}`);
+    }
+    this.managed = null;
+  }
+
+  getManagedUrl(): string | null {
+    return this.managed?.url ?? null;
+  }
+
+  /** Ordered list of (url, optional auth header) to try for ML requests. */
+  private getOrderedUrls(): ManagedUrlEntry[] {
+    const fromConfig: ManagedUrlEntry[] = this.config.urls.map((url) => ({ url }));
+    const managed = this.managed;
+    if (!managed) {
+      return fromConfig;
+    }
+    // Don't double up if a user typed the managed URL into the editable list.
+    return [managed, ...fromConfig.filter((entry) => entry.url !== managed.url)];
+  }
+
+  private authHeaders(entry: ManagedUrlEntry): Record<string, string> {
+    return entry.authToken ? { Authorization: `Bearer ${entry.authToken}` } : {};
+  }
+
   setup(config: MachineLearningConfig) {
     this._config = config;
     this.teardown();
 
-    // delete old servers
+    // delete entries for URLs that are neither in the config nor the managed slot.
+    const known = new Set(config.urls);
+    if (this.managed) {
+      known.add(this.managed.url);
+    }
     for (const url of Object.keys(this.healthyMap)) {
-      if (!config.urls.includes(url)) {
+      if (!known.has(url)) {
         delete this.healthyMap[url];
       }
     }
@@ -217,15 +257,18 @@ export class MachineLearningRepository {
   }
 
   private tick() {
-    for (const url of this.config.urls) {
-      void this.check(url);
+    for (const entry of this.getOrderedUrls()) {
+      void this.check(entry);
     }
   }
 
-  private async check(url: string) {
+  private async check(entry: ManagedUrlEntry) {
     let healthy = false;
     try {
-      const response = await fetch(new URL('ping', url), {
+      // /ping is intentionally unauthenticated on the ML container so RunPod's proxy probes work;
+      // we still send the auth header for managed URLs in case a sidecar enforces it.
+      const response = await fetch(new URL('ping', entry.url), {
+        headers: this.authHeaders(entry),
         signal: AbortSignal.timeout(this.config.availabilityChecks.timeout),
       });
       if (response.ok) {
@@ -235,7 +278,7 @@ export class MachineLearningRepository {
       // nothing to do here
     }
 
-    this.setHealthy(url, healthy);
+    this.setHealthy(entry.url, healthy);
   }
 
   private setHealthy(url: string, healthy: boolean) {
@@ -256,29 +299,34 @@ export class MachineLearningRepository {
 
   private async predict<T>(payload: ModelPayload, config: MachineLearningRequest): Promise<T> {
     const formData = await this.getFormData(payload, config);
+    const entries = this.getOrderedUrls();
 
-    for (const url of [
+    for (const entry of [
       // try healthy servers first
-      ...this.config.urls.filter((url) => this.isHealthy(url)),
-      ...this.config.urls.filter((url) => !this.isHealthy(url)),
+      ...entries.filter((entry) => this.isHealthy(entry.url)),
+      ...entries.filter((entry) => !this.isHealthy(entry.url)),
     ]) {
       try {
-        const response = await fetch(new URL('predict', url), { method: 'POST', body: formData });
+        const response = await fetch(new URL('predict', entry.url), {
+          method: 'POST',
+          headers: this.authHeaders(entry),
+          body: formData,
+        });
         if (response.ok) {
-          this.setHealthy(url, true);
+          this.setHealthy(entry.url, true);
           return response.json();
         }
 
         this.logger.warn(
-          `Machine learning request to "${url}" failed with status ${response.status}: ${response.statusText}`,
+          `Machine learning request to "${entry.url}" failed with status ${response.status}: ${response.statusText}`,
         );
-      } catch (error: Error | unknown) {
+      } catch (error: unknown) {
         this.logger.warn(
-          `Machine learning request to "${url}" failed: ${error instanceof Error ? error.message : error}`,
+          `Machine learning request to "${entry.url}" failed: ${error instanceof Error ? error.message : error}`,
         );
       }
 
-      this.setHealthy(url, false);
+      this.setHealthy(entry.url, false);
     }
 
     // Redact assembled prompt text to avoid leaking identity hints and admin-configured
@@ -389,29 +437,31 @@ export class MachineLearningRepository {
   }
 
   async getHardware(): Promise<MachineLearningHardwareResponse> {
-    for (const url of [
-      ...this.config.urls.filter((url) => this.isHealthy(url)),
-      ...this.config.urls.filter((url) => !this.isHealthy(url)),
+    const entries = this.getOrderedUrls();
+    for (const entry of [
+      ...entries.filter((entry) => this.isHealthy(entry.url)),
+      ...entries.filter((entry) => !this.isHealthy(entry.url)),
     ]) {
       try {
-        const response = await fetch(new URL('/hardware', url), {
+        const response = await fetch(new URL('/hardware', entry.url), {
+          headers: this.authHeaders(entry),
           signal: AbortSignal.timeout(this.config.availabilityChecks.timeout),
         });
         if (response.ok) {
-          this.setHealthy(url, true);
+          this.setHealthy(entry.url, true);
           return response.json();
         }
 
         this.logger.warn(
-          `Machine learning hardware request to "${url}" failed with status ${response.status}: ${response.statusText}`,
+          `Machine learning hardware request to "${entry.url}" failed with status ${response.status}: ${response.statusText}`,
         );
-      } catch (error: Error | unknown) {
+      } catch (error: unknown) {
         this.logger.warn(
-          `Machine learning hardware request to "${url}" failed: ${error instanceof Error ? error.message : error}`,
+          `Machine learning hardware request to "${entry.url}" failed: ${error instanceof Error ? error.message : error}`,
         );
       }
 
-      this.setHealthy(url, false);
+      this.setHealthy(entry.url, false);
     }
 
     return defaultMachineLearningHardware;

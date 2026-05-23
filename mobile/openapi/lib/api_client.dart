@@ -646,6 +646,18 @@ class ApiClient {
           return ReverseGeocodingStateResponseDto.fromJson(value);
         case 'RotateParameters':
           return RotateParameters.fromJson(value);
+        case 'RunPodBackfillResultDto':
+          return RunPodBackfillResultDto.fromJson(value);
+        case 'RunPodConnectionResultDto':
+          return RunPodConnectionResultDto.fromJson(value);
+        case 'RunPodConnectionTestDto':
+          return RunPodConnectionTestDto.fromJson(value);
+        case 'RunPodGpuTypeDto':
+          return RunPodGpuTypeDto.fromJson(value);
+        case 'RunPodProvisionDto':
+          return RunPodProvisionDto.fromJson(value);
+        case 'RunPodStateDto':
+          return RunPodStateDto.fromJson(value);
         case 'SearchAlbumResponseDto':
           return SearchAlbumResponseDto.fromJson(value);
         case 'SearchAssetResponseDto':
@@ -866,6 +878,8 @@ class ApiClient {
           return SystemConfigPhysicalDeduplicationDto.fromJson(value);
         case 'SystemConfigReverseGeocodingDto':
           return SystemConfigReverseGeocodingDto.fromJson(value);
+        case 'SystemConfigRunPodDto':
+          return SystemConfigRunPodDto.fromJson(value);
         case 'SystemConfigServerDto':
           return SystemConfigServerDto.fromJson(value);
         case 'SystemConfigSmartAlbumsDto':

@@ -105,13 +105,13 @@
             <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
               {$t('admin.machine_learning_image_description_requeue_modal_active_backend')}
             </dt>
-            <dd class="font-medium font-mono text-xs">{estimate.activeBackend}</dd>
+            <dd class="font-mono text-xs font-medium">{estimate.activeBackend}</dd>
           </div>
           <div class="flex justify-between">
             <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
               {$t('admin.machine_learning_image_description_requeue_modal_active_model')}
             </dt>
-            <dd class="font-medium font-mono text-xs">{estimate.activeModel}</dd>
+            <dd class="font-mono text-xs font-medium">{estimate.activeModel}</dd>
           </div>
         </dl>
       {/if}
@@ -123,14 +123,9 @@
       <Button shape="round" color="secondary" onclick={() => onClose()} disabled={isTriggering}>
         {$t('cancel')}
       </Button>
-      <Button
-        shape="round"
-        color="primary"
-        onclick={handleRequeue}
-        disabled={isTriggering || !!loadError || !estimate}
-      >
+      <Button shape="round" color="primary" onclick={handleRequeue} disabled={isTriggering || !!loadError || !estimate}>
         {#if isTriggering}
-          <LoadingSpinner size="16" />
+          <LoadingSpinner size="tiny" />
         {/if}
         {$t('admin.machine_learning_image_description_requeue_modal_confirm')}
       </Button>

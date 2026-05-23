@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        suffix: ['', '-cuda', '-openvino', '-armnn', '-rknn']
+        suffix: ['', '-cuda', '-cuda-runpod', '-openvino', '-armnn', '-rknn']
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -118,6 +118,10 @@ jobs:
           - device: cuda
             suffixes: '-cuda'
             platforms: linux/amd64
+          - device: cuda
+            suffixes: '-cuda-runpod'
+            platforms: linux/amd64
+            target: prod-runpod
           - device: openvino
             suffixes: '-openvino'
             platforms: linux/amd64
@@ -141,6 +145,7 @@ jobs:
       dockerfile: machine-learning/Dockerfile
       platforms: ${{ matrix.platforms }}
       suffixes: ${{ matrix.suffixes }}
+      target: ${{ matrix.target }}
       dockerhub-push: ${{ github.event_name == 'release' }}
       build-args: |
         DEVICE=${{ matrix.device }}

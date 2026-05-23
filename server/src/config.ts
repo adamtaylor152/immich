@@ -118,6 +118,19 @@ export type SystemConfig = {
       device: string;
       hideFromLibrary: boolean;
     };
+    runpod: {
+      enabled: boolean;
+      apiKey: string;
+      imageName: string;
+      defaultGpuTypeId: string;
+      containerDiskGb: number;
+      volumeGb: number;
+      autoStopEnabled: boolean;
+      autoStopGraceMinutes: number;
+      autoBackfillOnLaunch: boolean;
+      maxRuntimeHours: number;
+      dataPrivacyAcknowledged: boolean;
+    };
   };
   map: {
     enabled: boolean;
@@ -418,6 +431,19 @@ export const defaults = Object.freeze<SystemConfig>({
       threshold: 0.85,
       device: 'AUTO',
       hideFromLibrary: false,
+    },
+    runpod: {
+      enabled: false,
+      apiKey: '',
+      imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
+      defaultGpuTypeId: 'NVIDIA RTX A5000',
+      containerDiskGb: 50,
+      volumeGb: 20,
+      autoStopEnabled: true,
+      autoStopGraceMinutes: 15,
+      autoBackfillOnLaunch: false,
+      maxRuntimeHours: 24,
+      dataPrivacyAcknowledged: false,
     },
   },
   map: {

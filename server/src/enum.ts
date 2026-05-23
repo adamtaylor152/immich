@@ -371,6 +371,7 @@ export enum SystemMetadataKey {
   VersionCheckState = 'version-check-state',
   License = 'license',
   PhysicalDeduplicationMigration = 'physical-deduplication-migration',
+  RunPodState = 'runpod-state',
 }
 
 export enum UserMetadataKey {
@@ -1030,6 +1031,7 @@ export enum DatabaseLock {
   MaintenanceOperation = 621,
   MemoryCreation = 777,
   VersionCheck = 800,
+  RunPodTransition = 900,
 }
 
 export enum MaintenanceAction {
@@ -1251,6 +1253,7 @@ export enum ApiTag {
   People = 'People',
   Plugins = 'Plugins',
   Queues = 'Queues',
+  RunPod = 'RunPod (admin)',
   Search = 'Search',
   Server = 'Server',
   Sessions = 'Sessions',

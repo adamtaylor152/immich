@@ -50,6 +50,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
+import { RunPodRepository } from 'src/repositories/runpod.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { ServerInfoRepository } from 'src/repositories/server-info.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
@@ -248,6 +249,7 @@ export type ServiceOverrides = {
   physicalFile: PhysicalFileRepository;
   plugin: PluginRepository;
   process: ProcessRepository;
+  runPod: RunPodRepository;
   search: SearchRepository;
   serverInfo: ServerInfoRepository;
   session: SessionRepository;
@@ -332,6 +334,7 @@ export const getMocks = () => {
     physicalFile: automock(PhysicalFileRepository, { strict: false }),
     plugin: automock(PluginRepository, { strict: true, args: [databaseMock, loggerMock] }),
     process: automock(ProcessRepository),
+    runPod: automock(RunPodRepository, { args: [loggerMock], strict: false }),
     search: automock(SearchRepository, { strict: false }),
     // eslint-disable-next-line no-sparse-arrays
     serverInfo: automock(ServerInfoRepository, { args: [, loggerMock], strict: false }),
@@ -401,6 +404,7 @@ export const newTestService = <T extends BaseService>(
     overrides.physicalFile || (mocks.physicalFile as As<PhysicalFileRepository>),
     overrides.plugin || (mocks.plugin as As<PluginRepository>),
     overrides.process || (mocks.process as As<ProcessRepository>),
+    overrides.runPod || (mocks.runPod as As<RunPodRepository>),
     overrides.search || (mocks.search as As<SearchRepository>),
     overrides.serverInfo || (mocks.serverInfo as As<ServerInfoRepository>),
     overrides.session || (mocks.session as As<SessionRepository>),

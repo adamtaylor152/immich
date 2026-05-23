@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RunPodPanel from '$lib/components/admin-page/settings/machine-learning/RunPodPanel.svelte';
   import SettingAccordion from '$lib/components/shared-components/settings/SettingAccordion.svelte';
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSelect from './SettingSelect.svelte';
@@ -21,7 +22,7 @@
   } from '@immich/sdk';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
   const disabled = $derived(featureFlagsManager.value.configFile);
@@ -32,6 +33,12 @@
   const savedImageDescription = $derived(config.machineLearning.imageDescription!);
   const nsfwDetection = $derived(configToEdit.machineLearning.nsfwDetection!);
   const savedNsfwDetection = $derived(config.machineLearning.nsfwDetection!);
+  // Zod's `.default(...)` on runpod makes it optional in the generated DTO
+  // type even though the server always materialises it. Mirror the
+  // imageDescription/nsfwDetection pattern above so the template doesn't
+  // need to repeat the non-null assertion everywhere.
+  const runpod = $derived(configToEdit.machineLearning.runpod!);
+  const savedRunpod = $derived(config.machineLearning.runpod!);
 
   $effect(() => {
     const enhancedVideo = configToEdit.machineLearning.duplicateDetection.enhancedVideo;
@@ -103,8 +110,35 @@
     },
   ]);
 
+  let managedRunPodUrl = $state<string>('');
+  let managedUrlTimer: ReturnType<typeof setInterval> | undefined;
+
+  const refreshManagedUrl = async () => {
+    try {
+      const response = await fetch('/api/runpod/pods/current', { credentials: 'include' });
+      if (!response.ok) {
+        // Pod state endpoint failed — assume nothing is managed rather than
+        // leaving a stale URL in the chip.
+        managedRunPodUrl = '';
+        return;
+      }
+      const state = (await response.json()) as { status?: string; mlUrl?: string };
+      managedRunPodUrl = state.status === 'running' && state.mlUrl ? state.mlUrl : '';
+    } catch {
+      managedRunPodUrl = '';
+    }
+  };
+
   onMount(() => {
     void detectMachineLearningHardware();
+    void refreshManagedUrl();
+    managedUrlTimer = setInterval(() => void refreshManagedUrl(), 10_000);
+  });
+
+  onDestroy(() => {
+    if (managedUrlTimer) {
+      clearInterval(managedUrlTimer);
+    }
   });
 
   const detectMachineLearningHardware = async () => {
@@ -150,7 +184,11 @@
   // List-type prompt fields are displayed as newline-joined text and parsed back on input.
   // Using $derived (not $state) ensures the textareas always reflect the live config — including
   // after a Reset (which replaces configToEdit wholesale via SystemConfigButtonRow).
-  const parseLines = (text: string): string[] => text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const parseLines = (text: string): string[] =>
+    text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
 
   const lookForText = $derived((imageDescription.prompt?.lookFor ?? []).join('\n'));
   const customVocabularyText = $derived((imageDescription.prompt?.customVocabulary ?? []).join('\n'));
@@ -183,6 +221,13 @@
         />
 
         <hr />
+
+        {#if managedRunPodUrl}
+          <div class="rounded-sm border border-immich-gray/30 bg-immich-bg/30 p-2 font-mono text-xs break-all">
+            <span class="font-sans text-immich-gray not-italic">Managed by RunPod (auto):</span>
+            {managedRunPodUrl}
+          </div>
+        {/if}
 
         <div>
           {#each configToEdit.machineLearning.urls as _, i (i)}
@@ -220,6 +265,103 @@
           >
         </div>
       </div>
+
+      <SettingAccordion
+        key="runpod"
+        title="Cloud GPU (RunPod)"
+        subtitle="Provision the ML container on RunPod when local hardware can't keep up. Pod auto-stops when queues go idle."
+      >
+        <div class="ms-4 mt-4 flex flex-col gap-4">
+          <SettingSwitch
+            title="Enable RunPod integration"
+            subtitle="When on, Immich can provision and route ML traffic to a RunPod pod."
+            bind:checked={runpod.enabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled}
+          />
+
+          <hr />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.PASSWORD}
+            label="API key"
+            description="Anyone with admin access to Immich (or database read access) can spend money with this key. Generate one with pod create/read/delete scope."
+            bind:value={runpod.apiKey}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.apiKey !== savedRunpod.apiKey}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.TEXT}
+            label="Container image"
+            description="The ML container image to run on RunPod. Defaults to the fork's RunPod-tuned CUDA build."
+            bind:value={runpod.imageName}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.imageName !== savedRunpod.imageName}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.TEXT}
+            label="Default GPU type"
+            description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
+            bind:value={runpod.defaultGpuTypeId}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.defaultGpuTypeId !== savedRunpod.defaultGpuTypeId}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Container disk (GB)"
+            bind:value={runpod.containerDiskGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.containerDiskGb !== savedRunpod.containerDiskGb}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Persistent volume (GB)"
+            description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
+            bind:value={runpod.volumeGb}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.volumeGb !== savedRunpod.volumeGb}
+          />
+
+          <SettingSwitch
+            title="Auto-stop when idle"
+            subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
+            bind:checked={runpod.autoStopEnabled}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Idle grace (minutes)"
+            description="How long the pod can stay idle before auto-stop fires."
+            bind:value={runpod.autoStopGraceMinutes}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled || !runpod.autoStopEnabled}
+            isEdited={runpod.autoStopGraceMinutes !== savedRunpod.autoStopGraceMinutes}
+          />
+
+          <SettingSwitch
+            title="Auto-backfill on launch"
+            subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
+            bind:checked={runpod.autoBackfillOnLaunch}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label="Max runtime (hours)"
+            description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
+            bind:value={runpod.maxRuntimeHours}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
+            isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
+          />
+
+          <hr />
+
+          <RunPodPanel />
+        </div>
+      </SettingAccordion>
 
       <SettingAccordion
         key="availability-checks"
@@ -608,7 +750,8 @@
                 min={1}
                 max={6}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={imageDescription.prompt?.sentenceCountTarget !== savedImageDescription.prompt?.sentenceCountTarget}
+                isEdited={imageDescription.prompt?.sentenceCountTarget !==
+                  savedImageDescription.prompt?.sentenceCountTarget}
               />
 
               <SettingTextarea
@@ -617,7 +760,8 @@
                 value={lookForText}
                 onChange={(text) => (imageDescription.prompt!.lookFor = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !== JSON.stringify(savedImageDescription.prompt?.lookFor)}
+                isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !==
+                  JSON.stringify(savedImageDescription.prompt?.lookFor)}
               />
 
               <SettingTextarea
@@ -626,7 +770,8 @@
                 value={customVocabularyText}
                 onChange={(text) => (imageDescription.prompt!.customVocabulary = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !== JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
+                isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !==
+                  JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
               />
 
               <SettingTextarea
@@ -635,7 +780,8 @@
                 value={forbiddenInferencesText}
                 onChange={(text) => (imageDescription.prompt!.forbiddenInferences = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !== JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
+                isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !==
+                  JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
               />
 
               <SettingAccordion
@@ -649,7 +795,8 @@
                     value={nsfwIndicatorsText}
                     onChange={(text) => (imageDescription.prompt!.nsfwIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !== JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
+                    isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !==
+                      JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
                   />
                 </div>
               </SettingAccordion>
@@ -665,7 +812,8 @@
                     value={medicalIndicatorsText}
                     onChange={(text) => (imageDescription.prompt!.medicalIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !== JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
+                    isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !==
+                      JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
                   />
                 </div>
               </SettingAccordion>
@@ -680,31 +828,44 @@
                     title={$t('admin.machine_learning_image_description_identity_injection_enabled')}
                     bind:checked={imageDescription.prompt!.identityInjection!.enabled}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.enabled !== savedImageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.enabled !==
+                      savedImageDescription.prompt?.identityInjection?.enabled}
                   />
 
                   <SettingInputField
                     inputType={SettingInputFieldType.NUMBER}
                     label={$t('admin.machine_learning_image_description_identity_injection_max_names')}
-                    description={$t('admin.machine_learning_image_description_identity_injection_max_names_description')}
+                    description={$t(
+                      'admin.machine_learning_image_description_identity_injection_max_names_description',
+                    )}
                     bind:value={imageDescription.prompt!.identityInjection!.maxNames}
                     step="1"
                     min={1}
                     max={20}
-                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.maxNames !== savedImageDescription.prompt?.identityInjection?.maxNames}
+                    disabled={disabled ||
+                      !configToEdit.machineLearning.enabled ||
+                      !imageDescription.enabled ||
+                      !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.maxNames !==
+                      savedImageDescription.prompt?.identityInjection?.maxNames}
                   />
 
                   <SettingInputField
                     inputType={SettingInputFieldType.NUMBER}
                     label={$t('admin.machine_learning_image_description_identity_injection_min_confidence')}
-                    description={$t('admin.machine_learning_image_description_identity_injection_min_confidence_description')}
+                    description={$t(
+                      'admin.machine_learning_image_description_identity_injection_min_confidence_description',
+                    )}
                     bind:value={imageDescription.prompt!.identityInjection!.minFaceConfidence}
                     step="0.05"
                     min={0}
                     max={1}
-                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.minFaceConfidence !== savedImageDescription.prompt?.identityInjection?.minFaceConfidence}
+                    disabled={disabled ||
+                      !configToEdit.machineLearning.enabled ||
+                      !imageDescription.enabled ||
+                      !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.minFaceConfidence !==
+                      savedImageDescription.prompt?.identityInjection?.minFaceConfidence}
                   />
                 </div>
               </SettingAccordion>
@@ -719,7 +880,8 @@
                     title={$t('admin.machine_learning_image_description_advanced_enabled')}
                     bind:checked={imageDescription.prompt!.advanced!.enabled}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={imageDescription.prompt?.advanced?.enabled !== savedImageDescription.prompt?.advanced?.enabled}
+                    isEdited={imageDescription.prompt?.advanced?.enabled !==
+                      savedImageDescription.prompt?.advanced?.enabled}
                   />
 
                   {#if imageDescription.prompt?.advanced?.enabled}
@@ -729,7 +891,8 @@
                       value={rawPromptTemplateText}
                       onChange={(text) => (imageDescription.prompt!.advanced!.rawPromptTemplate = text)}
                       disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                      isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !== savedImageDescription.prompt?.advanced?.rawPromptTemplate}
+                      isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !==
+                        savedImageDescription.prompt?.advanced?.rawPromptTemplate}
                     />
 
                     <SettingSelect
@@ -737,11 +900,18 @@
                       name="image-description-placeholder-validation"
                       bind:value={imageDescription.prompt!.advanced!.placeholderValidation}
                       options={[
-                        { value: PlaceholderValidation.Strict, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_strict') },
-                        { value: PlaceholderValidation.Warn, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_warn') },
+                        {
+                          value: PlaceholderValidation.Strict,
+                          text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_strict'),
+                        },
+                        {
+                          value: PlaceholderValidation.Warn,
+                          text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_warn'),
+                        },
                       ]}
                       disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                      isEdited={imageDescription.prompt?.advanced?.placeholderValidation !== savedImageDescription.prompt?.advanced?.placeholderValidation}
+                      isEdited={imageDescription.prompt?.advanced?.placeholderValidation !==
+                        savedImageDescription.prompt?.advanced?.placeholderValidation}
                     />
                   {/if}
                 </div>

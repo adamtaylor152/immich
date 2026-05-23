@@ -151,6 +151,39 @@ const MachineLearningHardwareResponseSchema = z
   })
   .meta({ id: 'MachineLearningHardwareResponseDto' });
 
+const SystemConfigRunPodSchema = z
+  .object({
+    enabled: configBool.describe('Enabled'),
+    // apiKey is a billing credential. mapConfig() redacts it to '' on every
+    // GET response, and updateSystemConfig() interprets an empty incoming
+    // value as "preserve the stored key" (rather than "wipe it"). Net effect:
+    // the secret is never returned by the API once set, and admin form
+    // round-trips don't accidentally erase it. To rotate, send a new
+    // non-empty value. To clear, an admin must disable the integration and
+    // can leave the field blank (server-side preserve only fires when the
+    // stored value is non-empty AND the incoming value is empty — clearing
+    // intentionally would require a separate explicit action, same UX as
+    // most password fields).
+    //
+    // We intentionally do NOT use `.meta({ writeOnly: true })`: although the
+    // OpenAPI semantics are correct, oazapfts removes write-only fields from
+    // the generated TypeScript type entirely, which breaks the admin form's
+    // ability to bind to the field as an input. The masking + preserve
+    // pattern above achieves the same security guarantee at the application
+    // layer.
+    apiKey: z.string().describe('RunPod API key (write-only; empty preserves the existing key)'),
+    imageName: z.string().min(1).describe('Container image to launch'),
+    defaultGpuTypeId: z.string().min(1).describe('Preferred GPU type ID'),
+    containerDiskGb: z.int().min(10).max(2000).describe('Container disk size (GB)'),
+    volumeGb: z.int().min(0).max(2000).describe('Persistent volume size (GB)'),
+    autoStopEnabled: configBool.describe('Auto-stop when idle'),
+    autoStopGraceMinutes: z.int().min(1).max(1440).describe('Idle minutes before auto-stop'),
+    autoBackfillOnLaunch: configBool.describe('Auto-run ML backfill on pod ready'),
+    maxRuntimeHours: z.int().min(1).max(168).describe('Hard runtime ceiling (hours)'),
+    dataPrivacyAcknowledged: configBool.describe('User accepted that image previews leave the network'),
+  })
+  .meta({ id: 'SystemConfigRunPodDto' });
+
 const SmartAlbumKindSchema = z
   .object({
     enabled: configBool.describe('Whether this smart album is active'),
@@ -186,6 +219,7 @@ const SystemConfigMachineLearningSchema = z
     ocr: OcrConfigSchema,
     imageDescription: ImageDescriptionConfigSchema.default(defaults.machineLearning.imageDescription),
     nsfwDetection: NsfwDetectionConfigSchema.default(defaults.machineLearning.nsfwDetection),
+    runpod: SystemConfigRunPodSchema.default(defaults.machineLearning.runpod),
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });
 
@@ -490,5 +524,16 @@ const ImageDescriptionRequeueResponseSchema = z
 export class ImageDescriptionRequeueResponseDto extends createZodDto(ImageDescriptionRequeueResponseSchema) {}
 
 export function mapConfig(config: SystemConfig): SystemConfigDto {
-  return config;
+  // Redact secrets on read. Writes that come back with an empty string here
+  // preserve the stored value (see utils/config.ts:updateConfig).
+  return {
+    ...config,
+    machineLearning: {
+      ...config.machineLearning,
+      runpod: {
+        ...config.machineLearning.runpod,
+        apiKey: '',
+      },
+    },
+  };
 }

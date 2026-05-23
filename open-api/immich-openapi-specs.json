@@ -9800,6 +9800,363 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/runpod/backfill": {
+      "post": {
+        "description": "Queues smart-search, face detection, duplicates, OCR, image description, and NSFW detection.",
+        "operationId": "backfill",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodBackfillResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Enqueue all ML backfill jobs",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/connect": {
+      "post": {
+        "description": "Verify that a RunPod API key works. Pass `apiKey` to test a candidate key without saving.",
+        "operationId": "testConnection",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunPodConnectionTestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodConnectionResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Test RunPod connection",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/gpus": {
+      "get": {
+        "description": "Returns the GPU types currently offered by RunPod, with pricing.",
+        "operationId": "listGpus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunPodGpuTypeDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List RunPod GPU types",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read"
+      }
+    },
+    "/runpod/pods": {
+      "post": {
+        "description": "Launch the ML container on RunPod and inject the proxy URL into the live ML config.",
+        "operationId": "provision",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunPodProvisionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Provision a RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/pods/current": {
+      "delete": {
+        "description": "Destroys the pod and its persistent volume. Next launch is a full cold-start.",
+        "operationId": "terminate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Terminate the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      },
+      "get": {
+        "description": "Returns the current managed RunPod pod state (idle / provisioning / running / etc).",
+        "operationId": "getCurrent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get current RunPod state",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read"
+      }
+    },
+    "/runpod/pods/current/start": {
+      "post": {
+        "description": "Start a previously stopped pod, reusing its model cache.",
+        "operationId": "start",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Resume the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/pods/current/stop": {
+      "post": {
+        "description": "Stops the pod but keeps the model-cache volume so a future start is fast.",
+        "operationId": "stop",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Stop the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
     "/search/ask": {
       "post": {
         "description": "Interpret a natural language query locally and search assets with existing search primitives.",
@@ -16173,6 +16530,10 @@
     {
       "name": "Queues",
       "description": "Queues and background jobs are used for processing tasks asynchronously. Queues can be paused and resumed as needed."
+    },
+    {
+      "name": "RunPod (admin)",
+      "description": "Provision the Immich machine-learning container on RunPod cloud GPUs. The integration manages a single pod, transparently routes ML jobs to it, and stops it when idle to control cost."
     },
     {
       "name": "Search",
@@ -23559,6 +23920,178 @@
         ],
         "type": "object"
       },
+      "RunPodBackfillResultDto": {
+        "properties": {
+          "enqueued": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enqueued",
+          "skipped"
+        ],
+        "type": "object"
+      },
+      "RunPodConnectionResultDto": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "RunPodConnectionTestDto": {
+        "properties": {
+          "apiKey": {
+            "description": "API key to verify (overrides the stored key for the test)",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunPodGpuTypeDto": {
+        "properties": {
+          "communityCloud": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "memoryInGb": {
+            "type": "number"
+          },
+          "pricePerHour": {
+            "nullable": true,
+            "type": "number"
+          },
+          "secureCloud": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "displayName",
+          "id",
+          "memoryInGb"
+        ],
+        "type": "object"
+      },
+      "RunPodProvisionDto": {
+        "properties": {
+          "acknowledgeDataPrivacy": {
+            "description": "User confirms image previews will be sent to RunPod (must be true to launch)",
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "gpuCount": {
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "gpuTypeId": {
+            "description": "RunPod GPU type ID, e.g. \"NVIDIA RTX A5000\"",
+            "minLength": 1,
+            "type": "string"
+          },
+          "imageName": {
+            "description": "Override the configured image",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "acknowledgeDataPrivacy",
+          "gpuTypeId"
+        ],
+        "type": "object"
+      },
+      "RunPodStateDto": {
+        "properties": {
+          "errorMessage": {
+            "type": "string"
+          },
+          "estimatedCostUsd": {
+            "type": "number"
+          },
+          "gpuTypeId": {
+            "type": "string"
+          },
+          "imageName": {
+            "type": "string"
+          },
+          "instanceTag": {
+            "type": "string"
+          },
+          "lastBusyAt": {
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "type": "number"
+          },
+          "mlUrl": {
+            "type": "string"
+          },
+          "podCreatedAt": {
+            "type": "string"
+          },
+          "podId": {
+            "type": "string"
+          },
+          "pricePerHour": {
+            "type": "number"
+          },
+          "runningSince": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "idle",
+              "provisioning",
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "error"
+            ],
+            "type": "string"
+          },
+          "stoppedAt": {
+            "type": "string"
+          },
+          "unhealthySince": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
       "SearchAlbumResponseDto": {
         "properties": {
           "count": {
@@ -27520,6 +28053,9 @@
           "ocr": {
             "$ref": "#/components/schemas/OcrConfig"
           },
+          "runpod": {
+            "$ref": "#/components/schemas/SystemConfigRunPodDto"
+          },
           "urls": {
             "description": "ML service URLs",
             "items": {
@@ -27793,6 +28329,78 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "SystemConfigRunPodDto": {
+        "properties": {
+          "apiKey": {
+            "description": "RunPod API key (write-only; empty preserves the existing key)",
+            "type": "string"
+          },
+          "autoBackfillOnLaunch": {
+            "description": "Auto-run ML backfill on pod ready",
+            "type": "boolean"
+          },
+          "autoStopEnabled": {
+            "description": "Auto-stop when idle",
+            "type": "boolean"
+          },
+          "autoStopGraceMinutes": {
+            "description": "Idle minutes before auto-stop",
+            "maximum": 1440,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "containerDiskGb": {
+            "description": "Container disk size (GB)",
+            "maximum": 2000,
+            "minimum": 10,
+            "type": "integer"
+          },
+          "dataPrivacyAcknowledged": {
+            "description": "User accepted that image previews leave the network",
+            "type": "boolean"
+          },
+          "defaultGpuTypeId": {
+            "description": "Preferred GPU type ID",
+            "minLength": 1,
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled",
+            "type": "boolean"
+          },
+          "imageName": {
+            "description": "Container image to launch",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "description": "Hard runtime ceiling (hours)",
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "volumeGb": {
+            "description": "Persistent volume size (GB)",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "apiKey",
+          "autoBackfillOnLaunch",
+          "autoStopEnabled",
+          "autoStopGraceMinutes",
+          "containerDiskGb",
+          "dataPrivacyAcknowledged",
+          "defaultGpuTypeId",
+          "enabled",
+          "imageName",
+          "maxRuntimeHours",
+          "volumeGb"
         ],
         "type": "object"
       },

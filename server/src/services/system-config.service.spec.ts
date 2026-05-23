@@ -19,6 +19,7 @@ import { SystemConfigService } from 'src/services/system-config.service';
 import { DeepPartial } from 'src/types';
 import { mockEnvData } from 'test/repositories/config.repository.mock';
 import { newTestService, ServiceMocks } from 'test/utils';
+import { vi } from 'vitest';
 
 const partialConfig = {
   ffmpeg: { crf: 30 },
@@ -205,6 +206,19 @@ const updatedConfig = Object.freeze<SystemConfig>({
       threshold: 0.85,
       device: 'AUTO',
       hideFromLibrary: false,
+    },
+    runpod: {
+      enabled: false,
+      apiKey: '',
+      imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
+      defaultGpuTypeId: 'NVIDIA RTX A5000',
+      containerDiskGb: 50,
+      volumeGb: 20,
+      autoStopEnabled: true,
+      autoStopGraceMinutes: 15,
+      autoBackfillOnLaunch: false,
+      maxRuntimeHours: 24,
+      dataPrivacyAcknowledged: false,
     },
   },
   map: {
@@ -630,6 +644,70 @@ describe(SystemConfigService.name, () => {
       ).resolves.toBeUndefined();
     });
 
+    it('should reject runpod api key changes while pod is provisioning', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'provisioning' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is provisioning/);
+    });
+
+    it('should reject runpod image changes while pod is stopping', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'stopping' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, imageName: 'ghcr.io/x/y:new-tag' },
+            },
+          },
+        }),
+      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is stopping/);
+    });
+
+    it('should allow runpod api key changes when no pod transition is in flight', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'running' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should allow runpod api key changes when there is no runpod state at all', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(null);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it('should update the config and emit an event', async () => {
       mocks.systemMetadata.get.mockResolvedValue(partialConfig);
       await expect(sut.updateSystemConfig(updatedConfig)).resolves.toEqual(updatedConfig);
@@ -644,6 +722,67 @@ describe(SystemConfigService.name, () => {
       mocks.systemMetadata.readFile.mockResolvedValue(JSON.stringify({}));
       await expect(sut.updateSystemConfig(defaults)).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
+    });
+
+    it('should redact runpod.apiKey on read via mapConfig', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { runpod: { apiKey: 'rp_secret_value', enabled: true } },
+      });
+
+      const result = await sut.getSystemConfig();
+
+      expect(result.machineLearning.runpod.apiKey).toBe('');
+    });
+
+    it('should preserve stored runpod.apiKey when an empty value is written back', async () => {
+      const storedConfig = {
+        machineLearning: { runpod: { apiKey: 'rp_secret_value', enabled: true } },
+      };
+      mocks.systemMetadata.get.mockResolvedValue(storedConfig);
+
+      // The admin reads the config (apiKey: ''), edits some other field, and saves.
+      // The empty apiKey in the submitted DTO must not wipe the stored secret.
+      const newConfig = {
+        ...defaults,
+        machineLearning: {
+          ...defaults.machineLearning,
+          runpod: { ...defaults.machineLearning.runpod, apiKey: '', enabled: true },
+        },
+      };
+
+      await sut.updateSystemConfig(newConfig);
+
+      // updateConfig is called with the dto we mutated in-place; verify the
+      // preserved-key value is what gets persisted.
+      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([key]) => key === 'system-config',
+      );
+      expect(persisted).toBeDefined();
+      // The persisted partial config should include the preserved key.
+      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_secret_value');
+    });
+
+    it('should accept a non-empty new runpod.apiKey on write (rotation)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { runpod: { apiKey: 'rp_old_value', enabled: true } },
+      });
+
+      const newConfig = {
+        ...defaults,
+        machineLearning: {
+          ...defaults.machineLearning,
+          runpod: { ...defaults.machineLearning.runpod, apiKey: 'rp_NEW_value', enabled: true },
+        },
+      };
+
+      await sut.updateSystemConfig(newConfig);
+
+      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([key]) => key === 'system-config',
+      );
+      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_NEW_value');
     });
   });
 

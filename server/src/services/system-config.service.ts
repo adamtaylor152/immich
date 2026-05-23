@@ -8,7 +8,7 @@ import {
   mapConfig,
   SystemConfigDto,
 } from 'src/dtos/system-config.dto';
-import { BootstrapEventPriority, JobName, QueueName } from 'src/enum';
+import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
 import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
 import { BaseService } from 'src/services/base.service';
@@ -80,6 +80,18 @@ export class SystemConfigService extends BaseService {
         throw new Error('Physical deduplication master user must exist and be active.');
       }
     }
+
+    const oldRunpod = oldConfig.machineLearning.runpod;
+    const newRunpod = newConfig.machineLearning.runpod;
+    if (oldRunpod.apiKey !== newRunpod.apiKey || oldRunpod.imageName !== newRunpod.imageName) {
+      const runpodState = await this.systemMetadataRepository.get(SystemMetadataKey.RunPodState);
+      const inFlight = runpodState && ['provisioning', 'starting', 'stopping'].includes(runpodState.status);
+      if (inFlight) {
+        throw new Error(
+          `Cannot change RunPod API key or image while a pod is ${runpodState!.status}. Wait for the transition to settle, then retry.`,
+        );
+      }
+    }
   }
 
   async updateSystemConfig(dto: SystemConfigDto): Promise<SystemConfigDto> {
@@ -89,6 +101,17 @@ export class SystemConfigService extends BaseService {
     }
 
     const oldConfig = await this.getConfig({ withCache: false });
+
+    // mapConfig redacts machineLearning.runpod.apiKey to '' on read. Mirror
+    // the convention on write: an empty incoming apiKey means "preserve the
+    // existing value" (the user didn't intend to rotate the key), not "wipe
+    // the stored key". The user can clear the key by toggling RunPod off, or
+    // by sending a different non-empty placeholder; sending the redacted
+    // sentinel back unchanged must not destroy the real secret.
+    const incomingRunpodKey = dto.machineLearning?.runpod?.apiKey;
+    if (incomingRunpodKey === '' && oldConfig.machineLearning.runpod.apiKey !== '') {
+      dto.machineLearning.runpod.apiKey = oldConfig.machineLearning.runpod.apiKey;
+    }
 
     try {
       await this.eventRepository.emit('ConfigValidate', { newConfig: toPlainObject(dto), oldConfig });
