@@ -122,7 +122,8 @@ export class SystemConfigService extends BaseService {
     // whatever the client sent with the stored values BEFORE comparing the
     // imageDescription block, then maybe bump lastConfigChangeAt below.
     if (dto.machineLearning?.imageDescription) {
-      dto.machineLearning.imageDescription.pendingRequeueAt = oldConfig.machineLearning.imageDescription.pendingRequeueAt;
+      dto.machineLearning.imageDescription.pendingRequeueAt =
+        oldConfig.machineLearning.imageDescription.pendingRequeueAt;
       dto.machineLearning.imageDescription.lastConfigChangeAt =
         oldConfig.machineLearning.imageDescription.lastConfigChangeAt;
     }
@@ -140,7 +141,10 @@ export class SystemConfigService extends BaseService {
       'pendingRequeueAt',
       'lastConfigChangeAt',
     ]);
-    if (dto.machineLearning?.imageDescription && !_.isEqual(toPlainObject(oldDescription), toPlainObject(newDescription))) {
+    if (
+      dto.machineLearning?.imageDescription &&
+      !_.isEqual(toPlainObject(oldDescription), toPlainObject(newDescription))
+    ) {
       dto.machineLearning.imageDescription.lastConfigChangeAt = new Date().toISOString();
     }
 
@@ -264,7 +268,9 @@ export class SystemConfigService extends BaseService {
     return { totalAssets: stats.withDescription, withDescription: stats.withDescription };
   }
 
-  async triggerSmartAlbumReevaluate(dto: SmartAlbumReevaluateRequestDto = {}): Promise<SmartAlbumReevaluateResponseDto> {
+  async triggerSmartAlbumReevaluate(
+    dto: SmartAlbumReevaluateRequestDto = {},
+  ): Promise<SmartAlbumReevaluateResponseDto> {
     const { smartAlbums } = await this.getConfig({ withCache: false });
     if (!smartAlbums.enabled) {
       throw new BadRequestException('Smart albums are not enabled');

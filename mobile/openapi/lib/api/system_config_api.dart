@@ -400,8 +400,8 @@ class SystemConfigApi {
   ///
   /// Parameters:
   ///
-  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto (required):
-  Future<Response> triggerSmartAlbumReevaluateWithHttpInfo(SmartAlbumReevaluateRequestDto smartAlbumReevaluateRequestDto,) async {
+  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto:
+  Future<Response> triggerSmartAlbumReevaluateWithHttpInfo({ SmartAlbumReevaluateRequestDto? smartAlbumReevaluateRequestDto, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/system-config/smart-albums/reevaluate';
 
@@ -432,9 +432,9 @@ class SystemConfigApi {
   ///
   /// Parameters:
   ///
-  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto (required):
-  Future<SmartAlbumReevaluateResponseDto?> triggerSmartAlbumReevaluate(SmartAlbumReevaluateRequestDto smartAlbumReevaluateRequestDto,) async {
-    final response = await triggerSmartAlbumReevaluateWithHttpInfo(smartAlbumReevaluateRequestDto,);
+  /// * [SmartAlbumReevaluateRequestDto] smartAlbumReevaluateRequestDto:
+  Future<SmartAlbumReevaluateResponseDto?> triggerSmartAlbumReevaluate({ SmartAlbumReevaluateRequestDto? smartAlbumReevaluateRequestDto, }) async {
+    final response = await triggerSmartAlbumReevaluateWithHttpInfo( smartAlbumReevaluateRequestDto: smartAlbumReevaluateRequestDto, );
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

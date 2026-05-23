@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put } from '@nestjs/common';
-import { ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   ImageDescriptionRequeueEstimateDto,
@@ -139,9 +139,10 @@ export class SystemConfigController {
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   @ApiResponse({ status: 400, description: 'Smart albums are not enabled, or invalid kind.' })
+  @ApiBody({ required: false, type: SmartAlbumReevaluateRequestDto })
   triggerSmartAlbumReevaluate(
-    @Body() dto: SmartAlbumReevaluateRequestDto,
+    @Body() dto?: SmartAlbumReevaluateRequestDto,
   ): Promise<SmartAlbumReevaluateResponseDto> {
-    return this.service.triggerSmartAlbumReevaluate(dto);
+    return this.service.triggerSmartAlbumReevaluate(dto ?? ({} as SmartAlbumReevaluateRequestDto));
   }
 }

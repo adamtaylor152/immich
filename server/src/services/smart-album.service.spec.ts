@@ -233,7 +233,9 @@ describe(SmartAlbumService.name, () => {
           yield { id: asset1Id, ownerId: evalOwnerId, tags: ['food', 'beach'] };
         })(),
       );
-      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ food: foodAlbumId, travel: travelAlbumId }));
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ food: foodAlbumId, travel: travelAlbumId }),
+      );
 
       const result = await sut.handleReevaluateAll({ kind: 'food' });
 
@@ -255,7 +257,9 @@ describe(SmartAlbumService.name, () => {
       );
       // Asset is in travel and food. Re-evaluate kind=food only.
       mocks.smartAlbum.getMatchingKinds.mockResolvedValue(['travel', 'food']);
-      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId, food: foodAlbumId }));
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(
+        albumMap({ travel: travelAlbumId, food: foodAlbumId }),
+      );
 
       await sut.handleReevaluateAll({ kind: 'food' });
 
