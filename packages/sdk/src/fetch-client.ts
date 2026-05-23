@@ -1874,8 +1874,8 @@ export type RunPodGpuTypeDto = {
     secureCloud?: boolean;
 };
 export type RunPodProvisionDto = {
-    /** User confirms image previews will be sent to RunPod */
-    acknowledgeDataPrivacy: boolean;
+    /** User confirms image previews will be sent to RunPod (must be true to launch) */
+    acknowledgeDataPrivacy: true;
     gpuCount?: number;
     /** RunPod GPU type ID, e.g. "NVIDIA RTX A5000" */
     gpuTypeId: string;

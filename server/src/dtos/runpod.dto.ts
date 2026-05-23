@@ -33,7 +33,9 @@ const RunPodProvisionSchema = z
     gpuCount: z.int().min(1).max(8).optional(),
     imageName: z.string().min(1).optional().describe('Override the configured image'),
     maxRuntimeHours: z.int().min(1).max(168).optional(),
-    acknowledgeDataPrivacy: z.boolean().describe('User confirms image previews will be sent to RunPod'),
+    acknowledgeDataPrivacy: z
+      .literal(true)
+      .describe('User confirms image previews will be sent to RunPod (must be true to launch)'),
   })
   .meta({ id: 'RunPodProvisionDto' });
 

@@ -60,6 +60,7 @@ const ML_BACKFILL_QUEUES: Array<{ name: string; enqueue: (job: { queue: (item: a
 const PROVISION_TIMEOUT_MS = 5 * 60 * 1000; // pod must reach RUNNING within 5 min
 const UNHEALTHY_GRACE_MS = 5 * 60 * 1000; // pod RUNNING-but-unresponsive grace
 const STOP_MAX_ATTEMPTS = 5;
+const STOP_BACKOFF_MS = [5_000, 15_000, 60_000, 60_000, 60_000]; // 5s, 15s, 60s, 60s, 60s
 const TICK_INTERVAL_MS = 30_000;
 const ML_PORT = 3003;
 const ML_AUTH_ENV = 'IMMICH_ML_AUTH_TOKEN';
@@ -146,6 +147,12 @@ export class RunPodService extends BaseService {
     if (!dto.acknowledgeDataPrivacy) {
       throw new BadRequestException('Data privacy acknowledgement required to launch a pod');
     }
+    // Lock around the whole flow so two parallel provision() calls can't both
+    // pass the "is idle?" check and create two billable pods.
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () => this.provisionLocked(dto));
+  }
+
+  private async provisionLocked(dto: RunPodProvisionDto): Promise<RunPodStateDto> {
     const config = await this.getConfig({ withCache: false });
     const runpod = config.machineLearning.runpod;
     if (!runpod.enabled) {
@@ -217,6 +224,10 @@ export class RunPodService extends BaseService {
   }
 
   async stop(): Promise<RunPodStateDto> {
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () => this.stopLocked());
+  }
+
+  private async stopLocked(): Promise<RunPodStateDto> {
     const state = await this.loadState();
     if (state.status === 'idle') {
       throw new BadRequestException('No pod to stop');
@@ -239,11 +250,29 @@ export class RunPodService extends BaseService {
     };
     await this.writeState(next);
     await this.syncManagedUrl();
-    void this.attemptStop(next).catch((error) => this.logger.warn(`Initial stop attempt failed: ${error}`));
+    void this.attemptStopFromAdmin(next).catch((error) => this.logger.warn(`Initial stop attempt failed: ${error}`));
     return this.mapStateToDto(next);
   }
 
+  // attemptStop is called from inside reconcile() (already locked) and from
+  // stop() (lock dropped before this fires). Re-acquire the lock when invoking
+  // it from outside the reconcile path.
+  private async attemptStopFromAdmin(state: Extract<RunPodPersistedState, { status: 'stopping' }>) {
+    await this.databaseRepository.withLock(DatabaseLock.RunPodTransition, async () => {
+      // Re-load: another tick may have advanced state since stop() released the lock.
+      const current = await this.loadState();
+      if (current.status !== 'stopping' || ('podId' in current && current.podId !== state.podId)) {
+        return;
+      }
+      await this.attemptStop(current);
+    });
+  }
+
   async start(): Promise<RunPodStateDto> {
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () => this.startLocked());
+  }
+
+  private async startLocked(): Promise<RunPodStateDto> {
     const state = await this.loadState();
     if (state.status !== 'stopped') {
       throw new BadRequestException(`Cannot start pod while status is ${state.status}`);
@@ -274,6 +303,10 @@ export class RunPodService extends BaseService {
   }
 
   async terminate(): Promise<RunPodStateDto> {
+    return this.databaseRepository.withLock(DatabaseLock.RunPodTransition, () => this.terminateLocked());
+  }
+
+  private async terminateLocked(): Promise<RunPodStateDto> {
     const state = await this.loadState();
     if (state.status === 'idle') {
       throw new BadRequestException('No pod to terminate');
@@ -525,6 +558,17 @@ export class RunPodService extends BaseService {
     if (!key) {
       return;
     }
+
+    // Respect the exponential backoff: don't hit the API again until the
+    // cooldown window for the current attempt count has elapsed.
+    if (state.lastStopAttemptAt && state.stopAttempts > 0) {
+      const backoffMs = STOP_BACKOFF_MS[Math.min(state.stopAttempts - 1, STOP_BACKOFF_MS.length - 1)];
+      const elapsed = Date.now() - Date.parse(state.lastStopAttemptAt);
+      if (Number.isFinite(elapsed) && elapsed < backoffMs) {
+        return;
+      }
+    }
+
     try {
       await this.runPodRepository.stopPod(key, state.podId);
       const config = await this.getConfig({ withCache: false });
@@ -549,16 +593,28 @@ export class RunPodService extends BaseService {
       const attempts = state.stopAttempts + 1;
       const message = error instanceof Error ? error.message : String(error);
       if (attempts >= STOP_MAX_ATTEMPTS) {
+        // Park in a terminal `error` state so the reconciler stops invoking
+        // attemptStop (and re-sending the same admin notification every 30s).
+        // The pod still exists on RunPod; the admin can click "Terminate" from
+        // the UI to clean it up via DELETE /pods/{id}.
         this.logger.error(`RunPod stop failed ${attempts} times: ${message}`);
         await this.notifyAdmin(
           NotificationLevel.Error,
           'RunPod stop failed',
-          `Failed to stop pod ${state.podId} after ${attempts} attempts. Check the RunPod dashboard — it may still be billing. Error: ${message}`,
+          `Failed to stop pod ${state.podId} after ${attempts} attempts. The pod may still be billing — please check the RunPod dashboard and use "Terminate" in the admin UI to clean up. Error: ${message}`,
         );
-        // Leave state as 'stopping' with the attempts counter so the next tick keeps trying.
-      } else {
-        this.logger.warn(`RunPod stop attempt ${attempts}/${STOP_MAX_ATTEMPTS} failed: ${message}`);
+        await this.writeState({
+          status: 'error',
+          podId: state.podId,
+          gpuTypeId: state.gpuTypeId,
+          imageName: state.imageName,
+          instanceTag: state.instanceTag,
+          message: `Stop failed after ${attempts} attempts: ${message}`,
+          errorAt: new Date().toISOString(),
+        });
+        return;
       }
+      this.logger.warn(`RunPod stop attempt ${attempts}/${STOP_MAX_ATTEMPTS} failed: ${message}`);
       await this.writeState({ ...state, stopAttempts: attempts, lastStopAttemptAt: new Date().toISOString() });
     }
   }
@@ -573,10 +629,14 @@ export class RunPodService extends BaseService {
       const summary = await this.runPodRepository.getPod(key, state.podId);
       if (summary.desiredStatus === 'RUNNING') {
         this.logger.log(`Pod ${state.podId} unexpectedly running; reconciling to starting`);
+        // Same reasoning as start(): reset podCreatedAt so the provisioning
+        // timeout window applies to *this* observation of the pod being up,
+        // not the original launch (which is likely >5min in the past for a
+        // stopped pod that someone restarted from the RunPod dashboard).
         await this.writeState({
           status: 'starting',
           podId: state.podId,
-          podCreatedAt: state.podCreatedAt,
+          podCreatedAt: new Date().toISOString(),
           gpuTypeId: state.gpuTypeId,
           imageName: state.imageName,
           authToken: state.authToken,
@@ -654,12 +714,16 @@ export class RunPodService extends BaseService {
     if (!ML_JOB_NAMES.has(jobName)) {
       return;
     }
-    const state = await this.loadState();
-    if (state.status !== 'running') {
-      return;
-    }
-    // Idempotent write — no lock needed.
-    await this.writeState({ ...state, lastBusyAt: new Date().toISOString() });
+    // Lock-and-re-read to avoid overwriting a concurrent transition. Without
+    // the lock, an idle-stop or terminate could land between the load and the
+    // write, and our running-with-fresh-lastBusyAt write would wipe it.
+    await this.databaseRepository.withLock(DatabaseLock.RunPodTransition, async () => {
+      const state = await this.loadState();
+      if (state.status !== 'running') {
+        return;
+      }
+      await this.writeState({ ...state, lastBusyAt: new Date().toISOString() });
+    });
   }
 
   /**

@@ -23589,7 +23589,10 @@
       "RunPodProvisionDto": {
         "properties": {
           "acknowledgeDataPrivacy": {
-            "description": "User confirms image previews will be sent to RunPod",
+            "description": "User confirms image previews will be sent to RunPod (must be true to launch)",
+            "enum": [
+              true
+            ],
             "type": "boolean"
           },
           "gpuCount": {

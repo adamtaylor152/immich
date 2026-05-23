@@ -66,8 +66,11 @@ describe(RunPodService.name, () => {
 
   describe('provision', () => {
     it('refuses without privacy acknowledgement', async () => {
+      // The DTO schema enforces acknowledgeDataPrivacy: literal(true), but the
+      // service keeps an explicit runtime guard. Cast through never to force
+      // a `false` past the type system and verify the runtime guard still trips.
       await expect(
-        sut.provision({ gpuTypeId: 'NVIDIA RTX A5000', acknowledgeDataPrivacy: false }),
+        sut.provision({ gpuTypeId: 'NVIDIA RTX A5000', acknowledgeDataPrivacy: false } as never),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 

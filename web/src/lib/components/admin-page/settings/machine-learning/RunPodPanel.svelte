@@ -61,11 +61,23 @@
   const isStopped = $derived(status === 'stopped');
   const canBackfill = $derived(isRunning && !backfilling);
 
-  const refresh = async () => {
+  // The poll fires every 5s; a transient API blip should not spam toast
+  // notifications. Only surface an error once per consecutive failure streak,
+  // and clear the flag on the first successful refresh.
+  let pollErrorShown = $state(false);
+
+  const refresh = async (options: { notifyOnError?: boolean } = {}) => {
+    const notify = options.notifyOnError ?? true;
     try {
       state = await fetchCurrent();
+      pollErrorShown = false;
     } catch (error) {
-      handleError(error, 'Failed to load RunPod state');
+      if (notify && !pollErrorShown) {
+        handleError(error, 'Failed to load RunPod state');
+        pollErrorShown = true;
+      } else if (!notify) {
+        console.debug('RunPod state poll failed:', error);
+      }
     }
   };
 
@@ -91,7 +103,7 @@
   onMount(() => {
     void refresh();
     void refreshGpus();
-    pollTimer = setInterval(refresh, 5000);
+    pollTimer = setInterval(() => void refresh({ notifyOnError: false }), 5000);
   });
 
   onDestroy(() => {

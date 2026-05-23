@@ -543,6 +543,70 @@ describe(SystemConfigService.name, () => {
       ).resolves.toBeUndefined();
     });
 
+    it('should reject runpod api key changes while pod is provisioning', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'provisioning' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is provisioning/);
+    });
+
+    it('should reject runpod image changes while pod is stopping', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'stopping' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, imageName: 'ghcr.io/x/y:new-tag' },
+            },
+          },
+        }),
+      ).rejects.toThrow(/Cannot change RunPod API key or image while a pod is stopping/);
+    });
+
+    it('should allow runpod api key changes when no pod transition is in flight', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ status: 'running' } as never);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should allow runpod api key changes when there is no runpod state at all', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(null);
+      await expect(
+        sut.onConfigValidate({
+          oldConfig: defaults,
+          newConfig: {
+            ...defaults,
+            machineLearning: {
+              ...defaults.machineLearning,
+              runpod: { ...defaults.machineLearning.runpod, apiKey: 'new-key' },
+            },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
     it('should update the config and emit an event', async () => {
       mocks.systemMetadata.get.mockResolvedValue(partialConfig);
       await expect(sut.updateSystemConfig(updatedConfig)).resolves.toEqual(updatedConfig);

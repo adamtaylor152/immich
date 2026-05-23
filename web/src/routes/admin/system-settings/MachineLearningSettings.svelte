@@ -107,12 +107,15 @@
     try {
       const response = await fetch('/api/runpod/pods/current', { credentials: 'include' });
       if (!response.ok) {
+        // Pod state endpoint failed — assume nothing is managed rather than
+        // leaving a stale URL in the chip.
+        managedRunPodUrl = '';
         return;
       }
       const state = (await response.json()) as { status?: string; mlUrl?: string };
       managedRunPodUrl = state.status === 'running' && state.mlUrl ? state.mlUrl : '';
     } catch {
-      // ignore — the chip just won't render
+      managedRunPodUrl = '';
     }
   };
 
