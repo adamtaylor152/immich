@@ -48,10 +48,15 @@
     Object.fromEntries(kindKeys.map((k) => [k, getKind(k).clipQueries.join('\n')])) as Record<KindKey, string>,
   );
 
-  const handleReevaluateClick = async () => {
-    const result = await modalManager.show(SmartAlbumReevaluateModal, {});
+  const handleReevaluateClick = async (kind?: KindKey) => {
+    const props = kind ? { kind, kindLabel: kindTitle(kind) } : {};
+    const result = await modalManager.show(SmartAlbumReevaluateModal, props);
     if (result?.queued) {
-      toastManager.primary($t('admin.smart_albums_reevaluate_started'));
+      if (kind) {
+        toastManager.primary($t('admin.smart_albums_kind_reevaluate_started', { values: { kind: kindTitle(kind) } }));
+      } else {
+        toastManager.primary($t('admin.smart_albums_reevaluate_started'));
+      }
     } else if (result) {
       toastManager.primary($t('admin.smart_albums_reevaluate_already_in_flight'));
     }
@@ -124,6 +129,19 @@
                 disabled={kindFieldsDisabled}
                 isEdited={kindConfig.threshold !== savedKindConfig.threshold}
               />
+
+              <div class="flex justify-end">
+                <Button
+                  size="small"
+                  shape="round"
+                  color="secondary"
+                  leadingIcon={mdiRefresh}
+                  onclick={() => handleReevaluateClick(kind)}
+                  disabled={kindFieldsDisabled}
+                >
+                  {$t('admin.smart_albums_kind_reevaluate_button')}
+                </Button>
+              </div>
             </div>
           </SettingAccordion>
         {/each}
