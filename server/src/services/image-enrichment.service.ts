@@ -25,6 +25,7 @@ import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
 import { IdentityPostValidator } from 'src/services/identity-post-validator.service';
 import { ImageDescriptionPromptAssembler, KnownPerson } from 'src/services/prompt-assembler.service';
+import { SmartAlbumService } from 'src/services/smart-album.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
 import { isImageDescriptionEnabled, isNsfwDetectionEnabled, isSmartSearchEnabled } from 'src/utils/misc';
@@ -145,6 +146,13 @@ const normalizeTag = (tag: string) =>
 export class ImageEnrichmentService extends BaseService {
   private readonly promptAssembler = new ImageDescriptionPromptAssembler();
   private readonly identityPostValidator = new IdentityPostValidator();
+  private _smartAlbumService: SmartAlbumService | undefined;
+
+  /** Lazy accessor — avoids referencing `this` before super() returns. */
+  private get smartAlbumService(): SmartAlbumService {
+    this._smartAlbumService ??= BaseService.create(SmartAlbumService, this);
+    return this._smartAlbumService;
+  }
 
   async getAssetEnrichment(auth: AuthDto, id: string): Promise<AssetImageEnrichmentResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id], ignorePrivacy: true });
@@ -516,6 +524,19 @@ export class ImageEnrichmentService extends BaseService {
     }
     if (changed.visible) {
       await this.jobRepository.queue({ name: JobName.SidecarWrite, data: { id } });
+    }
+
+    // Smart-album evaluation: outside the metadata lock to keep the lock window
+    // small. Non-fatal — description has already succeeded; smart-album
+    // bookkeeping is best-effort.
+    try {
+      await this.smartAlbumService.evaluate({
+        assetId: asset.id,
+        ownerId: asset.ownerId,
+        tags: result.tags ?? [],
+      });
+    } catch (error) {
+      this.logger.warn(`Smart-album evaluation failed for asset ${asset.id}: ${getErrorMessage(error)}`);
     }
 
     return JobStatus.Success;

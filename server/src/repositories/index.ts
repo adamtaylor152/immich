@@ -35,6 +35,7 @@ import { PhysicalFileRepository } from 'src/repositories/physical-file.repositor
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { ServerInfoRepository } from 'src/repositories/server-info.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
@@ -92,6 +93,7 @@ export const repositories = [
   PluginRepository,
   ProcessRepository,
   SearchRepository,
+  SmartAlbumRepository,
   SessionRepository,
   ServerInfoRepository,
   SharedLinkRepository,

@@ -41,6 +41,7 @@ import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { ServerInfoRepository } from 'src/repositories/server-info.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
 import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
@@ -100,6 +101,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   ProcessRepository,
   SearchRepository,
   ServerInfoRepository,
+  SmartAlbumRepository,
   SessionRepository,
   SharedLinkRepository,
   SharedLinkAssetRepository,
@@ -160,6 +162,7 @@ export class BaseService {
     protected processRepository: ProcessRepository,
     protected searchRepository: SearchRepository,
     protected serverInfoRepository: ServerInfoRepository,
+    protected smartAlbumRepository: SmartAlbumRepository,
     protected sessionRepository: SessionRepository,
     protected sharedLinkRepository: SharedLinkRepository,
     protected sharedLinkAssetRepository: SharedLinkAssetRepository,
@@ -228,6 +231,7 @@ export class BaseService {
       ctx.processRepository,
       ctx.searchRepository,
       ctx.serverInfoRepository,
+      ctx.smartAlbumRepository,
       ctx.sessionRepository,
       ctx.sharedLinkRepository,
       ctx.sharedLinkAssetRepository,

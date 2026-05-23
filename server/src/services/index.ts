@@ -33,6 +33,7 @@ import { SearchService } from 'src/services/search.service';
 import { ServerService } from 'src/services/server.service';
 import { SessionService } from 'src/services/session.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
+import { SmartAlbumService } from 'src/services/smart-album.service';
 import { SmartInfoService } from 'src/services/smart-info.service';
 import { StackService } from 'src/services/stack.service';
 import { StorageTemplateService } from 'src/services/storage-template.service';
@@ -88,6 +89,7 @@ export const services = [
   ServerService,
   SessionService,
   SharedLinkService,
+  SmartAlbumService,
   SmartInfoService,
   ZeroShotTaggingService,
   StackService,

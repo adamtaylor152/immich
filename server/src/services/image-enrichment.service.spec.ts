@@ -1069,4 +1069,49 @@ describe(ImageEnrichmentService.name, () => {
       expect(saved.description.identityFlags?.hallucinatedNames).toEqual(['Madison']);
     });
   });
+
+  describe('smart-album integration', () => {
+    const tags = ['beach', 'sunset'];
+
+    beforeEach(() => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { nsfwDetection: { enabled: false }, imageDescription: { enabled: true } },
+        smartAlbums: { enabled: true },
+      });
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'A beach scene.',
+        people: [],
+        environment: 'outdoor',
+        objects: [],
+        visible_text: [],
+        context: '',
+        tags,
+      });
+      // smartAlbum mocks default to no-ops.
+      mocks.smartAlbum.getMatchingKinds.mockResolvedValue([]);
+      mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind.mockResolvedValue(null);
+      mocks.smartAlbum.isExcluded.mockResolvedValue(false);
+      mocks.smartAlbum.addAssetToSmartAlbum.mockResolvedValue();
+      mocks.smartAlbum.removeAssetFromSmartAlbum.mockResolvedValue();
+    });
+
+    it('should invoke smart-album evaluation after a successful description (evaluate path executes)', async () => {
+      // Trigger an error inside evaluate so we can observe the logger.warn call.
+      // This confirms evaluate was invoked; the mock will throw on first call to
+      // the smart-album repo so we catch + log it.
+      mocks.smartAlbum.getMatchingKinds.mockRejectedValue(new Error('forced'));
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Smart-album evaluation failed'));
+    });
+
+    it('should not fail the description job when smartAlbumService.evaluate throws', async () => {
+      mocks.smartAlbum.getMatchingKinds.mockRejectedValue(new Error('db exploded'));
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Smart-album evaluation failed'));
+    });
+  });
 });
