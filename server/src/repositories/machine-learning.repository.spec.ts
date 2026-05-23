@@ -253,6 +253,9 @@ describe(MachineLearningRepository.name, () => {
     ).rejects.toThrow('failed for all URLs');
 
     // Managed URL must still be tried first even with healthyMap reporting it unhealthy.
+    // Lock the call count too, so a future regression that adds extra retries
+    // (e.g. silently retrying the same URL twice) fails this test.
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(String(fetch.mock.calls[0][0])).toMatch(/endpoint\.api\.runpod\.ai/);
     expect(String(fetch.mock.calls[1][0])).toMatch(/local:3003/);
   });
