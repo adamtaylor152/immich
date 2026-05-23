@@ -59,7 +59,7 @@ When description and tag generation is enabled, Immich sends the asset preview i
 - Tags are plain searchable tags, deduplicated against existing tags.
 - Sidecar write jobs are queued after visible description or tag changes.
 
-The default description model setting is `Qwen/Qwen2.5-VL-3B-Instruct`. In this branch, that model is mapped internally to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model. The lower-resource fallback setting is `microsoft/Florence-2-base-ft`.
+The default description model setting is `Qwen/Qwen2.5-VL-3B-Instruct`. In this branch, that model is mapped internally to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model. The lower-resource fallback setting is `microsoft/Florence-2-base-ft`. See [Hardware and Model Notes](#hardware-and-model-notes) below for the full curated model dropdown, VRAM estimates per model, and an explanation of how the fallback behavior differs between local and RunPod URLs.
 
 ## NSFW Detection
 
@@ -110,16 +110,34 @@ Description and tag generation has two hardware profiles in the admin machine-le
 - `Intel iGPU (OpenVINO)` uses OpenVINO GenAI and maps the admin-facing `Qwen/Qwen2.5-VL-3B-Instruct` setting to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model.
 - `NVIDIA GPU (CUDA)` uses Transformers/PyTorch with the CUDA machine-learning image.
 
-| Use case                                                | Model name                             |
-| ------------------------------------------------------- | -------------------------------------- |
-| Highest quality descriptions and tags (large GPU/iGPU)  | `Qwen/Qwen2.5-VL-7B-Instruct`          |
-| Higher quality descriptions and tags (default)          | `Qwen/Qwen2.5-VL-3B-Instruct`          |
-| Lightweight Phi alternative (smaller, faster on iGPU)   | `microsoft/Phi-3.5-vision-instruct`    |
-| Older Phi build (smaller still)                         | `microsoft/Phi-3-vision-128k-instruct` |
-| Caption-only fallback (very low resource, CPU-friendly) | `microsoft/Florence-2-base-ft`         |
-| Caption-only fallback, larger Florence                  | `microsoft/Florence-2-large-ft`        |
+The admin UI provides a **curated dropdown** of image-description models. Each entry lists an estimated VRAM footprint so you can match it to your hardware. The dropdown also offers a **Custom…** sentinel that reveals a free-text input for any Hugging Face model ID (use with caution — only the families listed below are loadable).
 
-On OpenVINO, the Phi and Qwen entries above resolve transparently to pre-quantized int4 builds; on CUDA they use the original HF weights. Only the Qwen2.5-VL, Phi-3/3.5-vision, and Florence-2 families are loadable — other model names will fail at load time.
+| Model (admin dropdown label)       | VRAM (FP16) | Recommended hardware                           | Notes                                                                                                           |
+| ---------------------------------- | ----------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Qwen2.5-VL 3B (default)            | ~6 GB       | 24 GB GPU (RTX A4000/A5000) or Intel iGPU      | Solid for object/scene recognition. The default; resolves to `llmware/qwen2.5-vl-3b-ov` on OpenVINO.            |
+| Qwen2.5-VL 7B (balanced)           | ~16 GB      | 24 GB GPU                                      | Better at composition, text in images, and nuanced scenes. Resolves to `llmware/qwen2.5-vl-7b-ov` on OpenVINO.  |
+| Qwen2.5-VL 32B (quality)           | ~64 GB      | 80 GB GPU (A100 / L40S)                        | Excellent at complex scenes, fine details, cultural context. CUDA only (no OpenVINO alias).                     |
+| Qwen2.5-VL 72B (top tier)          | ~144 GB     | Multi-GPU (2× A100 80 GB or 1× H100 80 GB AWQ) | Best quality in the 2.5 family. CUDA only.                                                                      |
+| Qwen3-VL 30B-A3B (MoE)             | ~60 GB      | 80 GB GPU                                      | Mixture-of-experts; only ~3B params active per token, so it runs near 7B speed. CUDA only.                      |
+| _(legacy)_ Phi-3.5-vision-instruct | ~5 GB       | Intel iGPU                                     | Smaller alternative on OpenVINO; resolves to `OpenVINO/Phi-3.5-vision-instruct-int4-ov`.                        |
+| _(legacy)_ Phi-3-vision-128k       | ~5 GB       | Intel iGPU                                     | Older Phi build, smaller still.                                                                                 |
+| Florence-2-base-ft _(fallback)_    | ~1 GB       | Any CUDA box (local fallback only)             | Caption-only; not a chat-style VLM. Used only as fallback for local URLs — see "Fallback model behavior" below. |
+| Florence-2-large-ft _(fallback)_   | ~3 GB       | Any CUDA box (local fallback only)             | Same caveat as base-ft.                                                                                         |
+
+Only the **Qwen2.5-VL**, **Qwen3-VL**, **Phi-3/3.5-vision**, and **Florence-2** families are loadable on the CUDA path. Other Hugging Face model IDs pasted into the **Custom…** field will fail at load time with `Failed to load model 'X'` in the worker logs.
+
+On OpenVINO, the 3B/7B Qwen entries resolve transparently to pre-quantized int4 builds (`llmware/qwen2.5-vl-Nb-ov`). The 32B, 72B, and Qwen3-VL 30B-A3B entries are CUDA only — there is no OpenVINO alias.
+
+### Fallback model behavior
+
+The dropdown also exposes a **fallback model** field. Florence-2 is the typical choice for local CUDA setups, since it's small enough to fit alongside other models on the same GPU.
+
+The fallback logic is **split by destination**:
+
+- **Local URLs**: if the primary model fails (HTTP 5xx), Immich retries the same request with the fallback model name. Local Florence-2 then takes the call.
+- **RunPod managed URL**: the fallback is **never** attempted. The admin's model choice is the contract; silently switching to Florence on RunPod would be both surprising and broken (Florence's `trust_remote_code` modeling code is incompatible with the transformers 5.x pin on the cuda-runpod image).
+
+If you only use RunPod (no local URLs configured), the fallback never runs — leaving it set is harmless.
 
 For Intel iGPU deployments, use the OpenVINO machine-learning image/extra and keep the description device at `AUTO` unless you need to pin it. `AUTO` lets OpenVINO choose the best available device and fall back when the GPU is unavailable.
 

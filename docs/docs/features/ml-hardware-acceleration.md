@@ -34,7 +34,11 @@ Image enrichment has two independent model paths:
 
 Existing ONNX tasks keep NVIDIA acceleration when the CUDA machine-learning image is used. OpenVINO support does not disable CUDA; the machine-learning service still prefers `CUDAExecutionProvider` when the CUDA runtime is installed.
 
-The default description model setting is `Qwen/Qwen2.5-VL-3B-Instruct`. The Intel iGPU profile maps it internally to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model. The NVIDIA CUDA profile runs the admin-facing model directly through Transformers/PyTorch. The fallback setting is `microsoft/Florence-2-base-ft`.
+The default description model setting is `Qwen/Qwen2.5-VL-3B-Instruct`. The Intel iGPU profile maps it internally to the OpenVINO-converted `llmware/qwen2.5-vl-3b-ov` model. The NVIDIA CUDA profile runs the admin-facing model directly through Transformers/PyTorch via `AutoModelForVision2Seq`, which auto-dispatches the correct conditional-generation class based on the model's `config.json` — this is how the same code path handles Qwen2.5-VL (3B/7B/32B/72B) and Qwen3-VL (e.g. 30B-A3B MoE).
+
+The full curated dropdown of description models, with VRAM hints, lives in [Image Enrichment](/features/image-enrichment#hardware-and-model-notes). For RunPod cloud-GPU setups, [Remote Machine Learning → Choosing a description model](/guides/remote-machine-learning#choosing-a-description-model) covers cost estimates and pool recommendations per model.
+
+The default fallback setting is `microsoft/Florence-2-base-ft`. The fallback is only attempted on local (non-RunPod) URLs — see [Image Enrichment → Fallback model behavior](/features/image-enrichment#fallback-model-behavior) for the rationale.
 
 ## Prerequisites
 
