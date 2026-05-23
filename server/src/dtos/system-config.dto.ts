@@ -204,6 +204,10 @@ const SystemConfigRunPodSchema = z
     // pattern above achieves the same security guarantee at the application
     // layer.
     apiKey: z.string().describe('RunPod API key (write-only; empty preserves the existing key)'),
+    apiKeyConfigured: z
+      .boolean()
+      .optional()
+      .describe('Read-only indicator that a key is currently stored. Set by the server; ignored on write.'),
     imageName: z.string().min(1).describe('Container image to launch'),
     dataPrivacyAcknowledged: configBool.describe('User accepted that image previews leave the network'),
     // Pod-mode settings
@@ -602,7 +606,9 @@ export class SmartAlbumReevaluateRequestDto extends createZodDto(SmartAlbumReeva
 
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   // Redact secrets on read. Writes that come back with an empty string here
-  // preserve the stored value (see utils/config.ts:updateConfig).
+  // preserve the stored value (see utils/config.ts:updateConfig). The
+  // `apiKeyConfigured` flag exists so the admin UI can render a "Key Saved"
+  // indicator without exposing the actual key.
   return {
     ...config,
     machineLearning: {
@@ -610,6 +616,7 @@ export function mapConfig(config: SystemConfig): SystemConfigDto {
       runpod: {
         ...config.machineLearning.runpod,
         apiKey: '',
+        apiKeyConfigured: config.machineLearning.runpod.apiKey.length > 0,
       },
     },
   };

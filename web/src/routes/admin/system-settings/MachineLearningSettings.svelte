@@ -377,13 +377,37 @@
 
           <hr />
 
-          <SettingInputField
-            inputType={SettingInputFieldType.PASSWORD}
-            label="RunPod API Key"
-            bind:value={runpod.apiKey}
-            disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
-            isEdited={runpod.apiKey !== savedRunpod.apiKey}
-          />
+          <div class="flex flex-col gap-1">
+            <SettingInputField
+              inputType={SettingInputFieldType.PASSWORD}
+              label="RunPod API Key"
+              bind:value={runpod.apiKey}
+              disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
+              isEdited={runpod.apiKey !== savedRunpod.apiKey}
+              placeholder={savedRunpod.apiKeyConfigured ? '••••••••••••' : ''}
+            />
+            {#if savedRunpod.apiKeyConfigured && !runpod.apiKey}
+              <span
+                class="inline-flex w-fit items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Key Saved
+              </span>
+            {/if}
+          </div>
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}

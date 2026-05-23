@@ -19,6 +19,7 @@
     isEdited?: boolean;
     autofocus?: boolean;
     passwordAutocomplete?: AutoFill;
+    placeholder?: string;
     descriptionSnippet?: Snippet;
     trailingSnippet?: Snippet;
   } & (
@@ -44,6 +45,7 @@
     isEdited = false,
     autofocus = false,
     passwordAutocomplete = 'current-password',
+    placeholder,
     descriptionSnippet,
     trailingSnippet,
   }: Props = $props();
@@ -159,6 +161,7 @@
       bind:value={value as string}
       {disabled}
       {title}
+      {placeholder}
     />
   {/if}
 </div>

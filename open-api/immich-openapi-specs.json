@@ -28660,6 +28660,10 @@
             "description": "RunPod API key (write-only; empty preserves the existing key)",
             "type": "string"
           },
+          "apiKeyConfigured": {
+            "description": "Read-only indicator that a key is currently stored. Set by the server; ignored on write.",
+            "type": "boolean"
+          },
           "autoBackfillOnLaunch": {
             "description": "Auto-run ML backfill on pod ready (Pod mode)",
             "type": "boolean"
