@@ -28,7 +28,7 @@ class ImageDescriptionRequeueEstimateDto {
   /// Configured image description model name
   String activeModel;
 
-  /// Estimated total wall-clock seconds to re-describe all eligible assets at current throughput
+  /// Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).
   ///
   /// Minimum value: 0
   double estimatedTotalSeconds;
@@ -44,13 +44,13 @@ class ImageDescriptionRequeueEstimateDto {
   /// Maximum value: 9007199254740991
   int totalAssets;
 
-  /// Assets already holding a successful description
+  /// Number of eligible assets that currently have a description (will be re-run on force-requeue).
   ///
   /// Minimum value: 0
   /// Maximum value: 9007199254740991
   int withDescription;
 
-  /// Assets missing a description
+  /// Number of eligible assets that currently have no description.
   ///
   /// Minimum value: 0
   /// Maximum value: 9007199254740991

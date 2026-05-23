@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { defaults } from 'src/config';
 import { AssetImageEnrichmentAction } from 'src/dtos/asset.dto';
 import { AssetMetadataKey, AssetStatus, AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum';
 import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
@@ -307,15 +309,12 @@ describe(ImageEnrichmentService.name, () => {
   });
 
   it('should record a configHash on the description metadata when the job succeeds', async () => {
+    // No imageDescription override: the merged prompt config equals defaults,
+    // so we can compute the exact expected hash from defaults below.
     mocks.systemMetadata.get.mockResolvedValue({
       machineLearning: {
         enabled: true,
         nsfwDetection: { enabled: false },
-        imageDescription: {
-          enabled: true,
-          modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
-          prompt: { style: 'balanced' },
-        },
       },
     });
     mocks.machineLearning.describeImage.mockResolvedValue({
@@ -330,11 +329,16 @@ describe(ImageEnrichmentService.name, () => {
 
     await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
 
+    const expectedHash = createHash('sha256')
+      .update(JSON.stringify(defaults.machineLearning.imageDescription.prompt))
+      .digest('hex')
+      .slice(0, 8);
+
     const descriptionCall = mocks.asset.upsertMetadata.mock.calls.find(
       (call) => (call[1][0]?.value as { description?: { result?: unknown } } | undefined)?.description?.result,
     )!;
     const saved = descriptionCall[1][0].value as { description: Record<string, unknown> };
-    expect(saved.description.configHash).toMatch(/^[0-9a-f]{8}$/);
+    expect(saved.description.configHash).toBe(expectedHash);
   });
 
   it('should not record a configHash on failed description metadata', async () => {

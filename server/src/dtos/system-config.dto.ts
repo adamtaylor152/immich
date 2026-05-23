@@ -455,8 +455,14 @@ export class SystemConfigDto extends createZodDto(SystemConfigSchema) {}
 const ImageDescriptionRequeueEstimateSchema = z
   .object({
     totalAssets: z.int().min(0).describe('Total eligible image assets'),
-    withDescription: z.int().min(0).describe('Assets already holding a successful description'),
-    withoutDescription: z.int().min(0).describe('Assets missing a description'),
+    withDescription: z
+      .int()
+      .min(0)
+      .describe('Number of eligible assets that currently have a description (will be re-run on force-requeue).'),
+    withoutDescription: z
+      .int()
+      .min(0)
+      .describe('Number of eligible assets that currently have no description.'),
     rollingAvgSeconds: z
       .number()
       .meta({ format: 'double' })
@@ -466,7 +472,9 @@ const ImageDescriptionRequeueEstimateSchema = z
       .number()
       .meta({ format: 'double' })
       .min(0)
-      .describe('Estimated total wall-clock seconds to re-describe all eligible assets at current throughput'),
+      .describe(
+        'Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).',
+      ),
     activeBackend: z.string().describe('Configured hardware acceleration backend (e.g. "auto", "cuda")'),
     activeModel: z.string().describe('Configured image description model name'),
   })

@@ -20157,7 +20157,7 @@
             "type": "string"
           },
           "estimatedTotalSeconds": {
-            "description": "Estimated total wall-clock seconds to re-describe all eligible assets at current throughput",
+            "description": "Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).",
             "format": "double",
             "minimum": 0,
             "type": "number"
@@ -20175,13 +20175,13 @@
             "type": "integer"
           },
           "withDescription": {
-            "description": "Assets already holding a successful description",
+            "description": "Number of eligible assets that currently have a description (will be re-run on force-requeue).",
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
           },
           "withoutDescription": {
-            "description": "Assets missing a description",
+            "description": "Number of eligible assets that currently have no description.",
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"

@@ -3126,15 +3126,15 @@ export type ImageDescriptionRequeueEstimateDto = {
     activeBackend: string;
     /** Configured image description model name */
     activeModel: string;
-    /** Estimated total wall-clock seconds to re-describe all eligible assets at current throughput */
+    /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
     estimatedTotalSeconds: number;
     /** Rolling average seconds per asset (last 1000 completed jobs, or default estimate) */
     rollingAvgSeconds: number;
     /** Total eligible image assets */
     totalAssets: number;
-    /** Assets already holding a successful description */
+    /** Number of eligible assets that currently have a description (will be re-run on force-requeue). */
     withDescription: number;
-    /** Assets missing a description */
+    /** Number of eligible assets that currently have no description. */
     withoutDescription: number;
 };
 export type MachineLearningHardwareResponseDto = {

@@ -677,7 +677,7 @@ describe(SystemConfigService.name, () => {
         withDescription: 40,
         withoutDescription: 60,
         rollingAvgSeconds: 1.5,
-        estimatedTotalSeconds: 150,
+        estimatedTotalSeconds: 100 * 1.5,
         activeModel: 'Qwen/Qwen2.5-VL-3B-Instruct',
       });
       expect(typeof result.activeBackend).toBe('string');
@@ -701,7 +701,10 @@ describe(SystemConfigService.name, () => {
       await expect(sut.triggerDescriptionRequeue()).resolves.toEqual({ queued: true });
 
       expect(mocks.job.queue).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'ImageDescriptionQueueAll' }),
+        expect.objectContaining({
+          name: 'ImageDescriptionQueueAll',
+          data: { force: true },
+        }),
       );
     });
 
