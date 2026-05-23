@@ -35,7 +35,18 @@
   const runBackfill = async () => {
     const response = await fetch('/api/runpod/backfill', { method: 'POST', credentials: 'include' });
     if (!response.ok) {
-      throw new Error(`Failed to enqueue backfill (${response.status})`);
+      // Surface the actual server error message (e.g. "Cannot start backfill
+      // while RunPod is serverless-ready") instead of a generic status code.
+      let detail = `${response.status}`;
+      try {
+        const body = (await response.json()) as { message?: string };
+        if (body.message) {
+          detail = body.message;
+        }
+      } catch {
+        // Body wasn't JSON; fall back to status code.
+      }
+      throw new Error(`Failed to enqueue backfill: ${detail}`);
     }
     return response.json() as Promise<{ enqueued: string[]; skipped: string[] }>;
   };

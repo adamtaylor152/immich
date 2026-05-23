@@ -564,6 +564,36 @@ describe(RunPodService.name, () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('runBackfill enqueues ML jobs from serverless-ready (no Pod-only running gate)', async () => {
+      // Regression: previously runBackfill required state.status === 'running',
+      // which silently 400'd every backfill click from a Serverless deployment.
+      stubServerlessConfig();
+      setState({
+        status: 'serverless-ready',
+        instanceTag: 'aaaaaaaa-1234',
+        templateId: 'tmpl_existing',
+        endpointId: 'ep_xyz',
+        endpointUrl: ENDPOINT_URL,
+        imageName: 'ghcr.io/x/y:z',
+        gpuTypeIds: ['NVIDIA RTX A5000'],
+        workersMin: 0,
+        workersMax: 3,
+        idleTimeoutSeconds: 30,
+        createdAt: '2026-05-22T20:00:00.000Z',
+      });
+      const result = await sut.runBackfill();
+      // enqueueBackfill stuffs jobs into BullMQ; we just need to confirm it
+      // returns a payload (the controller wraps it back to the client).
+      expect(result.enqueued).toBeDefined();
+      expect(result.skipped).toBeDefined();
+    });
+
+    it('runBackfill refuses from idle even in serverless mode', async () => {
+      stubServerlessConfig();
+      setState({ status: 'idle' });
+      await expect(sut.runBackfill()).rejects.toBeInstanceOf(BadRequestException);
+    });
+
     it('syncManagedUrl injects the endpoint URL with the API key as bearer in serverless-ready', async () => {
       stubServerlessConfig();
       setState({

@@ -447,9 +447,17 @@ export class RunPodService extends BaseService {
   }
 
   async runBackfill(): Promise<RunPodBackfillResultDto> {
+    // Allow backfill whenever a RunPod target is ready to receive jobs —
+    // Pod mode's `running` AND Serverless mode's `serverless-ready`. The
+    // previous gate only accepted `running`, which silently broke backfill
+    // for the entire Serverless flow. enqueueBackfill just stuffs jobs into
+    // BullMQ — they'll wait for whatever worker eventually picks them up,
+    // including a cold-starting serverless worker.
     const state = await this.loadState();
-    if (state.status !== 'running') {
-      throw new BadRequestException(`Cannot start backfill while pod is ${state.status}`);
+    if (state.status !== 'running' && state.status !== 'serverless-ready') {
+      throw new BadRequestException(
+        `Cannot start backfill while RunPod is ${state.status}. Launch a pod or serverless endpoint first.`,
+      );
     }
     return this.enqueueBackfill();
   }
