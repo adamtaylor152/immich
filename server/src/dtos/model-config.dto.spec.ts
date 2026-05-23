@@ -101,4 +101,28 @@ describe('ImageDescriptionConfigSchema', () => {
       } as any),
     ).toThrow();
   });
+
+  it('defaults customInstructions to an empty string', () => {
+    const parsed = ImageDescriptionConfigSchema.parse({
+      enabled: true,
+      modelName: 'x',
+      fallbackModelName: 'y',
+      acceleration: 'auto',
+      device: 'AUTO',
+    });
+    expect(parsed.prompt.customInstructions).toBe('');
+  });
+
+  it('rejects customInstructions exceeding the 2000-char cap', () => {
+    expect(() =>
+      ImageDescriptionConfigSchema.parse({
+        enabled: true,
+        modelName: 'x',
+        fallbackModelName: 'y',
+        acceleration: 'auto',
+        device: 'AUTO',
+        prompt: { customInstructions: 'a'.repeat(2001) },
+      } as any),
+    ).toThrow();
+  });
 });

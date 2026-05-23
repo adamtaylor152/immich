@@ -138,6 +138,13 @@ export const ImageDescriptionPromptSchema = z
       ])
       .describe('Additional categories the model should note when visibly supported (brands, sports equipment, etc.)'),
     customVocabulary: z.array(z.string()).default([]).describe('Tag values the model should prefer when applicable'),
+    customInstructions: z
+      .string()
+      .max(2000)
+      .default('')
+      .describe(
+        'Free-form additional natural-language instructions appended to the description prompt. Example: "If you see a car, identify the make and model. If people are playing a sport, name the sport."',
+      ),
     nsfwIndicators: z
       .array(z.string())
       .default([

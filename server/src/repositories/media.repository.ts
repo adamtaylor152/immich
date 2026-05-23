@@ -186,6 +186,44 @@ export class MediaRepository {
       .toFile(output);
   }
 
+  /**
+   * Compose a set of input images into a single JPEG grid (left-to-right,
+   * top-to-bottom). Cells are letterboxed to a fixed size on a black canvas
+   * to keep aspect ratios intact. Used to feed multiple video frames through
+   * the single-image describeImage() ML endpoint.
+   */
+  async composeImageGrid(
+    inputs: string[],
+    options: { cols: number; rows: number; cellSize: number; output: string },
+  ): Promise<void> {
+    const { cols, rows, cellSize, output } = options;
+    const canvasWidth = cols * cellSize;
+    const canvasHeight = rows * cellSize;
+
+    const cells = await Promise.all(
+      inputs.slice(0, cols * rows).map((path) =>
+        sharp(path, { limitInputPixels: false })
+          .rotate()
+          .resize(cellSize, cellSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
+          .toFormat('jpeg')
+          .toBuffer(),
+      ),
+    );
+
+    const composites = cells.map((buffer, index) => ({
+      input: buffer,
+      left: (index % cols) * cellSize,
+      top: Math.floor(index / cols) * cellSize,
+    }));
+
+    await sharp({
+      create: { width: canvasWidth, height: canvasHeight, channels: 3, background: { r: 0, g: 0, b: 0 } },
+    })
+      .composite(composites)
+      .jpeg({ quality: 85, chromaSubsampling: '4:2:0', progressive: false })
+      .toFile(output);
+  }
+
   private getImageDecodingPipeline(input: string | Buffer, options: DecodeToBufferOptions) {
     let pipeline = sharp(input, {
       // some invalid images can still be processed by sharp, but we want to fail on them by default to avoid crashes

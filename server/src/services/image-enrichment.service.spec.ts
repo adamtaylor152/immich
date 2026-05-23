@@ -1114,4 +1114,116 @@ describe(ImageEnrichmentService.name, () => {
       expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Smart-album evaluation failed'));
     });
   });
+
+  describe('video descriptions', () => {
+    const videoAssetId = newUuid();
+
+    const baseVideoAsset = {
+      id: videoAssetId,
+      ownerId,
+      type: AssetType.Video,
+      status: AssetStatus.Active,
+      deletedAt: null,
+      visibility: AssetVisibility.Timeline,
+      description: '',
+      previewFile,
+    };
+
+    it('persists a skipped status with video-frames-unavailable when no duplicate frames exist', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          nsfwDetection: { enabled: false },
+          imageDescription: { enabled: true, modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' },
+        },
+      });
+      mocks.assetJob.getForImageEnrichment.mockResolvedValue(baseVideoAsset);
+      mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([]);
+
+      await expect(sut.handleImageDescription({ id: videoAssetId })).resolves.toBe(JobStatus.Skipped);
+
+      expect(mocks.machineLearning.describeImage).not.toHaveBeenCalled();
+      expect(mocks.media.composeImageGrid).not.toHaveBeenCalled();
+
+      const skipCall = mocks.asset.upsertMetadata.mock.calls.find(
+        (call) =>
+          (call[1][0]?.value as { description?: { status?: string } } | undefined)?.description?.status === 'skipped',
+      )!;
+      expect(skipCall).toBeDefined();
+      const saved = skipCall[1][0].value as { description: { status: string; reason: string } };
+      expect(saved.description.reason).toBe('video-frames-unavailable');
+    });
+
+    it('composes a frame grid and passes videoContext to the prompt when frames are present', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          nsfwDetection: { enabled: false },
+          imageDescription: { enabled: true, modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' },
+        },
+      });
+      mocks.assetJob.getForImageEnrichment.mockResolvedValue(baseVideoAsset);
+      mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([
+        { assetId: videoAssetId, frameIndex: 0, timestampMs: 1000, path: '/frames/0.jpeg' },
+        { assetId: videoAssetId, frameIndex: 1, timestampMs: 5000, path: '/frames/1.jpeg' },
+        { assetId: videoAssetId, frameIndex: 2, timestampMs: 9000, path: '/frames/2.jpeg' },
+        { assetId: videoAssetId, frameIndex: 3, timestampMs: 13_000, path: '/frames/3.jpeg' },
+      ] as never);
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'A short video.',
+        people: [],
+        environment: 'outdoors',
+        objects: [],
+        visible_text: [],
+        context: '',
+        tags: [],
+      });
+
+      await expect(sut.handleImageDescription({ id: videoAssetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.media.composeImageGrid).toHaveBeenCalledWith(
+        ['/frames/0.jpeg', '/frames/1.jpeg', '/frames/2.jpeg', '/frames/3.jpeg'],
+        expect.objectContaining({ cols: 2, rows: 2, output: expect.stringContaining('_description_grid.jpeg') }),
+      );
+
+      const describeCall = mocks.machineLearning.describeImage.mock.calls[0];
+      const gridPath = describeCall[0] as string;
+      expect(gridPath).toContain('_description_grid.jpeg');
+      // Prompt is the 4th arg; it should include the video grid prefix.
+      const prompt = describeCall[3] as string;
+      expect(prompt).toContain('composite');
+      expect(prompt).toContain('frames sampled from a video');
+
+      // Grid file is cleaned up after the run.
+      expect(mocks.storage.unlink).toHaveBeenCalledWith(gridPath);
+    });
+
+    it('keeps the image-asset path unchanged (no grid compose, no video context)', async () => {
+      // Default beforeEach mocks already configure an image asset.
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          nsfwDetection: { enabled: false },
+          imageDescription: { enabled: true, modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' },
+        },
+      });
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'A bright kitchen.',
+        people: [],
+        environment: 'indoors',
+        objects: [],
+        visible_text: [],
+        context: '',
+        tags: [],
+      });
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.media.composeImageGrid).not.toHaveBeenCalled();
+      expect(mocks.duplicateRepository.getVideoDuplicateFrames).not.toHaveBeenCalled();
+      const describeCall = mocks.machineLearning.describeImage.mock.calls[0];
+      expect(describeCall[0]).toBe(previewFile);
+      expect(describeCall[3] as string).not.toContain('composite');
+    });
+  });
 });

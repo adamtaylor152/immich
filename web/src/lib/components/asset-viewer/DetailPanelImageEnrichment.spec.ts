@@ -5,6 +5,7 @@ import {
   getAssetInfo,
   isHttpError,
   Status,
+  Status2,
   updateAssetImageEnrichment,
   type AssetImageEnrichmentResponseDto,
 } from '@immich/sdk';
@@ -32,7 +33,7 @@ const enrichmentFactory = (assetId: string, effectiveIsNsfw: boolean): AssetImag
     appliedTags: false,
   },
   nsfwDetection: {
-    status: Status.Success,
+    status: Status2.Success,
     effectiveIsNsfw,
     isNsfw: effectiveIsNsfw,
     score: effectiveIsNsfw ? 1 : 0,

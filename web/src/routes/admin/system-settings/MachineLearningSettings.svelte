@@ -10,6 +10,7 @@
   import { SettingInputFieldType } from '$lib/constants';
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
+  import { serverConfigManager } from '$lib/managers/server-config-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import ImageDescriptionRequeueModal from '$lib/modals/ImageDescriptionRequeueModal.svelte';
   import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
@@ -1206,6 +1207,15 @@
               />
 
               <SettingTextarea
+                label={$t('admin.machine_learning_image_description_custom_instructions')}
+                description={$t('admin.machine_learning_image_description_custom_instructions_description')}
+                bind:value={imageDescription.prompt!.customInstructions}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={imageDescription.prompt?.customInstructions !==
+                  savedImageDescription.prompt?.customInstructions}
+              />
+
+              <SettingTextarea
                 label={$t('admin.machine_learning_image_description_forbidden_inferences')}
                 description={$t('admin.machine_learning_image_description_forbidden_inferences_description')}
                 value={forbiddenInferencesText}
@@ -1309,7 +1319,19 @@
                 <div class="ms-4 mt-4 flex flex-col gap-4">
                   <SettingSwitch
                     title={$t('admin.machine_learning_image_description_advanced_enabled')}
-                    bind:checked={imageDescription.prompt!.advanced!.enabled}
+                    checked={imageDescription.prompt?.advanced?.enabled ?? false}
+                    onToggle={(next) => {
+                      imageDescription.prompt!.advanced!.enabled = next;
+                      // Pre-fill from the server-provided default template the
+                      // first time advanced mode is enabled, so admins have a
+                      // working starting point instead of an empty box. Only
+                      // fires when the textarea is empty — never clobbers
+                      // existing edits.
+                      if (next && !imageDescription.prompt!.advanced!.rawPromptTemplate) {
+                        imageDescription.prompt!.advanced!.rawPromptTemplate =
+                          serverConfigManager.value.defaultImageDescriptionRawPromptTemplate;
+                      }
+                    }}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
                     isEdited={imageDescription.prompt?.advanced?.enabled !==
                       savedImageDescription.prompt?.advanced?.enabled}
@@ -1325,6 +1347,17 @@
                       isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !==
                         savedImageDescription.prompt?.advanced?.rawPromptTemplate}
                     />
+
+                    <Button
+                      size="small"
+                      color="secondary"
+                      disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                      onclick={() =>
+                        (imageDescription.prompt!.advanced!.rawPromptTemplate =
+                          serverConfigManager.value.defaultImageDescriptionRawPromptTemplate)}
+                    >
+                      {$t('admin.machine_learning_image_description_advanced_reset_to_default')}
+                    </Button>
 
                     <SettingSelect
                       label={$t('admin.machine_learning_image_description_advanced_placeholder_validation')}

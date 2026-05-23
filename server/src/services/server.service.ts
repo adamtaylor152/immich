@@ -17,6 +17,7 @@ import {
 import { StorageFolder, SystemMetadataKey } from 'src/enum';
 import { UserStatsQueryResponse } from 'src/repositories/user.repository';
 import { BaseService } from 'src/services/base.service';
+import { DEFAULT_RAW_PROMPT_TEMPLATE } from 'src/services/prompt-assembler.service';
 import { asHumanReadable } from 'src/utils/bytes';
 import { mimeTypes } from 'src/utils/mime-types';
 import {
@@ -143,6 +144,7 @@ export class ServerService extends BaseService {
       mapDarkStyleUrl: config.map.darkStyle,
       mapLightStyleUrl: config.map.lightStyle,
       maintenanceMode: false,
+      defaultImageDescriptionRawPromptTemplate: DEFAULT_RAW_PROMPT_TEMPLATE,
     };
   }
 
