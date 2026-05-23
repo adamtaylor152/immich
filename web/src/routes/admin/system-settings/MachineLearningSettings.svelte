@@ -2,17 +2,21 @@
   import SettingAccordion from '$lib/components/shared-components/settings/SettingAccordion.svelte';
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSelect from './SettingSelect.svelte';
+  import SettingTextarea from './SettingTextarea.svelte';
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import SettingButtonsRow from '$lib/components/shared-components/settings/SystemConfigButtonRow.svelte';
   import { SettingInputFieldType } from '$lib/constants';
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
-  import { Button, IconButton } from '@immich/ui';
-  import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
+  import ImageDescriptionRequeueModal from '$lib/modals/ImageDescriptionRequeueModal.svelte';
+  import { Button, IconButton, modalManager } from '@immich/ui';
+  import { mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
   import {
     getMachineLearningHardware,
     MachineLearningHardwareAcceleration,
+    PlaceholderValidation,
+    Style,
     type SystemConfigMachineLearningDto,
   } from '@immich/sdk';
   import { isEqual } from 'lodash-es';
@@ -142,6 +146,44 @@
 
   const isMachineLearningConfigEdited = (machineLearning: SystemConfigMachineLearningDto) =>
     !isEqual(machineLearning, config.machineLearning);
+
+  // Textarea state mirrors for list-type prompt fields (string ↔ array, no two-way reactive loop).
+  // We initialise from configToEdit and write back on blur only.
+  let lookForText = $state((imageDescription.prompt?.lookFor ?? []).join('\n'));
+  let customVocabularyText = $state((imageDescription.prompt?.customVocabulary ?? []).join('\n'));
+  let nsfwIndicatorsText = $state((imageDescription.prompt?.nsfwIndicators ?? []).join('\n'));
+  let medicalIndicatorsText = $state((imageDescription.prompt?.medicalIndicators ?? []).join('\n'));
+  let forbiddenInferencesText = $state((imageDescription.prompt?.forbiddenInferences ?? []).join('\n'));
+  let rawPromptTemplateText = $state(imageDescription.prompt?.advanced?.rawPromptTemplate ?? '');
+
+  const parseLines = (text: string): string[] => text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  // Sync textarea strings → config arrays. Each effect is gated on its own text variable only,
+  // so there is no write-back loop (config arrays are plain object props, not reactive signals).
+  $effect(() => {
+    imageDescription.prompt!.lookFor = parseLines(lookForText);
+  });
+  $effect(() => {
+    imageDescription.prompt!.customVocabulary = parseLines(customVocabularyText);
+  });
+  $effect(() => {
+    imageDescription.prompt!.nsfwIndicators = parseLines(nsfwIndicatorsText);
+  });
+  $effect(() => {
+    imageDescription.prompt!.medicalIndicators = parseLines(medicalIndicatorsText);
+  });
+  $effect(() => {
+    imageDescription.prompt!.forbiddenInferences = parseLines(forbiddenInferencesText);
+  });
+  $effect(() => {
+    if (imageDescription.prompt?.advanced) {
+      imageDescription.prompt.advanced.rawPromptTemplate = rawPromptTemplateText;
+    }
+  });
+
+  const handleRequeueClick = async () => {
+    await modalManager.show(ImageDescriptionRequeueModal, {});
+  };
 </script>
 
 <div class="mt-2">
@@ -551,6 +593,182 @@
             disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
             isEdited={imageDescription.device !== savedImageDescription.device}
           />
+
+          <SettingAccordion
+            key="image-description-prompt"
+            title={$t('admin.machine_learning_image_description_prompt')}
+            subtitle={$t('admin.machine_learning_image_description_prompt_description')}
+          >
+            <div class="ms-4 mt-4 flex flex-col gap-4">
+              <SettingSelect
+                label={$t('admin.machine_learning_image_description_style')}
+                desc={$t('admin.machine_learning_image_description_style_description')}
+                name="image-description-style"
+                bind:value={imageDescription.prompt!.style}
+                options={[
+                  { value: Style.Terse, text: $t('admin.machine_learning_image_description_style_terse') },
+                  { value: Style.Balanced, text: $t('admin.machine_learning_image_description_style_balanced') },
+                  { value: Style.Rich, text: $t('admin.machine_learning_image_description_style_rich') },
+                ]}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={imageDescription.prompt?.style !== savedImageDescription.prompt?.style}
+              />
+
+              <SettingInputField
+                inputType={SettingInputFieldType.NUMBER}
+                label={$t('admin.machine_learning_image_description_sentence_count')}
+                description={$t('admin.machine_learning_image_description_sentence_count_description')}
+                bind:value={imageDescription.prompt!.sentenceCountTarget}
+                step="1"
+                min={1}
+                max={6}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={imageDescription.prompt?.sentenceCountTarget !== savedImageDescription.prompt?.sentenceCountTarget}
+              />
+
+              <SettingTextarea
+                label={$t('admin.machine_learning_image_description_look_for')}
+                description={$t('admin.machine_learning_image_description_look_for_description')}
+                bind:value={lookForText}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !== JSON.stringify(savedImageDescription.prompt?.lookFor)}
+              />
+
+              <SettingTextarea
+                label={$t('admin.machine_learning_image_description_custom_vocabulary')}
+                description={$t('admin.machine_learning_image_description_custom_vocabulary_description')}
+                bind:value={customVocabularyText}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !== JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
+              />
+
+              <SettingTextarea
+                label={$t('admin.machine_learning_image_description_forbidden_inferences')}
+                description={$t('admin.machine_learning_image_description_forbidden_inferences_description')}
+                bind:value={forbiddenInferencesText}
+                disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !== JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
+              />
+
+              <SettingAccordion
+                key="image-description-nsfw-indicators"
+                title={$t('admin.machine_learning_image_description_nsfw_indicators')}
+                subtitle={$t('admin.machine_learning_image_description_nsfw_indicators_description')}
+              >
+                <div class="ms-4 mt-4">
+                  <SettingTextarea
+                    label={$t('admin.machine_learning_image_description_nsfw_indicators')}
+                    bind:value={nsfwIndicatorsText}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                    isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !== JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
+                  />
+                </div>
+              </SettingAccordion>
+
+              <SettingAccordion
+                key="image-description-medical-indicators"
+                title={$t('admin.machine_learning_image_description_medical_indicators')}
+                subtitle={$t('admin.machine_learning_image_description_medical_indicators_description')}
+              >
+                <div class="ms-4 mt-4">
+                  <SettingTextarea
+                    label={$t('admin.machine_learning_image_description_medical_indicators')}
+                    bind:value={medicalIndicatorsText}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                    isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !== JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
+                  />
+                </div>
+              </SettingAccordion>
+
+              <SettingAccordion
+                key="image-description-identity-injection"
+                title={$t('admin.machine_learning_image_description_identity_injection')}
+                subtitle={$t('admin.machine_learning_image_description_identity_injection_description')}
+              >
+                <div class="ms-4 mt-4 flex flex-col gap-4">
+                  <SettingSwitch
+                    title={$t('admin.machine_learning_image_description_identity_injection_enabled')}
+                    bind:checked={imageDescription.prompt!.identityInjection!.enabled}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.enabled !== savedImageDescription.prompt?.identityInjection?.enabled}
+                  />
+
+                  <SettingInputField
+                    inputType={SettingInputFieldType.NUMBER}
+                    label={$t('admin.machine_learning_image_description_identity_injection_max_names')}
+                    description={$t('admin.machine_learning_image_description_identity_injection_max_names_description')}
+                    bind:value={imageDescription.prompt!.identityInjection!.maxNames}
+                    step="1"
+                    min={1}
+                    max={20}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.maxNames !== savedImageDescription.prompt?.identityInjection?.maxNames}
+                  />
+
+                  <SettingInputField
+                    inputType={SettingInputFieldType.NUMBER}
+                    label={$t('admin.machine_learning_image_description_identity_injection_min_confidence')}
+                    description={$t('admin.machine_learning_image_description_identity_injection_min_confidence_description')}
+                    bind:value={imageDescription.prompt!.identityInjection!.minFaceConfidence}
+                    step="0.05"
+                    min={0}
+                    max={1}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.minFaceConfidence !== savedImageDescription.prompt?.identityInjection?.minFaceConfidence}
+                  />
+                </div>
+              </SettingAccordion>
+
+              <SettingAccordion
+                key="image-description-advanced"
+                title={$t('admin.machine_learning_image_description_advanced')}
+                subtitle={$t('admin.machine_learning_image_description_advanced_description')}
+              >
+                <div class="ms-4 mt-4 flex flex-col gap-4">
+                  <SettingSwitch
+                    title={$t('admin.machine_learning_image_description_advanced_enabled')}
+                    bind:checked={imageDescription.prompt!.advanced!.enabled}
+                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                    isEdited={imageDescription.prompt?.advanced?.enabled !== savedImageDescription.prompt?.advanced?.enabled}
+                  />
+
+                  {#if imageDescription.prompt?.advanced?.enabled}
+                    <SettingTextarea
+                      label={$t('admin.machine_learning_image_description_advanced_raw_prompt')}
+                      description={$t('admin.machine_learning_image_description_advanced_raw_prompt_description')}
+                      bind:value={rawPromptTemplateText}
+                      disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                      isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !== savedImageDescription.prompt?.advanced?.rawPromptTemplate}
+                    />
+
+                    <SettingSelect
+                      label={$t('admin.machine_learning_image_description_advanced_placeholder_validation')}
+                      name="image-description-placeholder-validation"
+                      bind:value={imageDescription.prompt!.advanced!.placeholderValidation}
+                      options={[
+                        { value: PlaceholderValidation.Strict, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_strict') },
+                        { value: PlaceholderValidation.Warn, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_warn') },
+                      ]}
+                      disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+                      isEdited={imageDescription.prompt?.advanced?.placeholderValidation !== savedImageDescription.prompt?.advanced?.placeholderValidation}
+                    />
+                  {/if}
+                </div>
+              </SettingAccordion>
+            </div>
+          </SettingAccordion>
+
+          <div class="mt-4 flex justify-end">
+            <Button
+              shape="round"
+              size="small"
+              leadingIcon={mdiRefresh}
+              onclick={handleRequeueClick}
+              disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
+            >
+              {$t('admin.machine_learning_image_description_requeue')}
+            </Button>
+          </div>
         </div>
       </SettingAccordion>
 
