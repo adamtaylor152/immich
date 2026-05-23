@@ -41,7 +41,9 @@ describe(RunPodService.name, () => {
     ({ sut, mocks } = newTestService(RunPodService));
     // Pin to a non-Api worker so onConfigInit doesn't spin up a real interval timer
     (mocks.config.getWorker as ReturnType<typeof vi.fn>).mockReturnValue(ImmichWorker.Microservices);
-    (mocks.runPod.buildProxyUrl as ReturnType<typeof vi.fn>).mockImplementation((podId: string) => `https://${podId}-3003.proxy.runpod.net/`);
+    (mocks.runPod.buildProxyUrl as ReturnType<typeof vi.fn>).mockImplementation(
+      (podId: string) => `https://${podId}-3003.proxy.runpod.net/`,
+    );
     stubConfig();
     setState({ status: 'idle' });
   });
@@ -136,7 +138,13 @@ describe(RunPodService.name, () => {
       });
       // RunPod returns a pod whose name matches our instanceTag prefix — this is the orphan.
       (mocks.runPod.listPods as ReturnType<typeof vi.fn>).mockResolvedValue([
-        { id: 'pod_orphan', name: 'immich-aaaa1111-1748000000', desiredStatus: 'RUNNING', imageName: 'x', gpuTypeIds: ['x'] },
+        {
+          id: 'pod_orphan',
+          name: 'immich-aaaa1111-1748000000',
+          desiredStatus: 'RUNNING',
+          imageName: 'x',
+          gpuTypeIds: ['x'],
+        },
         { id: 'pod_other_user', name: 'something-else', desiredStatus: 'RUNNING', imageName: 'x', gpuTypeIds: ['x'] },
       ]);
       (mocks.runPod.terminatePod as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -224,7 +232,10 @@ describe(RunPodService.name, () => {
       });
       (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(null);
 
-      sut.onJobStart('thumbnailGeneration' as never, { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1' } } as never);
+      sut.onJobStart(
+        'thumbnailGeneration' as never,
+        { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1' } } as never,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(mocks.machineLearning.setManagedUrl).not.toHaveBeenCalled();
@@ -273,8 +284,8 @@ describe(RunPodService.name, () => {
       };
       // get returns the running state initially, then whatever was last `set` (so syncManagedUrl sees the new state).
       let current: RunPodPersistedState = initial;
-      (mocks.systemMetadata.get as ReturnType<typeof vi.fn>).mockImplementation(
-        async (key: SystemMetadataKey) => (key === SystemMetadataKey.RunPodState ? current : null),
+      (mocks.systemMetadata.get as ReturnType<typeof vi.fn>).mockImplementation(async (key: SystemMetadataKey) =>
+        key === SystemMetadataKey.RunPodState ? current : null,
       );
       (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mockImplementation(
         async (key: SystemMetadataKey, value: RunPodPersistedState) => {

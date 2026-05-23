@@ -21,6 +21,7 @@ class SystemConfigMachineLearningDto {
     this.imageDescription,
     this.nsfwDetection,
     required this.ocr,
+    this.runpod,
     this.urls = const [],
   });
 
@@ -53,6 +54,14 @@ class SystemConfigMachineLearningDto {
 
   OcrConfig ocr;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  SystemConfigRunPodDto? runpod;
+
   /// ML service URLs
   List<String> urls;
 
@@ -66,6 +75,7 @@ class SystemConfigMachineLearningDto {
     other.imageDescription == imageDescription &&
     other.nsfwDetection == nsfwDetection &&
     other.ocr == ocr &&
+    other.runpod == runpod &&
     _deepEquality.equals(other.urls, urls);
 
   @override
@@ -79,10 +89,11 @@ class SystemConfigMachineLearningDto {
     (imageDescription == null ? 0 : imageDescription!.hashCode) +
     (nsfwDetection == null ? 0 : nsfwDetection!.hashCode) +
     (ocr.hashCode) +
+    (runpod == null ? 0 : runpod!.hashCode) +
     (urls.hashCode);
 
   @override
-  String toString() => 'SystemConfigMachineLearningDto[availabilityChecks=$availabilityChecks, clip=$clip, duplicateDetection=$duplicateDetection, enabled=$enabled, facialRecognition=$facialRecognition, imageDescription=$imageDescription, nsfwDetection=$nsfwDetection, ocr=$ocr, urls=$urls]';
+  String toString() => 'SystemConfigMachineLearningDto[availabilityChecks=$availabilityChecks, clip=$clip, duplicateDetection=$duplicateDetection, enabled=$enabled, facialRecognition=$facialRecognition, imageDescription=$imageDescription, nsfwDetection=$nsfwDetection, ocr=$ocr, runpod=$runpod, urls=$urls]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -102,6 +113,11 @@ class SystemConfigMachineLearningDto {
     //  json[r'nsfwDetection'] = null;
     }
       json[r'ocr'] = this.ocr;
+    if (this.runpod != null) {
+      json[r'runpod'] = this.runpod;
+    } else {
+    //  json[r'runpod'] = null;
+    }
       json[r'urls'] = this.urls;
     return json;
   }
@@ -123,6 +139,7 @@ class SystemConfigMachineLearningDto {
         imageDescription: ImageDescriptionConfig.fromJson(json[r'imageDescription']),
         nsfwDetection: NsfwDetectionConfig.fromJson(json[r'nsfwDetection']),
         ocr: OcrConfig.fromJson(json[r'ocr'])!,
+        runpod: SystemConfigRunPodDto.fromJson(json[r'runpod']),
         urls: json[r'urls'] is Iterable
             ? (json[r'urls'] as Iterable).cast<String>().toList(growable: false)
             : const [],

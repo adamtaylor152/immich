@@ -1,9 +1,5 @@
 import { LoggingRepository } from 'src/repositories/logging.repository';
-import {
-  RunPodApiError,
-  RunPodNotFoundError,
-  RunPodRepository,
-} from 'src/repositories/runpod.repository';
+import { RunPodApiError, RunPodNotFoundError, RunPodRepository } from 'src/repositories/runpod.repository';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe(RunPodRepository.name, () => {
@@ -90,9 +86,7 @@ describe(RunPodRepository.name, () => {
   });
 
   it('surfaces GraphQL errors as RunPodApiError', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      Response.json({ errors: [{ message: 'Unauthorized' }] }),
-    );
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ errors: [{ message: 'Unauthorized' }] }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(sut.listGpuTypes(apiKey)).rejects.toBeInstanceOf(RunPodApiError);
   });

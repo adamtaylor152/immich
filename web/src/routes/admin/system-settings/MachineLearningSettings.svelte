@@ -178,7 +178,11 @@
   // List-type prompt fields are displayed as newline-joined text and parsed back on input.
   // Using $derived (not $state) ensures the textareas always reflect the live config — including
   // after a Reset (which replaces configToEdit wholesale via SystemConfigButtonRow).
-  const parseLines = (text: string): string[] => text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const parseLines = (text: string): string[] =>
+    text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
 
   const lookForText = $derived((imageDescription.prompt?.lookFor ?? []).join('\n'));
   const customVocabularyText = $derived((imageDescription.prompt?.customVocabulary ?? []).join('\n'));
@@ -747,7 +751,8 @@
                 min={1}
                 max={6}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={imageDescription.prompt?.sentenceCountTarget !== savedImageDescription.prompt?.sentenceCountTarget}
+                isEdited={imageDescription.prompt?.sentenceCountTarget !==
+                  savedImageDescription.prompt?.sentenceCountTarget}
               />
 
               <SettingTextarea
@@ -756,7 +761,8 @@
                 value={lookForText}
                 onChange={(text) => (imageDescription.prompt!.lookFor = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !== JSON.stringify(savedImageDescription.prompt?.lookFor)}
+                isEdited={JSON.stringify(imageDescription.prompt?.lookFor) !==
+                  JSON.stringify(savedImageDescription.prompt?.lookFor)}
               />
 
               <SettingTextarea
@@ -765,7 +771,8 @@
                 value={customVocabularyText}
                 onChange={(text) => (imageDescription.prompt!.customVocabulary = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !== JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
+                isEdited={JSON.stringify(imageDescription.prompt?.customVocabulary) !==
+                  JSON.stringify(savedImageDescription.prompt?.customVocabulary)}
               />
 
               <SettingTextarea
@@ -774,7 +781,8 @@
                 value={forbiddenInferencesText}
                 onChange={(text) => (imageDescription.prompt!.forbiddenInferences = parseLines(text))}
                 disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !== JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
+                isEdited={JSON.stringify(imageDescription.prompt?.forbiddenInferences) !==
+                  JSON.stringify(savedImageDescription.prompt?.forbiddenInferences)}
               />
 
               <SettingAccordion
@@ -788,7 +796,8 @@
                     value={nsfwIndicatorsText}
                     onChange={(text) => (imageDescription.prompt!.nsfwIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !== JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
+                    isEdited={JSON.stringify(imageDescription.prompt?.nsfwIndicators) !==
+                      JSON.stringify(savedImageDescription.prompt?.nsfwIndicators)}
                   />
                 </div>
               </SettingAccordion>
@@ -804,7 +813,8 @@
                     value={medicalIndicatorsText}
                     onChange={(text) => (imageDescription.prompt!.medicalIndicators = parseLines(text))}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !== JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
+                    isEdited={JSON.stringify(imageDescription.prompt?.medicalIndicators) !==
+                      JSON.stringify(savedImageDescription.prompt?.medicalIndicators)}
                   />
                 </div>
               </SettingAccordion>
@@ -819,31 +829,44 @@
                     title={$t('admin.machine_learning_image_description_identity_injection_enabled')}
                     bind:checked={imageDescription.prompt!.identityInjection!.enabled}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.enabled !== savedImageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.enabled !==
+                      savedImageDescription.prompt?.identityInjection?.enabled}
                   />
 
                   <SettingInputField
                     inputType={SettingInputFieldType.NUMBER}
                     label={$t('admin.machine_learning_image_description_identity_injection_max_names')}
-                    description={$t('admin.machine_learning_image_description_identity_injection_max_names_description')}
+                    description={$t(
+                      'admin.machine_learning_image_description_identity_injection_max_names_description',
+                    )}
                     bind:value={imageDescription.prompt!.identityInjection!.maxNames}
                     step="1"
                     min={1}
                     max={20}
-                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.maxNames !== savedImageDescription.prompt?.identityInjection?.maxNames}
+                    disabled={disabled ||
+                      !configToEdit.machineLearning.enabled ||
+                      !imageDescription.enabled ||
+                      !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.maxNames !==
+                      savedImageDescription.prompt?.identityInjection?.maxNames}
                   />
 
                   <SettingInputField
                     inputType={SettingInputFieldType.NUMBER}
                     label={$t('admin.machine_learning_image_description_identity_injection_min_confidence')}
-                    description={$t('admin.machine_learning_image_description_identity_injection_min_confidence_description')}
+                    description={$t(
+                      'admin.machine_learning_image_description_identity_injection_min_confidence_description',
+                    )}
                     bind:value={imageDescription.prompt!.identityInjection!.minFaceConfidence}
                     step="0.05"
                     min={0}
                     max={1}
-                    disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled || !imageDescription.prompt?.identityInjection?.enabled}
-                    isEdited={imageDescription.prompt?.identityInjection?.minFaceConfidence !== savedImageDescription.prompt?.identityInjection?.minFaceConfidence}
+                    disabled={disabled ||
+                      !configToEdit.machineLearning.enabled ||
+                      !imageDescription.enabled ||
+                      !imageDescription.prompt?.identityInjection?.enabled}
+                    isEdited={imageDescription.prompt?.identityInjection?.minFaceConfidence !==
+                      savedImageDescription.prompt?.identityInjection?.minFaceConfidence}
                   />
                 </div>
               </SettingAccordion>
@@ -858,7 +881,8 @@
                     title={$t('admin.machine_learning_image_description_advanced_enabled')}
                     bind:checked={imageDescription.prompt!.advanced!.enabled}
                     disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                    isEdited={imageDescription.prompt?.advanced?.enabled !== savedImageDescription.prompt?.advanced?.enabled}
+                    isEdited={imageDescription.prompt?.advanced?.enabled !==
+                      savedImageDescription.prompt?.advanced?.enabled}
                   />
 
                   {#if imageDescription.prompt?.advanced?.enabled}
@@ -868,7 +892,8 @@
                       value={rawPromptTemplateText}
                       onChange={(text) => (imageDescription.prompt!.advanced!.rawPromptTemplate = text)}
                       disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                      isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !== savedImageDescription.prompt?.advanced?.rawPromptTemplate}
+                      isEdited={imageDescription.prompt?.advanced?.rawPromptTemplate !==
+                        savedImageDescription.prompt?.advanced?.rawPromptTemplate}
                     />
 
                     <SettingSelect
@@ -876,11 +901,18 @@
                       name="image-description-placeholder-validation"
                       bind:value={imageDescription.prompt!.advanced!.placeholderValidation}
                       options={[
-                        { value: PlaceholderValidation.Strict, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_strict') },
-                        { value: PlaceholderValidation.Warn, text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_warn') },
+                        {
+                          value: PlaceholderValidation.Strict,
+                          text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_strict'),
+                        },
+                        {
+                          value: PlaceholderValidation.Warn,
+                          text: $t('admin.machine_learning_image_description_advanced_placeholder_validation_warn'),
+                        },
                       ]}
                       disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
-                      isEdited={imageDescription.prompt?.advanced?.placeholderValidation !== savedImageDescription.prompt?.advanced?.placeholderValidation}
+                      isEdited={imageDescription.prompt?.advanced?.placeholderValidation !==
+                        savedImageDescription.prompt?.advanced?.placeholderValidation}
                     />
                   {/if}
                 </div>

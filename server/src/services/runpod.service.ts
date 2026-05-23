@@ -30,7 +30,10 @@ const ML_JOB_NAMES: ReadonlySet<JobName> = new Set([
 // Queues to start when the user clicks "Run ML backfill" or auto-backfill is on.
 // Mirrors the buttons in /admin/queues. Use callbacks so each call is typed
 // against the JobItem union without `as never` casts.
-const ML_BACKFILL_QUEUES: Array<{ name: string; enqueue: (job: { queue: (item: any) => Promise<unknown> }) => Promise<unknown> }> = [
+const ML_BACKFILL_QUEUES: Array<{
+  name: string;
+  enqueue: (job: { queue: (item: any) => Promise<unknown> }) => Promise<unknown>;
+}> = [
   {
     name: 'smartSearch',
     enqueue: (job) => job.queue({ name: JobName.SmartSearchQueueAll, data: { force: false } }),
@@ -175,7 +178,8 @@ export class RunPodService extends BaseService {
       await this.updateConfig(next);
     }
 
-    const instanceTag = state.status === 'idle' && !state.instanceTag ? randomUUID() : (state.instanceTag ?? randomUUID());
+    const instanceTag =
+      state.status === 'idle' && !state.instanceTag ? randomUUID() : (state.instanceTag ?? randomUUID());
     const authToken = randomBytes(32).toString('hex');
     const imageName = dto.imageName?.trim() || runpod.imageName;
     const podNamePrefix = `immich-${instanceTag.slice(0, 8)}-`;
@@ -429,9 +433,7 @@ export class RunPodService extends BaseService {
     await this.syncManagedUrl();
   }
 
-  private async pollPodToReady(
-    state: Extract<RunPodPersistedState, { status: 'provisioning' | 'starting' }>,
-  ) {
+  private async pollPodToReady(state: Extract<RunPodPersistedState, { status: 'provisioning' | 'starting' }>) {
     const key = await this.getApiKey();
     if (!key) {
       return;

@@ -178,7 +178,9 @@
   };
 
   const handleTerminate = async () => {
-    if (!confirm('Terminate destroys the pod and its model cache. The next launch will be a full cold-start. Continue?')) {
+    if (
+      !confirm('Terminate destroys the pod and its model cache. The next launch will be a full cold-start. Continue?')
+    ) {
       return;
     }
     terminating = true;
@@ -297,7 +299,9 @@
               {terminating ? 'Terminating…' : 'Terminate'}
             </Button>
           {:else if isStopped}
-            <Button size="small" onclick={handleStart} disabled={provisioning}>{provisioning ? 'Starting…' : 'Resume'}</Button>
+            <Button size="small" onclick={handleStart} disabled={provisioning}
+              >{provisioning ? 'Starting…' : 'Resume'}</Button
+            >
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
               {terminating ? 'Terminating…' : 'Terminate'}
             </Button>
@@ -328,10 +332,16 @@
             {#if gpuLoading}
               <option value="">Loading…</option>
             {:else if gpuTypes.length === 0}
-              <option value={rp.defaultGpuTypeId}>{rp.defaultGpuTypeId} (default — click Test connection to refresh)</option>
+              <option value={rp.defaultGpuTypeId}
+                >{rp.defaultGpuTypeId} (default — click Test connection to refresh)</option
+              >
             {:else}
               {#each gpuTypes as g}
-                <option value={g.id}>{g.displayName} · {g.memoryInGb} GB{g.pricePerHour ? ` · $${g.pricePerHour.toFixed(2)}/hr` : ''}</option>
+                <option value={g.id}
+                  >{g.displayName} · {g.memoryInGb} GB{g.pricePerHour
+                    ? ` · $${g.pricePerHour.toFixed(2)}/hr`
+                    : ''}</option
+                >
               {/each}
             {/if}
           </select>
@@ -396,15 +406,16 @@
           {backfilling ? 'Enqueuing…' : 'Run ML backfill now'}
         </Button>
         <span class="text-xs text-immich-gray">
-          Queues smart search, face detection, OCR, duplicates, image description, and NSFW detection for every eligible asset.
+          Queues smart search, face detection, OCR, duplicates, image description, and NSFW detection for every eligible
+          asset.
         </span>
       </div>
     {/if}
 
     <div class="p-3 rounded bg-yellow-50 border border-yellow-200 text-xs text-yellow-900">
-      <strong>Security:</strong> The pod's URL is reachable from the public internet. Immich protects it with a per-launch
-      bearer token (the server sends <code>Authorization: Bearer ...</code> on every request). Unauthenticated requests get
-      a 401. Stopping a pod releases the GPU but keeps the model cache for fast resume.
+      <strong>Security:</strong> The pod's URL is reachable from the public internet. Immich protects it with a
+      per-launch bearer token (the server sends <code>Authorization: Bearer ...</code> on every request). Unauthenticated
+      requests get a 401. Stopping a pod releases the GPU but keeps the model cache for fast resume.
     </div>
   {/if}
 </div>
