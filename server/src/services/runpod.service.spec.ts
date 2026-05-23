@@ -55,7 +55,7 @@ describe(RunPodService.name, () => {
 
   describe('testConnection', () => {
     it('returns ok=true when the key works', async () => {
-      (mocks.runPod.testApiKey as ReturnType<typeof vi.fn>).mockResolvedValue();
+      (mocks.runPod.testApiKey as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve());
       await expect(sut.testConnection('rp_override')).resolves.toEqual({ ok: true });
       expect(mocks.runPod.testApiKey).toHaveBeenCalledWith('rp_override');
     });
@@ -147,7 +147,7 @@ describe(RunPodService.name, () => {
         },
         { id: 'pod_other_user', name: 'something-else', desiredStatus: 'RUNNING', imageName: 'x', gpuTypeIds: ['x'] },
       ]);
-      (mocks.runPod.terminatePod as ReturnType<typeof vi.fn>).mockResolvedValue();
+      (mocks.runPod.terminatePod as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve());
       (mocks.runPod.createPod as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: 'pod_new',
         name: 'immich-aaaa1111-1748000123',
@@ -296,7 +296,7 @@ describe(RunPodService.name, () => {
         },
       );
       (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(PROXY_URL);
-      (mocks.runPod.stopPod as ReturnType<typeof vi.fn>).mockResolvedValue();
+      (mocks.runPod.stopPod as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve());
 
       const result = await sut.stop();
       expect(result.status).toBe('stopping');
@@ -324,7 +324,7 @@ describe(RunPodService.name, () => {
         stoppedAt: new Date().toISOString(),
         instanceTag: 'tag-1',
       });
-      (mocks.runPod.startPod as ReturnType<typeof vi.fn>).mockResolvedValue();
+      (mocks.runPod.startPod as ReturnType<typeof vi.fn>).mockImplementation(() => Promise.resolve());
 
       const result = await sut.start();
       expect(result.status).toBe('starting');

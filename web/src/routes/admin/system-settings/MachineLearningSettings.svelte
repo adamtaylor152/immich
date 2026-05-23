@@ -305,8 +305,7 @@
             description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
             bind:value={runpod.defaultGpuTypeId}
             disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.defaultGpuTypeId !==
-              savedRunpod.defaultGpuTypeId}
+            isEdited={runpod.defaultGpuTypeId !== savedRunpod.defaultGpuTypeId}
           />
 
           <SettingInputField
@@ -314,8 +313,7 @@
             label="Container disk (GB)"
             bind:value={runpod.containerDiskGb}
             disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.containerDiskGb !==
-              savedRunpod.containerDiskGb}
+            isEdited={runpod.containerDiskGb !== savedRunpod.containerDiskGb}
           />
 
           <SettingInputField
@@ -339,12 +337,8 @@
             label="Idle grace (minutes)"
             description="How long the pod can stay idle before auto-stop fires."
             bind:value={runpod.autoStopGraceMinutes}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !runpod.enabled ||
-              !runpod.autoStopEnabled}
-            isEdited={runpod.autoStopGraceMinutes !==
-              savedRunpod.autoStopGraceMinutes}
+            disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled || !runpod.autoStopEnabled}
+            isEdited={runpod.autoStopGraceMinutes !== savedRunpod.autoStopGraceMinutes}
           />
 
           <SettingSwitch
@@ -360,8 +354,7 @@
             description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
             bind:value={runpod.maxRuntimeHours}
             disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.enabled}
-            isEdited={runpod.maxRuntimeHours !==
-              savedRunpod.maxRuntimeHours}
+            isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
           />
 
           <hr />
