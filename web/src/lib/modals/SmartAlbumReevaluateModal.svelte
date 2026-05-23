@@ -2,8 +2,10 @@
   import { handleError } from '$lib/utils/handle-error';
   import {
     getSmartAlbumReevaluateEstimate,
+    Kind,
     triggerSmartAlbumReevaluate,
     type SmartAlbumReevaluateEstimateDto,
+    type SmartAlbumReevaluateRequestDto,
   } from '@immich/sdk';
   import { Button, LoadingSpinner, Modal, ModalBody, ModalFooter } from '@immich/ui';
   import { t } from 'svelte-i18n';
@@ -14,7 +16,7 @@
     onClose: (result?: { queued: boolean }) => void;
     // Optional built-in kind to scope the re-evaluation to (e.g. "food").
     // When omitted, the job runs against every enabled kind.
-    kind?: string;
+    kind?: Kind;
     // Human-readable name of the scoped kind, shown in the modal title and
     // descriptive copy (e.g. "Food"). Falls back to the raw kind id.
     kindLabel?: string;
@@ -42,9 +44,8 @@
   const handleReevaluate = async () => {
     isTriggering = true;
     try {
-      const result = await triggerSmartAlbumReevaluate({
-        smartAlbumReevaluateRequestDto: kind ? { kind } : {},
-      });
+      const body: SmartAlbumReevaluateRequestDto = kind ? { kind } : {};
+      const result = await triggerSmartAlbumReevaluate({ smartAlbumReevaluateRequestDto: body });
       onClose(result);
     } catch (error) {
       handleError(error, $t('admin.smart_albums_reevaluate_modal_trigger_error'));

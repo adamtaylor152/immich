@@ -10,7 +10,7 @@
   import SmartAlbumReevaluateModal from '$lib/modals/SmartAlbumReevaluateModal.svelte';
   import { Button, modalManager, toastManager } from '@immich/ui';
   import { mdiRefresh } from '@mdi/js';
-  import type { SmartAlbumKindConfig } from '@immich/sdk';
+  import { Kind, type SmartAlbumKindConfig } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
@@ -29,7 +29,7 @@
       .map((l) => l.trim())
       .filter(Boolean);
 
-  const kindKeys = ['travel', 'documents', 'screenshots', 'food', 'pets', 'nature'] as const;
+  const kindKeys = [Kind.Travel, Kind.Documents, Kind.Screenshots, Kind.Food, Kind.Pets, Kind.Nature] as const;
   type KindKey = (typeof kindKeys)[number];
 
   const kindTitle = (kind: KindKey): string => {
@@ -154,7 +154,7 @@
             shape="round"
             color="secondary"
             leadingIcon={mdiRefresh}
-            onclick={handleReevaluateClick}
+            onclick={() => handleReevaluateClick()}
             disabled={disabled || !smartAlbums.enabled}
           >
             {$t('admin.smart_albums_reevaluate_button')}

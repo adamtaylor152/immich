@@ -135,6 +135,7 @@
     void detectMachineLearningHardware();
     void refreshManagedUrl();
     managedUrlTimer = setInterval(() => void refreshManagedUrl(), 10_000);
+    void loadDescriptionStats();
   });
 
   onDestroy(() => {
@@ -995,58 +996,56 @@
             subtitle=""
           >
             <div class="ms-4 mt-4 flex flex-col gap-4">
-              {#await loadDescriptionStats()}
+              {#if descriptionStatsLoading && !descriptionStats}
                 <p class="text-sm text-immich-fg/60 dark:text-immich-dark-fg/60">
                   {$t('admin.machine_learning_image_description_requeue_modal_loading')}
                 </p>
-              {:then _}
-                {#if descriptionStatsError}
-                  <p class="text-sm text-red-500">{descriptionStatsError}</p>
-                {:else if descriptionStats}
-                  <dl class="flex flex-col gap-2 text-sm">
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_last_config_change')}
-                      </dt>
-                      <dd class="font-medium">{formatTimestamp(savedImageDescription.lastConfigChangeAt)}</dd>
-                    </div>
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_pending_requeue')}
-                      </dt>
-                      <dd class="font-medium">{formatTimestamp(savedImageDescription.pendingRequeueAt)}</dd>
-                    </div>
-                    <hr class="border-primary/20" />
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_eligible_assets')}
-                      </dt>
-                      <dd class="font-medium">{descriptionStats.totalAssets.toLocaleString()}</dd>
-                    </div>
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_with_description')}
-                      </dt>
-                      <dd class="font-medium">{descriptionStats.withDescription.toLocaleString()}</dd>
-                    </div>
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_pending')}
-                      </dt>
-                      <dd class="font-medium">{descriptionStats.withoutDescription.toLocaleString()}</dd>
-                    </div>
-                    <hr class="border-primary/20" />
-                    <div class="flex justify-between">
-                      <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_estimated_time')}
-                      </dt>
-                      <dd class="font-medium">{formatDuration(descriptionStats.estimatedTotalSeconds)}</dd>
-                    </div>
-                  </dl>
-                {/if}
-              {/await}
+              {:else if descriptionStatsError}
+                <p class="text-sm text-red-500">{descriptionStatsError}</p>
+              {:else if descriptionStats}
+                <dl class="flex flex-col gap-2 text-sm">
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_last_config_change')}
+                    </dt>
+                    <dd class="font-medium">{formatTimestamp(savedImageDescription.lastConfigChangeAt)}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_pending_requeue')}
+                    </dt>
+                    <dd class="font-medium">{formatTimestamp(savedImageDescription.pendingRequeueAt)}</dd>
+                  </div>
+                  <hr class="border-primary/20" />
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_eligible_assets')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.totalAssets.toLocaleString()}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_with_description')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.withDescription.toLocaleString()}</dd>
+                  </div>
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_pending')}
+                    </dt>
+                    <dd class="font-medium">{descriptionStats.withoutDescription.toLocaleString()}</dd>
+                  </div>
+                  <hr class="border-primary/20" />
+                  <div class="flex justify-between">
+                    <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
+                      {$t('admin.image_description_status_estimated_time')}
+                    </dt>
+                    <dd class="font-medium">{formatDuration(descriptionStats.estimatedTotalSeconds)}</dd>
+                  </div>
+                </dl>
+              {/if}
 
-              {#if descriptionStatsLoading}
+              {#if descriptionStatsLoading && descriptionStats}
                 <p class="text-xs text-immich-fg/60 dark:text-immich-dark-fg/60">…</p>
               {/if}
 
