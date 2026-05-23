@@ -980,6 +980,21 @@ describe(ImageEnrichmentService.name, () => {
       expect(saved.description.result.description).toBe('Conner is playing baseball.');
     });
 
+    it('still describes the asset when face lookup throws (best-effort identity injection)', async () => {
+      mocks.person.getFaces.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      // describeImage must still be called, with a prompt that contains no
+      // identity hint (knownPersons was empty due to the lookup failure).
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
     it('strips hallucinated names before persisting the description', async () => {
       mocks.person.getFaces.mockResolvedValue([
         {

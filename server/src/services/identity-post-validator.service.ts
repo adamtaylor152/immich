@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common';
 import type { KnownPerson } from 'src/services/prompt-assembler.service';
 
 export interface IdentityValidationResult {
@@ -13,6 +12,11 @@ export interface IdentityValidationResult {
  * Capitalized words that appear mid-sentence but are not person names.
  * This list is intentionally small — only words that would plausibly
  * trigger the candidate-name heuristic (CapitalizedWord mid-sentence).
+ *
+ * Note: some entries (e.g. April, May) are also common given names. They are
+ * safe here because `knownPersons` names are checked first and are never
+ * stripped regardless of allow-list membership — so a person literally named
+ * "May" will still survive the validator.
  */
 const COMMON_NON_NAME_WORDS = new Set([
   // Days of the week
@@ -95,7 +99,6 @@ const isAfterSentenceEnd = (text: string, index: number): boolean => {
   return true; // reached start
 };
 
-@Injectable()
 export class IdentityPostValidator {
   /**
    * Post-process an ML-generated description against the set of known persons

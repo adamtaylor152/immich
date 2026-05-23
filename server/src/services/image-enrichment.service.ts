@@ -1031,7 +1031,17 @@ export class ImageEnrichmentService extends BaseService {
    * user-curated ground truth.
    */
   private async getKnownPersonsForAsset(assetId: string): Promise<KnownPerson[]> {
-    const faces = await this.personRepository.getFaces(assetId, { isVisible: true });
+    let faces;
+    try {
+      faces = await this.personRepository.getFaces(assetId, { isVisible: true });
+    } catch (error) {
+      // Non-fatal: identity injection is best-effort. If face lookup fails
+      // (DB hiccup, transient error), the description proceeds without
+      // known-person hints rather than failing the whole enrichment job.
+      // Log so persistent issues remain observable.
+      this.logger.warn(`Failed to fetch faces for identity injection on asset ${assetId}: ${getErrorMessage(error)}`);
+      return [];
+    }
     const knownPersons: KnownPerson[] = [];
 
     for (const face of faces) {

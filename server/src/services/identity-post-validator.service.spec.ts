@@ -109,8 +109,8 @@ describe(IdentityPostValidator.name, () => {
     });
   });
 
-  describe('zero known persons', () => {
-    it('leaves description unchanged and sets no flags when no known persons', () => {
+  describe('zero known persons — never fabricate names', () => {
+    it('does not substitute a generic person reference when knownPersons is empty', () => {
       const { description, flags } = sut.validate('A young boy is playing baseball.', []);
       expect(description).toBe('A young boy is playing baseball.');
       expect(flags.hallucinatedNames).toBeUndefined();
@@ -119,7 +119,7 @@ describe(IdentityPostValidator.name, () => {
   });
 
   describe('edge cases', () => {
-    it('returns empty flags object for a plain description with no persons', () => {
+    it('returns an empty flags object when the description has no persons and no candidates', () => {
       const { flags } = sut.validate('A red car is parked on the street.', []);
       expect(flags).toEqual({});
     });
@@ -130,7 +130,7 @@ describe(IdentityPostValidator.name, () => {
       expect(flags).toEqual({});
     });
 
-    it('handles description with no generic person reference and one known person', () => {
+    it('does not substitute when description has no generic person reference even with one known person', () => {
       const { description } = sut.validate('A red ball is on the grass.', [person('Conner')]);
       // No generic person → no substitution.
       expect(description).toBe('A red ball is on the grass.');
