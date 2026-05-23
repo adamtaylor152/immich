@@ -11,7 +11,7 @@ import {
   NotificationType,
   SystemMetadataKey,
 } from 'src/enum';
-import { ArgOf } from 'src/repositories/event.repository';
+import { ArgOf, ArgsOf } from 'src/repositories/event.repository';
 import { RunPodApiError, RunPodNotFoundError, RunPodPodSummary } from 'src/repositories/runpod.repository';
 import { BaseService } from 'src/services/base.service';
 import { RunPodPersistedState } from 'src/types';
@@ -85,6 +85,18 @@ export class RunPodService extends BaseService {
   async onConfigUpdate({ newConfig }: ArgOf<'ConfigUpdate'>) {
     this.currentApiKey = newConfig.machineLearning.runpod.apiKey;
     await this.syncManagedUrl();
+  }
+
+  @OnEvent({ name: 'JobStart' })
+  onJobStart(...[, job]: ArgsOf<'JobStart'>) {
+    // The reconciler timer is pinned to the API worker, but ML jobs run on the
+    // Microservices worker. Without this hook a non-API worker that booted
+    // before the pod came up would keep an empty managed URL and route every
+    // ML job to the local fallback. Sync once at job-start so the actual
+    // predict() call below picks up the pod.
+    if (ML_JOB_NAMES.has(job.name)) {
+      void this.syncManagedUrl().catch((error) => this.logger.warn(`Pre-job managed URL sync failed: ${error}`));
+    }
   }
 
   @OnEvent({ name: 'JobSuccess' })
@@ -243,10 +255,14 @@ export class RunPodService extends BaseService {
       const message = error instanceof Error ? error.message : String(error);
       throw new BadRequestException(`RunPod start failed: ${message}`);
     }
+    // Reset podCreatedAt to "now" so pollPodToReady's PROVISION_TIMEOUT_MS budget
+    // applies to the resume, not the original launch. Otherwise any pod that's
+    // been around longer than 5 minutes (i.e. nearly every resume) would be
+    // marked as failed immediately by the next reconcile tick.
     const next: RunPodPersistedState = {
       status: 'starting',
       podId: state.podId,
-      podCreatedAt: state.podCreatedAt,
+      podCreatedAt: new Date().toISOString(),
       gpuTypeId: state.gpuTypeId,
       imageName: state.imageName,
       authToken: state.authToken,

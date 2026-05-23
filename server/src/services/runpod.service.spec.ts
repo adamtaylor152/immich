@@ -151,6 +151,50 @@ describe(RunPodService.name, () => {
       expect(Date.parse((written as { lastBusyAt: string }).lastBusyAt)).toBeGreaterThan(Date.parse(before));
     });
 
+    it('syncs the managed URL on JobStart for ML jobs (catches non-API workers)', async () => {
+      setState({
+        status: 'running',
+        podId: 'pod_abc',
+        podCreatedAt: '2026-05-22T18:50:00.000Z',
+        gpuTypeId: 'NVIDIA RTX A5000',
+        imageName: 'ghcr.io/x/y:z',
+        authToken: 'tok-xyz',
+        mlUrl: PROXY_URL,
+        runningSince: '2026-05-22T18:55:00.000Z',
+        lastBusyAt: '2026-05-22T19:00:00.000Z',
+        maxRuntimeHours: 24,
+        instanceTag: 'tag-1',
+      });
+      (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+      sut.onJobStart('smartSearch' as never, { name: JobName.SmartSearch, data: { id: 'asset-1' } } as never);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mocks.machineLearning.setManagedUrl).toHaveBeenCalledWith(PROXY_URL, 'tok-xyz');
+    });
+
+    it('does NOT sync the managed URL on JobStart for non-ML jobs', async () => {
+      setState({
+        status: 'running',
+        podId: 'pod_abc',
+        podCreatedAt: '2026-05-22T18:50:00.000Z',
+        gpuTypeId: 'NVIDIA RTX A5000',
+        imageName: 'ghcr.io/x/y:z',
+        authToken: 'tok-xyz',
+        mlUrl: PROXY_URL,
+        runningSince: '2026-05-22T18:55:00.000Z',
+        lastBusyAt: '2026-05-22T19:00:00.000Z',
+        maxRuntimeHours: 24,
+        instanceTag: 'tag-1',
+      });
+      (mocks.machineLearning.getManagedUrl as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+      sut.onJobStart('thumbnailGeneration' as never, { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1' } } as never);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mocks.machineLearning.setManagedUrl).not.toHaveBeenCalled();
+    });
+
     it('does NOT update lastBusyAt for non-ML jobs', async () => {
       setState({
         status: 'running',
@@ -215,6 +259,35 @@ describe(RunPodService.name, () => {
       );
       // Clearing the managed URL on the local ML repo
       expect(mocks.machineLearning.clearManagedUrl).toHaveBeenCalled();
+    });
+  });
+
+  describe('start (resume)', () => {
+    it('resets podCreatedAt so the provisioning timeout applies to the resume, not the original launch', async () => {
+      // Original launch was hours ago — reusing it would immediately exceed
+      // PROVISION_TIMEOUT_MS on the next reconcile and mark the pod as errored.
+      const longAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+      setState({
+        status: 'stopped',
+        podId: 'pod_abc',
+        podCreatedAt: longAgo,
+        gpuTypeId: 'NVIDIA RTX A5000',
+        imageName: 'ghcr.io/x/y:z',
+        authToken: 'tok',
+        stoppedAt: new Date().toISOString(),
+        instanceTag: 'tag-1',
+      });
+      (mocks.runPod.startPod as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const result = await sut.start();
+      expect(result.status).toBe('starting');
+
+      const [, written] = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+      const writtenState = written as { status: string; podCreatedAt: string };
+      expect(writtenState.status).toBe('starting');
+      expect(Date.parse(writtenState.podCreatedAt)).toBeGreaterThan(Date.parse(longAgo));
+      // and it should be recent — within 5 seconds of "now"
+      expect(Math.abs(Date.now() - Date.parse(writtenState.podCreatedAt))).toBeLessThan(5000);
     });
   });
 
