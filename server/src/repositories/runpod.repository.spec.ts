@@ -145,9 +145,9 @@ describe(RunPodRepository.name, () => {
 
   it('attaches an AbortSignal with a timeout', async () => {
     let signal: AbortSignal | undefined;
-    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       signal = init.signal!;
-      return new Response('[]', { status: 200 });
+      return Promise.resolve(new Response('[]', { status: 200 }));
     });
     vi.stubGlobal('fetch', fetchMock);
 

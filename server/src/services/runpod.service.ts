@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { OnEvent } from 'src/decorators';
 import { RunPodBackfillResultDto, RunPodGpuTypeDto, RunPodProvisionDto, RunPodStateDto } from 'src/dtos/runpod.dto';
@@ -12,7 +12,7 @@ import {
   SystemMetadataKey,
 } from 'src/enum';
 import { ArgOf, ArgsOf } from 'src/repositories/event.repository';
-import { RunPodApiError, RunPodNotFoundError, RunPodPodSummary } from 'src/repositories/runpod.repository';
+import { RunPodNotFoundError, RunPodPodSummary } from 'src/repositories/runpod.repository';
 import { BaseService } from 'src/services/base.service';
 import { RunPodPersistedState } from 'src/types';
 
@@ -63,7 +63,7 @@ const ML_BACKFILL_QUEUES: Array<{
 const PROVISION_TIMEOUT_MS = 5 * 60 * 1000; // pod must reach RUNNING within 5 min
 const UNHEALTHY_GRACE_MS = 5 * 60 * 1000; // pod RUNNING-but-unresponsive grace
 const STOP_MAX_ATTEMPTS = 5;
-const STOP_BACKOFF_MS = [5_000, 15_000, 60_000, 60_000, 60_000]; // 5s, 15s, 60s, 60s, 60s
+const STOP_BACKOFF_MS = [5000, 15_000, 60_000, 60_000, 60_000]; // 5s, 15s, 60s, 60s, 60s
 const TICK_INTERVAL_MS = 30_000;
 const ML_PORT = 3003;
 const ML_AUTH_ENV = 'IMMICH_ML_AUTH_TOKEN';
@@ -423,11 +423,10 @@ export class RunPodService extends BaseService {
           await this.verifyStopped(state);
           break;
         }
-        case 'idle':
-        case 'error':
-        default:
-          // nothing to reconcile
+        default: {
+          // idle / error — nothing to reconcile
           break;
+        }
       }
     });
     await this.syncManagedUrl();
