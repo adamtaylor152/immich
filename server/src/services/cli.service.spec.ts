@@ -198,4 +198,96 @@ describe(CliService.name, () => {
       expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', { oauth: { enabled: true } });
     });
   });
+
+  describe('revertSchemaToUpstream', () => {
+    it('should no-op on a stock upstream DB (no migrations past the shared baseline)', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1778614946174-UpdateWorkflowTables', timestamp: '2026-01-02T00:00:00Z' },
+      ]);
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: true,
+        reverted: [],
+        workflowAliasInserted: false,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).not.toHaveBeenCalled();
+    });
+
+    it('should delegate when the fork has applied its full migration set', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1779400000000-UpdateWorkflowTables', timestamp: '2026-02-01T00:00:00Z' },
+        { name: '1779500000000-ReconcileSchemaDrift', timestamp: '2026-02-02T00:00:00Z' },
+      ]);
+      mocks.database.revertSchemaToUpstream.mockResolvedValue({
+        reverted: ['1779500000000-ReconcileSchemaDrift', '1779400000000-UpdateWorkflowTables'],
+        workflowAliasInserted: true,
+      });
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: false,
+        reverted: ['1779500000000-ReconcileSchemaDrift', '1779400000000-UpdateWorkflowTables'],
+        workflowAliasInserted: true,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delegate for an older fork build that only applied early fork migrations', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1778000000000-PhysicalDeduplication', timestamp: '2026-01-15T00:00:00Z' },
+        { name: '1778300000000-AddVideoDuplicateFrames', timestamp: '2026-01-20T00:00:00Z' },
+      ]);
+      mocks.database.revertSchemaToUpstream.mockResolvedValue({
+        reverted: ['1778300000000-AddVideoDuplicateFrames', '1778000000000-PhysicalDeduplication'],
+        workflowAliasInserted: true,
+      });
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: false,
+        reverted: ['1778300000000-AddVideoDuplicateFrames', '1778000000000-PhysicalDeduplication'],
+        workflowAliasInserted: true,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delegate after a partial-revert failure that already removed the 1779400 marker', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1778000000000-PhysicalDeduplication', timestamp: '2026-01-15T00:00:00Z' },
+        { name: '1778900000000-CreateAssetHealthTables', timestamp: '2026-01-20T00:00:00Z' },
+      ]);
+      mocks.database.revertSchemaToUpstream.mockResolvedValue({
+        reverted: ['1778900000000-CreateAssetHealthTables', '1778000000000-PhysicalDeduplication'],
+        workflowAliasInserted: false,
+      });
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: false,
+        reverted: ['1778900000000-CreateAssetHealthTables', '1778000000000-PhysicalDeduplication'],
+        workflowAliasInserted: false,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should treat the upstream-aliased workflow row alone as already-upstream', async () => {
+      mocks.database.getMigrations.mockResolvedValue([
+        { name: '1777897107000-PartnerAssetSyncReset', timestamp: '2026-01-01T00:00:00Z' },
+        { name: '1778614946174-UpdateWorkflowTables', timestamp: '2026-02-10T00:00:00Z' },
+      ]);
+
+      await expect(sut.revertSchemaToUpstream()).resolves.toEqual({
+        alreadyAtUpstream: true,
+        reverted: [],
+        workflowAliasInserted: false,
+      });
+
+      expect(mocks.database.revertSchemaToUpstream).not.toHaveBeenCalled();
+    });
+  });
 });

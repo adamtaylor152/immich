@@ -10,6 +10,7 @@ import { DisableOAuthLogin, EnableOAuthLogin } from 'src/commands/oauth-login';
 import { DisablePasswordLoginCommand, EnablePasswordLoginCommand } from 'src/commands/password-login';
 import { PromptPasswordQuestions, ResetAdminPasswordCommand } from 'src/commands/reset-admin-password.command';
 import { SchemaCheck } from 'src/commands/schema-check';
+import { PromptSchemaRevertQuestions, SchemaRevertToUpstreamCommand } from 'src/commands/schema-revert-to-upstream';
 import { VersionCommand } from 'src/commands/version.command';
 
 export const commandsAndQuestions = [
@@ -30,4 +31,6 @@ export const commandsAndQuestions = [
   PromptMediaLocationQuestions,
   PromptConfirmMoveQuestions,
   SchemaCheck,
+  SchemaRevertToUpstreamCommand,
+  PromptSchemaRevertQuestions,
 ];

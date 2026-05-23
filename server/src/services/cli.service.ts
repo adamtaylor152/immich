@@ -227,6 +227,41 @@ export class CliService extends BaseService {
     return true;
   }
 
+  /**
+   * Reverts every fork-only DB migration so the database can be served by
+   * the upstream immich-app/immich image. Pre-flight checks that this DB
+   * still has at least one fork migration applied — bails early on a stock
+   * upstream DB to avoid no-op confusion or accidental rename of an
+   * upstream row.
+   *
+   * Detection is "any applied migration named after the last shared
+   * baseline that isn't the upstream-aliased workflow row." This catches
+   * databases from older fork builds (where only a subset of fork
+   * migrations were ever applied) and partial-revert states (where an
+   * earlier run failed after rolling back the 1779400 marker), both of
+   * which a single-name marker check would miss.
+   */
+  async revertSchemaToUpstream(): Promise<{
+    alreadyAtUpstream: boolean;
+    reverted: string[];
+    workflowAliasInserted: boolean;
+  }> {
+    const lastSharedBaseline = '1777897107000-PartnerAssetSyncReset';
+    const upstreamWorkflowAlias = '1778614946174-UpdateWorkflowTables';
+
+    const applied = await this.databaseRepository.getMigrations();
+    const hasForkMigrations = applied.some(
+      (row) => row.name > lastSharedBaseline && row.name !== upstreamWorkflowAlias,
+    );
+
+    if (!hasForkMigrations) {
+      return { alreadyAtUpstream: true, reverted: [], workflowAliasInserted: false };
+    }
+
+    const { reverted, workflowAliasInserted } = await this.databaseRepository.revertSchemaToUpstream();
+    return { alreadyAtUpstream: false, reverted, workflowAliasInserted };
+  }
+
   cleanup() {
     return this.databaseRepository.shutdown();
   }

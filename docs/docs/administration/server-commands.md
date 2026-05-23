@@ -2,22 +2,23 @@
 
 The `immich-server` docker image comes preinstalled with an administrative CLI (`immich-admin`) that supports the following commands:
 
-| Command                    | Description                                                   |
-| -------------------------- | ------------------------------------------------------------- |
-| `help`                     | Display help                                                  |
-| `reset-admin-password`     | Reset the password for the admin user                         |
-| `disable-password-login`   | Disable password login                                        |
-| `enable-password-login`    | Enable password login                                         |
-| `disable-maintenance-mode` | Disable maintenance mode                                      |
-| `enable-maintenance-mode`  | Enable maintenance mode                                       |
-| `enable-oauth-login`       | Enable OAuth login                                            |
-| `disable-oauth-login`      | Disable OAuth login                                           |
-| `list-users`               | List Immich users                                             |
-| `grant-admin`              | Grant admin privileges to a user (by email)                   |
-| `revoke-admin`             | Revoke admin privileges from a user (by email)                |
-| `version`                  | Print Immich version                                          |
-| `change-media-location`    | Change database file paths to align with a new media location |
-| `schema-check`             | Verify database migrations and check for schema drift         |
+| Command                     | Description                                                                                                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `help`                      | Display help                                                                                                                                                                            |
+| `reset-admin-password`      | Reset the password for the admin user                                                                                                                                                   |
+| `disable-password-login`    | Disable password login                                                                                                                                                                  |
+| `enable-password-login`     | Enable password login                                                                                                                                                                   |
+| `disable-maintenance-mode`  | Disable maintenance mode                                                                                                                                                                |
+| `enable-maintenance-mode`   | Enable maintenance mode                                                                                                                                                                 |
+| `enable-oauth-login`        | Enable OAuth login                                                                                                                                                                      |
+| `disable-oauth-login`       | Disable OAuth login                                                                                                                                                                     |
+| `list-users`                | List Immich users                                                                                                                                                                       |
+| `grant-admin`               | Grant admin privileges to a user (by email)                                                                                                                                             |
+| `revoke-admin`              | Revoke admin privileges from a user (by email)                                                                                                                                          |
+| `version`                   | Print Immich version                                                                                                                                                                    |
+| `change-media-location`     | Change database file paths to align with a new media location                                                                                                                           |
+| `schema-check`              | Verify database migrations and check for schema drift                                                                                                                                   |
+| `schema-revert-to-upstream` | Roll back fork-only DB migrations so this database can be served by the official `immich-app/immich` image. See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md). |
 
 ## How to run a command
 
@@ -153,4 +154,26 @@ immich-admin schema-check
 Migrations are up to date
 
 No schema drift detected
+```
+
+Schema Revert to Upstream
+
+See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md) for the full procedure (backup, downgrade, verification).
+
+```bash
+immich-admin schema-revert-to-upstream
+... destructive operation warning ...
+? Type "revert" to confirm:  revert
+Reverted 11 fork migrations:
+  - 1779500000000-ReconcileSchemaDrift
+  - 1779400000000-UpdateWorkflowTables
+  - ...
+Recorded upstream "1778614946174-UpdateWorkflowTables" as applied.
+
+Schema revert complete. To finish downgrading to upstream:
+  1. Stop this container (e.g. `docker compose stop immich-server`).
+  2. In your docker-compose.yml, set:
+       image: ghcr.io/immich-app/immich-server:release
+     (or a specific upstream version).
+  3. `docker compose pull && docker compose up -d`
 ```
