@@ -249,14 +249,18 @@
 
   const currentPoolsMatchRecommended = $derived.by(() => {
     const recommended = recommendedPoolsForCurrentModel;
-    if (!recommended) return false;
+    if (!recommended) {
+      return false;
+    }
     const current = runpodServerless?.gpuTypeIds ?? [];
     return current.length === recommended.length && current.every((id, idx) => id === recommended[idx]);
   });
 
   const applyRecommendedPools = () => {
     const recommended = recommendedPoolsForCurrentModel;
-    if (!recommended || !runpodServerless) return;
+    if (!recommended || !runpodServerless) {
+      return;
+    }
     runpodServerless.gpuTypeIds = [...recommended];
   };
 
@@ -1098,11 +1102,11 @@
 
           {#if runpodMode === RunPodMode.Serverless && recommendedPoolsForCurrentModel && !currentPoolsMatchRecommended}
             <div
-              class="mb-4 -mt-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
+              class="-mt-2 mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
             >
               <p class="mb-1">
                 Recommended RunPod GPU pools for this model:
-                <code class="rounded bg-blue-100 px-1 dark:bg-blue-900">
+                <code class="rounded-sm bg-blue-100 px-1 dark:bg-blue-900">
                   {recommendedPoolsForCurrentModel.join(', ')}
                 </code>
               </p>
