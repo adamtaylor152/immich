@@ -144,7 +144,9 @@ export class SmartAlbumService extends BaseService {
    * six built-in albums for every existing user so they populate without a
    * server restart.
    */
-  @OnEvent({ name: 'ConfigUpdate', server: true })
+  // workers: [Api] only — backfillAllUsers writes album rows for every user,
+  // which we don't want to multiply by replica count in multi-node deployments.
+  @OnEvent({ name: 'ConfigUpdate', server: true, workers: [ImmichWorker.Api] })
   async onConfigUpdate({ newConfig, oldConfig }: ArgOf<'ConfigUpdate'>): Promise<void> {
     const wasDisabled = !oldConfig.smartAlbums.enabled;
     const isNowEnabled = newConfig.smartAlbums.enabled;

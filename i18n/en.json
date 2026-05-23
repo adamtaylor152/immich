@@ -440,6 +440,7 @@
     "smart_albums_kind_threshold": "Tag threshold",
     "smart_albums_kind_threshold_description": "Minimum confidence score (0.2–0.4) for a tag trigger to match.",
     "smart_albums_kind_travel": "Travel",
+    "smart_albums_reevaluate_already_in_flight": "A smart album re-evaluation is already in flight",
     "smart_albums_reevaluate_button": "Re-evaluate all assets",
     "smart_albums_reevaluate_modal_confirm": "Re-evaluate",
     "smart_albums_reevaluate_modal_description": "Each described image will be re-evaluated against all active smart album rules. Assets are added or removed from albums as needed.",

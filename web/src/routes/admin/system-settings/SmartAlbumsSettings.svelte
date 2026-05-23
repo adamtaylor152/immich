@@ -50,8 +50,10 @@
 
   const handleReevaluateClick = async () => {
     const result = await modalManager.show(SmartAlbumReevaluateModal, {});
-    if (result) {
+    if (result?.queued) {
       toastManager.primary($t('admin.smart_albums_reevaluate_started'));
+    } else if (result) {
+      toastManager.primary($t('admin.smart_albums_reevaluate_already_in_flight'));
     }
   };
 </script>
