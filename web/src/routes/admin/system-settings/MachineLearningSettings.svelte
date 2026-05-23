@@ -1019,7 +1019,7 @@
                     <hr class="border-primary/20" />
                     <div class="flex justify-between">
                       <dt class="text-immich-fg/70 dark:text-immich-dark-fg/70">
-                        {$t('admin.image_description_status_total_assets')}
+                        {$t('admin.image_description_status_eligible_assets')}
                       </dt>
                       <dd class="font-medium">{descriptionStats.totalAssets.toLocaleString()}</dd>
                     </div>

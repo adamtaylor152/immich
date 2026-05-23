@@ -802,9 +802,10 @@ describe(SystemConfigService.name, () => {
       });
 
       it('should NOT bump lastConfigChangeAt when only non-imageDescription fields change', async () => {
+        const initialLastChange = '2024-01-01T00:00:00.000Z';
         mocks.systemMetadata.get.mockResolvedValue({
           machineLearning: {
-            imageDescription: { lastConfigChangeAt: '2024-01-01T00:00:00.000Z' },
+            imageDescription: { lastConfigChangeAt: initialLastChange },
           },
         });
 
@@ -817,12 +818,13 @@ describe(SystemConfigService.name, () => {
               ...baselineDescription,
               // Client sends an empty/null pendingRequeueAt; server must
               // overwrite with the stored value (null in defaults).
-              lastConfigChangeAt: '2024-01-01T00:00:00.000Z',
+              lastConfigChangeAt: initialLastChange,
             },
           },
           ffmpeg: { ...defaults.ffmpeg, crf: 42 },
         };
 
+        const before = Date.now();
         await sut.updateSystemConfig(newConfig);
 
         // The persisted partial config should NOT include a new
@@ -835,23 +837,29 @@ describe(SystemConfigService.name, () => {
         const partial = persisted![1] as {
           machineLearning?: { imageDescription?: { lastConfigChangeAt?: string | null } };
         };
-        // The stored value should be preserved exactly (no fresh bump).
         const lastChange = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
-        // Either undefined (means no override, still the original 2024) or the
-        // exact 2024 value — but NOT a fresh ISO string from "now".
-        if (lastChange !== undefined) {
-          expect(lastChange).toBe('2024-01-01T00:00:00.000Z');
+        // The stored value must NOT have moved forward in time. The persisted
+        // partial must either omit the field (filtered out by updateConfig's
+        // diff because it equals the default) or carry the exact original
+        // ISO string — never a fresh "now" timestamp.
+        if (lastChange === undefined || lastChange === null) {
+          // Field was filtered out — no fresh bump persisted. Pass.
+        } else {
+          expect(lastChange).toBe(initialLastChange);
+          expect(Date.parse(lastChange)).toBeLessThan(before);
         }
       });
 
       it('should NOT ratchet on bare timestamp-only diffs (pendingRequeueAt/lastConfigChangeAt are ignored in the compare)', async () => {
         // Old config has timestamps set; client sends back the exact same
         // imageDescription block but with different timestamp values.
+        const initialLastChange = '2023-12-31T00:00:00.000Z';
+        const initialPendingRequeue = '2024-01-01T00:00:00.000Z';
         mocks.systemMetadata.get.mockResolvedValue({
           machineLearning: {
             imageDescription: {
-              pendingRequeueAt: '2024-01-01T00:00:00.000Z',
-              lastConfigChangeAt: '2023-12-31T00:00:00.000Z',
+              pendingRequeueAt: initialPendingRequeue,
+              lastConfigChangeAt: initialLastChange,
             },
           },
         });
@@ -871,6 +879,7 @@ describe(SystemConfigService.name, () => {
           },
         };
 
+        const before = Date.now();
         await sut.updateSystemConfig(newConfig);
 
         const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -882,12 +891,22 @@ describe(SystemConfigService.name, () => {
           };
         };
         // The pre-existing stored timestamps must be preserved (server is the
-        // source of truth for these two fields).
-        if (partial.machineLearning?.imageDescription?.lastConfigChangeAt !== undefined) {
-          expect(partial.machineLearning.imageDescription.lastConfigChangeAt).toBe('2023-12-31T00:00:00.000Z');
+        // source of truth for these two fields). The persisted partial must
+        // either omit the field (filtered out by updateConfig diff) or carry
+        // the exact original ISO string — never a fresh "now" timestamp.
+        const persistedLastChange = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
+        if (persistedLastChange === undefined || persistedLastChange === null) {
+          // Filtered out — no fresh bump persisted. Pass.
+        } else {
+          expect(persistedLastChange).toBe(initialLastChange);
+          expect(Date.parse(persistedLastChange)).toBeLessThan(before);
         }
-        if (partial.machineLearning?.imageDescription?.pendingRequeueAt !== undefined) {
-          expect(partial.machineLearning.imageDescription.pendingRequeueAt).toBe('2024-01-01T00:00:00.000Z');
+        const persistedPendingRequeue = partial.machineLearning?.imageDescription?.pendingRequeueAt;
+        if (persistedPendingRequeue === undefined || persistedPendingRequeue === null) {
+          // Filtered out — no fresh ratchet persisted. Pass.
+        } else {
+          expect(persistedPendingRequeue).toBe(initialPendingRequeue);
+          expect(Date.parse(persistedPendingRequeue)).toBeLessThan(before);
         }
       });
     });
@@ -1155,9 +1174,9 @@ describe(SystemConfigService.name, () => {
     it('should reject an unknown kind', async () => {
       mocks.systemMetadata.get.mockResolvedValue({ smartAlbums: { enabled: true } });
 
-      await expect(
-        sut.triggerSmartAlbumReevaluate({ kind: 'not-a-real-kind' as never }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(sut.triggerSmartAlbumReevaluate({ kind: 'not-a-real-kind' as never })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 

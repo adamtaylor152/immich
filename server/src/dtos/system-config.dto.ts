@@ -499,7 +499,7 @@ const ImageDescriptionRequeueEstimateSchema = z
       .meta({ format: 'double' })
       .min(0)
       .describe(
-        'Estimated seconds per asset. Currently a fixed placeholder value (1.5s) until rolling per-job duration metrics are implemented.',
+        'Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started.',
       ),
     estimatedTotalSeconds: z
       .number()
@@ -552,9 +552,7 @@ const SmartAlbumReevaluateRequestSchema = z
     kind: z
       .enum(SMART_ALBUM_BUILT_IN_KINDS)
       .optional()
-      .describe(
-        'Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.',
-      ),
+      .describe('Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.'),
   })
   .meta({ id: 'SmartAlbumReevaluateRequestDto' });
 
