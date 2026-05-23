@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
+  ImageDescriptionRequeueEstimateDto,
+  ImageDescriptionRequeueResponseDto,
   MachineLearningHardwareResponseDto,
   SystemConfigDto,
   SystemConfigTemplateStorageOptionDto,
@@ -72,5 +74,29 @@ export class SystemConfigController {
   })
   getStorageTemplateOptions(): SystemConfigTemplateStorageOptionDto {
     return this.storageTemplateService.getStorageTemplateOptions();
+  }
+
+  @Get('image-description/requeue-estimate')
+  @Authenticated({ permission: Permission.SystemConfigRead, admin: true })
+  @Endpoint({
+    summary: 'Estimate image description re-queue cost',
+    description:
+      'Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  getImageDescriptionRequeueEstimate(): Promise<ImageDescriptionRequeueEstimateDto> {
+    return this.service.estimateDescriptionRequeue();
+  }
+
+  @Post('image-description/requeue')
+  @Authenticated({ permission: Permission.SystemConfigUpdate, admin: true })
+  @Endpoint({
+    summary: 'Trigger image description re-queue',
+    description:
+      'Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  triggerImageDescriptionRequeue(): Promise<ImageDescriptionRequeueResponseDto> {
+    return this.service.triggerDescriptionRequeue();
   }
 }

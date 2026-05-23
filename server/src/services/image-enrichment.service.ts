@@ -42,6 +42,8 @@ type EnrichmentTask<T> =
       modelName: string;
       updatedAt: string;
       result: T;
+      /** 8-char hex truncation of SHA-256(JSON.stringify(prompt config)) at inference time. */
+      configHash?: string;
       appliedDescriptionHash?: string;
       appliedTagHash?: string;
       appliedTagValues?: string[];
@@ -90,6 +92,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+const promptConfigHash = (promptConfig: unknown) =>
+  createHash('sha256').update(JSON.stringify(promptConfig)).digest('hex').slice(0, 8);
 
 const getGeneratedDescriptionBlock = (description: string) => {
   const trimmed = description.trim();
@@ -461,6 +466,7 @@ export class ImageEnrichmentService extends BaseService {
           modelName: machineLearning.imageDescription.modelName,
           updatedAt: new Date().toISOString(),
           result,
+          configHash: promptConfigHash(machineLearning.imageDescription.prompt),
         };
         await this.saveEnrichmentMetadata(id, m, trx);
         return { metadata: m, previousDescription, previousTagValues };

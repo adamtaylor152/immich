@@ -452,6 +452,36 @@ export class SystemConfigSmtpDto extends createZodDto(SystemConfigSmtpSchema) {}
 export class SystemConfigTemplateStorageOptionDto extends createZodDto(SystemConfigTemplateStorageOptionSchema) {}
 export class SystemConfigDto extends createZodDto(SystemConfigSchema) {}
 
+const ImageDescriptionRequeueEstimateSchema = z
+  .object({
+    totalAssets: z.int().min(0).describe('Total eligible image assets'),
+    withDescription: z.int().min(0).describe('Assets already holding a successful description'),
+    withoutDescription: z.int().min(0).describe('Assets missing a description'),
+    rollingAvgSeconds: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .describe('Rolling average seconds per asset (last 1000 completed jobs, or default estimate)'),
+    estimatedTotalSeconds: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .describe('Estimated total wall-clock seconds to re-describe all eligible assets at current throughput'),
+    activeBackend: z.string().describe('Configured hardware acceleration backend (e.g. "auto", "cuda")'),
+    activeModel: z.string().describe('Configured image description model name'),
+  })
+  .meta({ id: 'ImageDescriptionRequeueEstimateDto' });
+
+export class ImageDescriptionRequeueEstimateDto extends createZodDto(ImageDescriptionRequeueEstimateSchema) {}
+
+const ImageDescriptionRequeueResponseSchema = z
+  .object({
+    queued: z.boolean().describe('Whether the queue-all job was newly enqueued (false = already in-flight)'),
+  })
+  .meta({ id: 'ImageDescriptionRequeueResponseDto' });
+
+export class ImageDescriptionRequeueResponseDto extends createZodDto(ImageDescriptionRequeueResponseSchema) {}
+
 export function mapConfig(config: SystemConfig): SystemConfigDto {
   return config;
 }

@@ -420,6 +420,10 @@ class ApiClient {
           return ImageDescriptionEnrichmentResponseDtoPeopleInner.fromJson(value);
         case 'ImageDescriptionPromptConfig':
           return ImageDescriptionPromptConfig.fromJson(value);
+        case 'ImageDescriptionRequeueEstimateDto':
+          return ImageDescriptionRequeueEstimateDto.fromJson(value);
+        case 'ImageDescriptionRequeueResponseDto':
+          return ImageDescriptionRequeueResponseDto.fromJson(value);
         case 'ImageEnrichmentFilter':
           return ImageEnrichmentFilterTypeTransformer().decode(value);
         case 'ImageEnrichmentReview':

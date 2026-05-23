@@ -13243,6 +13243,100 @@
         "x-immich-state": "Stable"
       }
     },
+    "/system-config/image-description/requeue": {
+      "post": {
+        "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if the queue-all job is already in-flight the call returns without re-enqueuing.",
+        "operationId": "triggerImageDescriptionRequeue",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Trigger image description re-queue",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/image-description/requeue-estimate": {
+      "get": {
+        "description": "Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.",
+        "operationId": "getImageDescriptionRequeueEstimate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueEstimateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Estimate image description re-queue cost",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/system-config/machine-learning/hardware": {
       "get": {
         "description": "Retrieve available hardware acceleration providers from the machine learning service.",
@@ -20050,6 +20144,70 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ImageDescriptionRequeueEstimateDto": {
+        "properties": {
+          "activeBackend": {
+            "description": "Configured hardware acceleration backend (e.g. \"auto\", \"cuda\")",
+            "type": "string"
+          },
+          "activeModel": {
+            "description": "Configured image description model name",
+            "type": "string"
+          },
+          "estimatedTotalSeconds": {
+            "description": "Estimated total wall-clock seconds to re-describe all eligible assets at current throughput",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "rollingAvgSeconds": {
+            "description": "Rolling average seconds per asset (last 1000 completed jobs, or default estimate)",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "totalAssets": {
+            "description": "Total eligible image assets",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withDescription": {
+            "description": "Assets already holding a successful description",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withoutDescription": {
+            "description": "Assets missing a description",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeBackend",
+          "activeModel",
+          "estimatedTotalSeconds",
+          "rollingAvgSeconds",
+          "totalAssets",
+          "withDescription",
+          "withoutDescription"
+        ],
+        "type": "object"
+      },
+      "ImageDescriptionRequeueResponseDto": {
+        "properties": {
+          "queued": {
+            "description": "Whether the queue-all job was newly enqueued (false = already in-flight)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
+        ],
         "type": "object"
       },
       "ImageEnrichmentFilter": {

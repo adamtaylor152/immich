@@ -306,6 +306,56 @@ describe(ImageEnrichmentService.name, () => {
     );
   });
 
+  it('should record a configHash on the description metadata when the job succeeds', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: {
+        enabled: true,
+        nsfwDetection: { enabled: false },
+        imageDescription: {
+          enabled: true,
+          modelName: 'Qwen/Qwen2.5-VL-3B-Instruct',
+          prompt: { style: 'balanced' },
+        },
+      },
+    });
+    mocks.machineLearning.describeImage.mockResolvedValue({
+      description: 'A sunny park.',
+      people: [],
+      environment: 'outdoors',
+      objects: [],
+      visible_text: [],
+      context: '',
+      tags: [],
+    });
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+    const descriptionCall = mocks.asset.upsertMetadata.mock.calls.find(
+      (call) => (call[1][0]?.value as { description?: { result?: unknown } } | undefined)?.description?.result,
+    )!;
+    const saved = descriptionCall[1][0].value as { description: Record<string, unknown> };
+    expect(saved.description.configHash).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('should not record a configHash on failed description metadata', async () => {
+    mocks.systemMetadata.get.mockResolvedValue({
+      machineLearning: {
+        enabled: true,
+        nsfwDetection: { enabled: false },
+        imageDescription: { enabled: true, modelName: 'Qwen/Qwen2.5-VL-3B-Instruct' },
+      },
+    });
+    mocks.machineLearning.describeImage.mockRejectedValue(new Error('model error'));
+
+    await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Failed);
+
+    const failCall = mocks.asset.upsertMetadata.mock.calls.find(
+      (call) => (call[1][0]?.value as { description?: { status?: string } } | undefined)?.description?.status === 'failed',
+    )!;
+    const saved = failCall[1][0].value as { description: Record<string, unknown> };
+    expect(saved.description).not.toHaveProperty('configHash');
+  });
+
   it('should not append an existing generated description block again', async () => {
     const description = 'A bright kitchen with a wooden table.';
     mocks.systemMetadata.get.mockResolvedValue({

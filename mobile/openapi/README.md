@@ -274,8 +274,10 @@ Class | Method | HTTP request | Description
 *SyncApi* | [**sendSyncAck**](doc//SyncApi.md#sendsyncack) | **POST** /sync/ack | Acknowledge changes
 *SystemConfigApi* | [**getConfig**](doc//SystemConfigApi.md#getconfig) | **GET** /system-config | Get system configuration
 *SystemConfigApi* | [**getConfigDefaults**](doc//SystemConfigApi.md#getconfigdefaults) | **GET** /system-config/defaults | Get system configuration defaults
+*SystemConfigApi* | [**getImageDescriptionRequeueEstimate**](doc//SystemConfigApi.md#getimagedescriptionrequeueestimate) | **GET** /system-config/image-description/requeue-estimate | Estimate image description re-queue cost
 *SystemConfigApi* | [**getMachineLearningHardware**](doc//SystemConfigApi.md#getmachinelearninghardware) | **GET** /system-config/machine-learning/hardware | Get machine learning hardware
 *SystemConfigApi* | [**getStorageTemplateOptions**](doc//SystemConfigApi.md#getstoragetemplateoptions) | **GET** /system-config/storage-template-options | Get storage template options
+*SystemConfigApi* | [**triggerImageDescriptionRequeue**](doc//SystemConfigApi.md#triggerimagedescriptionrequeue) | **POST** /system-config/image-description/requeue | Trigger image description re-queue
 *SystemConfigApi* | [**updateConfig**](doc//SystemConfigApi.md#updateconfig) | **PUT** /system-config | Update system configuration
 *SystemMetadataApi* | [**getAdminOnboarding**](doc//SystemMetadataApi.md#getadminonboarding) | **GET** /system-metadata/admin-onboarding | Retrieve admin onboarding
 *SystemMetadataApi* | [**getReverseGeocodingState**](doc//SystemMetadataApi.md#getreversegeocodingstate) | **GET** /system-metadata/reverse-geocoding-state | Retrieve reverse geocoding state
@@ -453,6 +455,8 @@ Class | Method | HTTP request | Description
  - [ImageDescriptionEnrichmentResponseDto](doc//ImageDescriptionEnrichmentResponseDto.md)
  - [ImageDescriptionEnrichmentResponseDtoPeopleInner](doc//ImageDescriptionEnrichmentResponseDtoPeopleInner.md)
  - [ImageDescriptionPromptConfig](doc//ImageDescriptionPromptConfig.md)
+ - [ImageDescriptionRequeueEstimateDto](doc//ImageDescriptionRequeueEstimateDto.md)
+ - [ImageDescriptionRequeueResponseDto](doc//ImageDescriptionRequeueResponseDto.md)
  - [ImageEnrichmentFilter](doc//ImageEnrichmentFilter.md)
  - [ImageEnrichmentReview](doc//ImageEnrichmentReview.md)
  - [ImageFormat](doc//ImageFormat.md)

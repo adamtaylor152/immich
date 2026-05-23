@@ -3117,6 +3117,26 @@ export type SystemConfigDto = {
     trash: SystemConfigTrashDto;
     user: SystemConfigUserDto;
 };
+export type ImageDescriptionRequeueResponseDto = {
+    /** Whether the queue-all job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type ImageDescriptionRequeueEstimateDto = {
+    /** Configured hardware acceleration backend (e.g. "auto", "cuda") */
+    activeBackend: string;
+    /** Configured image description model name */
+    activeModel: string;
+    /** Estimated total wall-clock seconds to re-describe all eligible assets at current throughput */
+    estimatedTotalSeconds: number;
+    /** Rolling average seconds per asset (last 1000 completed jobs, or default estimate) */
+    rollingAvgSeconds: number;
+    /** Total eligible image assets */
+    totalAssets: number;
+    /** Assets already holding a successful description */
+    withDescription: number;
+    /** Assets missing a description */
+    withoutDescription: number;
+};
 export type MachineLearningHardwareResponseDto = {
     /** Available PyTorch CUDA device count */
     cudaDeviceCount: number;
@@ -6854,6 +6874,29 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
         status: 200;
         data: SystemConfigDto;
     }>("/system-config/defaults", {
+        ...opts
+    }));
+}
+/**
+ * Trigger image description re-queue
+ */
+export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: ImageDescriptionRequeueResponseDto;
+    }>("/system-config/image-description/requeue", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Estimate image description re-queue cost
+ */
+export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ImageDescriptionRequeueEstimateDto;
+    }>("/system-config/image-description/requeue-estimate", {
         ...opts
     }));
 }

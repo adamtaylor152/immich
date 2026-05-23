@@ -149,4 +149,18 @@ describe(SystemConfigController.name, () => {
       });
     });
   });
+
+  describe('GET /system-config/image-description/requeue-estimate', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/system-config/image-description/requeue-estimate');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /system-config/image-description/requeue', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/system-config/image-description/requeue');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+  });
 });
