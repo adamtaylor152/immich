@@ -6,6 +6,13 @@ export type ImageDescriptionPromptConfig = z.infer<typeof ImageDescriptionPrompt
 
 export interface KnownPerson {
   name: string;
+  /**
+   * Per-face confidence score in [0,1]. Currently always 1.0 because Immich's
+   * schema does not store a per-face recognition score; named faces are taken
+   * as user-curated ground truth. The minFaceConfidence config still acts as
+   * an enable/disable knob (set to >1.0 to suppress all identity hints
+   * without disabling identityInjection.enabled).
+   */
   faceConfidence: number;
   boxCenter: [number, number]; // normalized [0,1] x/y
 }

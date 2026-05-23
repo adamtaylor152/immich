@@ -35,6 +35,8 @@ describe(ImageEnrichmentService.name, () => {
       Promise.resolve({ id: `${value}-id`, userId, value, parentId: null } as never),
     );
     mocks.tag.upsertAssetIds.mockResolvedValue([{ assetId, tagId: 'nsfw-id' } as never]);
+    // Default: no named faces — keeps existing tests unaffected.
+    mocks.person.getFaces.mockResolvedValue([]);
   });
 
   it('should store NSFW results and apply visible NSFW tags when only NSFW detection is enabled', async () => {
@@ -756,5 +758,315 @@ describe(ImageEnrichmentService.name, () => {
     expect(saved.description).not.toHaveProperty('appliedTagHash');
     expect(saved.description).not.toHaveProperty('appliedTagValues');
     expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SidecarWrite, data: { id: assetId } });
+  });
+
+  describe('identity injection — face data wiring', () => {
+    const enabledConfig = {
+      machineLearning: {
+        enabled: true,
+        nsfwDetection: { enabled: false },
+        imageDescription: { enabled: true },
+      },
+    };
+
+    beforeEach(() => {
+      mocks.systemMetadata.get.mockResolvedValue(enabledConfig);
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'Conner is playing baseball.',
+        people: [],
+        environment: 'outdoor field',
+        objects: ['baseball bat'],
+        visible_text: [],
+        context: 'youth baseball game',
+        tags: ['baseball', 'outdoors'],
+      });
+    });
+
+    it('passes named visible faces to the prompt assembler as knownPersons', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: 'Conner', isHidden: false } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.person.getFaces).toHaveBeenCalledWith(assetId, { isVisible: true });
+      // The prompt assembler is called with a prompt that includes the known person hint.
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.stringContaining('Conner'),
+      );
+    });
+
+    it('excludes faces with null personId from knownPersons', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: null,
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: null,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      // Prompt should NOT contain any name hint.
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('excludes faces linked to persons with an empty name', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: '', isHidden: false } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('excludes faces linked to persons whose name is only whitespace', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: '   ', isHidden: false } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('excludes faces linked to hidden persons', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: 'HiddenPerson', isHidden: true } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('skips faces with zero imageWidth to avoid NaN in boxCenter', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 0,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: 'ZeroWidth', isHidden: false } as never,
+        },
+      ]);
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('passes through the ML description unchanged when it already contains the known name', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: 'Conner', isHidden: false } as never,
+        },
+      ]);
+      // ML returns description already containing the known name — no changes needed.
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'Conner is playing baseball.',
+        people: [],
+        environment: 'outdoor field',
+        objects: [],
+        visible_text: [],
+        context: '',
+        tags: [],
+      });
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      const descriptionCall = mocks.asset.upsertMetadata.mock.calls.find(
+        (call) => (call[1][0]?.value as { description?: { result?: unknown } } | undefined)?.description?.result,
+      )!;
+      const saved = descriptionCall[1][0].value as { description: { result: { description: string } } };
+      expect(saved.description.result.description).toBe('Conner is playing baseball.');
+    });
+
+    it('still describes the asset when face lookup throws (best-effort identity injection)', async () => {
+      mocks.person.getFaces.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      // describeImage must still be called, with a prompt that contains no
+      // identity hint (knownPersons was empty due to the lookup failure).
+      expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
+        previewFile,
+        expect.anything(),
+        undefined,
+        expect.not.stringContaining('Known people'),
+      );
+    });
+
+    it('strips hallucinated names before persisting the description', async () => {
+      mocks.person.getFaces.mockResolvedValue([
+        {
+          id: newUuid(),
+          assetId,
+          personId: newUuid(),
+          imageWidth: 400,
+          imageHeight: 500,
+          boundingBoxX1: 100,
+          boundingBoxX2: 200,
+          boundingBoxY1: 100,
+          boundingBoxY2: 200,
+          isVisible: true,
+          deletedAt: null,
+          sourceType: 'machine-learning' as never,
+          updatedAt: new Date(),
+          updateId: newUuid(),
+          person: { id: newUuid(), name: 'Conner', isHidden: false } as never,
+        },
+      ]);
+      // ML hallucinated "Madison" — not in knownPersons.
+      mocks.machineLearning.describeImage.mockResolvedValue({
+        description: 'Conner and Madison are playing baseball.',
+        people: [],
+        environment: 'outdoor field',
+        objects: [],
+        visible_text: [],
+        context: '',
+        tags: [],
+      });
+
+      await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
+
+      const descriptionCall = mocks.asset.upsertMetadata.mock.calls.find(
+        (call) => (call[1][0]?.value as { description?: { result?: unknown } } | undefined)?.description?.result,
+      )!;
+      const saved = descriptionCall[1][0].value as {
+        description: { result: { description: string }; identityFlags?: { hallucinatedNames?: string[] } };
+      };
+      expect(saved.description.result.description).toBe('Conner and Someone are playing baseball.');
+      expect(saved.description.identityFlags?.hallucinatedNames).toEqual(['Madison']);
+    });
   });
 });
