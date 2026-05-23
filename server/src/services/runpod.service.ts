@@ -84,6 +84,35 @@ const TICK_INTERVAL_MS = 30_000;
 const ML_PORT = 3003;
 const ML_AUTH_ENV = 'IMMICH_ML_AUTH_TOKEN';
 
+/**
+ * Build the model-preload env vars that should be set on a RunPod worker so
+ * the configured image-description VLM is downloaded and warmed into VRAM
+ * at container boot, rather than on the first /predict request.
+ *
+ * RunPod serverless endpoints route through a CloudFlare edge proxy that
+ * disconnects clients after ~30 s of "no response from worker". Qwen2.5-VL
+ * (7B+) takes 60–90 s to download + load from cold, so without a preload the
+ * first 2–3 description jobs after a worker cold-start all return 502, the
+ * job queue marks the assets failed, and the admin sees a confusing
+ * "failed for all URLs". Preloading shifts that cost into the container
+ * boot, before any traffic arrives.
+ *
+ * If image description is disabled or no model is configured we return `{}`
+ * so RunPod's template-create call doesn't carry a stale model name across
+ * config changes.
+ */
+const imageDescriptionPreloadEnv = (config: SystemConfig): Record<string, string> => {
+  const desc = config.machineLearning.imageDescription;
+  if (!desc?.enabled || !desc.modelName) {
+    return {};
+  }
+  // pydantic-settings nests env vars via the double-underscore delimiter
+  // (`MACHINE_LEARNING_PRELOAD__IMAGE_DESCRIPTION__VISUAL`). The ML container
+  // resolves this to `PreloadModelData.image_description.visual` and feeds
+  // it into the same load-at-boot path used for CLIP and face recognition.
+  return { MACHINE_LEARNING_PRELOAD__IMAGE_DESCRIPTION__VISUAL: desc.modelName };
+};
+
 @Injectable()
 export class RunPodService extends BaseService {
   private tickHandle?: ReturnType<typeof setInterval>;
@@ -307,6 +336,7 @@ export class RunPodService extends BaseService {
         env: {
           [ML_AUTH_ENV]: authToken,
           MACHINE_LEARNING_CACHE_FOLDER: '/cache',
+          ...imageDescriptionPreloadEnv(config),
         },
       });
     } catch (error) {
@@ -1101,6 +1131,11 @@ export class RunPodService extends BaseService {
               //   github.com/runpod-workers/worker-load-balancing#deployment-steps
               PORT: String(ML_PORT),
               PORT_HEALTH: String(ML_PORT),
+              // Warm the image-description VLM into VRAM at container boot so
+              // the first description job after worker cold-start doesn't lose
+              // the race against the RunPod edge proxy's 30 s timeout. See
+              // imageDescriptionPreloadEnv() for the full rationale.
+              ...imageDescriptionPreloadEnv(config),
             },
             // RunPod rejects pod-flavoured templates from serverless endpoints.
             isServerless: true,
