@@ -468,12 +468,19 @@ export const defaults = Object.freeze<SystemConfig>({
       autoBackfillOnLaunch: false,
       maxRuntimeHours: 24,
       serverless: {
-        gpuTypeIds: ['NVIDIA RTX A5000', 'NVIDIA GeForce RTX 3090', 'NVIDIA GeForce RTX 4090'],
+        // GPU **pool IDs** (not specific types). RunPod's serverless API
+        // accepts AMPERE_16, AMPERE_24, ADA_24, AMPERE_48, ADA_48_PRO,
+        // AMPERE_80, ADA_80_PRO, HOPPER_141, ADA_32_PRO, BLACKWELL_96,
+        // BLACKWELL_180. AMPERE_24 covers the A5000 / RTX 3090.
+        // See https://docs.runpod.io/references/gpu-types#gpu-pools.
+        gpuTypeIds: ['AMPERE_24', 'ADA_24'],
         workersMin: 0,
         workersMax: 3,
         idleTimeoutSeconds: 30,
         executionTimeoutMs: 600_000,
-        scalerType: 'QUEUE_DELAY',
+        // LB endpoints have no queue, so REQUEST_COUNT is the only meaningful
+        // scaler. RunPod silently accepts QUEUE_DELAY for LB but it's a no-op.
+        scalerType: 'REQUEST_COUNT',
         scalerValue: 4,
       },
     },

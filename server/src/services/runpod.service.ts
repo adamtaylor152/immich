@@ -1023,19 +1023,39 @@ export class RunPodService extends BaseService {
         this.logger.warn(`Failed to scan for existing endpoints: ${error}`);
       }
 
+      // Also check for an orphan template (e.g. partial failure left a template
+      // behind without an endpoint) so we can adopt it instead of colliding on
+      // the unique-name constraint.
       if (!endpoint) {
-        // Create template + endpoint fresh.
-        const template = await this.runPodRepository.createTemplate(apiKey, {
-          name: `${prefix}-template`,
-          imageName: runpod.imageName,
-          containerDiskInGb: runpod.containerDiskGb,
-          ports: [`${ML_PORT}/http`],
-          // Crucially: no IMMICH_ML_AUTH_TOKEN in serverless mode. RunPod's
-          // proxy already auth-gates with the API key; double-auth would
-          // require the proxy to forward our header which it doesn't.
-          env: { MACHINE_LEARNING_CACHE_FOLDER: '/cache' },
-        });
-        templateId = template.id;
+        try {
+          const templates = await this.runPodRepository.listTemplates(apiKey);
+          const orphan = templates.find((t) => t.name?.startsWith(prefix));
+          if (orphan) {
+            templateId = orphan.id;
+            this.logger.log(`Adopting orphan template ${orphan.id} (tag=${instanceTag})`);
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to scan for existing templates: ${error}`);
+        }
+      }
+
+      if (!endpoint) {
+        if (!templateId) {
+          // Create template fresh.
+          const template = await this.runPodRepository.createTemplate(apiKey, {
+            name: `${prefix}-template`,
+            imageName: runpod.imageName,
+            containerDiskInGb: runpod.containerDiskGb,
+            ports: [`${ML_PORT}/http`],
+            // Crucially: no IMMICH_ML_AUTH_TOKEN in serverless mode. RunPod's
+            // proxy already auth-gates with the API key; double-auth would
+            // require the proxy to forward our header which it doesn't.
+            env: { MACHINE_LEARNING_CACHE_FOLDER: '/cache' },
+            // RunPod rejects pod-flavoured templates from serverless endpoints.
+            isServerless: true,
+          });
+          templateId = template.id;
+        }
         endpoint = await this.runPodRepository.createEndpoint(apiKey, {
           name: `${prefix}-endpoint`,
           templateId,
@@ -1046,6 +1066,11 @@ export class RunPodService extends BaseService {
           executionTimeoutMs: runpod.serverless.executionTimeoutMs,
           scalerType: runpod.serverless.scalerType,
           scalerValue: runpod.serverless.scalerValue,
+          // 'LB' = load-balancer endpoint. RunPod forwards arbitrary HTTP
+          // (including our /predict, /ping, /hardware) directly to a worker
+          // instead of wrapping it in a queue. Required for Immich's existing
+          // ML predict flow to work unchanged.
+          type: 'LB',
         });
         this.logger.log(`Created serverless endpoint ${endpoint.id} (template ${templateId}) tag=${instanceTag}`);
       }

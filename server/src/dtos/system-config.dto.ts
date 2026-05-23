@@ -157,7 +157,7 @@ const SystemConfigRunPodServerlessSchema = z
     workersMin: z.int().min(0).max(10).describe('Always-warm workers (0 = scale to zero)'),
     workersMax: z.int().min(1).max(20).describe('Max concurrent workers'),
     idleTimeoutSeconds: z.int().min(5).max(3600).describe('Seconds before an idle worker scales down'),
-    executionTimeoutMs: z.int().min(5_000).max(3_600_000).describe('Max time per request (ms)'),
+    executionTimeoutMs: z.int().min(5000).max(3_600_000).describe('Max time per request (ms)'),
     scalerType: z.enum(['QUEUE_DELAY', 'REQUEST_COUNT']).describe('Worker autoscaler strategy'),
     scalerValue: z.int().min(1).max(60).describe('Scaler threshold (queue seconds or request count)'),
   })

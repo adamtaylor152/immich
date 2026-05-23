@@ -410,8 +410,8 @@
             />
           {:else if runpodMode === 'serverless'}
             <SettingTextarea
-              label="GPU type IDs (one per line, in priority order)"
-              description="RunPod tries each ID in order until one is available. Example: 'NVIDIA RTX A5000'"
+              label="GPU pool IDs (one per line, in priority order)"
+              description="RunPod serverless wants GPU pool IDs (e.g. AMPERE_24, ADA_24, AMPERE_48), not specific types. AMPERE_24 covers the A5000 / RTX 3090. See https://docs.runpod.io/references/gpu-types#gpu-pools."
               value={runpodGpuTypeIdsText}
               onChange={(text) =>
                 (runpodServerless.gpuTypeIds = text

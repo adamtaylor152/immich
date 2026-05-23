@@ -26,7 +26,7 @@
 
 {#if !dismissed}
   <div
-    class="relative overflow-hidden rounded-md border border-purple-300/50 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4 text-white shadow-md"
+    class="relative overflow-hidden rounded-md border border-purple-300/50 bg-linear-to-br from-indigo-500 via-purple-500 to-pink-500 p-4 text-white shadow-md"
   >
     <button
       type="button"
@@ -51,7 +51,7 @@
     </button>
 
     <div class="flex flex-col gap-3 pr-8 sm:flex-row sm:items-center sm:gap-4">
-      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur">
+      <div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="28"
@@ -71,7 +71,7 @@
       </div>
 
       <div class="flex-1">
-        <h3 class="text-base font-semibold leading-tight">New to RunPod? Get $5–$500 in free credit</h3>
+        <h3 class="text-base/tight font-semibold">New to RunPod? Get $5–$500 in free credit</h3>
         <p class="mt-1 text-sm text-white/90">
           Sign up with this referral link — enough for ~30 hours of A5000 time. Helps support continued development of
           this RunPod integration.
@@ -82,7 +82,7 @@
         href={REFERRAL_URL}
         target="_blank"
         rel="noopener noreferrer"
-        class="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-purple-700 shadow-sm transition hover:bg-white/90 hover:shadow sm:self-center"
+        class="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-purple-700 shadow-sm transition hover:bg-white/90 hover:shadow-sm sm:self-center"
       >
         Sign up
         <svg

@@ -396,6 +396,9 @@ describe(RunPodService.name, () => {
   describe('serverless mode', () => {
     const ENDPOINT_URL = 'https://ep_xyz.api.runpod.ai/';
 
+    // Nested closure intentional — `stubConfig` references the outer `sut`
+    // that beforeEach re-creates per test, so this can't be hoisted.
+    // eslint-disable-next-line unicorn/consistent-function-scoping
     const stubServerlessConfig = (overrides: Partial<SystemConfig['machineLearning']['runpod']> = {}): SystemConfig =>
       stubConfig({ mode: 'serverless', ...overrides });
 
