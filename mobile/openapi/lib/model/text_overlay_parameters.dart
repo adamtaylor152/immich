@@ -124,7 +124,9 @@ class TextOverlayParameters {
       return TextOverlayParameters(
         color: mapValueOfType<String>(json, r'color') ?? '#ffffff',
         endMs: mapValueOfType<int>(json, r'endMs'),
-        size: num.parse('${json[r'size']}'),
+        size: json[r'size'] == null
+            ? 0.06
+            : num.parse('${json[r'size']}'),
         startMs: mapValueOfType<int>(json, r'startMs'),
         text: mapValueOfType<String>(json, r'text')!,
         x: num.parse('${json[r'x']}'),

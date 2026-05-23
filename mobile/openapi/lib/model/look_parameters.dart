@@ -56,7 +56,9 @@ class LookParameters {
       final json = value.cast<String, dynamic>();
 
       return LookParameters(
-        intensity: num.parse('${json[r'intensity']}'),
+        intensity: json[r'intensity'] == null
+            ? 100
+            : num.parse('${json[r'intensity']}'),
         name: mapValueOfType<String>(json, r'name')!,
       );
     }

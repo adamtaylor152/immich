@@ -39,9 +39,12 @@
        return {{{classname}}}(
    {{#vars}}
      {{#isDateTime}}
-@@ -215,6 +205,10 @@
+@@ -215,6 +205,12 @@
              ? {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}
-             : {{/isNullable}}{{{datatypeWithEnum}}}.parse('${json[r'{{{baseName}}}']}'),
+-            : {{/isNullable}}{{{datatypeWithEnum}}}.parse('${json[r'{{{baseName}}}']}'),
++            : {{/isNullable}}{{^isNullable}}{{^required}}json[r'{{{baseName}}}'] == null
++            ? {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}
++            : {{/required}}{{/isNullable}}{{{datatypeWithEnum}}}.parse('${json[r'{{{baseName}}}']}'),
                {{/isNumber}}
 +              {{#isDouble}}
 +        {{{name}}}: (mapValueOfType<num>(json, r'{{{baseName}}}'){{#required}}{{^isNullable}}!{{/isNullable}}{{/required}}{{^required}}{{#defaultValue}} ?? {{{.}}}{{/defaultValue}}{{/required}}){{#isNullable}}?{{/isNullable}}.toDouble(),
