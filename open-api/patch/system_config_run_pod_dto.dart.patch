@@ -1,0 +1,9 @@
+@@ -161,7 +161,7 @@ class SystemConfigRunPodDto {
+         enabled: mapValueOfType<bool>(json, r'enabled')!,
+         imageName: mapValueOfType<String>(json, r'imageName')!,
+         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
+-        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? 'disabled',
++        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,
+         serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
+         volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
+       );
