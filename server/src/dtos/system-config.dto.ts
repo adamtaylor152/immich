@@ -525,7 +525,11 @@ export class ImageDescriptionRequeueResponseDto extends createZodDto(ImageDescri
 
 const SmartAlbumReevaluateEstimateSchema = z
   .object({
-    totalAssets: z.int().min(0).describe('Total image assets with a successfully completed description'),
+    totalAssets: z
+      .int()
+      .min(0)
+      .describe('Total image assets that will be evaluated (currently equals withDescription)'),
+    withDescription: z.int().min(0).describe('Image assets with a successfully completed description'),
   })
   .meta({ id: 'SmartAlbumReevaluateEstimateDto' });
 

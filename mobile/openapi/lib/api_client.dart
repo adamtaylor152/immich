@@ -726,6 +726,10 @@ class ApiClient {
           return SignUpDto.fromJson(value);
         case 'SmartAlbumKindConfig':
           return SmartAlbumKindConfig.fromJson(value);
+        case 'SmartAlbumReevaluateEstimateDto':
+          return SmartAlbumReevaluateEstimateDto.fromJson(value);
+        case 'SmartAlbumReevaluateResponseDto':
+          return SmartAlbumReevaluateResponseDto.fromJson(value);
         case 'SmartSearchDto':
           return SmartSearchDto.fromJson(value);
         case 'SourceType':

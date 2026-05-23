@@ -13748,6 +13748,103 @@
         "x-immich-state": "Stable"
       }
     },
+    "/system-config/smart-albums/reevaluate": {
+      "post": {
+        "description": "Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.",
+        "operationId": "triggerSmartAlbumReevaluate",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartAlbumReevaluateResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Smart albums are not enabled."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Trigger smart-album re-evaluate",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/smart-albums/reevaluate-estimate": {
+      "get": {
+        "description": "Returns the number of image assets that have a completed description and will be re-evaluated by the re-evaluate job.",
+        "operationId": "getSmartAlbumReevaluateEstimate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartAlbumReevaluateEstimateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Estimate smart-album re-evaluate cost",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/system-config/storage-template-options": {
       "get": {
         "description": "Retrieve exemplary storage template options.",
@@ -20709,6 +20806,7 @@
           "ImageDescription",
           "NsfwDetectionQueueAll",
           "NsfwDetection",
+          "SmartAlbumReevaluateAll",
           "WorkflowAssetCreate"
         ],
         "type": "string"
@@ -25249,6 +25347,39 @@
           "name",
           "tagTriggers",
           "threshold"
+        ],
+        "type": "object"
+      },
+      "SmartAlbumReevaluateEstimateDto": {
+        "properties": {
+          "totalAssets": {
+            "description": "Total image assets that will be evaluated (currently equals withDescription)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withDescription": {
+            "description": "Image assets with a successfully completed description",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "totalAssets",
+          "withDescription"
+        ],
+        "type": "object"
+      },
+      "SmartAlbumReevaluateResponseDto": {
+        "properties": {
+          "queued": {
+            "description": "Whether the re-evaluate job was newly enqueued (false = already in-flight)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
         ],
         "type": "object"
       },

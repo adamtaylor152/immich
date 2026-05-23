@@ -73,11 +73,13 @@
         {#each kindKeys as kind (kind)}
           {@const kindConfig = getKind(kind)}
           {@const savedKindConfig = getSavedKind(kind)}
+          {@const kindToggleDisabled = disabled || !smartAlbums.enabled}
+          {@const kindFieldsDisabled = disabled || !smartAlbums.enabled || !kindConfig.enabled}
           <SettingAccordion key={`smart-albums-${kind}`} title={kindTitle(kind)} subtitle="">
             <div class="ms-4 mt-4 flex flex-col gap-4">
               <SettingSwitch
                 title={$t('admin.smart_albums_kind_enabled')}
-                {disabled}
+                disabled={kindToggleDisabled}
                 bind:checked={kindConfig.enabled}
                 isEdited={kindConfig.enabled !== savedKindConfig.enabled}
               />
@@ -87,7 +89,7 @@
                 label={$t('admin.smart_albums_kind_name')}
                 description={$t('admin.smart_albums_kind_name_description')}
                 bind:value={kindConfig.name}
-                {disabled}
+                disabled={kindFieldsDisabled}
                 isEdited={kindConfig.name !== savedKindConfig.name}
               />
 
@@ -95,7 +97,7 @@
                 label={$t('admin.smart_albums_kind_tag_triggers')}
                 description={$t('admin.smart_albums_kind_tag_triggers_description')}
                 value={tagTriggersText[kind]}
-                {disabled}
+                disabled={kindFieldsDisabled}
                 isEdited={kindConfig.tagTriggers.join('\n') !== savedKindConfig.tagTriggers.join('\n')}
                 onChange={(text) => (kindConfig.tagTriggers = parseLines(text))}
               />
@@ -104,7 +106,7 @@
                 label={$t('admin.smart_albums_kind_clip_queries')}
                 description={$t('admin.smart_albums_kind_clip_queries_description')}
                 value={clipQueriesText[kind]}
-                {disabled}
+                disabled={kindFieldsDisabled}
                 isEdited={kindConfig.clipQueries.join('\n') !== savedKindConfig.clipQueries.join('\n')}
                 onChange={(text) => (kindConfig.clipQueries = parseLines(text))}
               />
@@ -117,7 +119,7 @@
                 step="0.01"
                 min={0.2}
                 max={0.4}
-                {disabled}
+                disabled={kindFieldsDisabled}
                 isEdited={kindConfig.threshold !== savedKindConfig.threshold}
               />
             </div>

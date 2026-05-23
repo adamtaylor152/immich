@@ -3130,14 +3130,6 @@ export type SystemConfigSmartAlbumsDto = {
     /** Master smart-album enabled toggle */
     enabled: boolean;
 };
-export type SmartAlbumReevaluateEstimateDto = {
-    /** Total image assets that have a successfully completed description and will be evaluated */
-    totalAssets: number;
-};
-export type SmartAlbumReevaluateResponseDto = {
-    /** Whether the re-evaluate job was newly enqueued (deduplication: always true if not already running) */
-    queued: boolean;
-};
 export type SystemConfigStorageTemplateDto = {
     /** Enabled */
     enabled: boolean;
@@ -3228,6 +3220,16 @@ export type MachineLearningHardwareResponseDto = {
     providers: string[];
     /** Whether PyTorch CUDA is available */
     torchCudaAvailable: boolean;
+};
+export type SmartAlbumReevaluateResponseDto = {
+    /** Whether the re-evaluate job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type SmartAlbumReevaluateEstimateDto = {
+    /** Total image assets that will be evaluated (currently equals withDescription) */
+    totalAssets: number;
+    /** Image assets with a successfully completed description */
+    withDescription: number;
 };
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
@@ -7083,13 +7085,13 @@ export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) 
     }));
 }
 /**
- * Estimate smart-album re-evaluate cost
+ * Get machine learning hardware
  */
-export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
+export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: SmartAlbumReevaluateEstimateDto;
-    }>("/system-config/smart-albums/reevaluate-estimate", {
+        data: MachineLearningHardwareResponseDto;
+    }>("/system-config/machine-learning/hardware", {
         ...opts
     }));
 }
@@ -7108,13 +7110,13 @@ export function triggerSmartAlbumReevaluate(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
- * Get machine learning hardware
+ * Estimate smart-album re-evaluate cost
  */
-export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
+export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: MachineLearningHardwareResponseDto;
-    }>("/system-config/machine-learning/hardware", {
+        data: SmartAlbumReevaluateEstimateDto;
+    }>("/system-config/smart-albums/reevaluate-estimate", {
         ...opts
     }));
 }
@@ -8218,6 +8220,7 @@ export enum JobName {
     ImageDescription = "ImageDescription",
     NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
     NsfwDetection = "NsfwDetection",
+    SmartAlbumReevaluateAll = "SmartAlbumReevaluateAll",
     WorkflowAssetCreate = "WorkflowAssetCreate"
 }
 export enum Status2 {

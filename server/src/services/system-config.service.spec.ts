@@ -894,22 +894,33 @@ describe(SystemConfigService.name, () => {
 
       const result = await sut.estimateSmartAlbumReevaluate();
 
-      expect(result).toEqual({ totalAssets: 80 });
+      expect(result).toEqual({ totalAssets: 80, withDescription: 80 });
     });
   });
 
   describe('triggerSmartAlbumReevaluate', () => {
-    it('should enqueue the re-evaluate job and return queued=true when smartAlbums is enabled', async () => {
+    it('should enqueue the re-evaluate job and return queued=true when no dedup job is in flight', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         smartAlbums: { enabled: true },
       });
+      mocks.job.hasDedupJob.mockResolvedValue(false);
 
       const result = await sut.triggerSmartAlbumReevaluate();
 
       expect(result).toEqual({ queued: true });
-      expect(mocks.job.queue).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'SmartAlbumReevaluateAll' }),
-      );
+      expect(mocks.job.queue).toHaveBeenCalledWith(expect.objectContaining({ name: 'SmartAlbumReevaluateAll' }));
+    });
+
+    it('should return queued=false and not re-enqueue when a dedup job is already in flight', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: true },
+      });
+      mocks.job.hasDedupJob.mockResolvedValue(true);
+
+      const result = await sut.triggerSmartAlbumReevaluate();
+
+      expect(result).toEqual({ queued: false });
+      expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when smartAlbums is disabled', async () => {

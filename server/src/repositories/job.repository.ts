@@ -189,6 +189,17 @@ export class JobRepository {
     ) as unknown as Promise<JobCounts>;
   }
 
+  /**
+   * Check whether a deduplicated job (via BullMQ dedup id) is currently
+   * in-flight on the given queue. Used to surface the "already running"
+   * state for one-shot admin-triggered jobs that share a queue with others
+   * (e.g. SmartAlbumReevaluateAll on BackgroundTask).
+   */
+  async hasDedupJob(name: QueueName, dedupId: string): Promise<boolean> {
+    const jobId = await this.getQueue(name).getDeduplicationJobId(dedupId);
+    return jobId != null;
+  }
+
   private getQueueName(name: JobName) {
     return (this.handlers[name] as JobMapItem).queueName;
   }

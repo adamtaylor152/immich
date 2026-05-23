@@ -1,4 +1,5 @@
 import { defaults } from 'src/config';
+import { JobStatus } from 'src/enum';
 import { SmartAlbumService } from 'src/services/smart-album.service';
 import { newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -196,7 +197,6 @@ describe(SmartAlbumService.name, () => {
         smartAlbums: { enabled: false },
       });
 
-      const { JobStatus } = await import('src/enum');
       const result = await sut.handleReevaluateAll({});
 
       expect(result).toBe(JobStatus.Skipped);
@@ -208,6 +208,7 @@ describe(SmartAlbumService.name, () => {
       const asset2Id = newUuid();
       const ownerId = newUuid();
       mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/require-await
         (async function* () {
           yield { id: asset1Id, ownerId, tags: ['beach'] };
           yield { id: asset2Id, ownerId, tags: ['food'] };
@@ -215,7 +216,6 @@ describe(SmartAlbumService.name, () => {
       );
       mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(new Map());
 
-      const { JobStatus } = await import('src/enum');
       const result = await sut.handleReevaluateAll({});
 
       expect(result).toBe(JobStatus.Success);
@@ -229,6 +229,7 @@ describe(SmartAlbumService.name, () => {
       const asset2Id = newUuid();
       const ownerId = newUuid();
       mocks.assetJob.streamForSmartAlbumReevaluation.mockReturnValue(
+        // eslint-disable-next-line @typescript-eslint/require-await
         (async function* () {
           yield { id: asset1Id, ownerId, tags: ['beach'] };
           yield { id: asset2Id, ownerId, tags: ['food'] };
@@ -239,7 +240,6 @@ describe(SmartAlbumService.name, () => {
         .mockRejectedValueOnce(new Error('db error'))
         .mockResolvedValueOnce(new Map());
 
-      const { JobStatus } = await import('src/enum');
       const result = await sut.handleReevaluateAll({});
 
       expect(result).toBe(JobStatus.Success);

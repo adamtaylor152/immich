@@ -208,6 +208,54 @@ class SystemConfigApi {
     return null;
   }
 
+  /// Estimate smart-album re-evaluate cost
+  ///
+  /// Returns the number of image assets that have a completed description and will be re-evaluated by the re-evaluate job.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getSmartAlbumReevaluateEstimateWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/system-config/smart-albums/reevaluate-estimate';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Estimate smart-album re-evaluate cost
+  ///
+  /// Returns the number of image assets that have a completed description and will be re-evaluated by the re-evaluate job.
+  Future<SmartAlbumReevaluateEstimateDto?> getSmartAlbumReevaluateEstimate() async {
+    final response = await getSmartAlbumReevaluateEstimateWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SmartAlbumReevaluateEstimateDto',) as SmartAlbumReevaluateEstimateDto;
+    
+    }
+    return null;
+  }
+
   /// Get storage template options
   ///
   /// Retrieve exemplary storage template options.
@@ -299,6 +347,54 @@ class SystemConfigApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'ImageDescriptionRequeueResponseDto',) as ImageDescriptionRequeueResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Trigger smart-album re-evaluate
+  ///
+  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> triggerSmartAlbumReevaluateWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/system-config/smart-albums/reevaluate';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Trigger smart-album re-evaluate
+  ///
+  /// Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Idempotent via BullMQ deduplication.
+  Future<SmartAlbumReevaluateResponseDto?> triggerSmartAlbumReevaluate() async {
+    final response = await triggerSmartAlbumReevaluateWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SmartAlbumReevaluateResponseDto',) as SmartAlbumReevaluateResponseDto;
     
     }
     return null;
