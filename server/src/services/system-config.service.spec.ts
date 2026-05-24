@@ -215,6 +215,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
       enabled: false,
       mode: 'disabled',
       apiKey: '',
+      hfToken: '',
       imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
       dataPrivacyAcknowledged: false,
       defaultGpuTypeId: 'NVIDIA RTX A5000',

@@ -539,6 +539,39 @@
             {/if}
           </div>
 
+          <div class="flex flex-col gap-1">
+            <SettingInputField
+              inputType={SettingInputFieldType.PASSWORD}
+              label="HuggingFace Token (optional)"
+              description="Forwarded to the worker as HF_TOKEN so it can pull gated/large models (Qwen-VL etc.) without unauthenticated rate limits. Leave blank to skip."
+              bind:value={runpod.hfToken}
+              disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
+              isEdited={runpod.hfToken !== savedRunpod.hfToken}
+              placeholder={savedRunpod.hfTokenConfigured ? '••••••••••••' : ''}
+            />
+            {#if savedRunpod.hfTokenConfigured && !runpod.hfToken}
+              <span
+                class="inline-flex w-fit items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Token Saved
+              </span>
+            {/if}
+          </div>
+
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
             label="Container image"

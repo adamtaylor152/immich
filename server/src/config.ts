@@ -130,6 +130,11 @@ export type SystemConfig = {
       // `enabled` is true, else 'disabled' — see mapConfig.
       mode: 'disabled' | 'pod' | 'serverless';
       apiKey: string;
+      // Optional HuggingFace token forwarded to the ML worker as HF_TOKEN.
+      // Lets the worker fetch gated/large models (Qwen-VL etc.) without
+      // hitting unauthenticated rate limits. Same redact/preserve semantics
+      // as apiKey — see mapConfig + updateSystemConfig.
+      hfToken: string;
       imageName: string;
       dataPrivacyAcknowledged: boolean;
       // Pod-mode settings (unchanged from PR #37)
@@ -465,6 +470,7 @@ export const defaults = Object.freeze<SystemConfig>({
       enabled: false,
       mode: 'disabled',
       apiKey: '',
+      hfToken: '',
       imageName: 'ghcr.io/adamtaylor152/immich-machine-learning:fork-main-cuda-runpod',
       dataPrivacyAcknowledged: false,
       defaultGpuTypeId: 'NVIDIA RTX A5000',

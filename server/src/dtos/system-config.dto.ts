@@ -208,6 +208,17 @@ const SystemConfigRunPodSchema = z
       .boolean()
       .optional()
       .describe('Read-only indicator that a key is currently stored. Set by the server; ignored on write.'),
+    // Same redact/preserve pattern as apiKey. Forwarded to the ML worker as
+    // HF_TOKEN so it can pull gated/large HuggingFace models (Qwen-VL etc.)
+    // without rate-limit hits. Optional — empty string disables forwarding.
+    hfToken: z
+      .string()
+      .default('')
+      .describe('HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)'),
+    hfTokenConfigured: z
+      .boolean()
+      .optional()
+      .describe('Read-only indicator that an HF token is currently stored. Set by the server; ignored on write.'),
     imageName: z.string().min(1).describe('Container image to launch'),
     dataPrivacyAcknowledged: configBool.describe('User accepted that image previews leave the network'),
     // Pod-mode settings
@@ -623,6 +634,8 @@ export function mapConfig(config: SystemConfig): SystemConfigDto {
         ...config.machineLearning.runpod,
         apiKey: '',
         apiKeyConfigured: config.machineLearning.runpod.apiKey.length > 0,
+        hfToken: '',
+        hfTokenConfigured: config.machineLearning.runpod.hfToken.length > 0,
       },
     },
   };
