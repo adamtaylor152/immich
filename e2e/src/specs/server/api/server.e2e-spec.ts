@@ -134,7 +134,8 @@ describe('/server', () => {
     it('should respond with the server configuration', async () => {
       const { status, body } = await request(app).get('/server/config');
       expect(status).toBe(200);
-      expect(body).toEqual({
+      const { defaultImageDescriptionRawPromptTemplate, ...rest } = body;
+      expect(rest).toEqual({
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
         trashDays: 30,
@@ -147,6 +148,8 @@ describe('/server', () => {
         mapDarkStyleUrl: 'https://tiles.immich.cloud/v1/style/dark.json',
         mapLightStyleUrl: 'https://tiles.immich.cloud/v1/style/light.json',
       });
+      expect(defaultImageDescriptionRawPromptTemplate).toEqual(expect.any(String));
+      expect(defaultImageDescriptionRawPromptTemplate).toContain('{schema}');
     });
   });
 
