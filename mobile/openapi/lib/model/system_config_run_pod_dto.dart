@@ -22,6 +22,8 @@ class SystemConfigRunPodDto {
     required this.dataPrivacyAcknowledged,
     required this.defaultGpuTypeId,
     required this.enabled,
+    this.hfToken = '',
+    this.hfTokenConfigured,
     required this.imageName,
     required this.maxRuntimeHours,
     this.mode = const SystemConfigRunPodDtoModeEnum._('disabled'),
@@ -69,6 +71,18 @@ class SystemConfigRunPodDto {
   /// Enabled
   bool enabled;
 
+  /// HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)
+  String hfToken;
+
+  /// Read-only indicator that an HF token is currently stored. Set by the server; ignored on write.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? hfTokenConfigured;
+
   /// Container image to launch
   String imageName;
 
@@ -112,6 +126,8 @@ class SystemConfigRunPodDto {
     other.dataPrivacyAcknowledged == dataPrivacyAcknowledged &&
     other.defaultGpuTypeId == defaultGpuTypeId &&
     other.enabled == enabled &&
+    other.hfToken == hfToken &&
+    other.hfTokenConfigured == hfTokenConfigured &&
     other.imageName == imageName &&
     other.maxRuntimeHours == maxRuntimeHours &&
     other.mode == mode &&
@@ -131,6 +147,8 @@ class SystemConfigRunPodDto {
     (dataPrivacyAcknowledged.hashCode) +
     (defaultGpuTypeId.hashCode) +
     (enabled.hashCode) +
+    (hfToken.hashCode) +
+    (hfTokenConfigured == null ? 0 : hfTokenConfigured!.hashCode) +
     (imageName.hashCode) +
     (maxRuntimeHours.hashCode) +
     (mode.hashCode) +
@@ -139,7 +157,7 @@ class SystemConfigRunPodDto {
     (volumeGb.hashCode);
 
   @override
-  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, apiKeyConfigured=$apiKeyConfigured, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, provisionTimeoutMinutes=$provisionTimeoutMinutes, serverless=$serverless, volumeGb=$volumeGb]';
+  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, apiKeyConfigured=$apiKeyConfigured, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, hfToken=$hfToken, hfTokenConfigured=$hfTokenConfigured, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, provisionTimeoutMinutes=$provisionTimeoutMinutes, serverless=$serverless, volumeGb=$volumeGb]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -156,6 +174,12 @@ class SystemConfigRunPodDto {
       json[r'dataPrivacyAcknowledged'] = this.dataPrivacyAcknowledged;
       json[r'defaultGpuTypeId'] = this.defaultGpuTypeId;
       json[r'enabled'] = this.enabled;
+      json[r'hfToken'] = this.hfToken;
+    if (this.hfTokenConfigured != null) {
+      json[r'hfTokenConfigured'] = this.hfTokenConfigured;
+    } else {
+    //  json[r'hfTokenConfigured'] = null;
+    }
       json[r'imageName'] = this.imageName;
       json[r'maxRuntimeHours'] = this.maxRuntimeHours;
       json[r'mode'] = this.mode;
@@ -187,6 +211,8 @@ class SystemConfigRunPodDto {
         dataPrivacyAcknowledged: mapValueOfType<bool>(json, r'dataPrivacyAcknowledged')!,
         defaultGpuTypeId: mapValueOfType<String>(json, r'defaultGpuTypeId')!,
         enabled: mapValueOfType<bool>(json, r'enabled')!,
+        hfToken: mapValueOfType<String>(json, r'hfToken') ?? '',
+        hfTokenConfigured: mapValueOfType<bool>(json, r'hfTokenConfigured'),
         imageName: mapValueOfType<String>(json, r'imageName')!,
         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
         mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,

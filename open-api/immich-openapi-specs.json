@@ -28718,6 +28718,15 @@
             "description": "Enabled",
             "type": "boolean"
           },
+          "hfToken": {
+            "default": "",
+            "description": "HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)",
+            "type": "string"
+          },
+          "hfTokenConfigured": {
+            "description": "Read-only indicator that an HF token is currently stored. Set by the server; ignored on write.",
+            "type": "boolean"
+          },
           "imageName": {
             "description": "Container image to launch",
             "minLength": 1,

@@ -100,6 +100,18 @@ const ML_AUTH_ENV = 'IMMICH_ML_AUTH_TOKEN';
  * so RunPod's template-create call doesn't carry a stale model name across
  * config changes.
  */
+/**
+ * Forward the admin-configured HuggingFace token to the worker as `HF_TOKEN`.
+ * Lets the ML container pull gated/large models (Qwen-VL, etc.) without
+ * unauthenticated rate limits and speeds up cold-start downloads. Returns
+ * `{}` when no token is configured so we never set an empty `HF_TOKEN=` env
+ * (which would override `~/.cache/huggingface/token` if a user mounted one).
+ */
+const hfTokenEnv = (config: SystemConfig): Record<string, string> => {
+  const token = config.machineLearning.runpod.hfToken;
+  return token ? { HF_TOKEN: token } : {};
+};
+
 const imageDescriptionPreloadEnv = (config: SystemConfig): Record<string, string> => {
   const desc = config.machineLearning.imageDescription;
   if (!desc?.enabled || !desc.modelName) {
@@ -335,6 +347,7 @@ export class RunPodService extends BaseService {
         env: {
           [ML_AUTH_ENV]: authToken,
           MACHINE_LEARNING_CACHE_FOLDER: '/cache',
+          ...hfTokenEnv(config),
           ...imageDescriptionPreloadEnv(config),
         },
       });
@@ -1133,6 +1146,7 @@ export class RunPodService extends BaseService {
               //   github.com/runpod-workers/worker-load-balancing#deployment-steps
               PORT: String(ML_PORT),
               PORT_HEALTH: String(ML_PORT),
+              ...hfTokenEnv(config),
               // Warm the image-description VLM into VRAM at container boot so
               // the first description job after worker cold-start doesn't lose
               // the race against the RunPod edge proxy's 30 s timeout. See

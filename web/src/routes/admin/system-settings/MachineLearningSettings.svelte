@@ -33,6 +33,13 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  // Optional-with-default zod fields land in the generated DTO as
+  // `string | undefined`. The server always materialises them, but the
+  // password bindings below need a plain string. Backfill on load so the
+  // bind targets are never undefined.
+  if (configToEdit.machineLearning.runpod) {
+    configToEdit.machineLearning.runpod.hfToken ??= '';
+  }
   let detectedAcceleration = $state<MachineLearningHardwareAcceleration>();
   const imageDescription = $derived(configToEdit.machineLearning.imageDescription!);
   const savedImageDescription = $derived(config.machineLearning.imageDescription!);
@@ -535,6 +542,39 @@
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
                 Key Saved
+              </span>
+            {/if}
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <SettingInputField
+              inputType={SettingInputFieldType.PASSWORD}
+              label="HuggingFace Token (optional)"
+              description="Forwarded to the worker as HF_TOKEN so it can pull gated/large models (Qwen-VL etc.) without unauthenticated rate limits. Leave blank to skip."
+              bind:value={runpod.hfToken as string}
+              disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
+              isEdited={runpod.hfToken !== savedRunpod.hfToken}
+              placeholder={savedRunpod.hfTokenConfigured ? '••••••••••••' : ''}
+            />
+            {#if savedRunpod.hfTokenConfigured && !runpod.hfToken}
+              <span
+                class="inline-flex w-fit items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                Token Saved
               </span>
             {/if}
           </div>

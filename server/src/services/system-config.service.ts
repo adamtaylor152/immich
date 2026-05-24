@@ -145,6 +145,14 @@ export class SystemConfigService extends BaseService {
       dto.machineLearning.runpod.apiKey = oldConfig.machineLearning.runpod.apiKey;
     }
 
+    // Same preserve-on-empty semantics for the HuggingFace token forwarded to
+    // the ML worker. mapConfig redacts it to '' on read; an empty incoming
+    // value here means "keep the stored token" rather than "wipe it".
+    const incomingHfToken = dto.machineLearning?.runpod?.hfToken;
+    if (incomingHfToken === '' && oldConfig.machineLearning.runpod.hfToken !== '') {
+      dto.machineLearning.runpod.hfToken = oldConfig.machineLearning.runpod.hfToken;
+    }
+
     // The two timestamp fields below are server-managed (set by this service,
     // by the cost modal's defer endpoint, or by the re-queue trigger).
     // Inbound writes must not be allowed to clobber them — always overwrite
