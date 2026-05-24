@@ -33,6 +33,13 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  // Optional-with-default zod fields land in the generated DTO as
+  // `string | undefined`. The server always materialises them, but the
+  // password bindings below need a plain string. Backfill on load so the
+  // bind targets are never undefined.
+  if (configToEdit.machineLearning.runpod) {
+    configToEdit.machineLearning.runpod.hfToken ??= '';
+  }
   let detectedAcceleration = $state<MachineLearningHardwareAcceleration>();
   const imageDescription = $derived(configToEdit.machineLearning.imageDescription!);
   const savedImageDescription = $derived(config.machineLearning.imageDescription!);
@@ -544,7 +551,7 @@
               inputType={SettingInputFieldType.PASSWORD}
               label="HuggingFace Token (optional)"
               description="Forwarded to the worker as HF_TOKEN so it can pull gated/large models (Qwen-VL etc.) without unauthenticated rate limits. Leave blank to skip."
-              bind:value={runpod.hfToken}
+              bind:value={runpod.hfToken as string}
               disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
               isEdited={runpod.hfToken !== savedRunpod.hfToken}
               placeholder={savedRunpod.hfTokenConfigured ? '••••••••••••' : ''}

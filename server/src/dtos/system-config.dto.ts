@@ -213,6 +213,7 @@ const SystemConfigRunPodSchema = z
     // without rate-limit hits. Optional — empty string disables forwarding.
     hfToken: z
       .string()
+      .default('')
       .describe('HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)'),
     hfTokenConfigured: z
       .boolean()
