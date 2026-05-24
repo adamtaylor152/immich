@@ -3005,10 +3005,6 @@ export type SystemConfigRunPodDto = {
     apiKey: string;
     /** Read-only indicator that a key is currently stored. Set by the server; ignored on write. */
     apiKeyConfigured?: boolean;
-    /** HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token) */
-    hfToken?: string;
-    /** Read-only indicator that an HF token is currently stored. Set by the server; ignored on write. */
-    hfTokenConfigured?: boolean;
     /** Auto-run ML backfill on pod ready (Pod mode) */
     autoBackfillOnLaunch: boolean;
     /** Auto-stop when idle (Pod mode) */
@@ -3023,6 +3019,10 @@ export type SystemConfigRunPodDto = {
     defaultGpuTypeId: string;
     /** Enabled */
     enabled: boolean;
+    /** HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token) */
+    hfToken?: string;
+    /** Read-only indicator that an HF token is currently stored. Set by the server; ignored on write. */
+    hfTokenConfigured?: boolean;
     /** Container image to launch */
     imageName: string;
     /** Hard runtime ceiling (hours) (Pod mode) */
