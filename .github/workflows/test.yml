@@ -332,22 +332,27 @@ jobs:
         if: ${{ !cancelled() }}
 
       - name: Start Docker Compose
+        id: start-docker-compose
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
+      # Gate test runs on Docker Compose actually succeeding. Without this,
+      # `if: !cancelled()` runs vitest even when the database/server container
+      # never came up — the test harness then sits in an ECONNREFUSED retry
+      # loop until the 6-hour runner timeout instead of failing fast.
       - name: Run e2e tests (api & cli)
         env:
           VITEST_DISABLE_DOCKER_SETUP: true
         run: pnpm test
-        if: ${{ !cancelled() }}
+        if: ${{ steps.start-docker-compose.outcome == 'success' }}
 
       - name: Run e2e tests (maintenance)
         env:
           VITEST_DISABLE_DOCKER_SETUP: true
         run: pnpm test:maintenance
-        if: ${{ !cancelled() }}
+        if: ${{ steps.start-docker-compose.outcome == 'success' }}
 
       - name: Capture Docker logs
         if: always()
@@ -406,16 +411,20 @@ jobs:
         if: ${{ !cancelled() }}
 
       - name: Docker build
+        id: start-docker-compose-web
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
         if: ${{ !cancelled() }}
 
+      # Gate playwright runs on Docker Compose actually succeeding (see comment
+      # on the api/cli job above) — otherwise vitest/playwright sit in a
+      # connection-refused loop until the runner times out.
       - name: Run e2e tests (web)
         env:
           PLAYWRIGHT_DISABLE_WEBSERVER: true
         run: pnpm test:web
-        if: ${{ !cancelled() }}
+        if: ${{ steps.start-docker-compose-web.outcome == 'success' }}
 
       - name: Archive e2e test (web) results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -428,7 +437,7 @@ jobs:
         env:
           PLAYWRIGHT_DISABLE_WEBSERVER: true
         run: pnpm test:web:ui
-        if: ${{ !cancelled() }}
+        if: ${{ steps.start-docker-compose-web.outcome == 'success' }}
 
       - name: Archive ui test (web) results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -441,7 +450,7 @@ jobs:
         env:
           PLAYWRIGHT_DISABLE_WEBSERVER: true
         run: pnpm test:web:maintenance
-        if: ${{ !cancelled() }}
+        if: ${{ steps.start-docker-compose-web.outcome == 'success' }}
 
       - name: Archive maintenance tests (web) results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
