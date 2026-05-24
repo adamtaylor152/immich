@@ -134,7 +134,7 @@ export const DEFAULT_RAW_PROMPT_TEMPLATE = [
   '{names}',
   '{style_hint}',
   '{vocabulary}',
-  JSON_SCHEMA_BLOCK,
+  '{schema}',
   safetyRulesText(DEFAULT_NSFW_INDICATORS),
   medicalRulesText(DEFAULT_MEDICAL_INDICATORS, DEFAULT_FORBIDDEN_INFERENCES),
   STANDARD_RULES,
