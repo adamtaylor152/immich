@@ -218,6 +218,11 @@ const SystemConfigRunPodSchema = z
     autoStopGraceMinutes: z.int().min(1).max(1440).describe('Idle minutes before auto-stop (Pod mode)'),
     autoBackfillOnLaunch: configBool.describe('Auto-run ML backfill on pod ready (Pod mode)'),
     maxRuntimeHours: z.int().min(1).max(168).describe('Hard runtime ceiling (hours) (Pod mode)'),
+    provisionTimeoutMinutes: z
+      .int()
+      .min(1)
+      .max(60)
+      .describe('How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)'),
     // Serverless-mode settings
     serverless: SystemConfigRunPodServerlessSchema.default(defaults.machineLearning.runpod.serverless),
   })

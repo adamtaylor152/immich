@@ -606,6 +606,17 @@
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
             />
+
+            <SettingInputField
+              inputType={SettingInputFieldType.NUMBER}
+              label="Provision timeout (minutes)"
+              description="How long to wait for the pod to reach RUNNING + healthy /ping before giving up. Increase if large models take longer than 5 minutes to download on cold boot. Default 5."
+              bind:value={runpod.provisionTimeoutMinutes}
+              min={1}
+              max={60}
+              disabled={disabled || !configToEdit.machineLearning.enabled}
+              isEdited={runpod.provisionTimeoutMinutes !== savedRunpod.provisionTimeoutMinutes}
+            />
           {:else if runpodMode === 'serverless'}
             <SettingTextarea
               label="GPU pool IDs (one per line, in priority order)"

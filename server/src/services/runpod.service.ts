@@ -76,7 +76,6 @@ const ML_BACKFILL_QUEUES: Array<{
   },
 ];
 
-const PROVISION_TIMEOUT_MS = 5 * 60 * 1000; // pod must reach RUNNING within 5 min
 const UNHEALTHY_GRACE_MS = 5 * 60 * 1000; // pod RUNNING-but-unresponsive grace
 const STOP_MAX_ATTEMPTS = 5;
 const STOP_BACKOFF_MS = [5000, 15_000, 60_000, 60_000, 60_000]; // 5s, 15s, 60s, 60s, 60s
@@ -431,10 +430,10 @@ export class RunPodService extends BaseService {
       const message = error instanceof Error ? error.message : String(error);
       throw new BadRequestException(`RunPod start failed: ${message}`);
     }
-    // Reset podCreatedAt to "now" so pollPodToReady's PROVISION_TIMEOUT_MS budget
-    // applies to the resume, not the original launch. Otherwise any pod that's
-    // been around longer than 5 minutes (i.e. nearly every resume) would be
-    // marked as failed immediately by the next reconcile tick.
+    // Reset podCreatedAt to "now" so pollPodToReady's provisionTimeoutMinutes
+    // budget applies to the resume, not the original launch. Otherwise any pod
+    // that's been around longer than the timeout (i.e. nearly every resume)
+    // would be marked as failed immediately by the next reconcile tick.
     const next: RunPodPersistedState = {
       status: 'starting',
       podId: state.podId,
@@ -553,9 +552,15 @@ export class RunPodService extends BaseService {
       return;
     }
 
+    const provisionConfig = await this.getConfig({ withCache: true });
+    const provisionTimeoutMinutes = provisionConfig.machineLearning.runpod.provisionTimeoutMinutes;
+    const provisionTimeoutMs = provisionTimeoutMinutes * 60 * 1000;
     const createdAtMs = Date.parse(state.podCreatedAt);
-    if (!Number.isNaN(createdAtMs) && Date.now() - createdAtMs > PROVISION_TIMEOUT_MS) {
-      await this.handleProvisionFailure(state, 'Pod did not reach RUNNING within 5 minutes');
+    if (!Number.isNaN(createdAtMs) && Date.now() - createdAtMs > provisionTimeoutMs) {
+      await this.handleProvisionFailure(
+        state,
+        `Pod did not reach RUNNING within ${provisionTimeoutMinutes} minute(s)`,
+      );
       return;
     }
 

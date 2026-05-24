@@ -140,6 +140,7 @@ export type SystemConfig = {
       autoStopGraceMinutes: number;
       autoBackfillOnLaunch: boolean;
       maxRuntimeHours: number;
+      provisionTimeoutMinutes: number;
       // Serverless-mode settings (new)
       serverless: {
         // Ranked list of GPU type IDs RunPod can pick from. Cheapest first.
@@ -473,6 +474,7 @@ export const defaults = Object.freeze<SystemConfig>({
       autoStopGraceMinutes: 15,
       autoBackfillOnLaunch: false,
       maxRuntimeHours: 24,
+      provisionTimeoutMinutes: 5,
       serverless: {
         // GPU **pool IDs** (not specific types). RunPod's serverless API
         // accepts AMPERE_16, AMPERE_24, ADA_24, AMPERE_48, ADA_48_PRO,
