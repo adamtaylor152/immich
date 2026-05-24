@@ -3026,7 +3026,7 @@ export type SystemConfigRunPodDto = {
     /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients. */
     mode?: Mode2;
     /** How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode) */
-    provisionTimeoutMinutes: number;
+    provisionTimeoutMinutes?: number;
     serverless?: SystemConfigRunPodServerlessDto;
     /** Persistent volume size (GB) (Pod mode) */
     volumeGb: number;

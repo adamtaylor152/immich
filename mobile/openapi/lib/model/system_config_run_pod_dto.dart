@@ -25,7 +25,7 @@ class SystemConfigRunPodDto {
     required this.imageName,
     required this.maxRuntimeHours,
     this.mode = const SystemConfigRunPodDtoModeEnum._('disabled'),
-    required this.provisionTimeoutMinutes,
+    this.provisionTimeoutMinutes = 5,
     this.serverless,
     required this.volumeGb,
   });
@@ -190,7 +190,7 @@ class SystemConfigRunPodDto {
         imageName: mapValueOfType<String>(json, r'imageName')!,
         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
         mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,
-        provisionTimeoutMinutes: mapValueOfType<int>(json, r'provisionTimeoutMinutes')!,
+        provisionTimeoutMinutes: mapValueOfType<int>(json, r'provisionTimeoutMinutes') ?? 5,
         serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
         volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
       );
@@ -250,7 +250,6 @@ class SystemConfigRunPodDto {
     'enabled',
     'imageName',
     'maxRuntimeHours',
-    'provisionTimeoutMinutes',
     'volumeGb',
   };
 }

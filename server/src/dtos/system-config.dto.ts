@@ -222,6 +222,7 @@ const SystemConfigRunPodSchema = z
       .int()
       .min(1)
       .max(60)
+      .default(defaults.machineLearning.runpod.provisionTimeoutMinutes)
       .describe('How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)'),
     // Serverless-mode settings
     serverless: SystemConfigRunPodServerlessSchema.default(defaults.machineLearning.runpod.serverless),
