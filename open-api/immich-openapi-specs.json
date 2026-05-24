@@ -28739,6 +28739,13 @@
             ],
             "type": "string"
           },
+          "provisionTimeoutMinutes": {
+            "default": 5,
+            "description": "How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          },
           "serverless": {
             "$ref": "#/components/schemas/SystemConfigRunPodServerlessDto",
             "default": {

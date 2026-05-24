@@ -25,6 +25,7 @@ class SystemConfigRunPodDto {
     required this.imageName,
     required this.maxRuntimeHours,
     this.mode = const SystemConfigRunPodDtoModeEnum._('disabled'),
+    this.provisionTimeoutMinutes = 5,
     this.serverless,
     required this.volumeGb,
   });
@@ -80,6 +81,12 @@ class SystemConfigRunPodDto {
   /// disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.
   SystemConfigRunPodDtoModeEnum mode;
 
+  /// How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)
+  ///
+  /// Minimum value: 1
+  /// Maximum value: 60
+  int provisionTimeoutMinutes;
+
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
@@ -108,6 +115,7 @@ class SystemConfigRunPodDto {
     other.imageName == imageName &&
     other.maxRuntimeHours == maxRuntimeHours &&
     other.mode == mode &&
+    other.provisionTimeoutMinutes == provisionTimeoutMinutes &&
     other.serverless == serverless &&
     other.volumeGb == volumeGb;
 
@@ -126,11 +134,12 @@ class SystemConfigRunPodDto {
     (imageName.hashCode) +
     (maxRuntimeHours.hashCode) +
     (mode.hashCode) +
+    (provisionTimeoutMinutes.hashCode) +
     (serverless == null ? 0 : serverless!.hashCode) +
     (volumeGb.hashCode);
 
   @override
-  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, apiKeyConfigured=$apiKeyConfigured, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, serverless=$serverless, volumeGb=$volumeGb]';
+  String toString() => 'SystemConfigRunPodDto[apiKey=$apiKey, apiKeyConfigured=$apiKeyConfigured, autoBackfillOnLaunch=$autoBackfillOnLaunch, autoStopEnabled=$autoStopEnabled, autoStopGraceMinutes=$autoStopGraceMinutes, containerDiskGb=$containerDiskGb, dataPrivacyAcknowledged=$dataPrivacyAcknowledged, defaultGpuTypeId=$defaultGpuTypeId, enabled=$enabled, imageName=$imageName, maxRuntimeHours=$maxRuntimeHours, mode=$mode, provisionTimeoutMinutes=$provisionTimeoutMinutes, serverless=$serverless, volumeGb=$volumeGb]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -150,6 +159,7 @@ class SystemConfigRunPodDto {
       json[r'imageName'] = this.imageName;
       json[r'maxRuntimeHours'] = this.maxRuntimeHours;
       json[r'mode'] = this.mode;
+      json[r'provisionTimeoutMinutes'] = this.provisionTimeoutMinutes;
     if (this.serverless != null) {
       json[r'serverless'] = this.serverless;
     } else {
@@ -180,6 +190,7 @@ class SystemConfigRunPodDto {
         imageName: mapValueOfType<String>(json, r'imageName')!,
         maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
         mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,
+        provisionTimeoutMinutes: mapValueOfType<int>(json, r'provisionTimeoutMinutes') ?? 5,
         serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
         volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
       );
