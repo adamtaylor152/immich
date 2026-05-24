@@ -107,10 +107,11 @@ const ImageEnrichmentReviewSchema = z
 
 const ImageDescriptionEnrichmentResponseSchema = z
   .object({
-    status: z.enum(['missing', 'success', 'failed']),
+    status: z.enum(['missing', 'success', 'failed', 'skipped']),
     modelName: z.string().optional(),
     updatedAt: z.string().optional(),
     error: z.string().optional(),
+    skipReason: z.string().optional().describe('Machine-readable reason when status === "skipped"'),
     description: z.string().optional(),
     tags: z.array(z.string()).optional(),
     objects: z.array(z.string()).optional(),

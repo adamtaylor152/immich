@@ -20471,6 +20471,7 @@
                 "placeholderValidation": "strict",
                 "rawPromptTemplate": ""
               },
+              "customInstructions": "",
               "customVocabulary": [],
               "forbiddenInferences": [
                 "diagnoses",
@@ -20597,11 +20598,16 @@
             },
             "type": "array"
           },
+          "skipReason": {
+            "description": "Machine-readable reason when status === \"skipped\"",
+            "type": "string"
+          },
           "status": {
             "enum": [
               "missing",
               "success",
-              "failed"
+              "failed",
+              "skipped"
             ],
             "type": "string"
           },
@@ -20638,6 +20644,12 @@
               "rawPromptTemplate": ""
             },
             "description": "Advanced raw-prompt-editor configuration"
+          },
+          "customInstructions": {
+            "default": "",
+            "description": "Free-form additional natural-language instructions appended to the description prompt. Example: \"If you see a car, identify the make and model. If people are playing a sport, name the sport.\"",
+            "maxLength": 2000,
+            "type": "string"
           },
           "customVocabulary": {
             "default": [],
@@ -24682,6 +24694,10 @@
       },
       "ServerConfigDto": {
         "properties": {
+          "defaultImageDescriptionRawPromptTemplate": {
+            "description": "Canonical default for the image-description advanced raw prompt template",
+            "type": "string"
+          },
           "externalDomain": {
             "description": "External domain URL",
             "type": "string"
@@ -24732,6 +24748,7 @@
           }
         },
         "required": [
+          "defaultImageDescriptionRawPromptTemplate",
           "externalDomain",
           "isInitialized",
           "isOnboarded",
@@ -28302,6 +28319,7 @@
                   "placeholderValidation": "strict",
                   "rawPromptTemplate": ""
                 },
+                "customInstructions": "",
                 "customVocabulary": [],
                 "forbiddenInferences": [
                   "diagnoses",

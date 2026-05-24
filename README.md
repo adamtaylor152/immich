@@ -23,15 +23,17 @@ It is designed for users who want to keep the Immich experience they already kno
 
 - PIN-gated sensitive media hiding
 - Optional NSFW/sensitive-content detection
-- Local AI-generated descriptions and tags
+- Local AI-generated descriptions and tags for **both images and videos**
+- Free-form **custom-instructions** prompt control (e.g. "if you see a car, identify the make and model")
+- **Identity-aware descriptions** that name every recognized person and avoid generic group nouns
 - Family-library physical deduplication
 - Enhanced RAW support for difficult camera files
 - Media Health utilities for missing or corrupt source files
 - Better duplicate video detection
 - Non-destructive photo and video editing
 - Natural-language local discovery
-- A “Recently Added” media view
-- A “Best Photos” view for locally ranked high-quality images
+- A "Recently Added" media view
+- A "Best Photos" view for locally ranked high-quality images
 
 This fork is actively maintained and kept up to date with upstream Immich while preserving the additional features documented below.
 
@@ -39,6 +41,9 @@ This fork is actively maintained and kept up to date with upstream Immich while 
 > This is a downstream fork, not upstream Immich. It includes database changes and fork-only features that are not part of `immich-app/immich`.
 >
 > These database changes are designed to be reversible back to the main Immich branch, so users can switch back if needed — see [Reverting Back to Upstream Immich](docs/docs/features/revert-to-upstream.md) for the exact command and what data is preserved vs. dropped. As with any fork that modifies application behavior and database state, you should back up your database and media library before upgrading.
+
+> [!IMPORTANT]
+> **Before upgrading,** read [Configurable Descriptions, Identity, Videos, and Smart Albums](docs/docs/features/descriptions-and-smart-albums.md). The ML description pipeline in this fork has a recommended setup order, a dependency on Enhanced Video Duplicate Detection for video descriptions, and a curated model dropdown that may not include your existing model. Following the guide saves you from re-queueing your whole library more than once. New in this release: video descriptions via composite frame grids, a free-form "custom instructions" prompt field, and stronger identity-injection wording that names every detected person.
 
 Start with the [fork privacy suite guide](docs/docs/features/fork-privacy-suite.md) for setup notes, recommended rollout steps, physical deduplication guidance, and differences from upstream Immich.
 
@@ -123,20 +128,29 @@ CPU fallback works, but GPU acceleration is strongly recommended for larger libr
 
 ### Generated descriptions and tags
 
+> [!IMPORTANT]
+> **Read [the descriptions, identity, videos, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md) before upgrading.** This fork's ML description pipeline has a recommended setup order — Facial Recognition → Enhanced Video Duplicate Detection → prompt tuning → identity injection → re-queue → smart albums — and doing it in the wrong order means re-running expensive jobs across your whole library. The guide includes a day-by-day worked example for a typical family library, a recommended-setup-order table, and concrete custom-instructions examples you can paste into your config. Upgrading without reading it will still work, but you will likely re-queue your library more than once before getting the results you want.
+
 - AI-generated image descriptions
+- **AI-generated video descriptions** — composites the sampled frames from Enhanced Video Duplicate Detection into a single grid image and feeds it to the vision-language model with a time-aware prompt, so video descriptions reflect the whole timeline instead of one thumbnail
 - Searchable generated tags
 - Admin review tools for generated descriptions
 - Admin review tools for generated tags
 - Admin repair tools for NSFW/sensitive-content decisions
+- Curated model dropdown (Qwen2.5-VL 3B/7B, Phi-3.5-vision, Florence-2 fallback) with no silent RunPod fallback to a different model
 - Configurable prompt vocabulary, length, and tone
-- Identity injection — recognized named faces are passed into the description prompt so generated text can refer to people by name (e.g. _"Conner playing baseball"_ instead of _"a young boy playing baseball"_)
+- **Custom instructions** — a free-form natural-language field for guidance like _"if you see a car, identify the make and model"_ or _"name the sport being played"_, without rewriting the whole prompt template
+- **Identity injection with required-naming wording** — recognized named faces are passed into the description prompt, and the prompt explicitly requires the model to name each detected person and forbids generic group nouns like _"a family"_ or _"a group"_. Result: a 4-person photo says _"Kelly, Connor, Alexa, and Jeremy at the beach"_ instead of _"a family at the beach"_
 - Hallucination-prevention post-validator that strips proper nouns the model invented
+- **Advanced raw-prompt-template editor with pre-fill and reset** — toggle Advanced on and the textarea is pre-populated with the current default template so you have a working starting point, plus a Reset to default button if you want to discard edits
 - Admin status panel with live counts, last-config-change timestamp, and a real rolling-average re-queue time estimate
 - Defer-then-remind workflow: "Re-queue later" sets a persistent banner that reminds you to apply prompt changes after a session of edits
+- Per-asset status surfaces a `skipped` reason (e.g. `video-frames-unavailable`) when a description can't be generated, so admins know exactly what to fix
 
 Generated descriptions and tags are currently alpha-quality and expected to improve over time.
 
-See the [configurable descriptions, identity, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md) for step-by-step Basic and Advanced setup, prompt examples by library type, and tuning tips.
+> [!TIP]
+> The [descriptions, identity, videos, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md) is the single source of truth for this feature set. It includes: a recommended setup order, basic and advanced setup walkthroughs, nine worked custom-instructions examples covering vehicles, sports, travel landmarks, documents, food, pets, tone, and combined family-library prompts, a complete video-descriptions setup section, identity-injection tuning, smart-album triggers, a troubleshooting catalog, and a day-by-day worked example for an 80,000-photo + 3,000-video library.
 
 ### Smart auto-albums
 

@@ -17,6 +17,13 @@ export interface KnownPerson {
   boxCenter: [number, number]; // normalized [0,1] x/y
 }
 
+export interface VideoContext {
+  cols: number;
+  rows: number;
+  timestampsMs: number[];
+  durationMs?: number;
+}
+
 export interface AssembledPrompt {
   prompt: string;
   expectedSchemaVersion: string;
@@ -24,6 +31,9 @@ export interface AssembledPrompt {
 }
 
 const SCHEMA_VERSION = '2026-05-22';
+
+const ROLE_LINE =
+  'You are generating a concise searchable image record from computer vision outputs.\n\nUse only visible evidence from the image. If estimating age, use broad apparent age groups only, such as baby, child, teenager, young adult, adult, older adult, or unknown.';
 
 // KEEP IN SYNC WITH: machine-learning/immich_ml/models/image_description.py
 // (the JSON schema portion of IMAGE_DESCRIPTION_PROMPT)
@@ -58,20 +68,115 @@ const JSON_SCHEMA_BLOCK = `Return valid JSON with this schema:
   }
 }`;
 
+const STANDARD_RULES = [
+  'Rules:',
+  '- Return only JSON. Do not wrap the response in markdown or explanatory text.',
+  '- Keep the description factual, searchable, and user-friendly. Never put raw JSON or schema text in the description.',
+  '- Prefer concrete nouns over vague adjectives.',
+  '- Use 8 to 20 tags.',
+  '- Tags should be lowercase, short, and useful for search.',
+  '- Preserve uncertainty in people fields when needed.',
+  '- Avoid moralizing language.',
+].join('\n');
+
+const safetyRulesText = (indicators: string[]) =>
+  `If visible evidence supports adult nudity or sexual content, say so factually with terms like ${indicators.join(', ')}. Do not treat bare chest, bed, swimwear, underwear, or ambiguous partial clothing as explicit by itself.`;
+
+const medicalRulesText = (indicators: string[], forbidden: string[]) =>
+  `If visible evidence supports a medical context, describe visible items such as ${indicators.join(', ')}. Do not infer ${forbidden.join(', ')} unless plainly visible as generic text or objects.`;
+
+const DEFAULT_NSFW_INDICATORS = [
+  'adult-nudity',
+  'bare-buttocks',
+  'bondage',
+  'explicit',
+  'exposed-genitals',
+  'naked',
+  'nsfw',
+  'nudity',
+  'restraint',
+  'sex-toy',
+  'sexual-activity',
+];
+
+const DEFAULT_MEDICAL_INDICATORS = [
+  'bandage',
+  'cast',
+  'crutches',
+  'exam-table',
+  'hospital',
+  'iv-line',
+  'lab-result',
+  'medical',
+  'medical-monitor',
+  'medical-paperwork',
+  'mobility-aid',
+  'pill-organizer',
+  'prescription',
+  'syringe',
+  'ultrasound',
+  'wheelchair',
+  'wound',
+  'x-ray',
+];
+
+const DEFAULT_FORBIDDEN_INFERENCES = ['diagnoses', 'medication names', 'procedures', 'pregnancy', 'disability'];
+
+/**
+ * Canonical default raw-prompt template. Surfaced to the admin UI as the
+ * pre-fill payload when an admin enables advanced (raw template) mode, so they
+ * have a working starting point instead of an empty box. Uses defaults for the
+ * configurable indicator lists — admins editing the raw template are
+ * intentionally bypassing the structured fields.
+ */
+export const DEFAULT_RAW_PROMPT_TEMPLATE = [
+  ROLE_LINE,
+  '{names}',
+  '{style_hint}',
+  '{vocabulary}',
+  JSON_SCHEMA_BLOCK,
+  safetyRulesText(DEFAULT_NSFW_INDICATORS),
+  medicalRulesText(DEFAULT_MEDICAL_INDICATORS, DEFAULT_FORBIDDEN_INFERENCES),
+  STANDARD_RULES,
+].join('\n\n');
+
+const formatTimestamp = (ms: number): string => {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds - minutes * 60;
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toFixed(1).padStart(4, '0')}`;
+};
+
+const videoContextHint = (ctx: VideoContext): string => {
+  const cellCount = ctx.cols * ctx.rows;
+  const timestamps = ctx.timestampsMs.map((ms) => formatTimestamp(ms)).join(', ');
+  const durationFragment = ctx.durationMs ? ` of length ${formatTimestamp(ctx.durationMs)}` : '';
+  return [
+    `This image is a composite ${ctx.cols}x${ctx.rows} grid of ${cellCount} frames sampled from a video${durationFragment}.`,
+    `The grid is read left-to-right, top-to-bottom; cell timestamps in order are: ${timestamps}.`,
+    'Treat each cell as a frame from the same video, not as separate scenes. Describe the overall video — its subject, activity over time, and continuity between frames — not each frame in isolation. When motion or change is visible across cells, mention it.',
+  ].join(' ');
+};
+
 @Injectable()
 export class ImageDescriptionPromptAssembler {
   build(input: {
     config: ImageDescriptionPromptConfig;
     knownPersons: KnownPerson[];
     nsfw?: { isNsfw: boolean } | null;
+    videoContext?: VideoContext;
   }): AssembledPrompt {
-    const { config, knownPersons, nsfw } = input;
+    const { config, knownPersons, nsfw, videoContext } = input;
 
     if (config.advanced.enabled) {
-      return this.buildFromTemplate(config, knownPersons, nsfw);
+      return this.buildFromTemplate(config, knownPersons, nsfw, videoContext);
     }
 
-    const sections: string[] = [this.roleLine()];
+    const sections: string[] = [ROLE_LINE];
+
+    if (videoContext) {
+      sections.push(videoContextHint(videoContext));
+    }
 
     const identityHint = this.identityHint(config, knownPersons);
     if (identityHint) {
@@ -86,12 +191,15 @@ export class ImageDescriptionPromptAssembler {
     if (config.customVocabulary.length > 0) {
       sections.push(this.vocabularyHint(config.customVocabulary));
     }
+    if (config.customInstructions.trim().length > 0) {
+      sections.push(this.customInstructionsHint(config.customInstructions));
+    }
 
     sections.push(
       JSON_SCHEMA_BLOCK,
-      this.safetyRules(config.nsfwIndicators),
-      this.medicalRules(config.medicalIndicators, config.forbiddenInferences),
-      this.standardRules(),
+      safetyRulesText(config.nsfwIndicators),
+      medicalRulesText(config.medicalIndicators, config.forbiddenInferences),
+      STANDARD_RULES,
     );
 
     if (nsfw?.isNsfw) {
@@ -105,6 +213,7 @@ export class ImageDescriptionPromptAssembler {
     config: ImageDescriptionPromptConfig,
     knownPersons: KnownPerson[],
     nsfw?: { isNsfw: boolean } | null,
+    videoContext?: VideoContext,
   ): AssembledPrompt {
     const template = config.advanced.rawPromptTemplate;
     const warnings: string[] = [];
@@ -126,15 +235,15 @@ export class ImageDescriptionPromptAssembler {
       .replaceAll('{style_hint}', styleHint)
       .replaceAll('{vocabulary}', vocabulary);
 
+    if (videoContext) {
+      prompt = `${videoContextHint(videoContext)}\n\n${prompt}`;
+    }
+
     if (nsfw?.isNsfw) {
       prompt = `${prompt}\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
     }
 
     return { prompt, expectedSchemaVersion: SCHEMA_VERSION, warnings };
-  }
-
-  private roleLine(): string {
-    return 'You are generating a concise searchable image record from computer vision outputs.\n\nUse only visible evidence from the image. If estimating age, use broad apparent age groups only, such as baby, child, teenager, young adult, adult, older adult, or unknown.';
   }
 
   private identityHint(config: ImageDescriptionPromptConfig, persons: KnownPerson[]): string | null {
@@ -148,7 +257,11 @@ export class ImageDescriptionPromptAssembler {
       return null;
     }
     const lines = eligible.map((p) => `- ${p.name} (${this.positionLabel(p.boxCenter)})`);
-    return `Known people detected in this image (use these names when describing them; do not invent names):\n${lines.join('\n')}`;
+    return [
+      'Identity (REQUIRED — failure to follow this is a top error):',
+      'Known people detected in this image. You MUST refer to each of these people by name at least once in the description. Do NOT replace them with generic group nouns such as "a family", "a group", "people", "everyone", or "the kids" — use the listed names instead. Do not invent names not in this list.',
+      lines.join('\n'),
+    ].join('\n');
   }
 
   private positionLabel(box: [number, number]): string {
@@ -183,28 +296,11 @@ export class ImageDescriptionPromptAssembler {
     return `Prefer these tag values when applicable: ${items.join(', ')}.`;
   }
 
-  private safetyRules(indicators: string[]): string {
-    return `If visible evidence supports adult nudity or sexual content, say so factually with terms like ${indicators.join(', ')}. Do not treat bare chest, bed, swimwear, underwear, or ambiguous partial clothing as explicit by itself.`;
-  }
-
-  private medicalRules(indicators: string[], forbidden: string[]): string {
-    return `If visible evidence supports a medical context, describe visible items such as ${indicators.join(', ')}. Do not infer ${forbidden.join(', ')} unless plainly visible as generic text or objects.`;
+  private customInstructionsHint(text: string): string {
+    return `Additional instructions:\n${text.trim()}`;
   }
 
   private nsfwReinforcement(indicators: string[]): string {
     return `The dedicated NSFW classifier flagged this image. Re-check the image visually. If visible evidence supports it, include specific factual NSFW reasons in the description, tags, and safety.indicators, such as ${indicators.join(', ')}. If apparent age is uncertain around NSFW content, use conservative tags such as nsfw_review rather than explicit age claims.`;
-  }
-
-  private standardRules(): string {
-    return [
-      'Rules:',
-      '- Return only JSON. Do not wrap the response in markdown or explanatory text.',
-      '- Keep the description factual, searchable, and user-friendly. Never put raw JSON or schema text in the description.',
-      '- Prefer concrete nouns over vague adjectives.',
-      '- Use 8 to 20 tags.',
-      '- Tags should be lowercase, short, and useful for search.',
-      '- Preserve uncertainty in people fields when needed.',
-      '- Avoid moralizing language.',
-    ].join('\n');
   }
 }

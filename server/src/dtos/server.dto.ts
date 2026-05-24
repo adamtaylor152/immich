@@ -118,6 +118,9 @@ const ServerConfigSchema = z
     mapDarkStyleUrl: z.string().describe('Map dark style URL'),
     mapLightStyleUrl: z.string().describe('Map light style URL'),
     maintenanceMode: z.boolean().describe('Whether maintenance mode is active'),
+    defaultImageDescriptionRawPromptTemplate: z
+      .string()
+      .describe('Canonical default for the image-description advanced raw prompt template'),
   })
   .meta({ id: 'ServerConfigDto' });
 

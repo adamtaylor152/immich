@@ -163,6 +163,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
           'landmarks',
         ],
         customVocabulary: [],
+        customInstructions: '',
         nsfwIndicators: [
           'adult-nudity',
           'bare-buttocks',

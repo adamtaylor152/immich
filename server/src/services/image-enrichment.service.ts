@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
 import { createHash } from 'node:crypto';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
+import { StorageCore } from 'src/cores/storage.core';
 import { OnJob } from 'src/decorators';
 import {
   AssetImageEnrichmentAction,
@@ -18,13 +19,14 @@ import {
   JobStatus,
   Permission,
   QueueName,
+  StorageFolder,
 } from 'src/enum';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
 import { IdentityPostValidator } from 'src/services/identity-post-validator.service';
-import { ImageDescriptionPromptAssembler, KnownPerson } from 'src/services/prompt-assembler.service';
+import { ImageDescriptionPromptAssembler, KnownPerson, VideoContext } from 'src/services/prompt-assembler.service';
 import { SmartAlbumService } from 'src/services/smart-album.service';
 import { JobItem, JobOf } from 'src/types';
 import { updateLockedColumns } from 'src/utils/database';
@@ -59,12 +61,21 @@ type EnrichmentTask<T> =
       error: string;
     };
 
+type DescriptionEnrichmentTask =
+  | EnrichmentTask<ImageDescriptionResult>
+  | {
+      status: 'skipped';
+      modelName?: string;
+      updatedAt: string;
+      reason: string;
+    };
+
 type NsfwEnrichmentTask = EnrichmentTask<NsfwDetectionResult> & {
   review?: EnrichmentReview;
 };
 
 type EnrichmentMetadata = {
-  description?: EnrichmentTask<ImageDescriptionResult>;
+  description?: DescriptionEnrichmentTask;
   nsfwDetection?: NsfwEnrichmentTask;
 };
 
@@ -386,13 +397,37 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     const asset = await this.assetJobRepository.getForImageEnrichment(id);
-    if (!asset || !this.isEligibleImage(asset)) {
+    if (!asset || !this.isEligibleForDescription(asset)) {
       return JobStatus.Skipped;
     }
 
     if (!asset.previewFile) {
       return JobStatus.Skipped;
     }
+
+    // For videos, build a composite grid from the per-video duplicate-detection
+    // frames. When none exist (enhanced video dedup off or not yet run for this
+    // asset), persist a `skipped` status with `video-frames-unavailable` so the
+    // admin badge can explain why and bail without invoking the model — a single
+    // video thumbnail is usually a poor input.
+    let videoGrid: { path: string; videoContext: VideoContext } | undefined;
+    if (asset.type === AssetType.Video) {
+      videoGrid = await this.prepareVideoGrid(asset.id, asset.ownerId);
+      if (!videoGrid) {
+        await this.databaseRepository.withAssetMetadataLock(id, async (trx) => {
+          const m = await this.getEnrichmentMetadata(id, trx);
+          m.description = {
+            status: 'skipped',
+            updatedAt: new Date().toISOString(),
+            reason: 'video-frames-unavailable',
+          };
+          await this.saveEnrichmentMetadata(id, m, trx);
+        });
+        return JobStatus.Skipped;
+      }
+    }
+
+    const descriptionInputPath = videoGrid ? videoGrid.path : asset.previewFile!;
 
     // Snapshot the metadata to decide whether NSFW inference is needed; the
     // canonical read happens again inside the lock when we persist.
@@ -402,6 +437,8 @@ export class ImageEnrichmentService extends BaseService {
     let nsfwIsFresh = false;
     if (!nsfw && isNsfwDetectionEnabled(machineLearning)) {
       try {
+        // NSFW always runs against the preview thumbnail, not the composite
+        // grid — the classifier is calibrated for single-image input.
         nsfw = await this.machineLearningRepository.detectNsfw(asset.previewFile!, machineLearning.nsfwDetection);
         nsfwIsFresh = true;
       } catch (error) {
@@ -429,9 +466,10 @@ export class ImageEnrichmentService extends BaseService {
         config: machineLearning.imageDescription.prompt,
         knownPersons,
         nsfw: nsfw ? { isNsfw: nsfw.isNsfw } : null,
+        videoContext: videoGrid?.videoContext,
       });
       result = await this.machineLearningRepository.describeImage(
-        asset.previewFile!,
+        descriptionInputPath,
         machineLearning.imageDescription,
         nsfw,
         prompt,
@@ -448,6 +486,12 @@ export class ImageEnrichmentService extends BaseService {
         await this.saveEnrichmentMetadata(id, m, trx);
       });
       return JobStatus.Failed;
+    } finally {
+      // Composite grid is cheap to regenerate from the persisted
+      // duplicate-detection frames; clean up after every run.
+      if (videoGrid) {
+        await this.storageRepository.unlink(videoGrid.path).catch(() => {});
+      }
     }
 
     // Post-validate the ML description against known persons: strip any
@@ -569,6 +613,7 @@ export class ImageEnrichmentService extends BaseService {
               modelName: description?.modelName,
               updatedAt: description?.updatedAt,
               error: description?.status === 'failed' ? description.error : undefined,
+              skipReason: description?.status === 'skipped' ? description.reason : undefined,
               appliedDescription: false,
               appliedTags: false,
             },
@@ -794,6 +839,25 @@ export class ImageEnrichmentService extends BaseService {
   ) {
     return (
       asset?.type === AssetType.Image &&
+      asset.status === AssetStatus.Active &&
+      asset.deletedAt === null &&
+      (asset.visibility === AssetVisibility.Timeline || asset.visibility === AssetVisibility.Archive)
+    );
+  }
+
+  private isEligibleForDescription(
+    asset:
+      | {
+          type: AssetType;
+          status: AssetStatus;
+          deletedAt: Date | null;
+          visibility: AssetVisibility;
+        }
+      | undefined,
+  ) {
+    return (
+      !!asset &&
+      (asset.type === AssetType.Image || asset.type === AssetType.Video) &&
       asset.status === AssetStatus.Active &&
       asset.deletedAt === null &&
       (asset.visibility === AssetVisibility.Timeline || asset.visibility === AssetVisibility.Archive)
@@ -1093,4 +1157,74 @@ export class ImageEnrichmentService extends BaseService {
 
     return knownPersons;
   }
+
+  /**
+   * Build a composite frame-grid image for a video asset from the rows in
+   * `asset_video_duplicate_frame`. Returns null when no frames are persisted —
+   * the caller surfaces this as a `skipped` description with reason
+   * `video-frames-unavailable` so the admin badge can explain why.
+   *
+   * Grid layout escalates with frame count: 2 → 1×2, 3-4 → 2×2, 5-6 → 2×3,
+   * 7+ → 3×3 (subsampling evenly when >9 frames exist).
+   */
+  private async prepareVideoGrid(
+    assetId: string,
+    ownerId: string,
+  ): Promise<{ path: string; videoContext: VideoContext } | undefined> {
+    const frames = await this.duplicateRepository.getVideoDuplicateFrames([assetId]);
+    if (frames.length < 2) {
+      return undefined;
+    }
+
+    const layout = chooseGridLayout(frames.length);
+    const totalCells = layout.cols * layout.rows;
+    const selected = subsampleFrames(frames, totalCells);
+
+    const outputPath = StorageCore.getNestedPath(StorageFolder.Thumbnails, ownerId, `${assetId}_description_grid.jpeg`);
+    this.storageCore.ensureFolders(outputPath);
+
+    try {
+      await this.mediaRepository.composeImageGrid(
+        selected.map((f) => f.path),
+        { cols: layout.cols, rows: layout.rows, cellSize: 512, output: outputPath },
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to compose video frame grid for asset ${assetId}: ${getErrorMessage(error)}`);
+      return undefined;
+    }
+
+    return {
+      path: outputPath,
+      videoContext: {
+        cols: layout.cols,
+        rows: layout.rows,
+        timestampsMs: selected.map((f) => f.timestampMs),
+      },
+    };
+  }
 }
+
+const chooseGridLayout = (frameCount: number): { cols: number; rows: number } => {
+  if (frameCount <= 2) {
+    return { cols: 2, rows: 1 };
+  }
+  if (frameCount <= 4) {
+    return { cols: 2, rows: 2 };
+  }
+  if (frameCount <= 6) {
+    return { cols: 3, rows: 2 };
+  }
+  return { cols: 3, rows: 3 };
+};
+
+const subsampleFrames = <T>(frames: T[], target: number): T[] => {
+  if (frames.length <= target) {
+    return frames;
+  }
+  const step = frames.length / target;
+  const picked: T[] = [];
+  for (let i = 0; i < target; i++) {
+    picked.push(frames[Math.min(Math.floor(i * step), frames.length - 1)]);
+  }
+  return picked;
+};

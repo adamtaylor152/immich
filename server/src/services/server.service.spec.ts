@@ -171,6 +171,7 @@ describe(ServerService.name, () => {
         mapDarkStyleUrl: 'https://tiles.immich.cloud/v1/style/dark.json',
         mapLightStyleUrl: 'https://tiles.immich.cloud/v1/style/light.json',
         maintenanceMode: false,
+        defaultImageDescriptionRawPromptTemplate: expect.any(String) as unknown as string,
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
     });

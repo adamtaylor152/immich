@@ -104,6 +104,7 @@ export type SystemConfig = {
         sentenceCountTarget: number;
         lookFor: string[];
         customVocabulary: string[];
+        customInstructions: string;
         nsfwIndicators: string[];
         medicalIndicators: string[];
         forbiddenInferences: string[];
@@ -411,6 +412,7 @@ export const defaults = Object.freeze<SystemConfig>({
           'landmarks',
         ],
         customVocabulary: [],
+        customInstructions: '',
         nsfwIndicators: [
           'adult-nudity',
           'bare-buttocks',

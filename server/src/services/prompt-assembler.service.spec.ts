@@ -7,6 +7,7 @@ const baseConfig = (overrides: Partial<ImageDescriptionPromptConfig> = {}): Imag
   sentenceCountTarget: 3,
   lookFor: [],
   customVocabulary: [],
+  customInstructions: '',
   nsfwIndicators: ['naked', 'nudity', 'exposed-genitals'],
   medicalIndicators: ['hospital', 'bandage', 'iv-line'],
   forbiddenInferences: ['diagnoses', 'medication names'],
@@ -95,6 +96,27 @@ describe('ImageDescriptionPromptAssembler', () => {
       expect(prompt).toContain('Sarah');
     });
 
+    it('strengthened wording requires naming each person and forbids generic group nouns', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig(),
+        knownPersons: [
+          { name: 'Kelly', faceConfidence: 1, boxCenter: [0.2, 0.5] },
+          { name: 'Connor', faceConfidence: 1, boxCenter: [0.4, 0.5] },
+          { name: 'Alexa', faceConfidence: 1, boxCenter: [0.6, 0.5] },
+          { name: 'Jeremy', faceConfidence: 1, boxCenter: [0.8, 0.5] },
+        ],
+      });
+      // Strong directive present
+      expect(prompt).toContain('MUST refer to each');
+      // Explicitly forbids generic group nouns
+      expect(prompt).toContain('a family');
+      expect(prompt).toContain('a group');
+      // All four names still listed
+      for (const name of ['Kelly', 'Connor', 'Alexa', 'Jeremy']) {
+        expect(prompt).toContain(name);
+      }
+    });
+
     it('drops persons below min confidence', () => {
       const { prompt } = assembler.build({
         config: baseConfig({ identityInjection: { enabled: true, maxNames: 5, minFaceConfidence: 0.9 } }),
@@ -168,6 +190,63 @@ describe('ImageDescriptionPromptAssembler', () => {
       });
       expect(prompt).toMatch(/^TEMPLATE/);
       expect(prompt).toMatch(/dedicated NSFW classifier flagged/i);
+    });
+  });
+
+  describe('customInstructions', () => {
+    it('injects custom instructions when non-empty', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig({ customInstructions: 'If you see a vehicle, identify the make and model.' }),
+        knownPersons: [],
+      });
+      expect(prompt).toContain('Additional instructions:');
+      expect(prompt).toContain('identify the make and model');
+    });
+
+    it('omits the section when customInstructions is empty', () => {
+      const { prompt } = assembler.build({ config: baseConfig({ customInstructions: '' }), knownPersons: [] });
+      expect(prompt).not.toContain('Additional instructions:');
+    });
+
+    it('omits the section when customInstructions is only whitespace', () => {
+      const { prompt } = assembler.build({ config: baseConfig({ customInstructions: '   \n  ' }), knownPersons: [] });
+      expect(prompt).not.toContain('Additional instructions:');
+    });
+
+    it('does not inject customInstructions in advanced (raw template) mode', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig({
+          customInstructions: 'Identify any sport being played.',
+          advanced: { enabled: true, rawPromptTemplate: 'CUSTOM {schema}', placeholderValidation: 'strict' },
+        }),
+        knownPersons: [],
+      });
+      expect(prompt).not.toContain('Additional instructions:');
+      expect(prompt).not.toContain('Identify any sport');
+    });
+  });
+
+  describe('videoContext', () => {
+    it('prefixes the prompt with a composite-grid description when videoContext is supplied', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig(),
+        knownPersons: [],
+        videoContext: { cols: 2, rows: 2, timestampsMs: [1000, 5000, 9000, 13_000], durationMs: 15_000 },
+      });
+      expect(prompt).toContain('composite 2x2 grid of 4 frames');
+      expect(prompt).toContain('00:01.0');
+      expect(prompt).toContain('00:15.0');
+      expect(prompt).toContain('continuity between frames');
+    });
+
+    it('omits the duration fragment when durationMs is missing', () => {
+      const { prompt } = assembler.build({
+        config: baseConfig(),
+        knownPersons: [],
+        videoContext: { cols: 1, rows: 2, timestampsMs: [500, 4500] },
+      });
+      expect(prompt).toContain('composite 1x2 grid of 2 frames');
+      expect(prompt).not.toContain('of length ');
     });
   });
 

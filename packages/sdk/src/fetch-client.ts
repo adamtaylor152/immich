@@ -1045,6 +1045,8 @@ export type ImageDescriptionEnrichmentResponseDto = {
         confidence: string;
         count: number;
     }[];
+    /** Machine-readable reason when status === "skipped" */
+    skipReason?: string;
     status: Status;
     tags?: string[];
     updatedAt?: string;
@@ -1069,7 +1071,7 @@ export type NsfwDetectionEnrichmentResponseDto = {
     modelName?: string;
     review?: ImageEnrichmentReview;
     score?: number;
-    status: Status;
+    status: Status2;
     updatedAt?: string;
 };
 export type AssetImageEnrichmentResponseDto = {
@@ -1881,7 +1883,7 @@ export type RunPodStateDto = {
     podId?: string;
     pricePerHour?: number;
     runningSince?: string;
-    status: Status2;
+    status: Status3;
     stoppedAt?: string;
     templateId?: string;
     unhealthySince?: string;
@@ -2421,6 +2423,8 @@ export type ServerApkLinksDto = {
     x86_64: string;
 };
 export type ServerConfigDto = {
+    /** Canonical default for the image-description advanced raw prompt template */
+    defaultImageDescriptionRawPromptTemplate: string;
     /** External domain URL */
     externalDomain: string;
     /** Whether the server has been initialized */
@@ -2920,6 +2924,8 @@ export type IdentityInjectionConfig = {
 export type ImageDescriptionPromptConfig = {
     /** Advanced raw-prompt-editor configuration */
     advanced?: AdvancedPromptConfig;
+    /** Free-form additional natural-language instructions appended to the description prompt. Example: "If you see a car, identify the make and model. If people are playing a sport, name the sport." */
+    customInstructions?: string;
     /** Tag values the model should prefer when applicable */
     customVocabulary?: string[];
     /** Categories the model must not infer (diagnoses, medications, etc.) */
@@ -8100,12 +8106,18 @@ export enum MirrorAxis {
 export enum Status {
     Missing = "missing",
     Success = "success",
-    Failed = "failed"
+    Failed = "failed",
+    Skipped = "skipped"
 }
 export enum Action {
     Accepted = "accepted",
     MarkedSafe = "marked-safe",
     MarkedNsfw = "marked-nsfw"
+}
+export enum Status2 {
+    Missing = "missing",
+    Success = "success",
+    Failed = "failed"
 }
 export enum AssetImageEnrichmentAction {
     RerunImageDescription = "rerun-image-description",
@@ -8295,7 +8307,7 @@ export enum JobName {
     SmartAlbumReevaluateAll = "SmartAlbumReevaluateAll",
     WorkflowAssetCreate = "WorkflowAssetCreate"
 }
-export enum Status2 {
+export enum Status3 {
     Idle = "idle",
     Provisioning = "provisioning",
     Starting = "starting",

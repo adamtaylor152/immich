@@ -599,7 +599,44 @@ export class AssetJobRepository {
 
   @GenerateSql({ params: [], stream: true })
   streamForImageDescriptionJob(force?: boolean) {
-    return this.streamForImageEnrichmentTask(force, 'description');
+    // Image descriptions also run on videos that have persisted
+    // duplicate-detection frames (those frames are composited into a grid that
+    // feeds the single-image VLM endpoint). Videos without persisted frames
+    // are excluded — the handler would skip them anyway with
+    // `video-frames-unavailable`.
+    return this.assetsWithPreviews()
+      .select(['asset.id'])
+      .$call(withDefaultVisibility)
+      .where((eb) =>
+        eb.or([
+          eb('asset.type', '=', sql.lit(AssetType.Image)),
+          eb.and([
+            eb('asset.type', '=', sql.lit(AssetType.Video)),
+            eb.exists((qb) =>
+              qb
+                .selectFrom('asset_video_duplicate_frame')
+                .select('asset_video_duplicate_frame.assetId')
+                .whereRef('asset_video_duplicate_frame.assetId', '=', 'asset.id'),
+            ),
+          ]),
+        ]),
+      )
+      .$if(!force, (qb) =>
+        qb.where((eb) =>
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom('asset_metadata')
+                .select('asset_metadata.assetId')
+                .whereRef('asset_metadata.assetId', '=', 'asset.id')
+                .where('asset_metadata.key', '=', AssetMetadataKey.MlEnrichment)
+                .where(sql<string>`asset_metadata.value -> 'description' ->> 'status'`, '=', 'success'),
+            ),
+          ),
+        ),
+      )
+      .orderBy('asset.fileCreatedAt', 'desc')
+      .stream();
   }
 
   /**
