@@ -1,0 +1,106 @@
+name: Fork Release
+
+on:
+  workflow_run:
+    workflows: ['Docker']
+    branches: [fork/main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: Tag and release
+    if: >-
+      github.repository == 'adamtaylor152/immich' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Resolve target SHA
+        id: sha
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WR_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            echo "sha=$WR_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Compute next fork tag
+        id: tag
+        run: |
+          set -euo pipefail
+          UPSTREAM_VERSION=$(jq -r '.version' server/package.json)
+          PREFIX="fork-v${UPSTREAM_VERSION}-"
+          LAST_N=$(git tag --list "${PREFIX}*" \
+            | sed "s|^${PREFIX}||" \
+            | grep -E '^[0-9]+$' \
+            | sort -n \
+            | tail -1)
+          NEXT_N=$(( ${LAST_N:-0} + 1 ))
+          TAG="${PREFIX}${NEXT_N}"
+          PREV_TAG="${PREFIX}${LAST_N}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=${LAST_N:+$PREV_TAG}" >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed tag: $TAG (upstream v$UPSTREAM_VERSION, prev: ${PREV_TAG:-none})"
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag images
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          for IMG in immich-server immich-machine-learning; do
+            SRC="ghcr.io/${OWNER}/${IMG}:fork-main"
+            for DEST_TAG in "$TAG" release; do
+              echo "Tagging ${SRC} -> ghcr.io/${OWNER}/${IMG}:${DEST_TAG}"
+              docker buildx imagetools create \
+                -t "ghcr.io/${OWNER}/${IMG}:${DEST_TAG}" \
+                "$SRC"
+            done
+          done
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          PREV_TAG: ${{ steps.tag.outputs.prev_tag }}
+          UPSTREAM: ${{ steps.tag.outputs.upstream }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          NOTES_ARGS=(--generate-notes)
+          if [[ -n "$PREV_TAG" ]]; then
+            NOTES_ARGS+=(--notes-start-tag "$PREV_TAG")
+          fi
+          gh release create "$TAG" \
+            --target "$SHA" \
+            --title "$TAG (upstream v${UPSTREAM})" \
+            "${NOTES_ARGS[@]}"

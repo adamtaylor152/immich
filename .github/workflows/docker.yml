@@ -205,7 +205,7 @@ jobs:
       contents: read
       packages: write
     runs-on: ubuntu-latest
-    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main') && (needs.server.result == 'success' || needs.retag_server.result == 'success') }}
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main' || github.ref_name == 'fork/main') && (needs.server.result == 'success' || needs.retag_server.result == 'success') }}
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -218,7 +218,7 @@ jobs:
         env:
           REGISTRY_NAME: 'ghcr.io'
           REPOSITORY: ${{ github.repository_owner }}/immich-server
-          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || 'main' }}
+          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || (github.ref_name == 'fork/main' && 'fork-main' || 'main') }}
         run: |
           docker buildx imagetools create -t "${REGISTRY_NAME}/${REPOSITORY}:latest" "${REGISTRY_NAME}/${REPOSITORY}:${SOURCE_TAG}"
 
@@ -229,7 +229,7 @@ jobs:
       contents: read
       packages: write
     runs-on: ubuntu-latest
-    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main') && (needs.machine-learning.result == 'success' || needs.retag_ml.result == 'success') }}
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main' || github.ref_name == 'fork/main') && (needs.machine-learning.result == 'success' || needs.retag_ml.result == 'success') }}
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -242,7 +242,7 @@ jobs:
         env:
           REGISTRY_NAME: 'ghcr.io'
           REPOSITORY: ${{ github.repository_owner }}/immich-machine-learning
-          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || 'main' }}
+          SOURCE_TAG: ${{ github.event_name == 'release' && 'release' || (github.ref_name == 'fork/main' && 'fork-main' || 'main') }}
         run: |
           docker buildx imagetools create -t "${REGISTRY_NAME}/${REPOSITORY}:latest" "${REGISTRY_NAME}/${REPOSITORY}:${SOURCE_TAG}"
 
