@@ -51,9 +51,12 @@ jobs:
           set -euo pipefail
           UPSTREAM_VERSION=$(jq -r '.version' server/package.json)
           PREFIX="fork-v${UPSTREAM_VERSION}-"
+          # grep returns 1 on no matches which would kill the pipeline under
+          # pipefail; wrap so the first-ever run (no fork-v* tags yet) is fine
+          # and LAST_N stays empty, letting NEXT_N default to 1.
           LAST_N=$(git tag --list "${PREFIX}*" \
             | sed "s|^${PREFIX}||" \
-            | grep -E '^[0-9]+$' \
+            | { grep -E '^[0-9]+$' || true; } \
             | sort -n \
             | tail -1)
           NEXT_N=$(( ${LAST_N:-0} + 1 ))
