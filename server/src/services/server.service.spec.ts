@@ -159,7 +159,9 @@ describe(ServerService.name, () => {
 
   describe('getSystemConfig', () => {
     it('should respond the server configuration', async () => {
-      await expect(sut.getSystemConfig()).resolves.toEqual({
+      const result = await sut.getSystemConfig();
+      const { defaultImageDescriptionRawPromptTemplate, ...rest } = result;
+      expect(rest).toEqual({
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
         trashDays: 30,
@@ -171,8 +173,11 @@ describe(ServerService.name, () => {
         mapDarkStyleUrl: 'https://tiles.immich.cloud/v1/style/dark.json',
         mapLightStyleUrl: 'https://tiles.immich.cloud/v1/style/light.json',
         maintenanceMode: false,
-        defaultImageDescriptionRawPromptTemplate: expect.any(String) as unknown as string,
       });
+      expect(defaultImageDescriptionRawPromptTemplate).toContain('{schema}');
+      expect(defaultImageDescriptionRawPromptTemplate).toContain('{names}');
+      expect(defaultImageDescriptionRawPromptTemplate).toContain('{style_hint}');
+      expect(defaultImageDescriptionRawPromptTemplate).toContain('{vocabulary}');
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
     });
   });
