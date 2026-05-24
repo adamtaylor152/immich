@@ -28739,6 +28739,12 @@
             ],
             "type": "string"
           },
+          "provisionTimeoutMinutes": {
+            "description": "How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          },
           "serverless": {
             "$ref": "#/components/schemas/SystemConfigRunPodServerlessDto",
             "default": {
@@ -28773,6 +28779,7 @@
           "enabled",
           "imageName",
           "maxRuntimeHours",
+          "provisionTimeoutMinutes",
           "volumeGb"
         ],
         "type": "object"

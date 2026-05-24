@@ -4,6 +4,6 @@
          maxRuntimeHours: mapValueOfType<int>(json, r'maxRuntimeHours')!,
 -        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? 'disabled',
 +        mode: SystemConfigRunPodDtoModeEnum.fromJson(json[r'mode']) ?? SystemConfigRunPodDtoModeEnum.disabled,
+         provisionTimeoutMinutes: mapValueOfType<int>(json, r'provisionTimeoutMinutes')!,
          serverless: SystemConfigRunPodServerlessDto.fromJson(json[r'serverless']),
          volumeGb: mapValueOfType<int>(json, r'volumeGb')!,
-       );

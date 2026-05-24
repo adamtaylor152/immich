@@ -557,10 +557,7 @@ export class RunPodService extends BaseService {
     const provisionTimeoutMs = provisionTimeoutMinutes * 60 * 1000;
     const createdAtMs = Date.parse(state.podCreatedAt);
     if (!Number.isNaN(createdAtMs) && Date.now() - createdAtMs > provisionTimeoutMs) {
-      await this.handleProvisionFailure(
-        state,
-        `Pod did not reach RUNNING within ${provisionTimeoutMinutes} minute(s)`,
-      );
+      await this.handleProvisionFailure(state, `Pod did not reach RUNNING within ${provisionTimeoutMinutes} minute(s)`);
       return;
     }
 
