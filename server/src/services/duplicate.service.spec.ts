@@ -253,7 +253,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 120 },
+        format: { ...probeStub.videoStream2160p.format, duration: 120_000 },
       });
       mocks.machineLearning.encodeImage.mockResolvedValue('[1, 2, 3, 4]');
       mocks.duplicateRepository.replaceVideoDuplicateFrames.mockResolvedValue(['/data/thumbs/old-frame.jpeg']);
@@ -277,6 +277,32 @@ describe(DuplicateService.name, () => {
       });
     });
 
+    it('should treat asset duration as milliseconds when sampling frame timestamps', async () => {
+      const asset = AssetFactory.create({ type: AssetType.Video });
+      mocks.assetJob.getForVideoDuplicateFrameJob.mockResolvedValue({
+        id: asset.id,
+        ownerId: asset.ownerId,
+        originalPath: '/data/library/video.mp4',
+        visibility: AssetVisibility.Timeline,
+        videoStream: probeStub.videoStream2160p.videoStream!,
+        format: { ...probeStub.videoStream2160p.format, duration: 60_720 },
+      });
+      mocks.machineLearning.encodeImage.mockResolvedValue('[1, 2, 3, 4]');
+      mocks.duplicateRepository.replaceVideoDuplicateFrames.mockResolvedValue([]);
+
+      await expect(sut.handleGenerateVideoDuplicateFrames({ id: asset.id })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.duplicateRepository.replaceVideoDuplicateFrames).toHaveBeenCalledWith(
+        asset.id,
+        expect.arrayContaining([
+          expect.objectContaining({ assetId: asset.id, frameIndex: 0, timestampMs: 12_144 }),
+          expect.objectContaining({ assetId: asset.id, frameIndex: 1, timestampMs: 24_288 }),
+          expect.objectContaining({ assetId: asset.id, frameIndex: 2, timestampMs: 36_432 }),
+          expect.objectContaining({ assetId: asset.id, frameIndex: 3, timestampMs: 48_576 }),
+        ]),
+      );
+    });
+
     it('should mark videos too short for at least two sampled frames as detected', async () => {
       const asset = AssetFactory.create({ type: AssetType.Video });
       mocks.assetJob.getForVideoDuplicateFrameJob.mockResolvedValue({
@@ -285,7 +311,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 2 },
+        format: { ...probeStub.videoStream2160p.format, duration: 2000 },
       });
 
       await expect(sut.handleGenerateVideoDuplicateFrames({ id: asset.id })).resolves.toBe(JobStatus.Skipped);
@@ -304,7 +330,7 @@ describe(DuplicateService.name, () => {
         originalPath: '/data/library/video.mp4',
         visibility: AssetVisibility.Timeline,
         videoStream: probeStub.videoStream2160p.videoStream!,
-        format: { ...probeStub.videoStream2160p.format, duration: 120 },
+        format: { ...probeStub.videoStream2160p.format, duration: 120_000 },
       });
       mocks.machineLearning.encodeImage.mockResolvedValue('[1, 2, 3, 4]');
       mocks.systemMetadata.get

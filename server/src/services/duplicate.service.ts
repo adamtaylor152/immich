@@ -541,7 +541,7 @@ export class DuplicateService extends BaseService {
   }
 
   private getVideoDuplicateFrameTimestamps(frameCount: number, format: { duration: number }): number[] {
-    const duration = format.duration;
+    const duration = format.duration / 1000;
     if (!Number.isFinite(duration) || duration <= VIDEO_DUPLICATE_FRAME_MIN_COUNT) {
       return [];
     }
