@@ -3020,7 +3020,7 @@ export type SystemConfigRunPodDto = {
     /** Enabled */
     enabled: boolean;
     /** HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token) */
-    hfToken?: string;
+    hfToken: string;
     /** Read-only indicator that an HF token is currently stored. Set by the server; ignored on write. */
     hfTokenConfigured?: boolean;
     /** Container image to launch */

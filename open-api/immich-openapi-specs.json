@@ -28719,7 +28719,6 @@
             "type": "boolean"
           },
           "hfToken": {
-            "default": "",
             "description": "HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)",
             "type": "string"
           },
@@ -28787,6 +28786,7 @@
           "dataPrivacyAcknowledged",
           "defaultGpuTypeId",
           "enabled",
+          "hfToken",
           "imageName",
           "maxRuntimeHours",
           "volumeGb"
