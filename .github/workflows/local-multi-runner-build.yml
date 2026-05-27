@@ -5,6 +5,11 @@ name: 'Local multi-runner container image build'
 # (259f3f8e3ca1d04dd6164171126f8bce36c8223a). Local copy adds MISE_GITHUB_TOKEN
 # as a BuildKit secret so the Dockerfile can consume it via --mount=type=secret
 # instead of an ARG (which would leak into image history).
+#
+# Fork-local runner routing: Docker-heavy linux/amd64 image builds run on the
+# `aiimmich` self-hosted runner pool. Keep matrix generation and manifest/tag
+# merge jobs on GitHub-hosted runners so release bookkeeping stays isolated
+# from the Docker host.
 
 on:
   workflow_call:
@@ -73,7 +78,7 @@ jobs:
         shell: bash
         env:
           PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
-          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":["self-hosted","linux","x64","aiimmich","docker-build"],"linux/arm64":"ubuntu-24.04-arm"}' }}
         run: |
           matrix=$(jq -R -c \
             --argjson runner_mapping "${RUNNER_MAPPING}" \
@@ -113,6 +118,12 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Docker runner tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
