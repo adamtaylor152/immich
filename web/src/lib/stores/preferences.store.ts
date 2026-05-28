@@ -57,6 +57,12 @@ export interface AlbumViewSettings {
   groupOrder: string;
   sortBy: string;
   sortOrder: string;
+  /**
+   * When true the /albums grid shows every owned album regardless of nesting.
+   * When false (default) it shows only top-level (parentId === null) albums and
+   * relies on drill-down + the sidebar tree to reach nested ones.
+   */
+  showAllAlbums: boolean;
   collapsedGroups: {
     // Grouping Option => Array<Group ID>
     [group: string]: string[];
@@ -114,6 +120,7 @@ export const albumViewSettings = persisted<AlbumViewSettings>('album-view-settin
   groupOrder: SortOrder.Desc,
   sortBy: AlbumSortBy.MostRecentPhoto,
   sortOrder: SortOrder.Desc,
+  showAllAlbums: false,
   collapsedGroups: {},
 });
 

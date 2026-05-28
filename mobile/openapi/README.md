@@ -88,6 +88,7 @@ Class | Method | HTTP request | Description
 *AlbumsApi* | [**addUsersToAlbum**](doc//AlbumsApi.md#adduserstoalbum) | **PUT** /albums/{id}/users | Share album with users
 *AlbumsApi* | [**createAlbum**](doc//AlbumsApi.md#createalbum) | **POST** /albums | Create an album
 *AlbumsApi* | [**deleteAlbum**](doc//AlbumsApi.md#deletealbum) | **DELETE** /albums/{id} | Delete an album
+*AlbumsApi* | [**getAlbumDescendantCount**](doc//AlbumsApi.md#getalbumdescendantcount) | **GET** /albums/{id}/descendant-count | Count descendant albums
 *AlbumsApi* | [**getAlbumInfo**](doc//AlbumsApi.md#getalbuminfo) | **GET** /albums/{id} | Retrieve an album
 *AlbumsApi* | [**getAlbumMapMarkers**](doc//AlbumsApi.md#getalbummapmarkers) | **GET** /albums/{id}/map-markers | Retrieve album map markers
 *AlbumsApi* | [**getAlbumStatistics**](doc//AlbumsApi.md#getalbumstatistics) | **GET** /albums/statistics | Retrieve album statistics
@@ -356,6 +357,7 @@ Class | Method | HTTP request | Description
  - [AdjustParameters](doc//AdjustParameters.md)
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
  - [AdvancedPromptConfig](doc//AdvancedPromptConfig.md)
+ - [AlbumDescendantCountResponseDto](doc//AlbumDescendantCountResponseDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)
  - [AlbumUserAddDto](doc//AlbumUserAddDto.md)

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AddUsersDto,
+  AlbumDescendantCountResponseDto,
   AlbumResponseDto,
   AlbumsAddAssetsDto,
   AlbumsAddAssetsResponseDto,
@@ -129,6 +130,11 @@ export class AlbumService extends BaseService {
       }
     }
 
+    if (dto.parentId) {
+      // Nesting modifies the parent's structure, so require AlbumUpdate (owner-only).
+      await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [dto.parentId] });
+    }
+
     const allowedAssetIdsSet = await this.checkAccess({
       auth,
       permission: Permission.AssetShare,
@@ -144,6 +150,8 @@ export class AlbumService extends BaseService {
         description: dto.description,
         albumThumbnailAssetId: assetIds[0] || null,
         order: getPreferences(userMetadata).albums.defaultAssetOrder,
+        parentId: dto.parentId ?? null,
+        icon: dto.icon ?? null,
       },
       assetIds,
       [{ userId: auth.user.id, role: AlbumUserRole.Owner }, ...albumUsers],
@@ -169,6 +177,11 @@ export class AlbumService extends BaseService {
         throw new BadRequestException('Invalid album thumbnail');
       }
     }
+
+    if (dto.parentId !== undefined) {
+      await this.validateAndReparent(auth, album.id, dto.parentId);
+    }
+
     const updatedAlbum = await this.albumRepository.update(
       album.id,
       {
@@ -178,6 +191,8 @@ export class AlbumService extends BaseService {
         albumThumbnailAssetId: dto.albumThumbnailAssetId,
         isActivityEnabled: dto.isActivityEnabled,
         order: dto.order,
+        icon: dto.icon,
+        sortOrder: dto.sortOrder,
       },
       auth.user.id,
     );
@@ -188,6 +203,30 @@ export class AlbumService extends BaseService {
       privacyOptions,
     );
     return mapAlbum(mappedAlbum);
+  }
+
+  async getDescendantCount(auth: AuthDto, id: string): Promise<AlbumDescendantCountResponseDto> {
+    await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [id] });
+    const count = await this.albumRepository.getDescendantCount(id);
+    return { count };
+  }
+
+  private async validateAndReparent(auth: AuthDto, id: string, newParentId: string | null): Promise<void> {
+    if (newParentId === id) {
+      throw new BadRequestException('An album cannot be its own parent');
+    }
+
+    if (newParentId !== null) {
+      // Owner-only nesting: require AlbumUpdate on the proposed new parent.
+      await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [newParentId] });
+
+      const descendants = await this.albumRepository.getDescendantIds(id);
+      if (descendants.has(newParentId)) {
+        throw new BadRequestException('Cannot move an album under one of its own descendants');
+      }
+    }
+
+    await this.albumRepository.reparent(id, newParentId);
   }
 
   async delete(auth: AuthDto, id: string): Promise<void> {

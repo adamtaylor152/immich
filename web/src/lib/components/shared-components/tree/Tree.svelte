@@ -1,5 +1,6 @@
 <script lang="ts">
   import TreeItems from '$lib/components/shared-components/tree/TreeItems.svelte';
+  import { getAlbumDragData, isAlbumDrag, setAlbumDragData } from '$lib/utils/album-drag';
   import { TreeNode } from '$lib/utils/tree-utils';
   import { Icon } from '@immich/ui';
   import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
@@ -9,25 +10,139 @@
     active: string;
     icons: { default: string; active: string };
     getLink: (path: string) => string;
+    /**
+     * Optional drop-target hooks. When supplied, every tree row also accepts
+     * an album-drag (see `album-drag.ts`) and invokes `onDrop` with the dragged
+     * album id, the target node's path, and where on the row the drop landed:
+     *   - 'before' — top 25%: insert as a previous sibling of the target
+     *   - 'inside' — middle 50%: nest as a child of the target
+     *   - 'after'  — bottom 25%: insert as a following sibling of the target
+     * Backward-compatible: omit to disable drop, as the tags page does.
+     */
+    onDrop?: (draggedId: string, targetPath: string, position: 'before' | 'inside' | 'after') => void;
+    canAcceptDrop?: (draggedId: string, targetPath: string, position: 'before' | 'inside' | 'after') => boolean;
+    draggedId?: string | null;
+    /**
+     * Per-node icon override. When supplied, the returned default/active pair
+     * replaces the `icons` prop for this row only — used by the albums tree to
+     * show each album's customized icon while keeping the tags tree unchanged.
+     */
+    getIcons?: (node: TreeNode) => { default: string; active: string };
+    /**
+     * Tailwind utility classes for the node label `<span>`. Defaults to the
+     * monospace/text-sm look used by the tags tree. The albums tree overrides
+     * to use the standard `GoogleSans` body font at a larger size.
+     */
+    labelClass?: string;
+    /**
+     * When true the row also becomes a drag source — needed so siblings can be
+     * reordered straight from the tree. Drag data uses `node.id` as the album
+     * id, so the node must have one (set by `TreeNode.fromAlbums`).
+     */
+    enableDrag?: boolean;
+    onDragStart?: (id: string) => void;
+    onDragEnd?: () => void;
   }
 
-  let { node, active, icons, getLink }: Props = $props();
+  const DEFAULT_LABEL_CLASS =
+    'overflow-hidden ps-1 pt-1 font-mono text-sm text-nowrap text-ellipsis whitespace-pre-wrap';
 
+  let {
+    node,
+    active,
+    icons,
+    getLink,
+    onDrop,
+    canAcceptDrop,
+    draggedId = null,
+    getIcons,
+    labelClass = DEFAULT_LABEL_CLASS,
+    enableDrag = false,
+    onDragStart,
+    onDragEnd,
+  }: Props = $props();
+
+  const isDragSource = $derived(enableDrag && !!node.id);
+
+  const handleDragStart = (event: DragEvent) => {
+    if (!isDragSource || !node.id) {
+      return;
+    }
+    setAlbumDragData(event, node.id);
+    onDragStart?.(node.id);
+  };
+
+  const handleDragEnd = () => {
+    onDragEnd?.();
+  };
+
+  const nodeIcons = $derived(getIcons ? getIcons(node) : icons);
   const isTarget = $derived(active === node.path);
   const isActive = $derived(active === node.path || active.startsWith(node.value === '/' ? '/' : `${node.path}/`));
   let isOpen = $derived(isActive);
+  let dropPosition = $state<'before' | 'inside' | 'after' | null>(null);
+  const dropEnabled = $derived(onDrop !== undefined);
 
   const onclick = (event: MouseEvent) => {
     event.preventDefault();
     isOpen = !isOpen;
+  };
+
+  const computeDropPosition = (event: DragEvent): 'before' | 'inside' | 'after' => {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const ratio = (event.clientY - rect.top) / rect.height;
+    if (ratio < 0.25) {
+      return 'before';
+    }
+    if (ratio > 0.75) {
+      return 'after';
+    }
+    return 'inside';
+  };
+
+  const handleDragOver = (event: DragEvent) => {
+    if (!dropEnabled || !isAlbumDrag(event)) {
+      return;
+    }
+    const position = computeDropPosition(event);
+    if (canAcceptDrop && draggedId && !canAcceptDrop(draggedId, node.path, position)) {
+      dropPosition = null;
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer!.dropEffect = 'move';
+    dropPosition = position;
+  };
+
+  const handleDragLeave = () => {
+    dropPosition = null;
+  };
+
+  const handleDrop = (event: DragEvent) => {
+    if (!dropEnabled) {
+      return;
+    }
+    event.preventDefault();
+    const position = dropPosition ?? computeDropPosition(event);
+    dropPosition = null;
+    const dropped = getAlbumDragData(event);
+    if (dropped) {
+      onDrop?.(dropped, node.path, position);
+    }
   };
 </script>
 
 <a
   href={getLink(node.path)}
   title={node.value}
-  class={`flex grow place-items-center rounded-lg py-1 ps-2 text-sm hover:bg-slate-200 hover:font-semibold dark:hover:bg-slate-800 ${isTarget ? 'bg-slate-100 font-semibold text-primary dark:bg-slate-700' : 'dark:text-gray-200'}`}
+  class={`relative flex grow place-items-center rounded-lg py-1 ps-2 hover:bg-slate-200 hover:font-semibold dark:hover:bg-slate-800 ${isTarget ? 'bg-slate-100 font-semibold text-primary dark:bg-slate-700' : 'dark:text-gray-200'} ${dropPosition === 'inside' ? 'bg-primary/10 ring-2 ring-primary' : ''} ${dropPosition === 'before' ? "before:absolute before:inset-x-0 before:-top-0.5 before:h-1 before:rounded-full before:bg-primary before:content-['']" : ''} ${dropPosition === 'after' ? "after:absolute after:inset-x-0 after:-bottom-0.5 after:h-1 after:rounded-full after:bg-primary after:content-['']" : ''}`}
   data-sveltekit-keepfocus
+  draggable={isDragSource}
+  ondragstart={handleDragStart}
+  ondragend={handleDragEnd}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
 >
   {#if node.size > 0}
     <button type="button" {onclick}>
@@ -36,15 +151,28 @@
   {/if}
   <div class={node.size === 0 ? 'ml-[1.5em]' : ''}>
     <Icon
-      icon={isActive ? icons.active : icons.default}
-      class={isActive ? 'text-primary' : 'text-gray-400'}
+      icon={isActive ? nodeIcons.active : nodeIcons.default}
+      class={isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}
       color={node.color}
       size="20"
     />
   </div>
-  <span class="overflow-hidden ps-1 pt-1 font-mono text-nowrap text-ellipsis whitespace-pre-wrap">{node.value}</span>
+  <span class={labelClass}>{node.value}</span>
 </a>
 
 {#if isOpen}
-  <TreeItems tree={node} {icons} {active} {getLink} />
+  <TreeItems
+    tree={node}
+    {icons}
+    {active}
+    {getLink}
+    {onDrop}
+    {canAcceptDrop}
+    {draggedId}
+    {getIcons}
+    {labelClass}
+    {enableDrag}
+    {onDragStart}
+    {onDragEnd}
+  />
 {/if}

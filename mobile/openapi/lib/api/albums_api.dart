@@ -302,6 +302,63 @@ class AlbumsApi {
     }
   }
 
+  /// Count descendant albums
+  ///
+  /// Return the number of descendant albums (children, grandchildren, etc.) for a specific album. Used by the UI to show \"Delete X and N nested albums?\" confirmations.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<Response> getAlbumDescendantCountWithHttpInfo(String id,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/albums/{id}/descendant-count'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Count descendant albums
+  ///
+  /// Return the number of descendant albums (children, grandchildren, etc.) for a specific album. Used by the UI to show \"Delete X and N nested albums?\" confirmations.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  Future<AlbumDescendantCountResponseDto?> getAlbumDescendantCount(String id,) async {
+    final response = await getAlbumDescendantCountWithHttpInfo(id,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AlbumDescendantCountResponseDto',) as AlbumDescendantCountResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve an album
   ///
   /// Retrieve information about a specific album by its ID.

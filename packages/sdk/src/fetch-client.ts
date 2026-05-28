@@ -494,6 +494,8 @@ export type AlbumResponseDto = {
     endDate?: string;
     /** Has shared link */
     hasSharedLink: boolean;
+    /** Icon key (null = default folder icon) */
+    icon: string | null;
     /** Album ID */
     id: string;
     /** Activity feed enabled */
@@ -501,8 +503,12 @@ export type AlbumResponseDto = {
     /** Last modified asset timestamp */
     lastModifiedAssetTimestamp?: string;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = top-level) */
+    parentId: string | null;
     /** Is shared album */
     shared: boolean;
+    /** Sibling display position. Lower values appear first. */
+    sortOrder: number | null;
     /** Start date (earliest asset) */
     startDate?: string;
     /** Last update date */
@@ -522,6 +528,10 @@ export type CreateAlbumDto = {
     assetIds?: string[];
     /** Album description */
     description?: string;
+    /** Optional icon key (see album-icons.ts) */
+    icon?: string;
+    /** Parent album ID for nesting (omit for top-level) */
+    parentId?: string;
 };
 export type AlbumsAddAssetsDto = {
     /** Album IDs */
@@ -549,9 +559,15 @@ export type UpdateAlbumDto = {
     albumThumbnailAssetId?: string;
     /** Album description */
     description?: string;
+    /** Icon key (null = clear / use default folder icon) */
+    icon?: string | null;
     /** Enable activity feed */
     isActivityEnabled?: boolean;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = move to top-level, omit = no change) */
+    parentId?: string | null;
+    /** Sibling display position. Lower values appear first. Computed by the client as a midpoint. */
+    sortOrder?: number;
 };
 export type BulkIdsDto = {
     /** IDs to process */
@@ -564,6 +580,10 @@ export type BulkIdResponseDto = {
     id: string;
     /** Whether operation succeeded */
     success: boolean;
+};
+export type AlbumDescendantCountResponseDto = {
+    /** Number of descendant albums (children, grandchildren, etc.) */
+    count: number;
 };
 export type MapMarkerResponseDto = {
     /** City name */
@@ -4455,6 +4475,19 @@ export function addAssetsToAlbum({ id, bulkIdsDto }: {
         method: "PUT",
         body: bulkIdsDto
     })));
+}
+/**
+ * Count descendant albums
+ */
+export function getAlbumDescendantCount({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AlbumDescendantCountResponseDto;
+    }>(`/albums/${encodeURIComponent(id)}/descendant-count`, {
+        ...opts
+    }));
 }
 /**
  * Retrieve album map markers

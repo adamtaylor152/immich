@@ -5,6 +5,7 @@ import {
   AlbumUserRole,
   BulkIdErrorReason,
   deleteAlbum,
+  getAlbumDescendantCount,
   removeUserFromAlbum,
   updateAlbumInfo,
   updateAlbumUser,
@@ -228,12 +229,25 @@ export const handleDeleteAlbum = async (album: AlbumResponseDto, options?: { pro
   const { prompt = true, notify = true } = options ?? {};
 
   if (prompt) {
-    const confirmation =
+    let descendantCount = 0;
+    try {
+      const result = await getAlbumDescendantCount({ id: album.id });
+      descendantCount = result.count;
+    } catch {
+      // Permission denied or network error — fall back to the simple confirmation
+      // rather than blocking the delete on the count lookup.
+    }
+
+    const baseConfirmation =
       album.albumName.length > 0
         ? $t('album_delete_confirmation', { values: { album: album.albumName } })
         : $t('unnamed_album_delete_confirmation');
     const description = $t('album_delete_confirmation_description');
-    const success = await modalManager.showDialog({ prompt: `${confirmation} ${description}` });
+    const nestedNotice =
+      descendantCount > 0 ? $t('album_delete_confirmation_nested', { values: { count: descendantCount } }) : '';
+
+    const promptText = [baseConfirmation, nestedNotice, description].filter(Boolean).join(' ');
+    const success = await modalManager.showDialog({ prompt: promptText });
     if (!success) {
       return false;
     }

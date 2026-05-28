@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-this-alias */
 /* eslint-disable unicorn/no-this-assignment */
 /* eslint-disable unicorn/prefer-at */
-import type { TagResponseDto } from '@immich/sdk';
+import type { AlbumResponseDto, TagResponseDto } from '@immich/sdk';
 
 export class TreeNode extends Map<string, TreeNode> {
   value: string;
@@ -38,6 +38,43 @@ export class TreeNode extends Map<string, TreeNode> {
       current.id = tag.id;
       current.color = tag.color;
     }
+    return root;
+  }
+
+  /**
+   * Build a tree from a flat list of albums using their parentId links.
+   * Paths are slash-joined album ids (e.g. "uuid-a/uuid-b/uuid-c") so the
+   * generic Tree.svelte / TreeItems.svelte / Breadcrumbs.svelte components can
+   * detect active ancestors via the same `active.startsWith(path + "/")` check
+   * they use for tags. Use `getAlbumIdPath()` to compute the slash-path for an
+   * album from its id and the flat list. Albums whose parent isn't in the list
+   * (e.g. parent is shared away or missing) are promoted to the root.
+   */
+  static fromAlbums(albums: AlbumResponseDto[]) {
+    const root = new TreeNode('', '', null);
+    const byId = new Map<string, TreeNode>();
+
+    for (const album of albums) {
+      const node = new TreeNode(album.albumName, '', root);
+      node.id = album.id;
+      node.hasAssets = true;
+      byId.set(album.id, node);
+    }
+
+    for (const album of albums) {
+      const node = byId.get(album.id)!;
+      const parentNode = album.parentId ? byId.get(album.parentId) : undefined;
+      if (parentNode) {
+        node.parent = parentNode;
+        node.path = parentNode.path ? `${parentNode.path}/${album.id}` : album.id;
+        parentNode.set(album.id, node);
+      } else {
+        node.parent = root;
+        node.path = album.id;
+        root.set(album.id, node);
+      }
+    }
+
     return root;
   }
 
@@ -149,4 +186,32 @@ export function getParentPath(path: string) {
     return normalized.slice(0, last);
   }
   return last === 0 ? '/' : normalized;
+}
+
+/**
+ * Walk an album's parentId chain up to the root and produce the slash-joined
+ * id path matching what `TreeNode.fromAlbums()` writes onto each node.
+ * Returns an empty string if the album is not in the list.
+ */
+export function getAlbumIdPath(albums: AlbumResponseDto[], albumId: string): string {
+  const byId = new Map(albums.map((a) => [a.id, a]));
+  const parts: string[] = [];
+  let current: AlbumResponseDto | undefined = byId.get(albumId);
+  const seen = new Set<string>();
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    parts.unshift(current.id);
+    current = current.parentId ? byId.get(current.parentId) : undefined;
+  }
+  return parts.join('/');
+}
+
+/**
+ * Pull the last segment off a synthesized album path. Used in `getLink`
+ * callbacks so navigation always routes to the deepest album, not a
+ * concatenated ancestor chain.
+ */
+export function getLastIdSegment(path: string): string {
+  const idx = path.lastIndexOf('/');
+  return idx === -1 ? path : path.slice(idx + 1);
 }

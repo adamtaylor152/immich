@@ -36,6 +36,8 @@ const CreateAlbumSchema = z
     description: z.string().optional().describe('Album description'),
     albumUsers: z.array(AlbumUserCreateSchema).optional().describe('Album users'),
     assetIds: z.array(z.uuidv4()).optional().describe('Initial asset IDs'),
+    parentId: z.uuidv4().optional().describe('Parent album ID for nesting (omit for top-level)'),
+    icon: z.string().optional().describe('Optional icon key (see album-icons.ts)'),
   })
   .meta({ id: 'CreateAlbumDto' });
 
@@ -60,6 +62,16 @@ const UpdateAlbumSchema = z
     albumThumbnailAssetId: z.uuidv4().optional().describe('Album thumbnail asset ID'),
     isActivityEnabled: z.boolean().optional().describe('Enable activity feed'),
     order: AssetOrderSchema.optional(),
+    parentId: z
+      .uuidv4()
+      .nullable()
+      .optional()
+      .describe('Parent album ID for nesting (null = move to top-level, omit = no change)'),
+    icon: z.string().nullable().optional().describe('Icon key (null = clear / use default folder icon)'),
+    sortOrder: z
+      .number()
+      .optional()
+      .describe('Sibling display position. Lower values appear first. Computed by the client as a midpoint.'),
   })
   .meta({ id: 'UpdateAlbumDto' });
 
@@ -142,8 +154,17 @@ export const AlbumResponseSchema = z
     isActivityEnabled: z.boolean().describe('Activity feed enabled'),
     order: AssetOrderSchema.optional(),
     contributorCounts: z.array(ContributorCountResponseSchema).optional(),
+    parentId: z.string().nullable().describe('Parent album ID for nesting (null = top-level)'),
+    icon: z.string().nullable().describe('Icon key (null = default folder icon)'),
+    sortOrder: z.number().nullable().describe('Sibling display position. Lower values appear first.'),
   })
   .meta({ id: 'AlbumResponseDto' });
+
+const AlbumDescendantCountResponseSchema = z
+  .object({
+    count: z.int().min(0).describe('Number of descendant albums (children, grandchildren, etc.)'),
+  })
+  .meta({ id: 'AlbumDescendantCountResponseDto' });
 
 export class AddUsersDto extends createZodDto(AddUsersSchema) {}
 export class AlbumUserCreateDto extends createZodDto(AlbumUserCreateSchema) {}
@@ -156,6 +177,7 @@ export class GetAlbumInfoDto extends createZodDto(GetAlbumInfoSchema) {}
 export class AlbumStatisticsResponseDto extends createZodDto(AlbumStatisticsResponseSchema) {}
 export class UpdateAlbumUserDto extends createZodDto(UpdateAlbumUserSchema) {}
 export class AlbumResponseDto extends createZodDto(AlbumResponseSchema) {}
+export class AlbumDescendantCountResponseDto extends createZodDto(AlbumDescendantCountResponseSchema) {}
 class AlbumUserResponseDto extends createZodDto(AlbumUserResponseSchema) {}
 
 export type MapAlbumDto = {
@@ -170,6 +192,9 @@ export type MapAlbumDto = {
   id: string;
   isActivityEnabled: boolean;
   order: AssetOrder;
+  parentId: string | null;
+  icon: string | null;
+  sortOrder: number | null;
 };
 
 export const mapAlbum = (entity: MaybeDehydrated<MapAlbumDto>): AlbumResponseDto => {
@@ -212,5 +237,8 @@ export const mapAlbum = (entity: MaybeDehydrated<MapAlbumDto>): AlbumResponseDto
     assetCount: entity.assets?.length || 0,
     isActivityEnabled: entity.isActivityEnabled,
     order: entity.order,
+    parentId: entity.parentId,
+    icon: entity.icon,
+    sortOrder: entity.sortOrder,
   };
 };

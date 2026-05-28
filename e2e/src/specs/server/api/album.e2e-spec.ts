@@ -584,6 +584,100 @@ describe('/albums', () => {
       });
     });
 
+    describe('hierarchy', () => {
+      it('creates a child album under an existing parent', async () => {
+        const parent = await utils.createAlbum(user1.accessToken, { albumName: 'Trips' });
+
+        const { status, body } = await request(app)
+          .post('/albums')
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ albumName: 'Disneyland 2024', parentId: parent.id });
+
+        expect(status).toBe(201);
+        expect(body).toEqual(expect.objectContaining({ albumName: 'Disneyland 2024', parentId: parent.id }));
+      });
+
+      it('reports descendant count after building a 3-level chain', async () => {
+        const a = await utils.createAlbum(user1.accessToken, { albumName: 'Trips A' });
+        const b = await utils.createAlbum(user1.accessToken, { albumName: 'Trips B', parentId: a.id });
+        await utils.createAlbum(user1.accessToken, { albumName: 'Trips C', parentId: b.id });
+
+        const { status, body } = await request(app)
+          .get(`/albums/${a.id}/descendant-count`)
+          .set('Authorization', `Bearer ${user1.accessToken}`);
+
+        expect(status).toBe(200);
+        expect(body).toEqual({ count: 2 });
+      });
+
+      it('reparents an album to the root via PATCH parentId=null', async () => {
+        const parent = await utils.createAlbum(user1.accessToken, { albumName: 'Parent' });
+        const child = await utils.createAlbum(user1.accessToken, { albumName: 'Child', parentId: parent.id });
+
+        const { status, body } = await request(app)
+          .patch(`/albums/${child.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ parentId: null });
+
+        expect(status).toBe(200);
+        expect(body.parentId).toBeNull();
+      });
+
+      it('rejects making an album its own descendant (cycle prevention)', async () => {
+        const a = await utils.createAlbum(user1.accessToken, { albumName: 'CycleA' });
+        const b = await utils.createAlbum(user1.accessToken, { albumName: 'CycleB', parentId: a.id });
+
+        const { status, body } = await request(app)
+          .patch(`/albums/${a.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ parentId: b.id });
+
+        expect(status).toBe(400);
+        expect(body.message).toContain('descendants');
+      });
+
+      it('rejects an album becoming its own parent', async () => {
+        const a = await utils.createAlbum(user1.accessToken, { albumName: 'SelfParent' });
+
+        const { status } = await request(app)
+          .patch(`/albums/${a.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ parentId: a.id });
+
+        expect(status).toBe(400);
+      });
+
+      it('rejects nesting under an album owned by another user', async () => {
+        const mine = await utils.createAlbum(user1.accessToken, { albumName: 'Mine' });
+        const theirs = await utils.createAlbum(user2.accessToken, { albumName: 'Theirs' });
+
+        const { status } = await request(app)
+          .patch(`/albums/${mine.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ parentId: theirs.id });
+
+        expect(status).toBe(400);
+      });
+
+      it('cascades delete to descendants', async () => {
+        const a = await utils.createAlbum(user1.accessToken, { albumName: 'CascadeA' });
+        const b = await utils.createAlbum(user1.accessToken, { albumName: 'CascadeB', parentId: a.id });
+        const c = await utils.createAlbum(user1.accessToken, { albumName: 'CascadeC', parentId: b.id });
+
+        const del = await request(app)
+          .delete(`/albums/${a.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`);
+        expect(del.status).toBe(204);
+
+        for (const id of [a.id, b.id, c.id]) {
+          const { status } = await request(app)
+            .get(`/albums/${id}`)
+            .set('Authorization', `Bearer ${user1.accessToken}`);
+          expect(status).toBe(400);
+        }
+      });
+    });
+
     it('should not be able to update as a viewer', async () => {
       const { status, body } = await request(app)
         .patch(`/albums/${user1Albums[3].id}`)

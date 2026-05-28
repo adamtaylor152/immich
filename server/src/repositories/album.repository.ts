@@ -224,6 +224,7 @@ export class AlbumRepository {
       .selectAll('album')
       .select(withAlbumUsers(ownerId))
       .select(withSharedLink)
+      .orderBy('album.sortOrder', sql`asc nulls last`)
       .orderBy('album.createdAt', 'desc')
       .execute();
   }
@@ -326,41 +327,64 @@ export class AlbumRepository {
     const userIds = albumUsers.map((u) => u.userId);
     const roles = albumUsers.map((u) => u.role);
 
-    const result = await this.db
-      .with('album', (db) => db.insertInto('album').values(album).returningAll())
-      .with('album_user', (db) =>
-        db
-          .insertInto('album_user')
-          .expression((eb) =>
-            eb
-              .selectFrom('album')
-              .select(({ ref }) => [
-                ref('album.id').as('albumId'),
-                sql`unnest(${userIds}::uuid[])`.as('userId'),
-                sql`unnest(${roles}::album_user_role_enum[])`.as('role'),
-              ]),
-          )
-          .returning(['album_user.albumId', 'album_user.userId', 'album_user.role']),
-      )
-      .with('album_asset', (db) =>
-        db
-          .insertInto('album_asset')
-          .expression((eb) =>
-            eb
-              .selectFrom('album')
-              .select(({ ref }) => [ref('album.id').as('albumId'), sql`unnest(${assetIds}::uuid[])`.as('assetId')]),
-          )
-          .onConflict((oc) => oc.doNothing())
-          .returning(['album_asset.albumId', 'album_asset.assetId']),
-      )
-      .selectFrom('album')
-      .selectAll('album')
-      .select(withAlbumUsers(authUserId))
-      .select(withAssets({ withAssets: true }))
-      .$narrowType<{ assets: NotNull }>()
-      .executeTakeFirstOrThrow();
+    return this.db.transaction().execute(async (tx) => {
+      const result = await tx
+        .with('album', (db) => db.insertInto('album').values(album).returningAll())
+        .with('album_user', (db) =>
+          db
+            .insertInto('album_user')
+            .expression((eb) =>
+              eb
+                .selectFrom('album')
+                .select(({ ref }) => [
+                  ref('album.id').as('albumId'),
+                  sql`unnest(${userIds}::uuid[])`.as('userId'),
+                  sql`unnest(${roles}::album_user_role_enum[])`.as('role'),
+                ]),
+            )
+            .returning(['album_user.albumId', 'album_user.userId', 'album_user.role']),
+        )
+        .with('album_asset', (db) =>
+          db
+            .insertInto('album_asset')
+            .expression((eb) =>
+              eb
+                .selectFrom('album')
+                .select(({ ref }) => [ref('album.id').as('albumId'), sql`unnest(${assetIds}::uuid[])`.as('assetId')]),
+            )
+            .onConflict((oc) => oc.doNothing())
+            .returning(['album_asset.albumId', 'album_asset.assetId']),
+        )
+        .selectFrom('album')
+        .selectAll('album')
+        .select(withAlbumUsers(authUserId))
+        .select(withAssets({ withAssets: true }))
+        .$narrowType<{ assets: NotNull }>()
+        .executeTakeFirstOrThrow();
 
-    return result;
+      // Closure table: every album is its own ancestor.
+      await tx
+        .insertInto('album_closure')
+        .values({ id_ancestor: result.id, id_descendant: result.id })
+        .execute();
+
+      // If parented, copy every ancestor of the parent to be an ancestor of this new node.
+      if (result.parentId) {
+        const newId = result.id;
+        await tx
+          .insertInto('album_closure')
+          .columns(['id_ancestor', 'id_descendant'])
+          .expression(
+            tx
+              .selectFrom('album_closure')
+              .where('id_descendant', '=', result.parentId)
+              .select(['id_ancestor', sql<string>`${newId}::uuid`.as('id_descendant')]),
+          )
+          .execute();
+      }
+
+      return result;
+    });
   }
 
   update(id: string, album: Updateable<AlbumTable>, authUserId: string) {
@@ -376,6 +400,81 @@ export class AlbumRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.deleteFrom('album').where('id', '=', id).execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getDescendantIds(id: string): Promise<Set<string>> {
+    const rows = await this.db
+      .selectFrom('album_closure')
+      .select('id_descendant')
+      .where('id_ancestor', '=', id)
+      .where('id_descendant', '!=', id)
+      .execute();
+    return new Set(rows.map((r) => r.id_descendant));
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getAncestorIds(id: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('album_closure')
+      .select('id_ancestor')
+      .where('id_descendant', '=', id)
+      .where('id_ancestor', '!=', id)
+      .execute();
+    return rows.map((r) => r.id_ancestor);
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getDescendantCount(id: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('album_closure')
+      .select((eb) => sql<number>`${eb.fn.count('id_descendant')}::int`.as('count'))
+      .where('id_ancestor', '=', id)
+      .where('id_descendant', '!=', id)
+      .executeTakeFirstOrThrow();
+    return row.count;
+  }
+
+  /**
+   * Move an album (and its entire subtree) to a new parent. Closure-table rewrite
+   * uses the standard two-step algorithm:
+   *   1. Delete all ancestor->descendant rows where the descendant is in the moving
+   *      subtree but the ancestor is NOT (clears stale paths from the old parent chain).
+   *   2. If newParentId is set, insert a row for every (oldParentAncestor, subtreeNode)
+   *      pair so the subtree picks up the new chain.
+   * Self-rows are preserved by step 1 (subtree ancestors are also subtree descendants).
+   *
+   * The caller (service layer) is responsible for cycle prevention.
+   */
+  async reparent(id: string, newParentId: string | null): Promise<void> {
+    await this.db.transaction().execute(async (tx) => {
+      await tx.updateTable('album').set({ parentId: newParentId }).where('id', '=', id).execute();
+
+      await tx
+        .deleteFrom('album_closure')
+        .where('id_descendant', 'in', (eb) =>
+          eb.selectFrom('album_closure as sub').select('sub.id_descendant').where('sub.id_ancestor', '=', id),
+        )
+        .where('id_ancestor', 'not in', (eb) =>
+          eb.selectFrom('album_closure as sub2').select('sub2.id_descendant').where('sub2.id_ancestor', '=', id),
+        )
+        .execute();
+
+      if (newParentId !== null) {
+        await tx
+          .insertInto('album_closure')
+          .columns(['id_ancestor', 'id_descendant'])
+          .expression(
+            tx
+              .selectFrom('album_closure as supertree')
+              .innerJoin('album_closure as subtree', (j) => j.onTrue())
+              .where('supertree.id_descendant', '=', newParentId)
+              .where('subtree.id_ancestor', '=', id)
+              .select(['supertree.id_ancestor as id_ancestor', 'subtree.id_descendant as id_descendant']),
+          )
+          .execute();
+      }
+    });
   }
 
   @Chunked({ chunkSize: 30_000 })

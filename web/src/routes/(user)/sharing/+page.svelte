@@ -31,6 +31,7 @@
     groupOrder: SortOrder.Desc,
     sortBy: AlbumSortBy.MostRecentPhoto,
     sortOrder: SortOrder.Desc,
+    showAllAlbums: false,
     collapsedGroups: {},
   };
 

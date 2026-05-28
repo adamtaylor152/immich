@@ -33,6 +33,19 @@ export class AlbumTable {
   })
   albumThumbnailAssetId!: string | null;
 
+  @ForeignKeyColumn(() => AlbumTable, {
+    nullable: true,
+    onDelete: 'CASCADE',
+    comment: 'Parent album ID for nesting (null = top-level)',
+  })
+  parentId!: string | null;
+
+  @Column({ type: 'character varying', nullable: true, default: null })
+  icon!: string | null;
+
+  @Column({ type: 'double precision', nullable: true, default: null })
+  sortOrder!: number | null;
+
   @UpdateDateColumn()
   updatedAt!: Generated<Timestamp>;
 
