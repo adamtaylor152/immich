@@ -5,8 +5,8 @@
   import Albums from '$lib/components/album-page/AlbumsList.svelte';
   import UserPageLayout, { headerId } from '$lib/components/layouts/UserPageLayout.svelte';
   import EmptyPlaceholder from '$lib/components/shared-components/EmptyPlaceholder.svelte';
+  import UserSidebar from '$lib/components/shared-components/side-bar/UserSidebar.svelte';
   import TreeItems from '$lib/components/shared-components/tree/TreeItems.svelte';
-  import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import GroupTab from '$lib/elements/GroupTab.svelte';
   import SearchBar from '$lib/elements/SearchBar.svelte';
   import SkipLink from '$lib/elements/SkipLink.svelte';
@@ -138,7 +138,7 @@
 
 <UserPageLayout title={data.meta.title} use={[[scrollMemory, { routeStartsWith: Route.albums() }]]}>
   {#snippet sidebar()}
-    <Sidebar>
+    <UserSidebar>
       <SkipLink target={`#${headerId}`} text={$t('skip_to_albums')} breakpoint="md" />
       <section>
         <Text class="mb-4 ps-4" size="small">{$t('albums')}</Text>
@@ -169,7 +169,7 @@
           />
         </div>
       </section>
-    </Sidebar>
+    </UserSidebar>
   {/snippet}
 
   {#snippet buttons()}
