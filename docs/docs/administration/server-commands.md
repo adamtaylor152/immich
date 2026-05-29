@@ -2,22 +2,22 @@
 
 The `immich-server` docker image comes preinstalled with an administrative CLI (`immich-admin`) that supports the following commands:
 
-| Command                     | Description                                                                                                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `help`                      | Display help                                                                                                                                                                            |
-| `reset-admin-password`      | Reset the password for the admin user                                                                                                                                                   |
-| `disable-password-login`    | Disable password login                                                                                                                                                                  |
-| `enable-password-login`     | Enable password login                                                                                                                                                                   |
-| `disable-maintenance-mode`  | Disable maintenance mode                                                                                                                                                                |
-| `enable-maintenance-mode`   | Enable maintenance mode                                                                                                                                                                 |
-| `enable-oauth-login`        | Enable OAuth login                                                                                                                                                                      |
-| `disable-oauth-login`       | Disable OAuth login                                                                                                                                                                     |
-| `list-users`                | List Immich users                                                                                                                                                                       |
-| `grant-admin`               | Grant admin privileges to a user (by email)                                                                                                                                             |
-| `revoke-admin`              | Revoke admin privileges from a user (by email)                                                                                                                                          |
-| `version`                   | Print Immich version                                                                                                                                                                    |
-| `change-media-location`     | Change database file paths to align with a new media location                                                                                                                           |
-| `schema-check`              | Verify database migrations and check for schema drift                                                                                                                                   |
+| Command                    | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `help`                     | Display help                                                  |
+| `reset-admin-password`     | Reset the password for the admin user                         |
+| `disable-password-login`   | Disable password login                                        |
+| `enable-password-login`    | Enable password login                                         |
+| `disable-maintenance-mode` | Disable maintenance mode                                      |
+| `enable-maintenance-mode`  | Enable maintenance mode                                       |
+| `enable-oauth-login`       | Enable OAuth login                                            |
+| `disable-oauth-login`      | Disable OAuth login                                           |
+| `list-users`               | List Immich users                                             |
+| `grant-admin`              | Grant admin privileges to a user (by email)                   |
+| `revoke-admin`             | Revoke admin privileges from a user (by email)                |
+| `version`                  | Print Immich version                                          |
+| `change-media-location`    | Change database file paths to align with a new media location |
+| `schema-check`             | Verify database migrations and check for schema drift         |
 
 ## How to run a command
 

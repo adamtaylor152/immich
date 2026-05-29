@@ -40,7 +40,7 @@ so a leaked token has a small blast radius and no cross-repo reach.
    - **Webhook**: uncheck "Active" — this app pulls, no webhook needed
    - **Repository permissions**:
      - `Contents`: **Read & write**
-     - `Pull requests`: **Read & write**  (only if you want the bot to also
+     - `Pull requests`: **Read & write** (only if you want the bot to also
        remove the `fix:formatting` label; otherwise read)
      - everything else: **No access**
    - **Where can this GitHub App be installed?**: **Only on this account**
@@ -65,7 +65,7 @@ so a leaked token has a small blast radius and no cross-repo reach.
    gh secret set FORK_FORMATTER_PRIVATE_KEY < downloaded-private-key.pem
    ```
    Or via the GitHub UI: `Settings → Secrets and variables → Actions → New
-   repository secret`.
+repository secret`.
 
 ### Code change (apply after secrets exist)
 
@@ -129,11 +129,11 @@ as a required status check, this is already correct after the round-2 fix.
 If you want to enforce Zizmor for upstream and have it auto-pass on fork:
 
 1. Go to `Settings → Branches → Branch protection rules → Edit rule for
-   fork/main` (or whichever branch you protect).
+fork/main` (or whichever branch you protect).
 
 2. Under **Require status checks to pass before merging**, type `Zizmor`
    in the search box and select it. The exact-string match is essential:
-   `Zizmor (skipped on fork)` would be a *different* check and would not
+   `Zizmor (skipped on fork)` would be a _different_ check and would not
    be satisfied by either job.
 
 3. Save.
@@ -147,7 +147,7 @@ If you want to enforce Zizmor for upstream and have it auto-pass on fork:
 `.github/workflows/nsfw-unraid-docker.yml` now has `id-token: write` and
 `provenance: mode=min`. BuildKit produces unsigned provenance metadata
 embedded in the image manifest. The next conservative step is to add
-`actions/attest-build-provenance` to upload a *signed* SLSA attestation to
+`actions/attest-build-provenance` to upload a _signed_ SLSA attestation to
 Sigstore that consumers can verify with `gh attestation verify` or `cosign`.
 
 ### Manual steps (optional)
@@ -156,18 +156,19 @@ No GitHub UI changes are required — the OIDC trust between GitHub and
 Sigstore is already configured by `id-token: write`. The change is code-only:
 
 ```yaml
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@<pinned-sha>
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
+- name: Attest build provenance
+  uses: actions/attest-build-provenance@<pinned-sha>
+  with:
+    subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server
+    subject-digest: ${{ steps.build.outputs.digest }}
+    push-to-registry: true
 ```
 
 Add `id: build` to the existing `docker/build-push-action` step so
 `steps.build.outputs.digest` resolves. Repeat for the ML build job.
 
 Consumers verify with:
+
 ```bash
 gh attestation verify oci://ghcr.io/adamtaylor152/immich-server:commit-<sha> \
   --owner adamtaylor152
@@ -185,7 +186,7 @@ step is purely additive.
 
 `.github/actionlint.yaml:1-9` documents that labels in actionlint.yaml only
 teach the linter that labels exist — they don't control which workflows can
-*reach* the runner pool. That ACL is configured in the GitHub UI.
+_reach_ the runner pool. That ACL is configured in the GitHub UI.
 
 ### Manual steps
 
@@ -204,7 +205,7 @@ teach the linter that labels exist — they don't control which workflows can
 
 This is a one-time setup. The runner-mapping validation in
 `local-multi-runner-build.yml`'s `matrix` job catches misconfigured callers
-*before* the build job dispatches, but the operational ACL is the actual
+_before_ the build job dispatches, but the operational ACL is the actual
 gate.
 
 ---
