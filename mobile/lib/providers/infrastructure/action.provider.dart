@@ -28,14 +28,25 @@ import 'package:openapi/api.dart';
 final actionProvider = NotifierProvider<ActionNotifier, void>(ActionNotifier.new, dependencies: [multiSelectProvider]);
 
 class ActionResult {
+  /// Number of assets that were successfully acted upon.
   final int count;
+
+  /// Whether the action made any progress at all. `true` when at least one
+  /// asset succeeded — partial failures still have `success: true` so the
+  /// UI must check [failedCount] to distinguish full-success from partial.
   final bool success;
   final String? error;
 
-  const ActionResult({required this.count, required this.success, this.error});
+  /// Non-zero when the action only partially succeeded (some assets failed
+  /// while others succeeded). Allows callers to render a "partial" toast
+  /// instead of a misleading "success" toast that hides the failures.
+  /// Total attempted = [count] + [failedCount].
+  final int failedCount;
+
+  const ActionResult({required this.count, required this.success, this.error, this.failedCount = 0});
 
   @override
-  String toString() => 'ActionResult(count: $count, success: $success, error: $error)';
+  String toString() => 'ActionResult(count: $count, success: $success, error: $error, failedCount: $failedCount)';
 }
 
 class ActionNotifier extends Notifier<void> {
@@ -201,8 +212,17 @@ class ActionNotifier extends Notifier<void> {
     }
 
     try {
-      await _service.markNsfw(ids);
-      return ActionResult(count: ids.length, success: true);
+      final result = await _service.markNsfw(ids);
+      if (result.anyFailed) {
+        _logger.warning('Mark NSFW partial failure: ${result.failed.length}/${result.total} failed');
+        return ActionResult(
+          count: result.succeeded.length,
+          success: result.succeeded.isNotEmpty,
+          error: '${result.failed.length} of ${result.total} failed',
+          failedCount: result.failed.length,
+        );
+      }
+      return ActionResult(count: result.succeeded.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to mark assets as NSFW', error, stack);
       return ActionResult(count: ids.length, success: false, error: error.toString());
@@ -216,8 +236,17 @@ class ActionNotifier extends Notifier<void> {
     }
 
     try {
-      await _service.markSafe(ids);
-      return ActionResult(count: ids.length, success: true);
+      final result = await _service.markSafe(ids);
+      if (result.anyFailed) {
+        _logger.warning('Mark Safe partial failure: ${result.failed.length}/${result.total} failed');
+        return ActionResult(
+          count: result.succeeded.length,
+          success: result.succeeded.isNotEmpty,
+          error: '${result.failed.length} of ${result.total} failed',
+          failedCount: result.failed.length,
+        );
+      }
+      return ActionResult(count: result.succeeded.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to mark assets as safe', error, stack);
       return ActionResult(count: ids.length, success: false, error: error.toString());
@@ -566,6 +595,11 @@ class ActionNotifier extends Notifier<void> {
       return ActionResult(count: ids.length, success: false, error: 'Expected single asset for applying edits');
     }
 
+    // Fork only ships against server >= 3.0.0 (where AssetEditReadyV2 is
+    // emitted). Connecting to a pre-3.0.0 server will time out after 10s
+    // — surfaced as a server-incompatibility error to the user. The
+    // upstream V1-fallback branch was intentionally removed because the
+    // fork's edit pipeline depends on V2-shaped event payloads.
     final completer = ref.read(websocketProvider.notifier).waitForEvent("AssetEditReadyV2", (dynamic data) {
       final eventAsset = SyncAssetV2.fromJson(data["asset"]);
       return eventAsset?.id == ids.first;

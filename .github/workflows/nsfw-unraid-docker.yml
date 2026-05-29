@@ -31,6 +31,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # `id-token: write` is required for `docker/build-push-action` to mint
+      # a GitHub OIDC token, which BuildKit uses to produce signed SLSA
+      # provenance attestations alongside the `provenance: mode=min` metadata
+      # embedded in the image manifest. Without this permission, the build
+      # still succeeds but the provenance is unsigned BuildKit-embedded data
+      # only — not the verifiable SLSA attestation chain Unraid consumers
+      # need to validate `commit-<sha>` came from this exact workflow.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -50,7 +58,10 @@ jobs:
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          # Consistent with local-multi-runner-build.yml: use the repository
+          # owner identity (deterministic) instead of `github.actor` (varies by
+          # whoever pushed the commit — Renovate, a contributor, etc.).
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push server
@@ -60,7 +71,12 @@ jobs:
           file: server/Dockerfile
           platforms: linux/amd64
           push: true
-          provenance: false
+          # SLSA provenance generation is enabled (defaults to `mode=max`) so
+          # consumers can verify the build came from this repo + workflow. The
+          # `mode=min` variant keeps attestation overhead small while preserving
+          # the supply-chain attestation chain for Unraid users.
+          provenance: mode=min
+          sbom: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:${{ env.IMAGE_TAG }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-server:commit-${{ env.SOURCE_SHA }}
@@ -81,6 +97,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # See build-server above: required for signed SLSA provenance via OIDC.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -100,7 +118,9 @@ jobs:
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          # Consistent with local-multi-runner-build.yml: use the repository
+          # owner identity (deterministic) instead of `github.actor` (varies).
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push OpenVINO machine learning
@@ -110,7 +130,9 @@ jobs:
           file: machine-learning/Dockerfile
           platforms: linux/amd64
           push: true
-          provenance: false
+          # SLSA provenance generation enabled (mode=min keeps overhead small).
+          provenance: mode=min
+          sbom: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:${{ env.ML_IMAGE_TAG }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/immich-machine-learning:commit-${{ env.SOURCE_SHA }}-openvino

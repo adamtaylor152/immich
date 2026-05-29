@@ -77,6 +77,7 @@ class RunPodStateDto {
   ///
   String? gpuTypeId;
 
+  /// Serverless idle timeout; may be null when not yet provisioned.
   num? idleTimeoutSeconds;
 
   ///
@@ -185,8 +186,10 @@ class RunPodStateDto {
   ///
   bool? workerReady;
 
+  /// Serverless workersMax; may be null when not yet provisioned.
   num? workersMax;
 
+  /// Serverless workersMin; may be null when not yet provisioned.
   num? workersMin;
 
   @override

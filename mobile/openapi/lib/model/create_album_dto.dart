@@ -17,6 +17,8 @@ class CreateAlbumDto {
     this.albumUsers = const [],
     this.assetIds = const [],
     this.description,
+    this.icon,
+    this.parentId,
   });
 
   /// Album name
@@ -37,12 +39,32 @@ class CreateAlbumDto {
   ///
   String? description;
 
+  /// Optional icon key (see album-icons.ts)
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? icon;
+
+  /// Parent album ID for nesting (omit for top-level)
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? parentId;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is CreateAlbumDto &&
     other.albumName == albumName &&
     _deepEquality.equals(other.albumUsers, albumUsers) &&
     _deepEquality.equals(other.assetIds, assetIds) &&
-    other.description == description;
+    other.description == description &&
+    other.icon == icon &&
+    other.parentId == parentId;
 
   @override
   int get hashCode =>
@@ -50,10 +72,12 @@ class CreateAlbumDto {
     (albumName.hashCode) +
     (albumUsers.hashCode) +
     (assetIds.hashCode) +
-    (description == null ? 0 : description!.hashCode);
+    (description == null ? 0 : description!.hashCode) +
+    (icon == null ? 0 : icon!.hashCode) +
+    (parentId == null ? 0 : parentId!.hashCode);
 
   @override
-  String toString() => 'CreateAlbumDto[albumName=$albumName, albumUsers=$albumUsers, assetIds=$assetIds, description=$description]';
+  String toString() => 'CreateAlbumDto[albumName=$albumName, albumUsers=$albumUsers, assetIds=$assetIds, description=$description, icon=$icon, parentId=$parentId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -64,6 +88,16 @@ class CreateAlbumDto {
       json[r'description'] = this.description;
     } else {
     //  json[r'description'] = null;
+    }
+    if (this.icon != null) {
+      json[r'icon'] = this.icon;
+    } else {
+    //  json[r'icon'] = null;
+    }
+    if (this.parentId != null) {
+      json[r'parentId'] = this.parentId;
+    } else {
+    //  json[r'parentId'] = null;
     }
     return json;
   }
@@ -83,6 +117,8 @@ class CreateAlbumDto {
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
         description: mapValueOfType<String>(json, r'description'),
+        icon: mapValueOfType<String>(json, r'icon'),
+        parentId: mapValueOfType<String>(json, r'parentId'),
       );
     }
     return null;

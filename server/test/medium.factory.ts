@@ -189,6 +189,9 @@ export class MediumTestContext<S extends BaseService = BaseService> {
 
   async newMetadata(dto: Insertable<AssetMetadataTable>) {
     const { assetId, ...item } = dto;
+    // AssetRepository.upsertMetadata centralizes the asset.is_nsfw sync for
+    // 'ml-enrichment' items — see `syncIsNsfwForItems` — so callers do not need
+    // to mirror the boolean themselves.
     const result = await this.get(AssetRepository).upsertMetadata(assetId, [item]);
     return { metadata: dto, result };
   }

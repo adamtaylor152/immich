@@ -50,7 +50,9 @@ describe('/download', () => {
       for (const { id, filename } of files) {
         const bytes = await readFile(`${tempDir}/archive/${filename}`);
         const asset = await utils.getAssetInfo(admin.accessToken, id);
-        expect(utils.sha1(bytes)).toBe(asset.checksum);
+        // New uploads use SHA-256; legacy fixtures may still be SHA-1. Match by length.
+        const expected = asset.checksum.length === 44 ? utils.sha256(bytes) : utils.sha1(bytes);
+        expect(expected).toBe(asset.checksum);
       }
     });
   });

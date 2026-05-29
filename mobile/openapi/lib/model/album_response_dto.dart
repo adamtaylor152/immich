@@ -22,11 +22,14 @@ class AlbumResponseDto {
     required this.description,
     this.endDate,
     required this.hasSharedLink,
+    required this.icon,
     required this.id,
     required this.isActivityEnabled,
     this.lastModifiedAssetTimestamp,
     this.order,
+    required this.parentId,
     required this.shared,
+    required this.sortOrder,
     this.startDate,
     required this.updatedAt,
   });
@@ -66,6 +69,9 @@ class AlbumResponseDto {
   /// Has shared link
   bool hasSharedLink;
 
+  /// Icon key (null = default folder icon)
+  String? icon;
+
   /// Album ID
   String id;
 
@@ -89,8 +95,14 @@ class AlbumResponseDto {
   ///
   AssetOrder? order;
 
+  /// Parent album ID for nesting (null = top-level)
+  String? parentId;
+
   /// Is shared album
   bool shared;
+
+  /// Sibling display position. Lower values appear first.
+  num? sortOrder;
 
   /// Start date (earliest asset)
   ///
@@ -115,11 +127,14 @@ class AlbumResponseDto {
     other.description == description &&
     other.endDate == endDate &&
     other.hasSharedLink == hasSharedLink &&
+    other.icon == icon &&
     other.id == id &&
     other.isActivityEnabled == isActivityEnabled &&
     other.lastModifiedAssetTimestamp == lastModifiedAssetTimestamp &&
     other.order == order &&
+    other.parentId == parentId &&
     other.shared == shared &&
+    other.sortOrder == sortOrder &&
     other.startDate == startDate &&
     other.updatedAt == updatedAt;
 
@@ -135,16 +150,19 @@ class AlbumResponseDto {
     (description.hashCode) +
     (endDate == null ? 0 : endDate!.hashCode) +
     (hasSharedLink.hashCode) +
+    (icon == null ? 0 : icon!.hashCode) +
     (id.hashCode) +
     (isActivityEnabled.hashCode) +
     (lastModifiedAssetTimestamp == null ? 0 : lastModifiedAssetTimestamp!.hashCode) +
     (order == null ? 0 : order!.hashCode) +
+    (parentId == null ? 0 : parentId!.hashCode) +
     (shared.hashCode) +
+    (sortOrder == null ? 0 : sortOrder!.hashCode) +
     (startDate == null ? 0 : startDate!.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'AlbumResponseDto[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, albumUsers=$albumUsers, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, order=$order, shared=$shared, startDate=$startDate, updatedAt=$updatedAt]';
+  String toString() => 'AlbumResponseDto[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, albumUsers=$albumUsers, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, icon=$icon, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, order=$order, parentId=$parentId, shared=$shared, sortOrder=$sortOrder, startDate=$startDate, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -165,6 +183,11 @@ class AlbumResponseDto {
     //  json[r'endDate'] = null;
     }
       json[r'hasSharedLink'] = this.hasSharedLink;
+    if (this.icon != null) {
+      json[r'icon'] = this.icon;
+    } else {
+    //  json[r'icon'] = null;
+    }
       json[r'id'] = this.id;
       json[r'isActivityEnabled'] = this.isActivityEnabled;
     if (this.lastModifiedAssetTimestamp != null) {
@@ -177,7 +200,17 @@ class AlbumResponseDto {
     } else {
     //  json[r'order'] = null;
     }
+    if (this.parentId != null) {
+      json[r'parentId'] = this.parentId;
+    } else {
+    //  json[r'parentId'] = null;
+    }
       json[r'shared'] = this.shared;
+    if (this.sortOrder != null) {
+      json[r'sortOrder'] = this.sortOrder;
+    } else {
+    //  json[r'sortOrder'] = null;
+    }
     if (this.startDate != null) {
       json[r'startDate'] = this.startDate!.toUtc().toIso8601String();
     } else {
@@ -205,11 +238,16 @@ class AlbumResponseDto {
         description: mapValueOfType<String>(json, r'description')!,
         endDate: mapDateTime(json, r'endDate', r''),
         hasSharedLink: mapValueOfType<bool>(json, r'hasSharedLink')!,
+        icon: mapValueOfType<String>(json, r'icon'),
         id: mapValueOfType<String>(json, r'id')!,
         isActivityEnabled: mapValueOfType<bool>(json, r'isActivityEnabled')!,
         lastModifiedAssetTimestamp: mapDateTime(json, r'lastModifiedAssetTimestamp', r''),
         order: AssetOrder.fromJson(json[r'order']),
+        parentId: mapValueOfType<String>(json, r'parentId'),
         shared: mapValueOfType<bool>(json, r'shared')!,
+        sortOrder: json[r'sortOrder'] == null
+            ? null
+            : num.parse('${json[r'sortOrder']}'),
         startDate: mapDateTime(json, r'startDate', r''),
         updatedAt: mapDateTime(json, r'updatedAt', r'')!,
       );
@@ -266,9 +304,12 @@ class AlbumResponseDto {
     'createdAt',
     'description',
     'hasSharedLink',
+    'icon',
     'id',
     'isActivityEnabled',
+    'parentId',
     'shared',
+    'sortOrder',
     'updatedAt',
   };
 }

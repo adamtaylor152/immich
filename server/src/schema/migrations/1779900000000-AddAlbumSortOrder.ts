@@ -1,0 +1,39 @@
+import { Kysely, sql } from 'kysely';
+
+export async function up(db: Kysely<any>): Promise<void> {
+  await sql`ALTER TABLE "album" ADD COLUMN "sortOrder" double precision DEFAULT NULL;`.execute(db);
+
+  // Backfill so existing rows have a stable ordering: newer createdAt -> lower
+  // sortOrder -> appears first (ascending). Future drag-to-reorder writes pick
+  // midpoints between neighbors so subsequent moves never need to renumber.
+  await sql`UPDATE "album" SET "sortOrder" = -extract(epoch from "createdAt") WHERE "sortOrder" IS NULL;`.execute(db);
+
+  // Partial index for the common "siblings of P in display order" query.
+  await sql`CREATE INDEX "album_parent_sort_idx" ON "album" ("parentId", "sortOrder") WHERE "parentId" IS NOT NULL;`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "album_root_sort_idx" ON "album" ("sortOrder") WHERE "parentId" IS NULL;`.execute(db);
+
+  // Register overrides so schema:generate matches the partial @Index decorators
+  // on AlbumTable. SQL must byte-match `asIndexCreate` for those declarations.
+  await sql`
+    INSERT INTO "migration_overrides" ("name", "value") VALUES (
+      'index_album_parent_sort_idx',
+      '{"type":"index","name":"album_parent_sort_idx","sql":"CREATE INDEX \\"album_parent_sort_idx\\" ON \\"album\\" (\\"parentId\\", \\"sortOrder\\") WHERE ((\\"parentId\\" IS NOT NULL));"}'::jsonb
+    ) ON CONFLICT ("name") DO NOTHING;
+  `.execute(db);
+  await sql`
+    INSERT INTO "migration_overrides" ("name", "value") VALUES (
+      'index_album_root_sort_idx',
+      '{"type":"index","name":"album_root_sort_idx","sql":"CREATE INDEX \\"album_root_sort_idx\\" ON \\"album\\" (\\"sortOrder\\") WHERE ((\\"parentId\\" IS NULL));"}'::jsonb
+    ) ON CONFLICT ("name") DO NOTHING;
+  `.execute(db);
+}
+
+export async function down(db: Kysely<any>): Promise<void> {
+  await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_album_root_sort_idx';`.execute(db);
+  await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_album_parent_sort_idx';`.execute(db);
+  await sql`DROP INDEX IF EXISTS "album_root_sort_idx";`.execute(db);
+  await sql`DROP INDEX IF EXISTS "album_parent_sort_idx";`.execute(db);
+  await sql`ALTER TABLE "album" DROP COLUMN IF EXISTS "sortOrder";`.execute(db);
+}

@@ -38,11 +38,14 @@ export enum UploadFieldName {
 // Fork-only: legacy clients (immich-go, pre-3.0 mobile) send `duration` as an
 // `hh:mm:ss[.SSSSSS]` string instead of integer milliseconds. Convert that
 // shape here so the rest of the chain (.int().min(0)) sees a number.
+// SECURITY (security.md L4): hours and fractional-seconds parts are bounded
+// to a sane upper digit count so a pathological multi-megabyte input string
+// is rejected at regex time rather than coerced into Number().
 const hmsToMillisecondsPreprocess = (value: unknown) => {
-  if (typeof value !== 'string') {
+  if (typeof value !== 'string' || value.length > 64) {
     return value;
   }
-  const match = /^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(value);
+  const match = /^(\d{1,6}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/.exec(value);
   if (!match) {
     return value;
   }
@@ -77,7 +80,11 @@ const AssetMediaCreateSchema = AssetMediaBaseSchema.extend({
 const AssetBulkUploadCheckItemSchema = z
   .object({
     id: z.string().describe('Asset ID'),
-    checksum: z.string().describe('Base64 or hex encoded SHA1 hash'),
+    checksum: z
+      .string()
+      .describe(
+        'Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets.',
+      ),
   })
   .meta({ id: 'AssetBulkUploadCheckItem' });
 

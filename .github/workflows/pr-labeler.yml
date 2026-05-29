@@ -2,6 +2,13 @@ name: 'Pull Request Labeler'
 on:
   - pull_request_target # zizmor: ignore[dangerous-triggers] no attacker inputs are used here
 
+# Cancel previous label runs for the same PR when a new push arrives — the
+# labels are idempotent (path-based), so the latest run produces the correct
+# set. Avoids spurious "removed then re-added" label notifications.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

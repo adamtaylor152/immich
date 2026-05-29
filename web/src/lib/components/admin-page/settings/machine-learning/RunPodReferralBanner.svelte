@@ -1,18 +1,26 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import { t } from 'svelte-i18n';
 
   const STORAGE_KEY = 'immich.runpod.referralBannerDismissedAt';
   const REFERRAL_URL = 'https://runpod.io?ref=y1isyc1m';
 
-  let dismissed = $state(false);
+  // Read synchronously from localStorage in the script body (guarded by
+  // `browser` so SSR is safe). Avoids the previous `onMount` race that
+  // flashed the banner visible for already-dismissed admins between mount
+  // and the async fetch cycle for the admin panel.
+  const initialDismissed = browser
+    ? (() => {
+        try {
+          return Boolean(localStorage.getItem(STORAGE_KEY));
+        } catch {
+          // localStorage unavailable (private mode, etc.) — show the banner.
+          return false;
+        }
+      })()
+    : false;
 
-  onMount(() => {
-    try {
-      dismissed = Boolean(localStorage.getItem(STORAGE_KEY));
-    } catch {
-      // localStorage unavailable (private mode, etc.) — just show the banner.
-    }
-  });
+  let dismissed = $state(initialDismissed);
 
   const handleDismiss = () => {
     dismissed = true;
@@ -31,7 +39,7 @@
     <button
       type="button"
       onclick={handleDismiss}
-      aria-label="Dismiss banner"
+      aria-label={$t('admin.machine_learning_runpod_referral_banner_dismiss')}
       class="absolute top-2 right-2 rounded-full p-1 text-white/80 transition hover:bg-white/20 hover:text-white"
     >
       <svg
@@ -71,10 +79,9 @@
       </div>
 
       <div class="flex-1">
-        <h3 class="text-base/tight font-semibold">New to RunPod? Get $5–$500 in free credit</h3>
+        <h3 class="text-base/tight font-semibold">{$t('admin.machine_learning_runpod_referral_banner_title')}</h3>
         <p class="mt-1 text-sm text-white/90">
-          Sign up with this referral link — enough for up to ~30 hours of A5000 time. Helps support continued
-          development of this RunPod integration.
+          {$t('admin.machine_learning_runpod_referral_banner_subtitle')}
         </p>
       </div>
 
@@ -84,7 +91,7 @@
         rel="noopener noreferrer"
         class="inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-purple-700 shadow-sm transition hover:bg-white/90 hover:shadow-sm sm:self-center"
       >
-        Sign up
+        {$t('admin.machine_learning_runpod_referral_banner_signup')}
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="14"

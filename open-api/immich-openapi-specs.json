@@ -2245,6 +2245,58 @@
         "x-immich-state": "Stable"
       }
     },
+    "/albums/{id}/descendant-count": {
+      "get": {
+        "description": "Return the number of descendant albums (children, grandchildren, etc.) for a specific album. Used by the UI to show \"Delete X and N nested albums?\" confirmations.",
+        "operationId": "getAlbumDescendantCount",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumDescendantCountResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Count descendant albums",
+        "tags": [
+          "Albums"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "album.read"
+      }
+    },
     "/albums/{id}/map-markers": {
       "get": {
         "description": "Retrieve map marker information for a specific album by its ID.",
@@ -2936,7 +2988,7 @@
           {
             "name": "x-immich-checksum",
             "in": "header",
-            "description": "sha1 checksum that can be used for duplicate detection before the file is uploaded",
+            "description": "SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded",
             "required": false,
             "schema": {
               "type": "string"
@@ -17070,6 +17122,20 @@
         },
         "type": "object"
       },
+      "AlbumDescendantCountResponseDto": {
+        "properties": {
+          "count": {
+            "description": "Number of descendant albums (children, grandchildren, etc.)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
       "AlbumResponseDto": {
         "properties": {
           "albumName": {
@@ -17119,6 +17185,11 @@
             "description": "Has shared link",
             "type": "boolean"
           },
+          "icon": {
+            "description": "Icon key (null = default folder icon)",
+            "nullable": true,
+            "type": "string"
+          },
           "id": {
             "description": "Album ID",
             "type": "string"
@@ -17135,9 +17206,19 @@
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
           },
+          "parentId": {
+            "description": "Parent album ID for nesting (null = top-level)",
+            "nullable": true,
+            "type": "string"
+          },
           "shared": {
             "description": "Is shared album",
             "type": "boolean"
+          },
+          "sortOrder": {
+            "description": "Sibling display position. Lower values appear first.",
+            "nullable": true,
+            "type": "number"
           },
           "startDate": {
             "description": "Start date (earliest asset)",
@@ -17158,9 +17239,12 @@
           "createdAt",
           "description",
           "hasSharedLink",
+          "icon",
           "id",
           "isActivityEnabled",
+          "parentId",
           "shared",
+          "sortOrder",
           "updatedAt"
         ],
         "type": "object"
@@ -17869,7 +17953,7 @@
       "AssetBulkUploadCheckItem": {
         "properties": {
           "checksum": {
-            "description": "Base64 or hex encoded SHA1 hash",
+            "description": "Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets.",
             "type": "string"
           },
           "id": {
@@ -18801,7 +18885,7 @@
       "AssetResponseDto": {
         "properties": {
           "checksum": {
-            "description": "Base64 encoded SHA1 hash",
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
             "type": "string"
           },
           "createdAt": {
@@ -19161,7 +19245,7 @@
             "$ref": "#/components/schemas/BestPhotoScoreDto"
           },
           "checksum": {
-            "description": "Base64 encoded SHA1 hash",
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
             "type": "string"
           },
           "createdAt": {
@@ -19660,6 +19744,16 @@
           },
           "description": {
             "description": "Album description",
+            "type": "string"
+          },
+          "icon": {
+            "description": "Optional icon key (see album-icons.ts)",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Parent album ID for nesting (omit for top-level)",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           }
         },
@@ -23011,6 +23105,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23204,6 +23299,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23333,6 +23429,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -24307,6 +24404,7 @@
             "type": "string"
           },
           "idleTimeoutSeconds": {
+            "description": "Serverless idle timeout; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           },
@@ -24364,10 +24462,12 @@
             "type": "boolean"
           },
           "workersMax": {
+            "description": "Serverless workersMax; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           },
           "workersMin": {
+            "description": "Serverless workersMin; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           }
@@ -25506,6 +25606,7 @@
           "clipQueries": {
             "description": "CLIP query phrases used when no tag trigger matches",
             "items": {
+              "maxLength": 256,
               "type": "string"
             },
             "type": "array"
@@ -25516,11 +25617,13 @@
           },
           "name": {
             "description": "User-visible album name",
+            "maxLength": 256,
             "type": "string"
           },
           "tagTriggers": {
             "description": "Tags that mark an asset as belonging to this album",
             "items": {
+              "maxLength": 256,
               "type": "string"
             },
             "type": "array"
@@ -29697,12 +29800,28 @@
             "description": "Album description",
             "type": "string"
           },
+          "icon": {
+            "description": "Icon key (null = clear / use default folder icon)",
+            "nullable": true,
+            "type": "string"
+          },
           "isActivityEnabled": {
             "description": "Enable activity feed",
             "type": "boolean"
           },
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
+          },
+          "parentId": {
+            "description": "Parent album ID for nesting (null = move to top-level, omit = no change)",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "sortOrder": {
+            "description": "Sibling display position. Lower values appear first. Computed by the client as a midpoint.",
+            "type": "number"
           }
         },
         "type": "object"

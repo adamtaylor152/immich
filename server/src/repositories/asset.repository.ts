@@ -60,6 +60,7 @@ import {
 } from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { globToSqlPattern } from 'src/utils/misc';
+import { deriveIsNsfwFromMetadata } from 'src/utils/nsfw';
 
 export type AssetStats = Record<AssetType, number>;
 
@@ -401,7 +402,7 @@ export class AssetRepository {
       .execute();
   }
 
-  upsertMetadata(
+  async upsertMetadata(
     id: string,
     items: Array<{ key: string; value: Record<string, unknown> }>,
     kysely: Kysely<DB> = this.db,
@@ -410,7 +411,7 @@ export class AssetRepository {
       return [];
     }
 
-    return kysely
+    const result = await kysely
       .insertInto('asset_metadata')
       .values(items.map((item) => ({ assetId: id, ...item })))
       .onConflict((oc) =>
@@ -420,10 +421,36 @@ export class AssetRepository {
       )
       .returning(['key', 'value', 'updatedAt'])
       .execute();
+
+    // Mirror any ml-enrichment writes into the denormalized asset.is_nsfw column.
+    // The privacy filter (`utils/database.ts:nsfwAssetIdExists`) reads the boolean,
+    // so any write to the JSONB key must keep the column in sync — including
+    // writes coming directly from the public API (see AssetService).
+    await this.syncIsNsfwForItems(
+      kysely,
+      items.map((item) => ({ assetId: id, ...item })),
+    );
+
+    return result;
   }
 
-  upsertBulkMetadata(items: Insertable<AssetMetadataTable>[]) {
-    return this.db
+  /**
+   * Mirror the derived NSFW state into `asset.is_nsfw` so the privacy filter
+   * (utils/database.ts nsfwAssetIdExists) can do a single boolean probe instead
+   * of a correlated JSONB EXISTS. Called by ImageEnrichmentService inside the
+   * per-asset advisory lock.
+   */
+  async updateIsNsfw(assetId: string, isNsfw: boolean, kysely: Kysely<DB> = this.db): Promise<void> {
+    await kysely
+      .updateTable('asset')
+      .set({ is_nsfw: isNsfw })
+      .where('id', '=', asUuid(assetId))
+      .where('is_nsfw', '!=', isNsfw)
+      .execute();
+  }
+
+  async upsertBulkMetadata(items: Insertable<AssetMetadataTable>[]) {
+    const result = await this.db
       .insertInto('asset_metadata')
       .values(items)
       .onConflict((oc) =>
@@ -433,6 +460,30 @@ export class AssetRepository {
       )
       .returning(['assetId', 'key', 'value', 'updatedAt'])
       .execute();
+
+    await this.syncIsNsfwForItems(this.db, items);
+
+    return result;
+  }
+
+  /**
+   * Walk `items` for any `ml-enrichment` keys and update `asset.is_nsfw` to
+   * match what the runtime derivation would compute. Centralizes the sync at
+   * the repository layer so the boolean cannot drift from the JSONB regardless
+   * of who calls upsertMetadata (service layer, image-enrichment service, test
+   * factories, etc.).
+   */
+  private async syncIsNsfwForItems(
+    kysely: Kysely<DB>,
+    items: Array<{ assetId: string; key: string; value: unknown }>,
+  ): Promise<void> {
+    for (const item of items) {
+      if (item.key !== AssetMetadataKey.MlEnrichment) {
+        continue;
+      }
+      const isNsfw = deriveIsNsfwFromMetadata(item.value) ?? false;
+      await this.updateIsNsfw(item.assetId, isNsfw, kysely);
+    }
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })

@@ -1350,7 +1350,7 @@ class AssetsApi {
   /// * [String] slug:
   ///
   /// * [String] xImmichChecksum:
-  ///   sha1 checksum that can be used for duplicate detection before the file is uploaded
+  ///   SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded
   ///
   /// * [int] duration:
   ///   Duration in milliseconds (for videos)
@@ -1474,7 +1474,7 @@ class AssetsApi {
   /// * [String] slug:
   ///
   /// * [String] xImmichChecksum:
-  ///   sha1 checksum that can be used for duplicate detection before the file is uploaded
+  ///   SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded
   ///
   /// * [int] duration:
   ///   Duration in milliseconds (for videos)

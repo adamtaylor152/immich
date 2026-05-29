@@ -240,12 +240,24 @@ const SystemConfigRunPodSchema = z
   })
   .meta({ id: 'SystemConfigRunPodDto' });
 
+// Admin-controlled but unbounded strings flow into background-job log lines
+// and the smart-album evaluator. Cap to 256 chars and reject control characters
+// (CWE-117 log injection hardening + general defensive bound).
+// eslint-disable-next-line no-control-regex
+const SMART_ALBUM_STRING_CONTROL_PATTERN = /[\u0000-\u001F\u007F]/;
+const smartAlbumString = z
+  .string()
+  .max(256, { error: 'String must be 256 characters or fewer' })
+  .refine((value) => !SMART_ALBUM_STRING_CONTROL_PATTERN.test(value), {
+    error: 'String cannot contain control characters or newlines',
+  });
+
 const SmartAlbumKindSchema = z
   .object({
     enabled: configBool.describe('Whether this smart album is active'),
-    name: z.string().describe('User-visible album name'),
-    tagTriggers: z.array(z.string()).describe('Tags that mark an asset as belonging to this album'),
-    clipQueries: z.array(z.string()).describe('CLIP query phrases used when no tag trigger matches'),
+    name: smartAlbumString.describe('User-visible album name'),
+    tagTriggers: z.array(smartAlbumString).describe('Tags that mark an asset as belonging to this album'),
+    clipQueries: z.array(smartAlbumString).describe('CLIP query phrases used when no tag trigger matches'),
     threshold: z.number().meta({ format: 'double' }).min(0).max(1).describe('CLIP similarity threshold'),
   })
   .meta({ id: 'SmartAlbumKindConfig' });

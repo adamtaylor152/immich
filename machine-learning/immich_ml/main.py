@@ -1,6 +1,8 @@
 import asyncio
 import gc
+import ipaddress
 import os
+import secrets
 import signal
 import threading
 import time
@@ -39,6 +41,7 @@ from .schemas import (
     ModelType,
     PipelineRequest,
     T,
+    validate_options,
 )
 
 MultiPartParser.spool_max_size = 2**26  # spools to disk if payload is 64 MiB or larger
@@ -71,12 +74,41 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
             await preload_models(settings.preload)
         yield
     finally:
-        log.handlers.clear()
-        for model in model_cache.cache._cache.values():
-            del model
+        # IMPORTANT ordering for actual GPU memory release:
+        #   1. Quiesce the thread pool so no in-flight `predict` thread still
+        #      holds a model instance via its local stack.
+        #   2. Drop the cache's strong refs to model instances.
+        #   3. gc.collect() to release the now-unreferenced sessions.
+        #   4. torch.cuda.empty_cache() to return pinned GPU memory.
+        # `log.handlers.clear()` is deferred to the end so warnings emitted
+        # by the shutdown branches above are still visible to operators.
+        # See ml.md Medium "Lifespan teardown doesn't release model GPU memory".
         if thread_pool is not None:
-            thread_pool.shutdown()
+            try:
+                thread_pool.shutdown(wait=True)
+            except Exception as error:
+                log.warning(f"Failed to shut down thread pool during shutdown: {error}")
+        # Drop strong references held by the cache so Torch/OpenVINO sessions
+        # (which may hold multi-GB of pinned GPU memory) are eligible for GC
+        # before the worker is respawned. Without this, `del model` only
+        # deleted the loop variable and the cache dict kept references alive.
+        try:
+            model_cache.cache._cache.clear()
+        except Exception as error:
+            log.warning(f"Failed to clear model cache during shutdown: {error}")
         gc.collect()
+        # If torch is present, also drop any cached CUDA allocator state.
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+        except Exception as error:
+            log.warning(f"Failed to empty CUDA cache during shutdown: {error}")
+        # Final step — after this, log.warning is a no-op. Keep this LAST.
+        log.handlers.clear()
 
 
 async def preload_models(preload: PreloadModelData) -> None:
@@ -150,11 +182,18 @@ def get_entries(entries: str = Form()) -> InferenceEntries:
         with_deps: list[InferenceEntry] = []
         for task, types in request.items():
             for type, entry in types.items():
+                # Validate per-task option keyspace. Unknown keys are rejected
+                # to prevent schema drift / arbitrary kwargs to model constructors.
+                # See ml.md High concern "external_prompt and other ML model options".
+                raw_options = entry.get("options", {}) or {}
+                if not isinstance(raw_options, dict):
+                    raise HTTPException(422, "Invalid request format: options must be an object.")
+                validated_options = validate_options(task, type, raw_options)
                 parsed: InferenceEntry = {
                     "name": entry["modelName"],
                     "task": task,
                     "type": type,
-                    "options": entry.get("options", {}),
+                    "options": validated_options,
                 }
                 dep = get_model_deps(parsed["name"], type, task)
                 (with_deps if dep else without_deps).append(parsed)
@@ -170,30 +209,159 @@ app = FastAPI(lifespan=lifespan)
 # Health endpoints stay unauthenticated so RunPod's proxy probes and LAN deployments
 # (the default UX) keep working unchanged. Auth only kicks in for paths that actually
 # do inference, and only when IMMICH_ML_AUTH_TOKEN is set in the environment.
-_AUTH_EXEMPT_PATHS = {"/", "/ping"}
+# Normalised exempt paths — comparison strips trailing slash and lowercases.
+_AUTH_EXEMPT_PATHS = frozenset({"/", "/ping"})
+# Cap on the Authorization header byte length to avoid degenerate-input
+# denial-of-service from arbitrary-length headers. Starlette already caps but
+# making this explicit here is defensive and cheap.
+_MAX_AUTH_HEADER_LENGTH = 8 * 1024
+
+
+def _normalize_auth_path(path: str) -> str:
+    """Lowercase + trailing-slash strip, but never strip the root '/'."""
+    normalized = path.lower()
+    if len(normalized) > 1 and normalized.endswith("/"):
+        normalized = normalized.rstrip("/")
+    return normalized
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return True if `host` is a loopback bind (127.0.0.0/8 or ::1).
+
+    Uses `ipaddress` for proper classification so we don't false-positive on
+    hostnames like ``127.example.com`` and we correctly handle the bracketed
+    IPv6 form ``[::1]`` plus the literal hostname ``localhost``.
+    """
+    if not host:
+        return False
+    cleaned = host.strip().lower()
+    if cleaned == "localhost":
+        return True
+    # Tolerate bracketed IPv6 literals (e.g. "[::1]" or "[::1]:3003").
+    if cleaned.startswith("["):
+        closing = cleaned.find("]")
+        if closing > 0:
+            cleaned = cleaned[1:closing]
+    else:
+        # Strip ":port" suffix on bare IPv4 ("127.0.0.1:3003").
+        if cleaned.count(":") == 1:
+            cleaned = cleaned.split(":", 1)[0]
+    try:
+        return ipaddress.ip_address(cleaned).is_loopback
+    except ValueError:
+        return False
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, expected_token: str | None) -> None:
+    def __init__(self, app: ASGIApp, expected_token: str | None, allow_unauthenticated: bool) -> None:
         super().__init__(app)
-        self._expected = expected_token
+        # Encode once so compare_digest sees bytes of consistent type.
+        self._expected_bytes: bytes | None = expected_token.encode("utf-8") if expected_token else None
+        # When ``allow_unauthenticated`` is True the operator explicitly chose
+        # a loopback bind without a token (local-dev UX). Outside of that,
+        # ``expected_token`` must be set — startup refuses otherwise.
+        self._allow_unauthenticated = allow_unauthenticated
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if not self._expected:
+        normalized_path = _normalize_auth_path(request.url.path)
+        if normalized_path in _AUTH_EXEMPT_PATHS:
             return await call_next(request)
-        if request.url.path in _AUTH_EXEMPT_PATHS:
-            return await call_next(request)
+        if self._expected_bytes is None:
+            # Only possible when the operator explicitly opted into the
+            # loopback-no-token mode (allow_unauthenticated=True). On any
+            # other bind, startup raised — see _build_auth_config.
+            if self._allow_unauthenticated:
+                return await call_next(request)
+            # Fail closed. This branch should not be reachable in practice
+            # because startup refuses to construct the middleware in this
+            # state, but we never serve an unauthenticated request on a
+            # non-loopback bind. ml.md R3 (fail-closed bearer auth).
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
         header = request.headers.get("authorization", "")
+        if len(header) > _MAX_AUTH_HEADER_LENGTH:
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
         scheme, _, token = header.partition(" ")
-        if scheme.lower() != "bearer" or token != self._expected:
+        if scheme.lower() != "bearer":
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
+        # Constant-time comparison to prevent the matching-prefix timing leak
+        # that ``token != self._expected`` exposed. ml.md High #1.
+        if not secrets.compare_digest(token.encode("utf-8"), self._expected_bytes):
             return JSONResponse({"message": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
 
+class AuthConfigurationError(RuntimeError):
+    """Raised at startup when ML is bound to a non-loopback address with no
+    ``IMMICH_ML_AUTH_TOKEN``. We refuse to serve unauthenticated inference on
+    a network-reachable bind. ml.md R3 (fail-closed bearer auth)."""
+
+
+def _build_auth_config(
+    auth_token: str | None,
+    immich_host: str,
+) -> tuple[str | None, bool]:
+    """Validate the (token, bind) combination at startup.
+
+    Returns ``(token, allow_unauthenticated)``. Raises
+    ``AuthConfigurationError`` on the disallowed combination
+    (no token + non-loopback bind) so the operator notices immediately
+    rather than after an attacker hits the unauthenticated ``/predict``.
+    """
+    if auth_token:
+        return auth_token, False
+    if _is_loopback_host(immich_host):
+        # Local-dev UX: explicit loopback bind without a token is fine.
+        return None, True
+    raise AuthConfigurationError(
+        "IMMICH_ML_AUTH_TOKEN is unset and IMMICH_HOST "
+        f"{immich_host!r} is not a loopback address. ML will not start "
+        "without authentication on a network-reachable bind. Set "
+        "IMMICH_ML_AUTH_TOKEN to enable bearer auth, or bind ML to "
+        "127.0.0.1/::1/localhost for trusted local-only use."
+    )
+
+
 _auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
-if _auth_token:
-    log.info("Bearer-token authentication enabled for /predict")
-app.add_middleware(BearerAuthMiddleware, expected_token=_auth_token)
+_immich_host = os.environ.get("IMMICH_HOST", "[::]").strip()
+# NOTE: ``_build_auth_config`` raises ``AuthConfigurationError`` at import
+# time when the (token, bind) combination is unsafe (no token + non-loopback
+# bind). This is intentional — the only known importer of this module is
+# ``__main__.py`` via gunicorn workers, and tooling that imported the app
+# without setting envs would silently expose ``/predict``. A bright,
+# multi-line banner is logged below so operators can spot the auth state
+# in worker logs without scanning for a single line. If a future workflow
+# needs to import this module for introspection without serving traffic
+# (e.g. an OpenAPI dump), move the validation into ``lifespan`` startup so
+# the import stays side-effect-free.
+_expected_token, _allow_unauthenticated = _build_auth_config(_auth_token, _immich_host)
+
+# Prominent startup banner so the auth state is visible in worker logs.
+# A single log.info/warning line is easy to miss when gunicorn boots; the
+# banner format mirrors other Immich startup output and prints the bind
+# host so operators can correlate it with their compose / k8s config.
+_auth_state = (
+    "ENABLED  (bearer token required for /predict)"
+    if _expected_token
+    else "DISABLED (loopback bind; /predict open to local processes)"
+)
+log.info("=" * 64)
+log.info("Immich ML auth: %s", _auth_state)
+log.info("  IMMICH_HOST              = %s", _immich_host)
+log.info("  IMMICH_ML_AUTH_TOKEN set = %s", "yes" if _expected_token else "no")
+log.info("=" * 64)
+if not _expected_token:
+    log.warning(
+        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback %r); /predict is "
+        "unauthenticated. Acceptable for local development only — any "
+        "non-loopback bind without a token will refuse to start.",
+        _immich_host,
+    )
+
+app.add_middleware(
+    BearerAuthMiddleware,
+    expected_token=_expected_token,
+    allow_unauthenticated=_allow_unauthenticated,
+)
 
 
 @app.get("/")
@@ -208,6 +376,16 @@ def ping() -> PlainTextResponse:
 
 @app.get("/hardware")
 def hardware() -> ORJSONResponse:
+    """Report available hardware acceleration providers.
+
+    Public contract — KEEP IN SYNC WITH ``server/src/repositories/machine-learning.repository.ts``
+    (``MachineLearningHardware``) and ``server/src/enum.ts`` (``MachineLearningHardwareAcceleration``).
+    ``preferredAcceleration`` is serialized as the lowercase string value of
+    ``ImageDescriptionAcceleration`` (``"cuda"`` / ``"openvino"`` / ``"auto"``).
+    Changing the enum requires a coordinated update on the server side and
+    a corresponding Zod schema parse — adding a new variant without updating
+    the server will silently break the front-end auto-detect UX.
+    """
     providers = ort.get_available_providers()
     openvino_device_ids = _openvino_device_ids(providers)
     torch_cuda_available, cuda_device_count = _torch_cuda_info()

@@ -16,8 +16,11 @@ class UpdateAlbumDto {
     this.albumName,
     this.albumThumbnailAssetId,
     this.description,
+    this.icon,
     this.isActivityEnabled,
     this.order,
+    this.parentId,
+    this.sortOrder,
   });
 
   /// Album name
@@ -47,6 +50,9 @@ class UpdateAlbumDto {
   ///
   String? description;
 
+  /// Icon key (null = clear / use default folder icon)
+  String? icon;
+
   /// Enable activity feed
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -64,13 +70,28 @@ class UpdateAlbumDto {
   ///
   AssetOrder? order;
 
+  /// Parent album ID for nesting (null = move to top-level, omit = no change)
+  String? parentId;
+
+  /// Sibling display position. Lower values appear first. Computed by the client as a midpoint.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? sortOrder;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is UpdateAlbumDto &&
     other.albumName == albumName &&
     other.albumThumbnailAssetId == albumThumbnailAssetId &&
     other.description == description &&
+    other.icon == icon &&
     other.isActivityEnabled == isActivityEnabled &&
-    other.order == order;
+    other.order == order &&
+    other.parentId == parentId &&
+    other.sortOrder == sortOrder;
 
   @override
   int get hashCode =>
@@ -78,11 +99,14 @@ class UpdateAlbumDto {
     (albumName == null ? 0 : albumName!.hashCode) +
     (albumThumbnailAssetId == null ? 0 : albumThumbnailAssetId!.hashCode) +
     (description == null ? 0 : description!.hashCode) +
+    (icon == null ? 0 : icon!.hashCode) +
     (isActivityEnabled == null ? 0 : isActivityEnabled!.hashCode) +
-    (order == null ? 0 : order!.hashCode);
+    (order == null ? 0 : order!.hashCode) +
+    (parentId == null ? 0 : parentId!.hashCode) +
+    (sortOrder == null ? 0 : sortOrder!.hashCode);
 
   @override
-  String toString() => 'UpdateAlbumDto[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, description=$description, isActivityEnabled=$isActivityEnabled, order=$order]';
+  String toString() => 'UpdateAlbumDto[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, description=$description, icon=$icon, isActivityEnabled=$isActivityEnabled, order=$order, parentId=$parentId, sortOrder=$sortOrder]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -101,6 +125,11 @@ class UpdateAlbumDto {
     } else {
     //  json[r'description'] = null;
     }
+    if (this.icon != null) {
+      json[r'icon'] = this.icon;
+    } else {
+    //  json[r'icon'] = null;
+    }
     if (this.isActivityEnabled != null) {
       json[r'isActivityEnabled'] = this.isActivityEnabled;
     } else {
@@ -110,6 +139,16 @@ class UpdateAlbumDto {
       json[r'order'] = this.order;
     } else {
     //  json[r'order'] = null;
+    }
+    if (this.parentId != null) {
+      json[r'parentId'] = this.parentId;
+    } else {
+    //  json[r'parentId'] = null;
+    }
+    if (this.sortOrder != null) {
+      json[r'sortOrder'] = this.sortOrder;
+    } else {
+    //  json[r'sortOrder'] = null;
     }
     return json;
   }
@@ -126,8 +165,13 @@ class UpdateAlbumDto {
         albumName: mapValueOfType<String>(json, r'albumName'),
         albumThumbnailAssetId: mapValueOfType<String>(json, r'albumThumbnailAssetId'),
         description: mapValueOfType<String>(json, r'description'),
+        icon: mapValueOfType<String>(json, r'icon'),
         isActivityEnabled: mapValueOfType<bool>(json, r'isActivityEnabled'),
         order: AssetOrder.fromJson(json[r'order']),
+        parentId: mapValueOfType<String>(json, r'parentId'),
+        sortOrder: json[r'sortOrder'] == null
+            ? null
+            : num.parse('${json[r'sortOrder']}'),
       );
     }
     return null;

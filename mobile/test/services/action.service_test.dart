@@ -7,6 +7,7 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
+import 'package:immich_mobile/repositories/asset_api.repository.dart';
 import 'package:immich_mobile/repositories/download.repository.dart';
 import 'package:immich_mobile/services/action.service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -123,10 +124,14 @@ void main() {
     test('marks remote assets as NSFW through the API repository', () async {
       const ids = ['remote-1', 'remote-2'];
 
-      when(() => assetApiRepository.markNsfw(ids)).thenAnswer((_) async {});
+      when(
+        () => assetApiRepository.markNsfw(ids),
+      ).thenAnswer((_) async => const AssetEnrichmentResult(succeeded: ids, failed: <String>[]));
 
-      await sut.markNsfw(ids);
+      final result = await sut.markNsfw(ids);
 
+      expect(result.succeeded, ids);
+      expect(result.failed, isEmpty);
       verify(() => assetApiRepository.markNsfw(ids)).called(1);
       verifyNoMoreInteractions(remoteAssetRepository);
     });
@@ -136,10 +141,14 @@ void main() {
     test('marks remote assets as safe through the API repository', () async {
       const ids = ['remote-1', 'remote-2'];
 
-      when(() => assetApiRepository.markSafe(ids)).thenAnswer((_) async {});
+      when(
+        () => assetApiRepository.markSafe(ids),
+      ).thenAnswer((_) async => const AssetEnrichmentResult(succeeded: ids, failed: <String>[]));
 
-      await sut.markSafe(ids);
+      final result = await sut.markSafe(ids);
 
+      expect(result.succeeded, ids);
+      expect(result.failed, isEmpty);
       verify(() => assetApiRepository.markSafe(ids)).called(1);
       verifyNoMoreInteractions(remoteAssetRepository);
     });

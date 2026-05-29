@@ -278,7 +278,9 @@ export class StorageCore {
     const config = await getConfig(repos, { withCache: true });
     if (assetInfo && config.storageTemplate.hashVerificationEnabled) {
       const { checksum } = assetInfo;
-      const newChecksum = await this.cryptoRepository.hashFile(newPath);
+      // Match algorithm to the stored checksum length (SHA-1 = 20 bytes legacy,
+      // SHA-256 = 32 bytes new). Re-uploads in either era should verify cleanly.
+      const newChecksum = await this.cryptoRepository.hashFileMatching(newPath, checksum);
       if (!newChecksum.equals(checksum)) {
         this.logger.warn(
           `Unable to complete move. File checksum mismatch: ${newChecksum.toString('base64')} !== ${checksum.toString(

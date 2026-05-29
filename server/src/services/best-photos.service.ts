@@ -21,6 +21,11 @@ import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 
 type BestPhotoScoringAsset = NonNullable<Awaited<ReturnType<AssetJobRepository['getForBestPhotoScoring']>>>;
 
+/** Asset row joined with best_photo_score columns. Derived from the repository
+ * return type so a schema change to `asset_best_photo_score` trips the
+ * compiler at `mapBestPhotoAsset`. */
+type BestPhotoAssetRow = Awaited<ReturnType<BestPhotosRepository['getBestPhotos']>>['items'][number];
+
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
 const isScreenshotLike = (fileName: string) =>
@@ -157,7 +162,7 @@ export class BestPhotosService {
     };
   }
 
-  private mapBestPhotoAsset(auth: AuthDto, asset: any): BestPhotoAssetResponseDto {
+  private mapBestPhotoAsset(auth: AuthDto, asset: BestPhotoAssetRow): BestPhotoAssetResponseDto {
     return {
       ...mapAsset(asset, { auth }),
       bestPhotoScore: {

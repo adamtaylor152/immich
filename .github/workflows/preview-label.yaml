@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [labeled, closed]
 
+# Serialize per-PR — the workflow mutates labels and posts status comments.
+# Queue rather than cancel so a "preview added" comment isn't lost when a
+# "PR closed" event arrives mid-flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 permissions: {}
 
 jobs:

@@ -36,6 +36,14 @@ class DriftBackupRepository extends DriftDatabaseRepository {
   /// - remainder: number of those assets that do not yet exist on the server for [userId]
   ///              (includes processing)
   /// - processing: number of those assets that are still preparing/have a null checksum
+  ///
+  /// **NOTE (SHA-256 server transition, commit `3dbbb1e6e`):** the
+  /// `lae.checksum = rae.checksum` join compares local SHA-1 against
+  /// remote checksum, which is SHA-256 for any asset uploaded after the
+  /// transition. The join silently fails for those rows, so the
+  /// `remainder_count` is inflated and the "already backed up" set is
+  /// understated for affected users. See `hash.service.dart` for the
+  /// full impact analysis and follow-up plan.
   Future<({int total, int remainder, int processing})> getAllCounts(String userId) async {
     const sql = '''
         SELECT
@@ -81,6 +89,18 @@ class DriftBackupRepository extends DriftDatabaseRepository {
     );
   }
 
+  /// Returns local assets that look like they still need to be backed up
+  /// for [userId].
+  ///
+  /// **NOTE (SHA-256 server transition, commit `3dbbb1e6e`):** the
+  /// `remote.checksum equalsExp lae.checksum` predicate compares local SHA-1
+  /// against remote checksum, which is SHA-256 for assets uploaded after the
+  /// transition. Affected assets will be re-included as upload candidates on
+  /// every backup cycle. The server still rejects the re-upload with
+  /// `AssetMediaStatus.DUPLICATE` (its own SHA-256 calc matches), so no
+  /// duplicate row is created, but the bandwidth is wasted and the local
+  /// `getBackupCounts` UI displays a permanently-pending state. See
+  /// `hash.service.dart` for the full analysis and follow-up plan.
   Future<List<LocalAsset>> getCandidates(String userId, {bool onlyHashed = true}) async {
     final selectedAlbumIds = _db.localAlbumEntity.selectOnly(distinct: true)
       ..addColumns([_db.localAlbumEntity.id])

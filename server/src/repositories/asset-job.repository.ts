@@ -640,9 +640,15 @@ export class AssetJobRepository {
   }
 
   /**
-   * Stream image assets that have a successfully completed description, yielding
-   * the asset id, owner id, and the tag array from the description result. Used
-   * by the smart-album bulk re-evaluate job.
+   * Stream image AND video assets that have a successfully completed description,
+   * yielding the asset id, owner id, and the tag array from the description result.
+   * Used by the smart-album bulk re-evaluate job.
+   *
+   * Videos with persisted duplicate frames are included because
+   * `ImageEnrichmentService.handleImageDescription` runs on both images and
+   * videos (compositing video frames into a grid for the VLM). Filtering on
+   * `type = Image` would mean the admin "Re-evaluate all" button could never
+   * remove or refresh video memberships in smart albums.
    */
   @GenerateSql({ params: [], stream: true })
   streamForSmartAlbumReevaluation() {
@@ -658,7 +664,6 @@ export class AssetJobRepository {
         'asset.ownerId',
         sql<string[]>`COALESCE(asset_metadata.value -> 'description' -> 'result' -> 'tags', '[]'::jsonb)`.as('tags'),
       ])
-      .where('asset.type', '=', sql.lit(AssetType.Image))
       .where('asset.deletedAt', 'is', null)
       .$call(withDefaultVisibility)
       .where((eb) =>

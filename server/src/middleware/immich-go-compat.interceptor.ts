@@ -7,12 +7,16 @@ import { Observable, map } from 'rxjs';
 // fields back to the pre-3.0 `hh:mm:ss.SSS` string format when the request
 // looks like it comes from immich-go.
 //
-// immich-go does not set a custom User-Agent (see simulot/immich-go's
-// immich/client.go), so it sends Go's default `Go-http-client/1.1`. We also
-// match `immich-go/*` in case a future release adds an explicit UA. Other
-// Go HTTP clients hitting this fork will also receive the legacy format —
-// acceptable for a self-hosted fork where this is the deliberate behavior.
-const LEGACY_USER_AGENT = /^(immich-go|Go-http-client)\//i;
+// SECURITY/CORRECTNESS (security.md M4, server.md High #immich-go): only
+// match `immich-go/*` explicitly. The previous regex also matched the
+// generic Go stdlib `Go-http-client/*` UA, which is the default for every
+// Go HTTP client (Terraform providers, cloud CLIs, Prometheus exporters,
+// custom integrations). All of those received responses that diverged from
+// the OpenAPI contract. To opt in, immich-go must send a UA starting with
+// `immich-go/`; clients can also use the explicit `X-Immich-Go-Compat: 1`
+// header for legacy support without rebuilding.
+const LEGACY_USER_AGENT = /^immich-go\//i;
+const OPT_IN_HEADER = 'x-immich-go-compat';
 
 function millisecondsToHmsString(ms: number): string {
   const total = Math.max(0, Math.floor(ms));
@@ -53,8 +57,12 @@ function rewriteDurations(node: unknown, depth = 0): void {
 @Injectable()
 export class ImmichGoCompatInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler<unknown>): Observable<unknown> {
-    const userAgent = context.switchToHttp().getRequest<Request>().headers['user-agent'];
-    if (!userAgent || !LEGACY_USER_AGENT.test(userAgent)) {
+    const request = context.switchToHttp().getRequest<Request>();
+    const userAgent = request.headers['user-agent'];
+    const optInHeader = request.headers[OPT_IN_HEADER];
+    const matchesUA = !!userAgent && LEGACY_USER_AGENT.test(userAgent);
+    const optedIn = optInHeader === '1' || optInHeader === 'true';
+    if (!matchesUA && !optedIn) {
       return next.handle();
     }
     return next.handle().pipe(

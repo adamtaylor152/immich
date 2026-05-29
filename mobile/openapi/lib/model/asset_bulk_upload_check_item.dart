@@ -17,7 +17,7 @@ class AssetBulkUploadCheckItem {
     required this.id,
   });
 
-  /// Base64 or hex encoded SHA1 hash
+  /// Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets.
   String checksum;
 
   /// Asset ID

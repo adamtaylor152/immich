@@ -16,7 +16,7 @@
   import { fileUploadHandler, openFileUploadDialog } from '$lib/utils/file-uploader';
   import { handleError } from '$lib/utils/handle-error';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
-  import { getAssetInfo, type SharedLinkResponseDto } from '@immich/sdk';
+  import { getAssetInfo, type AssetResponseDto, type SharedLinkResponseDto } from '@immich/sdk';
   import { IconButton, Logo, toastManager } from '@immich/ui';
   import { mdiArrowLeft, mdiDownload, mdiFileImagePlusOutline, mdiSelectAll } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -33,6 +33,21 @@
   const viewport: Viewport = $state({ width: 0, height: 0 });
 
   let assets = $derived(sharedLink.assets);
+
+  // Local cursor `$state` for the single-asset shared-link path. AssetViewer's
+  // `cursor` prop is non-bindable, so the owner of the cursor (this component)
+  // must hold the state and update it via the `onAssetUpdate` callback when
+  // an asset refresh happens (e.g. NSFW review, refresh-people).
+  let singleAsset = $state<AssetResponseDto | undefined>(undefined);
+
+  const loadSingleAsset = async (id: string) => {
+    // Clear before the network round-trip so a switch to a different shared
+    // asset doesn't render the previous asset's data behind the spinner.
+    if (singleAsset?.id !== id) {
+      singleAsset = undefined;
+    }
+    singleAsset = await getAssetInfo({ ...authManager.params, id });
+  };
 
   dragAndDropFilesStore.subscribe((value) => {
     if (value.isDragging && value.files.length > 0) {
@@ -131,9 +146,23 @@
     {/if}
   </header>
 {:else if assets.length === 1}
-  {#await getAssetInfo({ ...authManager.params, id: assets[0].id }) then asset}
+  {#await loadSingleAsset(assets[0].id) then _}
     {#await import('$lib/components/asset-viewer/AssetViewer.svelte') then { default: AssetViewer }}
-      <AssetViewer cursor={{ current: asset }} onAction={handleAction} />
+      {#if singleAsset}
+        <!-- Local `$state` so the asset can be refreshed in-place (e.g. NSFW
+             review). AssetViewer's `cursor` prop is non-bindable, so the owner of
+             the cursor (this component) must hold the `$state` and update it
+             via the `onAssetUpdate` callback. -->
+        <AssetViewer
+          cursor={{ current: singleAsset }}
+          onAssetUpdate={(updatedAsset) => {
+            if (singleAsset?.id === updatedAsset.id) {
+              singleAsset = updatedAsset;
+            }
+          }}
+          onAction={handleAction}
+        />
+      {/if}
     {/await}
   {/await}
 {/if}

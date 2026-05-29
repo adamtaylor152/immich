@@ -61,6 +61,12 @@ import { ASSET_CHECKSUM_CONSTRAINT } from 'src/utils/database';
   columns: ['id'],
   where: `visibility = 'timeline' AND "deletedAt" IS NULL`,
 })
+// Partial index backing the privacy-gate NSFW probe (migration 2100000000010).
+@Index({
+  name: 'idx_asset_is_nsfw',
+  columns: ['is_nsfw'],
+  where: 'is_nsfw = true',
+})
 // For all assets, each originalpath must be unique per user and library
 export class AssetTable {
   @PrimaryGeneratedColumn()
@@ -91,7 +97,7 @@ export class AssetTable {
   duration!: number | null;
 
   @Column({ type: 'bytea', index: true })
-  checksum!: Buffer; // sha1 checksum
+  checksum!: Buffer; // SHA-256 for new uploads (32 bytes), SHA-1 for legacy rows (20 bytes); see `checksumAlgorithm`
 
   @Column({ enum: asset_checksum_algorithm_enum })
   checksumAlgorithm!: ChecksumAlgorithm;
@@ -149,4 +155,13 @@ export class AssetTable {
 
   @Column({ type: 'boolean', default: false })
   isEdited!: Generated<boolean>;
+
+  /**
+   * Denormalized NSFW flag. Owned by ImageEnrichmentService — updated inside
+   * the per-asset advisory lock whenever the asset_metadata blob is written.
+   * See migration `2100000000010-AddAssetIsNsfwIndex.ts`. Index is partial on
+   * `is_nsfw = true` so the privacy-filter probe is a single index scan.
+   */
+  @Column({ type: 'boolean', default: false })
+  is_nsfw!: Generated<boolean>;
 }

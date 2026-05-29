@@ -26,6 +26,7 @@ import { isGranted, requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
 import { getHiddenContentQueryOptions, getPrivacyQueryOptions } from 'src/utils/hidden-content';
 import { isSmartSearchEnabled } from 'src/utils/misc';
+import { fromChecksum } from 'src/utils/request';
 
 @Injectable()
 export class SearchService extends BaseService {
@@ -106,8 +107,8 @@ export class SearchService extends BaseService {
 
     let checksum: Buffer | undefined;
     if (dto.checksum) {
-      const encoding = dto.checksum.length === 28 ? 'base64' : 'hex';
-      checksum = Buffer.from(dto.checksum, encoding);
+      // Supports SHA-1 (legacy) and SHA-256 (current) digests, both hex and base64.
+      checksum = fromChecksum(dto.checksum);
     }
 
     const page = dto.page ?? 1;

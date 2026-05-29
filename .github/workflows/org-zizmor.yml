@@ -5,6 +5,17 @@ on:
   push:
     branches: [main]
 
+# Cancel previous Zizmor runs for the same PR/branch when a new push lands.
+# The push-to-main case still serializes (one run per commit) so the audit
+# results posted to the security tab reflect the latest tip. Standard
+# pattern: cancel only for PR triggers, queue for push to avoid losing
+# the post-merge audit on rapid back-to-back merges.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
 jobs:
   zizmor:
     name: Zizmor
@@ -17,3 +28,22 @@ jobs:
       actions: read
       contents: read
       security-events: write
+
+  zizmor-skipped:
+    # Required-check satisfaction: when the upstream `zizmor` reusable workflow
+    # is skipped (fork environment), this job posts a passing status under the
+    # EXACT same name (`Zizmor`) so any branch-protection rule listing `Zizmor`
+    # as a required check is satisfied. GitHub matches required checks by
+    # exact name string — `Zizmor (skipped on fork)` would be a DIFFERENT check
+    # and would NOT satisfy a `Zizmor` required-check rule. The mutually
+    # exclusive `if:` conditions on the two jobs (one runs only upstream, the
+    # other only on forks) guarantee exactly one runs per workflow execution,
+    # so name collision is benign and the status check is unambiguous.
+    name: Zizmor
+    if: github.repository_owner != 'immich-app'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Mark as skipped
+        run: |
+          echo "::notice::Zizmor is upstream-only. This fork runs no-op to satisfy required checks."

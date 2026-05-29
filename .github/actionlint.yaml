@@ -1,3 +1,12 @@
+# Note: adding labels here only teaches actionlint that the labels exist —
+# it does NOT control which workflows or repositories can target the runner
+# pool. The runner-group access scope (e.g. "this repository only") is
+# configured in GitHub Settings → Actions → Runner groups. Verify the
+# `aiimmich` runner group is restricted to `adamtaylor152/immich` so a
+# parallel adamtaylor152 repository cannot fan-out builds onto the host.
+# Workflow-level safety guards live in:
+#   - .github/workflows/local-multi-runner-build.yml (job-level if: guard)
+#   - .github/workflows/nsfw-unraid-docker.yml (job-level repository pin)
 self-hosted-runner:
   labels:
     - aiimmich

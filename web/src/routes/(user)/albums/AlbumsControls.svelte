@@ -27,8 +27,10 @@
   import {
     mdiArrowDownThin,
     mdiArrowUpThin,
+    mdiFileTreeOutline,
     mdiFolderArrowDownOutline,
     mdiFolderArrowUpOutline,
+    mdiFolderMultipleOutline,
     mdiFolderRemoveOutline,
     mdiFormatListBulletedSquare,
     mdiPlusBoxOutline,
@@ -193,6 +195,31 @@
       </div>
     </div>
   </span>
+{/if}
+
+<!-- Top-level / Show All Toggle -->
+{#if $albumViewSettings.showAllAlbums}
+  <Button
+    leadingIcon={mdiFileTreeOutline}
+    onclick={() => ($albumViewSettings.showAllAlbums = false)}
+    size="small"
+    variant="ghost"
+    color="secondary"
+    title={$t('show_top_level_albums_description')}
+  >
+    <Text class="hidden md:block">{$t('show_top_level_albums')}</Text>
+  </Button>
+{:else}
+  <Button
+    leadingIcon={mdiFolderMultipleOutline}
+    onclick={() => ($albumViewSettings.showAllAlbums = true)}
+    size="small"
+    variant="ghost"
+    color="secondary"
+    title={$t('show_all_albums_description')}
+  >
+    <Text class="hidden md:block">{$t('show_all_albums')}</Text>
+  </Button>
 {/if}
 
 <!-- Cover/List Display Toggle -->

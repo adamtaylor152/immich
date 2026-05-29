@@ -15,6 +15,15 @@ type BuiltInKind = keyof SystemConfig['smartAlbums']['builtIn'];
  */
 const tagTriggerCache = new WeakMap<SystemConfig['smartAlbums']['builtIn'], Map<BuiltInKind, Set<string>>>();
 
+/**
+ * Strip control characters + newlines + escape codes from user-controlled
+ * values before they hit the logger. Defense against CWE-117 log injection.
+ * Caps length at 64 chars so logs don't bloat on a pathological input.
+ */
+const sanitizeForLog = (value: string): string =>
+  // eslint-disable-next-line no-control-regex
+  value.replaceAll(/[\u0000-\u001F\u007F]/g, '?').slice(0, 64);
+
 const getTagTriggerSet = (builtIn: SystemConfig['smartAlbums']['builtIn'], kind: BuiltInKind): Set<string> => {
   let perConfig = tagTriggerCache.get(builtIn);
   if (!perConfig) {
@@ -186,7 +195,10 @@ export class SmartAlbumService extends BaseService {
 
     const kind = (data as { kind?: string } | undefined)?.kind;
     if (kind && !(kind in smartAlbums.builtIn)) {
-      this.logger.warn(`Smart-album re-evaluate dispatched with unknown kind "${kind}" — skipping`);
+      // Sanitize: strip control chars + newlines + cap length so an admin-supplied
+      // `kind` cannot inject log lines (CWE-117).
+      const safeKind = sanitizeForLog(kind);
+      this.logger.warn(`Smart-album re-evaluate dispatched with unknown kind "${safeKind}" — skipping`);
       return JobStatus.Skipped;
     }
 
@@ -230,6 +242,11 @@ export class SmartAlbumService extends BaseService {
   /**
    * Ensure the 6 built-in smart albums exist for the given user. Idempotent —
    * safe to call on every server start or user creation event.
+   *
+   * Performance (server.md Medium #bootstrap): query existing smart_album rows
+   * for this owner FIRST and only pass missing kinds to the repository. This
+   * skips the per-kind advisory-lock transaction when nothing is missing —
+   * common case after a server restart.
    */
   async ensureBuiltInAlbumsForUser(ownerId: string): Promise<void> {
     const { smartAlbums } = await this.getConfig({ withCache: true });
@@ -237,10 +254,16 @@ export class SmartAlbumService extends BaseService {
       return;
     }
     const builtInKinds = Object.keys(smartAlbums.builtIn) as BuiltInKind[];
-    const kinds = builtInKinds.map((kind) => ({
-      kind,
-      name: smartAlbums.builtIn[kind].name,
-    }));
+    const existing = await this.smartAlbumRepository.getAllSmartAlbumIdsForOwner(ownerId);
+    const kinds = builtInKinds
+      .filter((kind) => !existing.has(kind))
+      .map((kind) => ({
+        kind,
+        name: smartAlbums.builtIn[kind].name,
+      }));
+    if (kinds.length === 0) {
+      return;
+    }
     await this.smartAlbumRepository.ensureForUser(ownerId, kinds);
   }
 }

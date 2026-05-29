@@ -78,6 +78,16 @@ export async function up(db: Kysely<any>): Promise<void> {
   await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_plugin_action_supportedContexts_idx';`.execute(db);
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function down(): Promise<void> {
-  // not supported
+  // CRITICAL: this migration drops upstream's workflow/plugin tables and
+  // creates fork-shaped equivalents. There is NO safe automated reversal —
+  // running a no-op down() previously caused silent state corruption (the
+  // schema-revert CLI was removed in this commit precisely because this
+  // migration cannot be reversed). Use `pg_restore` from a backup taken
+  // before installing the fork to downgrade.
+  throw new Error(
+    '1779400000000-UpdateWorkflowTables cannot be reversed automatically. ' +
+      'Restore from a pre-fork pg_dump backup to downgrade to upstream Immich.',
+  );
 }

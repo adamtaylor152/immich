@@ -9,7 +9,7 @@
   interface Props {
     showBackButton?: boolean;
     backIcon?: string;
-    tailwindClasses?: string;
+    class?: string;
     forceDark?: boolean;
     multiRow?: boolean;
     onClose?: () => void;
@@ -21,7 +21,7 @@
   let {
     showBackButton = true,
     backIcon = mdiClose,
-    tailwindClasses = '',
+    class: className = '',
     forceDark = false,
     multiRow = false,
     onClose = () => {},
@@ -32,16 +32,26 @@
 
   let appBarBorder = $state('border border-subtle');
 
-  const onScroll = () => {
-    if (window.scrollY > 80) {
-      appBarBorder = 'border border-gray-200 bg-gray-50 dark:border-gray-600';
+  // requestAnimationFrame-throttled scroll handler. Previously every
+  // scroll event invalidated the entire app bar, causing visible jank on
+  // long lists. We collapse multiple events per frame into a single update.
+  let scrollFrameRequested = false;
 
-      if (forceDark) {
-        appBarBorder = 'border border-gray-600';
-      }
+  const computeBorder = () => {
+    scrollFrameRequested = false;
+    if (window.scrollY > 80) {
+      appBarBorder = forceDark ? 'border border-gray-600' : 'border border-gray-200 bg-gray-50 dark:border-gray-600';
     } else {
       appBarBorder = 'border border-subtle';
     }
+  };
+
+  const onScroll = () => {
+    if (scrollFrameRequested) {
+      return;
+    }
+    scrollFrameRequested = true;
+    requestAnimationFrame(computeBorder);
   };
 
   onMount(() => {
@@ -67,7 +77,7 @@
       'justify-between lg:grid-cols-[25%_50%_25%]',
       appBarBorder,
       'm-2 place-items-center rounded-full p-2 transition-all max-md:p-0',
-      tailwindClasses,
+      className,
       forceDark ? 'bg-immich-dark-gray! text-white' : 'bg-light-50 dark:bg-immich-dark-gray',
     ]}
   >

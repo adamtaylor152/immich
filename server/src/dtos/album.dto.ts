@@ -1,5 +1,6 @@
 import { ShallowDehydrateObject } from 'kysely';
 import { createZodDto } from 'nestjs-zod';
+import { ALBUM_ICON_KEYS } from 'src/constants/album-icons';
 import { AlbumUser, AuthSharedLink } from 'src/database';
 import { BulkIdErrorReasonSchema } from 'src/dtos/asset-ids.response.dto';
 import { MapAsset } from 'src/dtos/asset-response.dto';
@@ -9,6 +10,19 @@ import { MaybeDehydrated } from 'src/types';
 import { asDateString } from 'src/utils/date';
 import { stringToBool } from 'src/validation';
 import z from 'zod';
+
+// Constrain icon to the finite catalog of valid keys (kept in sync with
+// web/src/lib/utils/album-icons.ts). Unknown values are rejected at the API
+// boundary instead of being stored and echoed back verbatim.
+//
+// Enforced at runtime via refine (not z.enum) so the generated OpenAPI/SDK/Dart
+// wire type stays `string`: a nominal enum would force a coordinated codegen
+// bump across every client. Runtime validation still rejects invalid keys,
+// which is the data-integrity goal of the constraint.
+const ALBUM_ICON_KEY_SET: ReadonlySet<string> = new Set(ALBUM_ICON_KEYS);
+const AlbumIconKeySchema = z
+  .string()
+  .refine((value) => ALBUM_ICON_KEY_SET.has(value), { message: 'Invalid album icon key' });
 
 const AlbumUserAddSchema = z
   .object({
@@ -36,6 +50,8 @@ const CreateAlbumSchema = z
     description: z.string().optional().describe('Album description'),
     albumUsers: z.array(AlbumUserCreateSchema).optional().describe('Album users'),
     assetIds: z.array(z.uuidv4()).optional().describe('Initial asset IDs'),
+    parentId: z.uuidv4().optional().describe('Parent album ID for nesting (omit for top-level)'),
+    icon: AlbumIconKeySchema.optional().describe('Optional icon key (see album-icons.ts)'),
   })
   .meta({ id: 'CreateAlbumDto' });
 
@@ -60,6 +76,16 @@ const UpdateAlbumSchema = z
     albumThumbnailAssetId: z.uuidv4().optional().describe('Album thumbnail asset ID'),
     isActivityEnabled: z.boolean().optional().describe('Enable activity feed'),
     order: AssetOrderSchema.optional(),
+    parentId: z
+      .uuidv4()
+      .nullable()
+      .optional()
+      .describe('Parent album ID for nesting (null = move to top-level, omit = no change)'),
+    icon: AlbumIconKeySchema.nullable().optional().describe('Icon key (null = clear / use default folder icon)'),
+    sortOrder: z
+      .number()
+      .optional()
+      .describe('Sibling display position. Lower values appear first. Computed by the client as a midpoint.'),
   })
   .meta({ id: 'UpdateAlbumDto' });
 
@@ -142,8 +168,20 @@ export const AlbumResponseSchema = z
     isActivityEnabled: z.boolean().describe('Activity feed enabled'),
     order: AssetOrderSchema.optional(),
     contributorCounts: z.array(ContributorCountResponseSchema).optional(),
+    parentId: z.string().nullable().describe('Parent album ID for nesting (null = top-level)'),
+    // Deliberately tolerant on read: a value stored before the enum was enforced
+    // (or written directly to the DB) must not break album reads. Writes are
+    // constrained via AlbumIconKeySchema on create/update.
+    icon: z.string().nullable().describe('Icon key (null = default folder icon)'),
+    sortOrder: z.number().nullable().describe('Sibling display position. Lower values appear first.'),
   })
   .meta({ id: 'AlbumResponseDto' });
+
+const AlbumDescendantCountResponseSchema = z
+  .object({
+    count: z.int().min(0).describe('Number of descendant albums (children, grandchildren, etc.)'),
+  })
+  .meta({ id: 'AlbumDescendantCountResponseDto' });
 
 export class AddUsersDto extends createZodDto(AddUsersSchema) {}
 export class AlbumUserCreateDto extends createZodDto(AlbumUserCreateSchema) {}
@@ -156,6 +194,7 @@ export class GetAlbumInfoDto extends createZodDto(GetAlbumInfoSchema) {}
 export class AlbumStatisticsResponseDto extends createZodDto(AlbumStatisticsResponseSchema) {}
 export class UpdateAlbumUserDto extends createZodDto(UpdateAlbumUserSchema) {}
 export class AlbumResponseDto extends createZodDto(AlbumResponseSchema) {}
+export class AlbumDescendantCountResponseDto extends createZodDto(AlbumDescendantCountResponseSchema) {}
 class AlbumUserResponseDto extends createZodDto(AlbumUserResponseSchema) {}
 
 export type MapAlbumDto = {
@@ -170,6 +209,9 @@ export type MapAlbumDto = {
   id: string;
   isActivityEnabled: boolean;
   order: AssetOrder;
+  parentId: string | null;
+  icon: string | null;
+  sortOrder: number | null;
 };
 
 export const mapAlbum = (entity: MaybeDehydrated<MapAlbumDto>): AlbumResponseDto => {
@@ -212,5 +254,8 @@ export const mapAlbum = (entity: MaybeDehydrated<MapAlbumDto>): AlbumResponseDto
     assetCount: entity.assets?.length || 0,
     isActivityEnabled: entity.isActivityEnabled,
     order: entity.order,
+    parentId: entity.parentId,
+    icon: entity.icon,
+    sortOrder: entity.sortOrder,
   };
 };

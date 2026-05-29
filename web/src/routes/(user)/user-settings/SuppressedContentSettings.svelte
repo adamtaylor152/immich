@@ -33,6 +33,33 @@
   let selectedPeople: PersonResponseDto[] = $state([]);
   let selectedPersonIds: string[] = $state(authManager.preferences.privacy?.suppression?.personIds ?? []);
   let scope: SuppressionScope = $state(authManager.preferences.privacy?.suppression?.scope ?? SuppressionScope.Owned);
+  // Mirror the auth preferences snapshot we last initialised from so we can
+  // detect if the source moves out from under us (saved-then-reloaded in
+  // another tab, etc.) and re-sync local state without forcing a full reload.
+  const initialPrefsSnapshotKey = JSON.stringify({
+    tagIds: authManager.preferences.privacy?.suppression?.tagIds ?? [],
+    personIds: authManager.preferences.privacy?.suppression?.personIds ?? [],
+    scope: authManager.preferences.privacy?.suppression?.scope ?? SuppressionScope.Owned,
+  });
+  let lastPrefsSnapshotKey = $state(initialPrefsSnapshotKey);
+  // Snapshot of the local state at the last sync (mount, save, accepted
+  // external update). Compared against the live local state to detect whether
+  // the user has unsaved edits — if so, an external prefs change won't
+  // silently clobber them; instead, surface a "preferences updated elsewhere"
+  // banner so the user can choose to discard or merge.
+  let baselineSnapshotKey = $state(initialPrefsSnapshotKey);
+  let pendingExternalPrefs = $state<{ tagIds: string[]; personIds: string[]; scope: SuppressionScope } | undefined>(
+    undefined,
+  );
+
+  const localSnapshotKey = $derived(
+    JSON.stringify({
+      tagIds: selectedTagIds,
+      personIds: selectedPersonIds,
+      scope,
+    }),
+  );
+  const isDirty = $derived(localSnapshotKey !== baselineSnapshotKey);
 
   let tagOption: ComboBoxOption | undefined = $state();
   let peopleSearch = $state('');
@@ -50,6 +77,58 @@
   onMount(async () => {
     await refreshLockState();
   });
+
+  // Re-sync local state if the auth preferences change underneath us. If the
+  // user has unsaved edits, hold the new preferences in `pendingExternalPrefs`
+  // and surface a banner instead of silently overwriting their work. Otherwise
+  // apply the change in-place.
+  // Guard against the unauthenticated case (where the preferences getter
+  // throws) so the effect doesn't blow up during teardown.
+  $effect(() => {
+    if (!authManager.authenticated) {
+      return;
+    }
+    const prefs = authManager.preferences?.privacy?.suppression;
+    const incoming = {
+      tagIds: prefs?.tagIds ?? [],
+      personIds: prefs?.personIds ?? [],
+      scope: prefs?.scope ?? SuppressionScope.Owned,
+    };
+    const key = JSON.stringify(incoming);
+    if (key === lastPrefsSnapshotKey) {
+      return;
+    }
+    lastPrefsSnapshotKey = key;
+
+    if (isDirty) {
+      // Hold the change so the user can opt-in to discard their local edits.
+      pendingExternalPrefs = incoming;
+      return;
+    }
+
+    applyExternalPrefs(incoming);
+  });
+
+  const applyExternalPrefs = (incoming: { tagIds: string[]; personIds: string[]; scope: SuppressionScope }) => {
+    selectedTagIds = incoming.tagIds;
+    selectedPersonIds = incoming.personIds;
+    scope = incoming.scope;
+    baselineSnapshotKey = JSON.stringify(incoming);
+    pendingExternalPrefs = undefined;
+    if (isElevated && hasPinCode) {
+      void loadSuppressionNames();
+    }
+  };
+
+  const discardLocalEditsAndApply = () => {
+    if (pendingExternalPrefs) {
+      applyExternalPrefs(pendingExternalPrefs);
+    }
+  };
+
+  const dismissExternalPrefsBanner = () => {
+    pendingExternalPrefs = undefined;
+  };
 
   onDestroy(() => {
     abortController?.abort();
@@ -149,7 +228,10 @@
 
     try {
       const results = await searchPerson({ name, withHidden: true }, { signal: controller.signal });
-      peopleResults = results.filter((person) => !selectedPeopleIds.has(person.id));
+      // Don't apply results if we've been superseded by a newer search.
+      if (abortController === controller) {
+        peopleResults = results.filter((person) => !selectedPeopleIds.has(person.id));
+      }
     } catch (error) {
       if (!controller.signal.aborted) {
         handleError(error, $t('errors.cant_search_people'));
@@ -157,14 +239,22 @@
     } finally {
       if (abortController === controller) {
         isSearchingPeople = false;
+        abortController = undefined;
       }
     }
   };
 
   const searchPeople = () => {
-    abortController?.abort();
+    // Cancel any in-flight request and clear the reference immediately so
+    // the finally-block of the previous run doesn't fight with this one
+    // for ownership of `abortController` / `isSearchingPeople`.
+    if (abortController) {
+      abortController.abort();
+      abortController = undefined;
+    }
     if (searchTimeout) {
       clearTimeout(searchTimeout);
+      searchTimeout = undefined;
     }
 
     const name = peopleSearch.trim();
@@ -194,6 +284,15 @@
         },
       });
       authManager.setPreferences(response);
+      // Refresh the baseline so the in-flight local state is no longer dirty.
+      // (The auth-prefs `$effect` will also fire and match, but updating the
+      // baseline here closes the race window.)
+      baselineSnapshotKey = JSON.stringify({
+        tagIds: selectedTagIds,
+        personIds: selectedPersonIds,
+        scope,
+      });
+      pendingExternalPrefs = undefined;
       toastManager.primary($t('saved_settings'));
     } catch (error) {
       handleError(error, $t('errors.unable_to_update_settings'));
@@ -227,6 +326,24 @@
     </div>
   {:else}
     <div class="flex max-w-4xl flex-col gap-6 sm:ms-4 md:ms-8">
+      {#if pendingExternalPrefs}
+        <div
+          class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-900/30"
+          role="alert"
+        >
+          <p class="text-amber-900 dark:text-amber-100">
+            {$t('suppressed_content_external_change_prompt')}
+          </p>
+          <div class="flex gap-2">
+            <Button size="small" shape="round" color="secondary" variant="ghost" onclick={dismissExternalPrefsBanner}>
+              {$t('keep_my_changes')}
+            </Button>
+            <Button size="small" shape="round" onclick={discardLocalEditsAndApply}>
+              {$t('reload')}
+            </Button>
+          </div>
+        </div>
+      {/if}
       <Field label={$t('suppression_scope')} description={$t('suppression_scope_description')}>
         <div
           class="inline-flex rounded-full border border-gray-300 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900"

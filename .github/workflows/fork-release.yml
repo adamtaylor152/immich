@@ -43,18 +43,40 @@ jobs:
         with:
           ref: ${{ steps.sha.outputs.sha }}
           fetch-depth: 0
-          persist-credentials: true
+          # SECURITY: don't persist the default GITHUB_TOKEN for subsequent steps.
+          # The only step that needs git authorship below (`gh release create`)
+          # uses GH_TOKEN environment variable explicitly, not the persisted
+          # checkout credentials.
+          persist-credentials: false
 
       - name: Compute next fork tag
         id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           UPSTREAM_VERSION=$(jq -r '.version' server/package.json)
           PREFIX="fork-v${UPSTREAM_VERSION}-"
+          # Use the GitHub API (authoritative) instead of local git tags to
+          # tolerate sibling runs that publish a tag while this one is building.
+          # Falls back to git tags if the API call fails (e.g. rate-limited).
           # grep returns 1 on no matches which would kill the pipeline under
           # pipefail; wrap so the first-ever run (no fork-v* tags yet) is fine
           # and LAST_N stays empty, letting NEXT_N default to 1.
-          LAST_N=$(git tag --list "${PREFIX}*" \
+          #
+          # PAGINATION: --paginate walks all pages so very long-lived forks with
+          # >100 releases still find the highest fork-vX-N tag correctly. The
+          # git-tags fallback below also covers any API hiccup mid-pagination.
+          API_TAGS=$(gh api --paginate "repos/${OWNER_REPO}/releases?per_page=100" \
+            --jq '.[].tag_name' 2>/dev/null || true)
+          if [[ -z "${API_TAGS}" ]]; then
+            echo "GitHub API returned no releases; falling back to local git tags"
+            git fetch --tags --quiet origin || true
+            API_TAGS=$(git tag --list "${PREFIX}*" || true)
+          fi
+          LAST_N=$(printf '%s\n' "${API_TAGS}" \
+            | { grep -E "^${PREFIX}[0-9]+$" || true; } \
             | sed "s|^${PREFIX}||" \
             | { grep -E '^[0-9]+$' || true; } \
             | sort -n \
@@ -78,16 +100,34 @@ jobs:
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           OWNER: ${{ github.repository_owner }}
+          SHA: ${{ steps.sha.outputs.sha }}
         run: |
           set -euo pipefail
+          # Use the immutable per-commit tag `:commit-<sha>` published by the
+          # Docker workflow rather than the mutable `:fork-main` floating tag.
+          # `:fork-main` is overwritten on every push to fork/main, so retagging
+          # from it can promote a stale commit's digest under a "release" tag
+          # while the GitHub release's target_commitish points elsewhere.
+          # `:commit-<sha>` is digest-immutable for the same commit.
           for IMG in immich-server immich-machine-learning; do
-            SRC="ghcr.io/${OWNER}/${IMG}:fork-main"
-            for DEST_TAG in "$TAG" release; do
-              echo "Tagging ${SRC} -> ghcr.io/${OWNER}/${IMG}:${DEST_TAG}"
-              docker buildx imagetools create \
-                -t "ghcr.io/${OWNER}/${IMG}:${DEST_TAG}" \
-                "$SRC"
-            done
+            SRC="ghcr.io/${OWNER}/${IMG}:commit-${SHA}"
+            echo "Verifying source image exists: ${SRC}"
+            if ! docker buildx imagetools inspect "${SRC}" > /dev/null 2>&1; then
+              echo "::error::Commit-tagged image ${SRC} not found in GHCR."
+              echo "::error::The Docker workflow may not have pushed the per-commit tag yet."
+              echo "::error::Refusing to retag from mutable :fork-main to avoid promoting a stale commit."
+              exit 1
+            fi
+            # Retag to the release-specific tag first, then promote to `release`.
+            # If the per-version tag push fails, we never overwrite `release`.
+            echo "Tagging ${SRC} -> ghcr.io/${OWNER}/${IMG}:${TAG}"
+            docker buildx imagetools create \
+              -t "ghcr.io/${OWNER}/${IMG}:${TAG}" \
+              "$SRC"
+            echo "Tagging ${SRC} -> ghcr.io/${OWNER}/${IMG}:release"
+            docker buildx imagetools create \
+              -t "ghcr.io/${OWNER}/${IMG}:release" \
+              "$SRC"
           done
 
       - name: Create GitHub release

@@ -8,6 +8,7 @@
     type SmartAlbumReevaluateRequestDto,
   } from '@immich/sdk';
   import { Button, LoadingSpinner, Modal, ModalBody, ModalFooter } from '@immich/ui';
+  import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -27,19 +28,47 @@
   let estimate = $state<SmartAlbumReevaluateEstimateDto | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let isTriggering = $state(false);
+  // Hand the markup a pending Promise from the very first render so the
+  // `{#await}` block enters the spinner branch immediately. Previously this
+  // was `$state(undefined)` and only assigned in onMount — Svelte 5's
+  // `{#await undefined}` renders the `{:then}` branch for one frame with
+  // both `estimate` and `loadError` still undefined, producing a visible
+  // empty-modal flash before the spinner.
+  let estimateController: AbortController | undefined;
+  let resolveEstimate: () => void;
+  let estimatePromise: Promise<void> = new Promise<void>((resolve) => {
+    resolveEstimate = resolve;
+  });
 
-  const loadEstimate = async () => {
+  const loadEstimate = async (signal: AbortSignal) => {
     try {
-      estimate = await getSmartAlbumReevaluateEstimate();
+      estimate = await getSmartAlbumReevaluateEstimate({ signal });
     } catch (error) {
+      if (signal.aborted) {
+        return;
+      }
       loadError = $t('admin.smart_albums_reevaluate_modal_error');
       handleError(error, $t('admin.smart_albums_reevaluate_modal_error'));
+    } finally {
+      resolveEstimate();
     }
   };
 
-  // Hoist out of the markup so Svelte 5 doesn't re-invoke loadEstimate on
-  // every reactive update to the await block.
-  const estimatePromise = loadEstimate();
+  onMount(() => {
+    // Kick off the fetch on mount (post-SSR). The promise the markup is
+    // awaiting was created synchronously above, so it stays pending and
+    // displays the spinner from the first render.
+    estimateController = new AbortController();
+    void loadEstimate(estimateController.signal);
+  });
+
+  onDestroy(() => {
+    estimateController?.abort();
+    estimateController = undefined;
+    // Resolve the pending promise so any in-flight `{#await}` settles
+    // cleanly instead of holding on forever after teardown.
+    resolveEstimate();
+  });
 
   const handleReevaluate = async () => {
     isTriggering = true;

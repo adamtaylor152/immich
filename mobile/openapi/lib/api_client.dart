@@ -196,6 +196,8 @@ class ApiClient {
           return AdminOnboardingUpdateDto.fromJson(value);
         case 'AdvancedPromptConfig':
           return AdvancedPromptConfig.fromJson(value);
+        case 'AlbumDescendantCountResponseDto':
+          return AlbumDescendantCountResponseDto.fromJson(value);
         case 'AlbumResponseDto':
           return AlbumResponseDto.fromJson(value);
         case 'AlbumStatisticsResponseDto':

@@ -3,10 +3,15 @@ import { firstValueFrom, of } from 'rxjs';
 import { ImmichGoCompatInterceptor } from 'src/middleware/immich-go-compat.interceptor';
 import { describe, expect, it } from 'vitest';
 
-const makeContext = (userAgent?: string): ExecutionContext =>
+const makeContext = (userAgent?: string, optInHeader?: string): ExecutionContext =>
   ({
     switchToHttp: () => ({
-      getRequest: () => ({ headers: { 'user-agent': userAgent } }),
+      getRequest: () => ({
+        headers: {
+          'user-agent': userAgent,
+          ...(optInHeader === undefined ? {} : { 'x-immich-go-compat': optInHeader }),
+        },
+      }),
     }),
   }) as unknown as ExecutionContext;
 
@@ -14,8 +19,13 @@ const makeHandler = (body: unknown): CallHandler => ({
   handle: () => of(body),
 });
 
-const run = async (interceptor: ImmichGoCompatInterceptor, userAgent: string | undefined, body: unknown) => {
-  return firstValueFrom(interceptor.intercept(makeContext(userAgent), makeHandler(body)));
+const run = async (
+  interceptor: ImmichGoCompatInterceptor,
+  userAgent: string | undefined,
+  body: unknown,
+  optInHeader?: string,
+) => {
+  return firstValueFrom(interceptor.intercept(makeContext(userAgent, optInHeader), makeHandler(body)));
 };
 
 describe('ImmichGoCompatInterceptor', () => {
@@ -84,8 +94,19 @@ describe('ImmichGoCompatInterceptor', () => {
       expect((result as { duration: string }).duration).toBe('00:00:01.000');
     });
 
-    it("matches Go's default HTTP client User-Agent (immich-go does not set a custom one)", async () => {
+    it("does NOT match Go's default HTTP client User-Agent (avoids breaking other Go clients)", async () => {
       const result = await run(interceptor, 'Go-http-client/1.1', { duration: 1000 });
+      // No conversion — duration stays as integer ms.
+      expect((result as { duration: number }).duration).toBe(1000);
+    });
+
+    it('matches via explicit X-Immich-Go-Compat header', async () => {
+      const result = await run(interceptor, 'Go-http-client/1.1', { duration: 1000 }, '1');
+      expect((result as { duration: string }).duration).toBe('00:00:01.000');
+    });
+
+    it('accepts X-Immich-Go-Compat: true', async () => {
+      const result = await run(interceptor, undefined, { duration: 1000 }, 'true');
       expect((result as { duration: string }).duration).toBe('00:00:01.000');
     });
 

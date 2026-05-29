@@ -279,7 +279,7 @@ class _BackupDelaySliderState extends ConsumerState<_BackupDelaySlider> {
   late final StreamSubscription<int?> subscription;
   late int currentValue;
 
-  static int backupDelayToSliderValue(int ms) => switch (ms) {
+  static int backupDelayToSliderValue(int seconds) => switch (seconds) {
     5 => 0,
     30 => 1,
     120 => 2,
@@ -345,8 +345,11 @@ class _BackupDelaySliderState extends ConsumerState<_BackupDelaySlider> {
             });
           },
           onChangeEnd: (double v) async {
-            final milliseconds = backupDelayToSeconds(v.toInt());
-            await ref.read(appSettingsServiceProvider).setSetting(AppSettingsEnum.backupTriggerDelay, milliseconds);
+            if (!mounted) {
+              return;
+            }
+            final seconds = backupDelayToSeconds(v.toInt());
+            await ref.read(appSettingsServiceProvider).setSetting(AppSettingsEnum.backupTriggerDelay, seconds);
           },
           max: 3.0,
           min: 0.0,

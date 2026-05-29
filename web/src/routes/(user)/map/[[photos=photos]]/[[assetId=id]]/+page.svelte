@@ -95,6 +95,12 @@
             assetViewerManager.showAssetViewer(false);
             handlePromiseError(navigate({ targetRoute: 'current', assetId: null }));
           }}
+          onAssetUpdate={(updatedAsset) => {
+            // The cursor prop is an inline literal, so mutating cursor.current
+            // inside the viewer silently fails. Route updates through the
+            // manager, which owns the $state-backed `asset`.
+            assetViewerManager.setAsset(updatedAsset);
+          }}
           isShared={false}
         />
       {/await}

@@ -5,6 +5,7 @@
   import { handleSetMaintenanceMode } from '$lib/services/maintenance.service';
   import { maintenanceStore } from '$lib/stores/maintenance.store';
   import { loadMaintenanceStatus } from '$lib/utils/maintenance';
+  import { websocketEvents } from '$lib/stores/websocket';
   import { MaintenanceAction } from '@immich/sdk';
   import { Button, Heading, Link, ProgressBar, Scrollable, Text } from '@immich/ui';
   import { onMount } from 'svelte';
@@ -19,24 +20,24 @@
 
   const { auth, status } = maintenanceStore;
 
-  let refreshMaintenanceStatusPromise: Promise<void> | undefined;
-
-  const refreshMaintenanceStatus = () => {
-    if (refreshMaintenanceStatusPromise) {
-      return;
-    }
-
-    refreshMaintenanceStatusPromise = loadMaintenanceStatus()
-      .catch(() => undefined)
-      .finally(() => {
-        refreshMaintenanceStatusPromise = undefined;
-      });
-  };
-
+  // The websocket layer (see web/src/lib/stores/websocket.ts) already updates
+  // maintenanceStore.status whenever a MaintenanceStatusV1 event arrives,
+  // and the connection is opened for the maintenance route even without auth
+  // (see openWebsocketConnection). We only need a single status fetch at mount
+  // time to populate the store; live updates arrive via the websocket.
   onMount(() => {
-    const interval = setInterval(refreshMaintenanceStatus, 1000);
+    // One-shot initial load — websocket events take over after that.
+    void loadMaintenanceStatus().catch(() => undefined);
 
-    return () => clearInterval(interval);
+    // Subscribe to the websocket event explicitly as well. websocket.ts
+    // already calls maintenanceStore.status.set on its own, but listening here
+    // means this component reacts immediately even if the maintenanceStore
+    // wiring ever changes upstream.
+    const cleanup = websocketEvents.on('MaintenanceStatusV1', (event) => {
+      maintenanceStore.status.set(event);
+    });
+
+    return () => cleanup();
   });
 
   // strip token from URL after load

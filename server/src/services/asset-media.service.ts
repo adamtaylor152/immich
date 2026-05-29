@@ -347,7 +347,7 @@ export class AssetMediaService extends BaseService {
       libraryId: null,
 
       checksum: file.checksum,
-      checksumAlgorithm: ChecksumAlgorithm.sha1File,
+      checksumAlgorithm: ChecksumAlgorithm.sha256File,
       originalPath: file.originalPath,
 
       fileCreatedAt: dto.fileCreatedAt,

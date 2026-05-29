@@ -4,6 +4,12 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers] no attacker inputs are used here
     types: [opened, labeled, unlabeled, synchronize]
 
+# Cancel stale validations when label set changes — the latest event is the
+# source of truth for the required-label check.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

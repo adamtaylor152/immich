@@ -246,6 +246,23 @@ export class ImageDescriptionPromptAssembler {
     return { prompt, expectedSchemaVersion: SCHEMA_VERSION, warnings };
   }
 
+  /**
+   * Defense-in-depth sanitization for person names being interpolated into
+   * VLM prompts. The DTO layer (`person.dto.ts`) already caps length and
+   * rejects control characters at the API boundary, but persons may have
+   * been created before that validation existed. Strip control chars and
+   * cap length here too so a stored legacy name can't poison a prompt.
+   */
+  private sanitizePersonName(name: string): string {
+    return (
+      name
+        // eslint-disable-next-line no-control-regex
+        .replaceAll(/[\u0000-\u001F\u007F]/g, ' ')
+        .slice(0, 256)
+        .trim()
+    );
+  }
+
   private identityHint(config: ImageDescriptionPromptConfig, persons: KnownPerson[]): string | null {
     if (!config.identityInjection.enabled) {
       return null;
@@ -256,7 +273,7 @@ export class ImageDescriptionPromptAssembler {
     if (eligible.length === 0) {
       return null;
     }
-    const lines = eligible.map((p) => `- ${p.name} (${this.positionLabel(p.boxCenter)})`);
+    const lines = eligible.map((p) => `- ${this.sanitizePersonName(p.name)} (${this.positionLabel(p.boxCenter)})`);
     return [
       'Identity (REQUIRED — failure to follow this is a top error):',
       'Known people detected in this image. You MUST refer to each of these people by name at least once in the description. Do NOT replace them with generic group nouns such as "a family", "a group", "people", "everyone", or "the kids" — use the listed names instead. Do not invent names not in this list.',

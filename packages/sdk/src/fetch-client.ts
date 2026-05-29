@@ -494,6 +494,8 @@ export type AlbumResponseDto = {
     endDate?: string;
     /** Has shared link */
     hasSharedLink: boolean;
+    /** Icon key (null = default folder icon) */
+    icon: string | null;
     /** Album ID */
     id: string;
     /** Activity feed enabled */
@@ -501,8 +503,12 @@ export type AlbumResponseDto = {
     /** Last modified asset timestamp */
     lastModifiedAssetTimestamp?: string;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = top-level) */
+    parentId: string | null;
     /** Is shared album */
     shared: boolean;
+    /** Sibling display position. Lower values appear first. */
+    sortOrder: number | null;
     /** Start date (earliest asset) */
     startDate?: string;
     /** Last update date */
@@ -522,6 +528,10 @@ export type CreateAlbumDto = {
     assetIds?: string[];
     /** Album description */
     description?: string;
+    /** Optional icon key (see album-icons.ts) */
+    icon?: string;
+    /** Parent album ID for nesting (omit for top-level) */
+    parentId?: string;
 };
 export type AlbumsAddAssetsDto = {
     /** Album IDs */
@@ -549,9 +559,15 @@ export type UpdateAlbumDto = {
     albumThumbnailAssetId?: string;
     /** Album description */
     description?: string;
+    /** Icon key (null = clear / use default folder icon) */
+    icon?: string | null;
     /** Enable activity feed */
     isActivityEnabled?: boolean;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = move to top-level, omit = no change) */
+    parentId?: string | null;
+    /** Sibling display position. Lower values appear first. Computed by the client as a midpoint. */
+    sortOrder?: number;
 };
 export type BulkIdsDto = {
     /** IDs to process */
@@ -564,6 +580,10 @@ export type BulkIdResponseDto = {
     id: string;
     /** Whether operation succeeded */
     success: boolean;
+};
+export type AlbumDescendantCountResponseDto = {
+    /** Number of descendant albums (children, grandchildren, etc.) */
+    count: number;
 };
 export type MapMarkerResponseDto = {
     /** City name */
@@ -685,7 +705,7 @@ export type AssetBulkUpdateDto = {
     visibility?: AssetVisibility;
 };
 export type AssetBulkUploadCheckItem = {
-    /** Base64 or hex encoded SHA1 hash */
+    /** Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets. */
     checksum: string;
     /** Asset ID */
     id: string;
@@ -854,7 +874,7 @@ export type TagResponseDto = {
     value: string;
 };
 export type AssetResponseDto = {
-    /** Base64 encoded SHA1 hash */
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1228,7 +1248,7 @@ export type BestPhotoScoreDto = {
 };
 export type BestPhotoAssetResponseDto = {
     bestPhotoScore: BestPhotoScoreDto;
-    /** Base64 encoded SHA1 hash */
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1873,6 +1893,7 @@ export type RunPodStateDto = {
     errorMessage?: string;
     estimatedCostUsd?: number;
     gpuTypeId?: string;
+    /** Serverless idle timeout; may be null when not yet provisioned. */
     idleTimeoutSeconds?: number | null;
     imageName?: string;
     instanceTag?: string;
@@ -1888,7 +1909,9 @@ export type RunPodStateDto = {
     templateId?: string;
     unhealthySince?: string;
     workerReady?: boolean;
+    /** Serverless workersMax; may be null when not yet provisioned. */
     workersMax?: number | null;
+    /** Serverless workersMin; may be null when not yet provisioned. */
     workersMin?: number | null;
 };
 export type RunPodGpuTypeDto = {
@@ -4455,6 +4478,19 @@ export function addAssetsToAlbum({ id, bulkIdsDto }: {
         method: "PUT",
         body: bulkIdsDto
     })));
+}
+/**
+ * Count descendant albums
+ */
+export function getAlbumDescendantCount({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AlbumDescendantCountResponseDto;
+    }>(`/albums/${encodeURIComponent(id)}/descendant-count`, {
+        ...opts
+    }));
 }
 /**
  * Retrieve album map markers

@@ -94,13 +94,25 @@ jobs:
       - name: Run analyze
         env:
           DCM_CI_KEY: ${{ secrets.DCM_CI_KEY }}
+          REPO: ${{ github.repository }}
         run: |
           if [ -n "${DCM_CI_KEY:-}" ]; then
             mise //mobile:analyze
+          elif [ "${REPO}" = "immich-app/immich" ]; then
+            # Upstream repo requires DCM. If the secret is missing here we are
+            # almost certainly looking at a rotated/expired key — fail loudly so
+            # an operator sees it instead of silently downgrading lint coverage.
+            echo "::error::DCM_CI_KEY is missing on upstream repository ${REPO}."
+            echo "::error::Rotate the secret and re-run; refusing to fall back to dart-analyzer-only lint."
+            exit 1
           else
             # Fork environment: no DCM license. Run only the bundled dart analyzer;
             # dcm is a commercial linter for style enforcement, not correctness.
-            echo "::notice::DCM_CI_KEY secret not configured; skipping dcm step"
+            # We use `::warning::` (not `::notice::`) so the skip appears in the
+            # PR annotation list and on the workflow run summary, making it
+            # obvious if the secret silently disappears in a fork that previously
+            # had it configured.
+            echo "::warning title=DCM skipped::DCM_CI_KEY secret not configured for ${REPO}; running dart-analyzer only. This skips dcm style enforcement."
             mise //mobile:analyze:dart
           fi
 

@@ -4,6 +4,14 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, edited, labeled]
 
+# Serialize close/reopen state transitions per-PR. The workflow performs
+# mutating GraphQL operations (close/reopen, label add/remove) — racing two
+# in-flight runs on the same PR risks toggling state inconsistently. Queue
+# instead of cancel so the cleanup half of every transition completes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 permissions: {}
 
 jobs:
@@ -33,9 +41,13 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
         run: |
           OK=true
+          # `--` end-of-options marker prevents a PR body containing a string
+          # that looks like a grep flag (e.g. "--help") from being parsed by
+          # grep. `-F` (fixed strings) on the inner grep further blocks any
+          # regex metacharacters in the body from changing semantics.
           while IFS= read -r header; do
-            printf '%s\n' "$BODY" | grep -qF "$header" || OK=false
-          done < <(sed '/<!--/,/-->/d' .github/pull_request_template.md | grep "^## ")
+            printf '%s\n' "$BODY" | grep -qF -- "$header" || OK=false
+          done < <(sed '/<!--/,/-->/d' .github/pull_request_template.md | grep -- "^## ")
           echo "uses_template=$OK" | tee --append "$GITHUB_OUTPUT"
 
   close_template:

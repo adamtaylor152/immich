@@ -111,7 +111,21 @@ export class FileUploadInterceptor implements NestInterceptor {
       );
 
       const writeStream = this.storageRepository.createWriteStream(path);
-      const hash = file.fieldname === UploadFieldName.ASSET_DATA ? createHash('sha1') : null;
+      // SHA-256 over SHA-1 (CWE-327, SHAttered):
+      // - The persisted digest is 32 bytes; the column is `bytea` so length is
+      //   variable and pre-existing 20-byte SHA-1 rows are unaffected.
+      // - Deduplication keys on `(checksum, fileSizeInByte)`. Mixed-algorithm
+      //   rows never collide (different byte content), so a re-upload of an
+      //   existing SHA-1 asset by the same user simply becomes a separate
+      //   master rather than linking — the conservative outcome.
+      // - The corresponding `checksumAlgorithm` column is set to
+      //   `ChecksumAlgorithm.sha256File` by the upload service so consumers
+      //   can disambiguate by length AND by algorithm tag.
+      // - Clients that send a precomputed checksum via the
+      //   `x-immich-checksum` header may still send SHA-1 (legacy detection)
+      //   OR SHA-256 (new path); `fromChecksum` (utils/request.ts) decodes
+      //   based on the encoded string length.
+      const hash = file.fieldname === UploadFieldName.ASSET_DATA ? createHash('sha256') : null;
 
       let size = 0;
 

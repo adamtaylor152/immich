@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto, invalidate } from '$app/navigation';
+  import { beforeNavigate, goto, invalidate } from '$app/navigation';
   import OnEvents from '$lib/components/OnEvents.svelte';
   import { pluginManager } from '$lib/managers/plugin-manager.svelte';
   import WorkflowAddStepModal from '$lib/modals/WorkflowAddStepModal.svelte';
@@ -57,6 +57,30 @@
   let { data }: Props = $props();
 
   let { id, enabled, name, description, trigger, steps } = $derived(data.workflow);
+
+  // Track the original snapshot so we can warn the user if they navigate
+  // away with unsaved edits. JSON.stringify is good enough here — the shape
+  // is plain and the comparison is cheap.
+  const snapshot = () => JSON.stringify({ enabled, name, description, trigger, steps });
+  let savedSnapshot = $derived(
+    JSON.stringify({
+      enabled: data.workflow.enabled,
+      name: data.workflow.name,
+      description: data.workflow.description,
+      trigger: data.workflow.trigger,
+      steps: data.workflow.steps,
+    }),
+  );
+  let hasUnsavedChanges = $derived(snapshot() !== savedSnapshot);
+
+  beforeNavigate(({ cancel }) => {
+    // Per-spec: warn before discarding pending edits. The native confirm
+    // mirrors the upstream pattern (svelte/kit doesn't yet have an idiomatic
+    // way to await a modal during navigation lifecycle).
+    if (hasUnsavedChanges && !confirm($t('editor_discard_edits_prompt'))) {
+      cancel();
+    }
+  });
 
   const handleAddStep = async () => {
     const step = await modalManager.show(WorkflowAddStepModal, { trigger });

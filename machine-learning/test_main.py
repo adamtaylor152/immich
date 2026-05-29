@@ -560,6 +560,250 @@ class TestImageDescriptionModel:
         assert max_in_flight == 1
         assert all(result["description"] == "A room." for result in results)
 
+    def test_cache_dir_is_scoped_by_acceleration_openvino(self) -> None:
+        # Acceleration is included in the cache path so CUDA and OpenVINO
+        # snapshots never collide on the same directory.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+        assert model.cache_dir.parts[-1] == "openvino"
+        # `clean_name` strips dots, slashes, and colons.
+        assert model.cache_dir.parts[-2] == "Qwen25-VL-3B-Instruct"
+
+    def test_cache_dir_is_scoped_by_acceleration_cuda(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        assert model.cache_dir.parts[-1] == "cuda"
+        assert model.cache_dir.parts[-2] == "Qwen25-VL-3B-Instruct"
+
+    def test_cache_dir_differs_between_cuda_and_openvino(self) -> None:
+        cuda_model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        ov_model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+        assert cuda_model.cache_dir != ov_model.cache_dir
+
+    def test_make_prompt_strips_control_chars_in_external_prompt(self) -> None:
+        # Server-side is the primary defense, but a regression there must
+        # not open the prompt-injection vector. Control chars and format
+        # chars are stripped; tabs/newlines/CR are preserved.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        payload = "Hello​\x00World\n\tnext line"
+        assert model._make_prompt(external_prompt=payload) == "HelloWorld\n\tnext line"
+
+    def test_make_prompt_preserves_legit_whitespace_in_external_prompt(self) -> None:
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        payload = "Line 1\nLine 2\r\n  indented\ttabbed"
+        assert model._make_prompt(external_prompt=payload) == payload
+
+    def test_cached_requires_config_json(self, tmp_path: Path) -> None:
+        # ml.md Critical #2 — partial/inconsistent caches reported "cached"
+        # if the directory was non-empty. The new check requires config.json
+        # so a half-finished snapshot_download (or operator file dropped in
+        # by accident) does NOT skip re-download.
+        model = ImageDescriptionModel(
+            "Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda", cache_dir=tmp_path
+        )
+        # Empty directory: not cached
+        assert model.cached is False
+        # Non-empty directory missing config.json: not cached
+        (tmp_path / "stray.txt").write_text("partial download junk")
+        assert model.cached is False
+        # config.json present: cached
+        (tmp_path / "config.json").write_text("{}")
+        assert model.cached is True
+
+    def test_cuda_predict_uses_inference_lock(self, monkeypatch: MonkeyPatch) -> None:
+        # Mirror the OpenVINO concurrency test for CUDA: model.generate()
+        # must serialize across threads.
+        model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="cuda")
+        in_flight = 0
+        max_in_flight = 0
+        guard = threading.Lock()
+
+        class FakeProcessor:
+            def apply_chat_template(self, *args: Any, **kwargs: Any) -> str:
+                return "text"
+
+            def __call__(self, *args: Any, **kwargs: Any) -> Any:
+                class Inputs(dict[str, Any]):
+                    input_ids = [[0, 1, 2]]
+
+                    def to(self, device: Any) -> "Inputs":
+                        return self
+
+                return Inputs()
+
+            def batch_decode(self, *args: Any, **kwargs: Any) -> list[str]:
+                return [json.dumps({"description": "A room.", "tags": ["room"]})]
+
+        class FakeModel:
+            def generate(self, **kwargs: Any) -> list[list[int]]:
+                nonlocal in_flight, max_in_flight
+                with guard:
+                    in_flight += 1
+                    max_in_flight = max(max_in_flight, in_flight)
+                time.sleep(0.05)
+                with guard:
+                    in_flight -= 1
+                return [[0, 1, 2, 3, 4, 5]]
+
+        class FakeTorch:
+            class _NoGrad:
+                def __enter__(self) -> "FakeTorch._NoGrad":
+                    return self
+
+                def __exit__(self, *args: Any) -> None:
+                    return None
+
+            def inference_mode(self) -> "FakeTorch._NoGrad":
+                return self._NoGrad()
+
+        session: dict[str, Any] = {
+            "model": FakeModel(),
+            "processor": FakeProcessor(),
+            "device": "cuda:0",
+            "torch": FakeTorch(),
+            "torch_dtype": "float16",
+        }
+        model.session = session
+        model.loaded = True
+
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(model._predict_qwen, image, None, "p") for _ in range(4)]
+            for future in futures:
+                future.result()
+
+        assert max_in_flight == 1
+
+    def test_florence_predict_serializes_all_three_subtasks(self, monkeypatch: MonkeyPatch) -> None:
+        # ml.md T4 — Florence ran caption/OCR/detection as three separately
+        # locked calls. Two concurrent requests could interleave between
+        # sub-tasks (T1.caption → T2.caption → T1.ocr → …) and race on
+        # KV-cache + tokenizer state. The fix holds ``_cuda_lock`` ONCE
+        # around the whole 3-call sequence.
+        #
+        # Strategy: assert the lock-granularity invariant directly by
+        # instrumenting ``_cuda_lock`` and counting acquire/release
+        # events. The per-request invariant is "exactly one acquire per
+        # ``_predict_florence`` call regardless of how many sub-tasks
+        # run inside". Under the broken per-task implementation each
+        # ``_run_florence_task`` would acquire the lock, producing 3×
+        # the count. This count is deterministic — it does not depend
+        # on thread scheduling, sleeps, or barriers — so it stays
+        # robust under heavy CI oversubscription.
+        model = ImageDescriptionModel("microsoft/Florence-2-base", acceleration="cuda")
+        # We need the model to think it's Florence — _predict_florence is
+        # only invoked for Florence and is the API surface we want to test.
+        assert model._is_florence_model() is True
+
+        events: list[tuple[int, str]] = []
+        events_guard = threading.Lock()
+
+        class TracingLock:
+            """Wrapper around ``threading.Lock`` that records every
+            acquire/release with the calling thread's identity so the
+            test can assert the lock-granularity invariant directly."""
+
+            def __init__(self) -> None:
+                self._inner = threading.Lock()
+
+            def __enter__(self) -> "TracingLock":
+                self._inner.acquire()
+                with events_guard:
+                    events.append((threading.get_ident(), "acquire"))
+                return self
+
+            def __exit__(self, *args: Any) -> None:
+                with events_guard:
+                    events.append((threading.get_ident(), "release"))
+                self._inner.release()
+
+            def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+                acquired = self._inner.acquire(blocking, timeout)
+                if acquired:
+                    with events_guard:
+                        events.append((threading.get_ident(), "acquire"))
+                return acquired
+
+            def release(self) -> None:
+                with events_guard:
+                    events.append((threading.get_ident(), "release"))
+                self._inner.release()
+
+        model._cuda_lock = TracingLock()  # type: ignore[assignment]
+
+        class FakeProcessor:
+            def __call__(self, *args: Any, **kwargs: Any) -> Any:
+                class _Vals:
+                    def to(self, *_a: Any, **_kw: Any) -> "_Vals":
+                        return self
+
+                # Provide the keys _run_florence_task expects.
+                return {"input_ids": _Vals(), "pixel_values": _Vals()}
+
+            def batch_decode(self, *args: Any, **kwargs: Any) -> list[str]:
+                return ["<MORE_DETAILED_CAPTION>some-caption"]
+
+            def post_process_generation(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+                task = kwargs.get("task")
+                if task == "<MORE_DETAILED_CAPTION>":
+                    return {"<MORE_DETAILED_CAPTION>": "A room."}
+                if task == "<OCR>":
+                    return {"<OCR>": "sign"}
+                return {"<OD>": {"labels": ["chair"]}}
+
+        class FakeModel:
+            def generate(self, **kwargs: Any) -> list[list[int]]:
+                return [[0, 1, 2, 3, 4, 5]]
+
+        class FakeTorch:
+            class _NoGrad:
+                def __enter__(self) -> "FakeTorch._NoGrad":
+                    return self
+
+                def __exit__(self, *args: Any) -> None:
+                    return None
+
+            def inference_mode(self) -> "FakeTorch._NoGrad":
+                return self._NoGrad()
+
+        session: dict[str, Any] = {
+            "model": FakeModel(),
+            "processor": FakeProcessor(),
+            "device": "cuda:0",
+            "torch": FakeTorch(),
+            "torch_dtype": "float16",
+        }
+        model.session = session
+        model.loaded = True
+
+        image = Image.new("RGB", (3, 2), (1, 2, 3))
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(model._predict_florence, image) for _ in range(2)]
+            for future in futures:
+                future.result()
+
+        # Per-request invariant: exactly one acquire+release per
+        # ``_predict_florence`` call, so 2 acquires + 2 releases
+        # across two concurrent callers. If the lock were per-task we
+        # would see 6/6 (one acquire per ``_run_florence_task``).
+        acquires = [event for event in events if event[1] == "acquire"]
+        releases = [event for event in events if event[1] == "release"]
+        assert len(acquires) == 2, (
+            f"Expected 2 lock acquires (one per _predict_florence call), got {len(acquires)}: {events}"
+        )
+        assert len(releases) == 2, f"Expected 2 lock releases, got {len(releases)}: {events}"
+        # Mutual exclusion: the lock guarantees the second caller's
+        # acquire cannot land between the first caller's acquire and
+        # release. Verify acquire/release events strictly alternate
+        # (acq, rel, acq, rel) — any other order means the callers'
+        # lock holds overlapped, which the lock should prevent.
+        # (The ThreadPoolExecutor may reuse a worker thread when the
+        # first task finishes fast, so we do NOT assert distinct
+        # thread identities here — that would flake.)
+        assert [e[1] for e in events] == ["acquire", "release", "acquire", "release"], (
+            f"Florence callers' lock holds overlapped: {events}"
+        )
+
 
 @pytest.mark.usefixtures("ort_session")
 class TestOrtSession:
@@ -1694,6 +1938,226 @@ def test_ping_endpoint(deployed_app: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.text == "pong"
+
+
+def test_bearer_auth_constant_time_compare() -> None:
+    # Constant-time comparison rejects mismatched tokens uniformly. We can
+    # only verify functional correctness here; timing is structurally enforced
+    # by secrets.compare_digest.
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse as _PR
+    from starlette.routing import Route
+
+    from immich_ml.main import BearerAuthMiddleware
+
+    async def home(_req: Any) -> Any:
+        return _PR("ok")
+
+    async def ping_endpoint(_req: Any) -> Any:
+        return _PR("pong")
+
+    # Register /ping at both casings so the path-normalization assertion can
+    # check that an exempt path returns 200 from the underlying handler,
+    # rather than a 401 from the middleware or a 404 from the router
+    # (the 200-or-404 disjunction masked path-normalization bugs).
+    app = Starlette(
+        routes=[
+            Route("/", home),
+            Route("/ping", ping_endpoint),
+            Route("/PING", ping_endpoint),
+            Route("/predict", home, methods=["POST"]),
+        ]
+    )
+    app.add_middleware(BearerAuthMiddleware, expected_token="my-token", allow_unauthenticated=False)
+    client = TestClient(app)
+
+    # Exempt path
+    assert client.get("/ping").status_code == 200
+    # Case + trailing slash normalization: middleware must exempt /PING/
+    # exactly the same as /ping. Tight assertion — any other status (incl.
+    # 401 from the middleware) is a regression.
+    assert client.get("/PING/").status_code == 200
+    # Missing header — non-exempt path must be 401
+    assert client.post("/predict").status_code == 401
+    # Wrong scheme — non-exempt path must be 401
+    assert client.post("/predict", headers={"Authorization": "Basic x"}).status_code == 401
+    # Wrong token — non-exempt path must be 401
+    assert client.post("/predict", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    # Correct token
+    assert client.post("/predict", headers={"Authorization": "Bearer my-token"}).status_code == 200
+
+
+def test_bearer_auth_rejects_oversized_header() -> None:
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse as _PR
+    from starlette.routing import Route
+
+    from immich_ml.main import BearerAuthMiddleware
+
+    async def home(_req: Any) -> Any:
+        return _PR("ok")
+
+    app = Starlette(routes=[Route("/predict", home, methods=["POST"])])
+    app.add_middleware(BearerAuthMiddleware, expected_token="my-token", allow_unauthenticated=False)
+    client = TestClient(app)
+    huge = "Bearer " + ("x" * (16 * 1024))
+    assert client.post("/predict", headers={"Authorization": huge}).status_code == 401
+
+
+def test_bearer_auth_fails_closed_when_unset_on_non_loopback_bind() -> None:
+    # R3 fail-closed: when IMMICH_ML_AUTH_TOKEN is unset and the bind is not
+    # loopback, the application must refuse to start. We can't easily relaunch
+    # the FastAPI app from a test, so exercise the startup helper directly —
+    # the middleware itself is constructed via this helper, so a misconfigured
+    # bind never reaches request-serving code.
+    from immich_ml.main import AuthConfigurationError, _build_auth_config
+
+    with pytest.raises(AuthConfigurationError):
+        _build_auth_config(None, "[::]")
+    with pytest.raises(AuthConfigurationError):
+        _build_auth_config(None, "0.0.0.0")
+    with pytest.raises(AuthConfigurationError):
+        _build_auth_config(None, "192.168.1.10")
+    # Loopback binds are allowed without a token (local-dev UX).
+    assert _build_auth_config(None, "127.0.0.1") == (None, True)
+    assert _build_auth_config(None, "127.5.6.7") == (None, True)
+    assert _build_auth_config(None, "::1") == (None, True)
+    assert _build_auth_config(None, "[::1]") == (None, True)
+    assert _build_auth_config(None, "[::1]:3003") == (None, True)
+    assert _build_auth_config(None, "127.0.0.1:3003") == (None, True)
+    assert _build_auth_config(None, "localhost") == (None, True)
+    # Token configured: any bind is fine.
+    assert _build_auth_config("secret", "0.0.0.0") == ("secret", False)
+
+
+def test_bearer_auth_fails_closed_middleware_returns_401_when_misconfigured() -> None:
+    # Defense in depth: even if a future caller bypasses _build_auth_config and
+    # constructs the middleware in a misconfigured state (no token,
+    # allow_unauthenticated=False), every non-exempt request must return 401.
+    from starlette.applications import Starlette
+    from starlette.responses import PlainTextResponse as _PR
+    from starlette.routing import Route
+
+    from immich_ml.main import BearerAuthMiddleware
+
+    async def home(_req: Any) -> Any:
+        return _PR("ok")
+
+    async def ping_endpoint(_req: Any) -> Any:
+        return _PR("pong")
+
+    app = Starlette(
+        routes=[Route("/ping", ping_endpoint), Route("/predict", home, methods=["POST"])]
+    )
+    app.add_middleware(BearerAuthMiddleware, expected_token=None, allow_unauthenticated=False)
+    client = TestClient(app)
+    # Exempt path still serves (health checks must continue working).
+    assert client.get("/ping").status_code == 200
+    # Non-exempt path returns 401 regardless of header.
+    assert client.post("/predict").status_code == 401
+    assert client.post("/predict", headers={"Authorization": "Bearer x"}).status_code == 401
+
+
+def test_is_loopback_host_rejects_non_loopback_strings() -> None:
+    # Hostnames that LOOK like loopback addresses must NOT be treated as
+    # loopback. The previous `startswith("127.")` check would have passed
+    # "127.example.com"; ip_address() rejects it as ValueError -> False.
+    from immich_ml.main import _is_loopback_host
+
+    assert _is_loopback_host("127.0.0.1") is True
+    assert _is_loopback_host("127.255.255.255") is True
+    assert _is_loopback_host("::1") is True
+    assert _is_loopback_host("[::1]") is True
+    assert _is_loopback_host("[::1]:3003") is True
+    assert _is_loopback_host("127.0.0.1:3003") is True
+    assert _is_loopback_host("LOCALHOST") is True
+    assert _is_loopback_host("0.0.0.0") is False
+    assert _is_loopback_host("[::]") is False
+    assert _is_loopback_host("192.168.1.1") is False
+    # The string-prefix bug: "127.example.com" must NOT be treated as loopback.
+    assert _is_loopback_host("127.example.com") is False
+    assert _is_loopback_host("127a.b.c") is False
+    assert _is_loopback_host("") is False
+
+
+def test_options_validation_rejects_unknown_keys(deployed_app: TestClient) -> None:
+    # Per-task option validation rejects unknown keys to prevent schema
+    # drift / arbitrary kwargs to model constructors.
+    response = deployed_app.post(
+        "http://localhost:3003/predict",
+        data={
+            "entries": json.dumps(
+                {
+                    "image-description-tagging": {
+                        "visual": {
+                            "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+                            "options": {"some_unknown_key": "x"},
+                        }
+                    }
+                }
+            )
+        },
+        files={"image": b"fake"},
+    )
+    assert response.status_code == 422
+
+
+def test_options_validation_caps_external_prompt(deployed_app: TestClient) -> None:
+    from immich_ml.schemas import MAX_EXTERNAL_PROMPT_LENGTH
+
+    response = deployed_app.post(
+        "http://localhost:3003/predict",
+        data={
+            "entries": json.dumps(
+                {
+                    "image-description-tagging": {
+                        "visual": {
+                            "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+                            "options": {"external_prompt": "x" * (MAX_EXTERNAL_PROMPT_LENGTH + 1)},
+                        }
+                    }
+                }
+            )
+        },
+        files={"image": b"fake"},
+    )
+    assert response.status_code == 422
+
+
+def test_options_validation_rejects_ttl_key(deployed_app: TestClient) -> None:
+    # ml.md duplicate-kwarg latent regression — _OptionsBase used to declare
+    # ttl; main.run_inference passes ttl=settings.model_ttl alongside
+    # **entry["options"]. If a caller sent ttl in options the validation
+    # accepted it, the spread crashed with TypeError. ttl is now removed
+    # from the option schema so a request containing it returns 422
+    # (extra="forbid") rather than crashing at runtime.
+    response = deployed_app.post(
+        "http://localhost:3003/predict",
+        data={
+            "entries": json.dumps(
+                {
+                    "image-description-tagging": {
+                        "visual": {
+                            "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+                            "options": {"ttl": 60},
+                        }
+                    }
+                }
+            )
+        },
+        files={"image": b"fake"},
+    )
+    assert response.status_code == 422
+
+
+def test_extract_signal_field_returns_bool_for_non_canonical_values() -> None:
+    from immich_ml.models.image_description import ImageDescriptionModel
+
+    model = ImageDescriptionModel("Qwen/Qwen2.5-VL-3B-Instruct", acceleration="openvino")
+    body = '"safety": {"is_nsfw_likely": "high", "confidence": "high"}'
+    result = model._extract_signal_field(body, "safety", "is_nsfw_likely")
+    # "high" -> True via _bool_value, not the literal string "high"
+    assert result["is_nsfw_likely"] is True
 
 
 def test_hardware_endpoint_reports_cuda(deployed_app: TestClient, monkeypatch: MonkeyPatch) -> None:

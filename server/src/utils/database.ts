@@ -80,7 +80,15 @@ export const removeUndefinedKeys = <T extends object>(update: T, template: unkno
 };
 
 export const ASSET_CHECKSUM_CONSTRAINT = 'UQ_assets_owner_checksum';
-const STRONG_DESCRIPTION_NSFW_TAGS = [
+/**
+ * Description-emitted tag values that count as a strong NSFW signal even
+ * without the dedicated classifier. The check requires the `safety.is_nsfw_likely`
+ * flag PLUS confidence='high' PLUS at least one of these normalized tags in
+ * `safety.indicators`, OR a regex match against the description text. Owned
+ * here for use by both the migration backfill and ImageEnrichmentService
+ * (which sets `asset.is_nsfw` on metadata writes).
+ */
+export const STRONG_DESCRIPTION_NSFW_TAGS = [
   'adult-nudity',
   'bare-buttocks',
   'bondage',
@@ -98,6 +106,9 @@ const STRONG_DESCRIPTION_NSFW_TAGS = [
   'sexual-activity',
 ];
 
+export const DESCRIPTION_NSFW_TEXT_REGEX =
+  /\b(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\b/i;
+
 export const isAssetChecksumConstraint = (error: unknown) => {
   return (error as PostgresError)?.constraint_name === 'UQ_assets_owner_checksum';
 };
@@ -106,41 +117,33 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
   return qb.where('asset.visibility', 'in', [sql.lit(AssetVisibility.Archive), sql.lit(AssetVisibility.Timeline)]);
 }
 
+/**
+ * NSFW predicate. Previously a 30-line correlated EXISTS against asset_metadata
+ * JSONB (no index). Replaced with a denormalized `asset.is_nsfw` boolean owned
+ * by ImageEnrichmentService — see migration 2100000000010 and the
+ * STRONG_DESCRIPTION_NSFW_TAGS constant which keeps the JSONB derivation
+ * canonical for the column writer to read.
+ *
+ * The `STRONG_DESCRIPTION_NSFW_TAGS` constant is kept exported because
+ * ImageEnrichmentService uses the same derivation rules when computing the
+ * boolean.
+ */
 export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`exists (
       select 1
-      from asset_metadata
-      where asset_metadata."assetId" = ${assetId}
-        and asset_metadata.key = ${AssetMetadataKey.MlEnrichment}
-        and case
-          when asset_metadata.value #> '{nsfwDetection,review}' is not null then
-            coalesce((asset_metadata.value #>> '{nsfwDetection,review,isNsfw}')::boolean, false)
-          else
-            coalesce(
-              (asset_metadata.value #>> '{nsfwDetection,result,isNsfw}')::boolean,
-              (asset_metadata.value #>> '{nsfwDetection,result,nsfw}')::boolean,
-              false
-            )
-            or (
-              coalesce((asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}')::boolean, false)
-              and lower(coalesce(asset_metadata.value #>> '{description,result,safety,confidence}', '')) = 'high'
-              and (
-                exists (
-                  select 1
-                  from jsonb_array_elements_text(
-                    coalesce(asset_metadata.value #> '{description,result,safety,indicators}', '[]'::jsonb)
-                  ) as indicator(value)
-                  where lower(regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')) = any(
-                    array[${sql.join(STRONG_DESCRIPTION_NSFW_TAGS)}]::text[]
-                  )
-                )
-                or coalesce(asset_metadata.value #>> '{description,result,description}', '') ~*
-                  '\\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\\M'
-              )
-            )
-        end = true
+      from asset as nsfw_asset
+      where nsfw_asset.id = ${assetId}
+        and nsfw_asset.is_nsfw = true
     )`;
 
-const nsfwAssetExists = (assetAlias = 'asset') => nsfwAssetIdExists(sql.ref(`${assetAlias}.id`));
+// NOTE: COALESCE protects callers that LEFT JOIN `asset` and pass `not nsfwAssetExists(...)`
+// to a WHERE clause. Without it, a row whose left-joined asset is NULL (e.g. an
+// album-only activity comment) would evaluate `null = true` → NULL, `not NULL` →
+// NULL, and the WHERE filter would silently drop the row. The old correlated-EXISTS
+// implementation didn't have this hazard because `NOT EXISTS` returns TRUE for an
+// empty subquery. Treating the absent boolean as `false` (i.e., "not NSFW")
+// preserves the previous semantics.
+const nsfwAssetExists = (assetAlias = 'asset') =>
+  sql<boolean>`coalesce(${sql.ref(`${assetAlias}.is_nsfw`)}, false) = true`;
 
 export function withNsfwAssets<O>(qb: SelectQueryBuilder<DB, any, O>, assetAlias = 'asset') {
   return qb.where(nsfwAssetExists(assetAlias));

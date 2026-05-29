@@ -3,8 +3,8 @@ import 'package:immich_mobile/domain/services/background_worker.service.dart';
 import 'package:immich_mobile/platform/background_worker_api.g.dart';
 import 'package:immich_mobile/platform/background_worker_lock_api.g.dart';
 import 'package:immich_mobile/platform/connectivity_api.g.dart';
-import 'package:immich_mobile/platform/native_sync_api.g.dart';
 import 'package:immich_mobile/platform/local_image_api.g.dart';
+import 'package:immich_mobile/platform/native_sync_api.g.dart';
 import 'package:immich_mobile/platform/network_api.g.dart';
 import 'package:immich_mobile/platform/remote_image_api.g.dart';
 

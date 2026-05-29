@@ -27,87 +27,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $2
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $3,
-                            $4,
-                            $5,
-                            $6,
-                            $7,
-                            $8,
-                            $9,
-                            $10,
-                            $11,
-                            $12,
-                            $13,
-                            $14,
-                            $15,
-                            $16,
-                            $17
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 
@@ -146,87 +66,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $4
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $5,
-                            $6,
-                            $7,
-                            $8,
-                            $9,
-                            $10,
-                            $11,
-                            $12,
-                            $13,
-                            $14,
-                            $15,
-                            $16,
-                            $17,
-                            $18,
-                            $19
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 
@@ -246,96 +86,16 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (
-            exists (
-              select
-                1
-              from
-                asset_metadata
-              where
-                asset_metadata."assetId" = "asset"."id"
-                and asset_metadata.key = $1
-                and case
-                  when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                    )::boolean,
-                    false
-                  )
-                  else coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                    )::boolean,
-                    false
-                  )
-                  or (
-                    coalesce(
-                      (
-                        asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                      )::boolean,
-                      false
-                    )
-                    and lower(
-                      coalesce(
-                        asset_metadata.value #>> '{description,result,safety,confidence}',
-                        ''
-                      )
-                    ) = 'high'
-                    and (
-                      exists (
-                        select
-                          1
-                        from
-                          jsonb_array_elements_text(
-                            coalesce(
-                              asset_metadata.value #> '{description,result,safety,indicators}',
-                              '[]'::jsonb
-                            )
-                          ) as indicator (value)
-                        where
-                          lower(
-                            regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                          ) = any (
-                            array[
-                              $2,
-                              $3,
-                              $4,
-                              $5,
-                              $6,
-                              $7,
-                              $8,
-                              $9,
-                              $10,
-                              $11,
-                              $12,
-                              $13,
-                              $14,
-                              $15,
-                              $16
-                            ]::text[]
-                          )
-                      )
-                      or coalesce(
-                        asset_metadata.value #>> '{description,result,description}',
-                        ''
-                      ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                    )
-                  )
-                end = true
-            )
-          )
+          and not (coalesce("asset"."is_nsfw", false) = true)
           and not exists (
             select
-              $17 as "one"
+              $1 as "one"
             from
               "asset_face"
               inner join "person" on "person"."id" = "asset_face"."personId"
             where
               "asset_face"."assetId" = "asset"."id"
-              and "person"."isHidden" = $18
+              and "person"."isHidden" = $2
           )
         order by
           "asset"."fileCreatedAt" asc
@@ -346,7 +106,7 @@ from
   "memory"
 where
   "deletedAt" is null
-  and "ownerId" = $19
+  and "ownerId" = $3
   and (
     not exists (
       select
@@ -366,87 +126,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $20
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $21,
-                            $22,
-                            $23,
-                            $24,
-                            $25,
-                            $26,
-                            $27,
-                            $28,
-                            $29,
-                            $30,
-                            $31,
-                            $32,
-                            $33,
-                            $34,
-                            $35
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 order by
@@ -468,96 +148,16 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (
-            exists (
-              select
-                1
-              from
-                asset_metadata
-              where
-                asset_metadata."assetId" = "asset"."id"
-                and asset_metadata.key = $1
-                and case
-                  when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                    )::boolean,
-                    false
-                  )
-                  else coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                    )::boolean,
-                    false
-                  )
-                  or (
-                    coalesce(
-                      (
-                        asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                      )::boolean,
-                      false
-                    )
-                    and lower(
-                      coalesce(
-                        asset_metadata.value #>> '{description,result,safety,confidence}',
-                        ''
-                      )
-                    ) = 'high'
-                    and (
-                      exists (
-                        select
-                          1
-                        from
-                          jsonb_array_elements_text(
-                            coalesce(
-                              asset_metadata.value #> '{description,result,safety,indicators}',
-                              '[]'::jsonb
-                            )
-                          ) as indicator (value)
-                        where
-                          lower(
-                            regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                          ) = any (
-                            array[
-                              $2,
-                              $3,
-                              $4,
-                              $5,
-                              $6,
-                              $7,
-                              $8,
-                              $9,
-                              $10,
-                              $11,
-                              $12,
-                              $13,
-                              $14,
-                              $15,
-                              $16
-                            ]::text[]
-                          )
-                      )
-                      or coalesce(
-                        asset_metadata.value #>> '{description,result,description}',
-                        ''
-                      ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                    )
-                  )
-                end = true
-            )
-          )
+          and not (coalesce("asset"."is_nsfw", false) = true)
           and not exists (
             select
-              $17 as "one"
+              $1 as "one"
             from
               "asset_face"
               inner join "person" on "person"."id" = "asset_face"."personId"
             where
               "asset_face"."assetId" = "asset"."id"
-              and "person"."isHidden" = $18
+              and "person"."isHidden" = $2
           )
         order by
           "asset"."fileCreatedAt" asc
@@ -569,14 +169,14 @@ from
 where
   (
     "showAt" is null
-    or "showAt" <= $19
+    or "showAt" <= $3
   )
   and (
     "hideAt" is null
-    or "hideAt" >= $20
+    or "hideAt" >= $4
   )
   and "deletedAt" is null
-  and "ownerId" = $21
+  and "ownerId" = $5
   and (
     not exists (
       select
@@ -596,87 +196,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $22
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $23,
-                            $24,
-                            $25,
-                            $26,
-                            $27,
-                            $28,
-                            $29,
-                            $30,
-                            $31,
-                            $32,
-                            $33,
-                            $34,
-                            $35,
-                            $36,
-                            $37
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 order by
@@ -699,87 +219,7 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (
-            exists (
-              select
-                1
-              from
-                asset_metadata
-              where
-                asset_metadata."assetId" = "asset"."id"
-                and asset_metadata.key = $1
-                and case
-                  when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                    )::boolean,
-                    false
-                  )
-                  else coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                    )::boolean,
-                    false
-                  )
-                  or (
-                    coalesce(
-                      (
-                        asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                      )::boolean,
-                      false
-                    )
-                    and lower(
-                      coalesce(
-                        asset_metadata.value #>> '{description,result,safety,confidence}',
-                        ''
-                      )
-                    ) = 'high'
-                    and (
-                      exists (
-                        select
-                          1
-                        from
-                          jsonb_array_elements_text(
-                            coalesce(
-                              asset_metadata.value #> '{description,result,safety,indicators}',
-                              '[]'::jsonb
-                            )
-                          ) as indicator (value)
-                        where
-                          lower(
-                            regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                          ) = any (
-                            array[
-                              $2,
-                              $3,
-                              $4,
-                              $5,
-                              $6,
-                              $7,
-                              $8,
-                              $9,
-                              $10,
-                              $11,
-                              $12,
-                              $13,
-                              $14,
-                              $15,
-                              $16
-                            ]::text[]
-                          )
-                      )
-                      or coalesce(
-                        asset_metadata.value #>> '{description,result,description}',
-                        ''
-                      ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                    )
-                  )
-                end = true
-            )
-          )
+          and not (coalesce("asset"."is_nsfw", false) = true)
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -787,7 +227,7 @@ select
 from
   "memory"
 where
-  "id" = $17
+  "id" = $1
   and "deletedAt" is null
   and (
     not exists (
@@ -808,87 +248,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $18
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $19,
-                            $20,
-                            $21,
-                            $22,
-                            $23,
-                            $24,
-                            $25,
-                            $26,
-                            $27,
-                            $28,
-                            $29,
-                            $30,
-                            $31,
-                            $32,
-                            $33
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 
@@ -915,87 +275,7 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (
-            exists (
-              select
-                1
-              from
-                asset_metadata
-              where
-                asset_metadata."assetId" = "asset"."id"
-                and asset_metadata.key = $1
-                and case
-                  when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                    )::boolean,
-                    false
-                  )
-                  else coalesce(
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                    )::boolean,
-                    (
-                      asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                    )::boolean,
-                    false
-                  )
-                  or (
-                    coalesce(
-                      (
-                        asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                      )::boolean,
-                      false
-                    )
-                    and lower(
-                      coalesce(
-                        asset_metadata.value #>> '{description,result,safety,confidence}',
-                        ''
-                      )
-                    ) = 'high'
-                    and (
-                      exists (
-                        select
-                          1
-                        from
-                          jsonb_array_elements_text(
-                            coalesce(
-                              asset_metadata.value #> '{description,result,safety,indicators}',
-                              '[]'::jsonb
-                            )
-                          ) as indicator (value)
-                        where
-                          lower(
-                            regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                          ) = any (
-                            array[
-                              $2,
-                              $3,
-                              $4,
-                              $5,
-                              $6,
-                              $7,
-                              $8,
-                              $9,
-                              $10,
-                              $11,
-                              $12,
-                              $13,
-                              $14,
-                              $15,
-                              $16
-                            ]::text[]
-                          )
-                      )
-                      or coalesce(
-                        asset_metadata.value #>> '{description,result,description}',
-                        ''
-                      ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                    )
-                  )
-                end = true
-            )
-          )
+          and not (coalesce("asset"."is_nsfw", false) = true)
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -1003,7 +283,7 @@ select
 from
   "memory"
 where
-  "id" = $17
+  "id" = $1
   and "deletedAt" is null
   and (
     not exists (
@@ -1024,87 +304,7 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (
-          exists (
-            select
-              1
-            from
-              asset_metadata
-            where
-              asset_metadata."assetId" = "asset"."id"
-              and asset_metadata.key = $18
-              and case
-                when asset_metadata.value #> '{nsfwDetection,review}' is not null then coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,review,isNsfw}'
-                  )::boolean,
-                  false
-                )
-                else coalesce(
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,isNsfw}'
-                  )::boolean,
-                  (
-                    asset_metadata.value #>> '{nsfwDetection,result,nsfw}'
-                  )::boolean,
-                  false
-                )
-                or (
-                  coalesce(
-                    (
-                      asset_metadata.value #>> '{description,result,safety,is_nsfw_likely}'
-                    )::boolean,
-                    false
-                  )
-                  and lower(
-                    coalesce(
-                      asset_metadata.value #>> '{description,result,safety,confidence}',
-                      ''
-                    )
-                  ) = 'high'
-                  and (
-                    exists (
-                      select
-                        1
-                      from
-                        jsonb_array_elements_text(
-                          coalesce(
-                            asset_metadata.value #> '{description,result,safety,indicators}',
-                            '[]'::jsonb
-                          )
-                        ) as indicator (value)
-                      where
-                        lower(
-                          regexp_replace(indicator.value, '[^a-z0-9_-]+', '-', 'g')
-                        ) = any (
-                          array[
-                            $19,
-                            $20,
-                            $21,
-                            $22,
-                            $23,
-                            $24,
-                            $25,
-                            $26,
-                            $27,
-                            $28,
-                            $29,
-                            $30,
-                            $31,
-                            $32,
-                            $33
-                          ]::text[]
-                        )
-                    )
-                    or coalesce(
-                      asset_metadata.value #>> '{description,result,description}',
-                      ''
-                    ) ~* '\m(naked|nude|nudity|genitals?|penis|vagina|buttocks?|sexual activity|sex toy|bondage|restrained|restraint)\M'
-                  )
-                )
-              end = true
-          )
-        )
+        and not (coalesce("asset"."is_nsfw", false) = true)
     )
   )
 

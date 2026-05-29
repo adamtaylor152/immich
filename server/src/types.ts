@@ -648,6 +648,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.VersionCheckState]: VersionCheckMetadata;
   [SystemMetadataKey.MemoriesState]: MemoriesState;
   [SystemMetadataKey.RunPodState]: RunPodPersistedState;
+  [SystemMetadataKey.RunPodOrphans]: { orphanTemplateIds: string[] };
 }
 
 export type UserPreferences = {

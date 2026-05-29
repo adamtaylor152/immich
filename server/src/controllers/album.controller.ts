@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   AddUsersDto,
+  AlbumDescendantCountResponseDto,
   AlbumResponseDto,
   AlbumsAddAssetsDto,
   AlbumsAddAssetsResponseDto,
@@ -112,6 +113,21 @@ export class AlbumController {
   })
   getAlbumMapMarkers(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<MapMarkerResponseDto[]> {
     return this.service.getMapMarkers(auth, id);
+  }
+
+  @Authenticated({ permission: Permission.AlbumRead })
+  @Get(':id/descendant-count')
+  @Endpoint({
+    summary: 'Count descendant albums',
+    description:
+      'Return the number of descendant albums (children, grandchildren, etc.) for a specific album. Used by the UI to show "Delete X and N nested albums?" confirmations.',
+    history: new HistoryBuilder().added('v3'),
+  })
+  getAlbumDescendantCount(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+  ): Promise<AlbumDescendantCountResponseDto> {
+    return this.service.getDescendantCount(auth, id);
   }
 
   @Put(':id/assets')

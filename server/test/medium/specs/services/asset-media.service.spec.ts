@@ -2,7 +2,7 @@ import { Kysely } from 'kysely';
 import { randomBytes } from 'node:crypto';
 import { AssetMediaStatus, AssetRejectReason, AssetUploadAction } from 'src/dtos/asset-media-response.dto';
 import { AssetMediaSize } from 'src/dtos/asset-media.dto';
-import { AlbumUserRole, AssetFileType, AssetMetadataKey, AssetType, SharedLinkType } from 'src/enum';
+import { AlbumUserRole, AssetFileType, AssetMetadataKey, AssetType, ChecksumAlgorithm, SharedLinkType } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -87,6 +87,94 @@ describe(AssetService.name, () => {
       expect(ctx.getMock(EventRepository).emit).toHaveBeenCalledWith('AssetCreate', {
         asset: expect.objectContaining({}),
       });
+    });
+
+    it('records SHA-256 (32-byte checksum + sha256File algorithm) for new uploads', async () => {
+      const { sut, ctx } = setup();
+
+      ctx.getMock(StorageRepository).utimes.mockResolvedValue();
+      ctx.getMock(EventRepository).emit.mockResolvedValue();
+      ctx.getMock(JobRepository).queue.mockResolvedValue();
+
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      // 32 bytes — what file-upload.interceptor.ts emits after switching to sha256.
+      const sha256 = randomBytes(32);
+      const response = await sut.uploadAsset(
+        auth,
+        { fileModifiedAt: new Date(), fileCreatedAt: new Date(), assetData: Buffer.from('some data') },
+        mediumFactory.uploadFile({ checksum: sha256 }),
+      );
+
+      expect(response.status).toBe(AssetMediaStatus.CREATED);
+
+      const created = await ctx.get(AssetRepository).getById(response.id);
+      expect(created).not.toBeNull();
+      expect(created!.checksumAlgorithm).toBe(ChecksumAlgorithm.sha256File);
+      expect(created!.checksum).toBeInstanceOf(Buffer);
+      expect(created!.checksum.length).toBe(32);
+      expect(created!.checksum.equals(sha256)).toBe(true);
+    });
+
+    it('preserves legacy SHA-1 rows when a new SHA-256 row with the same content is uploaded', async () => {
+      // Mixed-algorithm rows must NOT dedup with each other: the digest bytes
+      // differ (20 vs 32 bytes), and dedup keys on full bytes — so a fresh
+      // SHA-256 upload of the same content as a legacy SHA-1 asset becomes its
+      // own master rather than linking. The legacy row is untouched.
+      const { sut, ctx } = setup();
+
+      ctx.getMock(StorageRepository).utimes.mockResolvedValue();
+      ctx.getMock(EventRepository).emit.mockResolvedValue();
+      ctx.getMock(JobRepository).queue.mockResolvedValue();
+
+      const { user } = await ctx.newUser();
+      const legacySha1 = randomBytes(20);
+      const { asset: legacyAsset } = await ctx.newAsset({
+        ownerId: user.id,
+        checksum: legacySha1,
+        checksumAlgorithm: ChecksumAlgorithm.sha1File,
+      });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const newSha256 = randomBytes(32);
+      const response = await sut.uploadAsset(
+        auth,
+        { fileModifiedAt: new Date(), fileCreatedAt: new Date(), assetData: Buffer.from('some data') },
+        mediumFactory.uploadFile({ checksum: newSha256 }),
+      );
+
+      expect(response.id).not.toBe(legacyAsset.id);
+      expect(response.status).toBe(AssetMediaStatus.CREATED);
+
+      const refetched = await ctx.get(AssetRepository).getById(legacyAsset.id);
+      expect(refetched!.checksumAlgorithm).toBe(ChecksumAlgorithm.sha1File);
+      expect(refetched!.checksum.length).toBe(20);
+      expect(refetched!.checksum.equals(legacySha1)).toBe(true);
+    });
+
+    it('rejects an exact SHA-256 duplicate within the same owner (dedup on the new algo)', async () => {
+      const { sut, ctx } = setup();
+
+      ctx.getMock(StorageRepository).utimes.mockResolvedValue();
+      ctx.getMock(EventRepository).emit.mockResolvedValue();
+      ctx.getMock(JobRepository).queue.mockResolvedValue();
+
+      const { user } = await ctx.newUser();
+      const sha256 = randomBytes(32);
+      const { asset: existing } = await ctx.newAsset({
+        ownerId: user.id,
+        checksum: sha256,
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const response = await sut.uploadAsset(
+        auth,
+        { fileModifiedAt: new Date(), fileCreatedAt: new Date(), assetData: Buffer.from('some data') },
+        mediumFactory.uploadFile({ checksum: sha256 }),
+      );
+
+      expect(response).toEqual({ id: existing.id, status: AssetMediaStatus.DUPLICATE });
     });
 
     it('should work with an empty metadata list', async () => {

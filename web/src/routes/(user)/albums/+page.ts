@@ -3,8 +3,9 @@ import { authenticate } from '$lib/utils/auth';
 import { getFormatter } from '$lib/utils/i18n';
 import type { PageLoad } from './$types';
 
-export const load = (async ({ url }) => {
+export const load = (async ({ url, depends }) => {
   await authenticate(url);
+  depends('album:data');
   const sharedAlbums = await getAllAlbums({ isShared: true });
   const albums = await getAllAlbums({ isOwned: true });
   const $t = await getFormatter();

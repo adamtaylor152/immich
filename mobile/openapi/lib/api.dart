@@ -77,6 +77,7 @@ part 'model/add_users_dto.dart';
 part 'model/adjust_parameters.dart';
 part 'model/admin_onboarding_update_dto.dart';
 part 'model/advanced_prompt_config.dart';
+part 'model/album_descendant_count_response_dto.dart';
 part 'model/album_response_dto.dart';
 part 'model/album_statistics_response_dto.dart';
 part 'model/album_user_add_dto.dart';

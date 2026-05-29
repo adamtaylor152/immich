@@ -151,10 +151,20 @@ export class SmartAlbumRepository {
         return;
       }
 
+      // ON CONFLICT (smartAlbumId, assetId) DO UPDATE so matchReason refreshes
+      // when an asset that originally matched via tag is later evaluated and
+      // matches via tag+clip ("both") or clip alone. The DISTINCT guard makes
+      // the write a no-op when the reason hasn't changed — keeps the upsert
+      // cheap and avoids bumping updatedAt-style triggers.
       await trx
         .insertInto('smart_album_asset')
         .values({ smartAlbumId, assetId, matchReason })
-        .onConflict((oc) => oc.doNothing())
+        .onConflict((oc) =>
+          oc
+            .columns(['smartAlbumId', 'assetId'])
+            .doUpdateSet((eb) => ({ matchReason: eb.ref('excluded.matchReason') }))
+            .where((eb) => eb('smart_album_asset.matchReason', 'is distinct from', eb.ref('excluded.matchReason'))),
+        )
         .execute();
 
       await trx

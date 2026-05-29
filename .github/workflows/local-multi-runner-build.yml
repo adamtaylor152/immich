@@ -73,6 +73,51 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       key: ${{ steps.artifact-key.outputs.base }}
     steps:
+      - name: Validate runner-mapping
+        # SECURITY (defense-in-depth): the `build` job below carries a hard
+        # workflow-level `if:` guard that refuses fork-PR execution and pins
+        # to the canonical repository slugs. That guard is the primary control.
+        # This step is a *secondary* deny-list that rejects any runner-mapping
+        # whose resolved label set references a self-hosted runner *before* the
+        # matrix is generated, so a misconfigured caller surfaces as a clear
+        # validation error at the `matrix` job (GitHub-hosted, safe to fail)
+        # rather than silently relying on the `build`-job guard. The deny-list
+        # catches `self-hosted` (the canonical GitHub label) and `aiimmich`
+        # (the fork's runner-group identifier) — extend if a new self-hosted
+        # pool is added. Allow-listed GitHub-hosted runner labels (`ubuntu-*`,
+        # `pokedex-*` for the upstream cuda-rocm builder which is org-hosted)
+        # pass through unchanged.
+        id: validate
+        shell: bash
+        env:
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":["self-hosted","linux","x64","aiimmich","docker-build"],"linux/arm64":"ubuntu-24.04-arm"}' }}
+          IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Flatten every label string referenced anywhere in the mapping.
+          LABELS=$(jq -r '
+            [ .. | strings ] | unique | .[]
+          ' <<< "${RUNNER_MAPPING}")
+          # `self-hosted` is the GitHub-canonical signal. `aiimmich` is the fork
+          # runner-group label — both are denied to fork-PR callers regardless
+          # of who is calling. Same-repo PR or push from the canonical slugs
+          # continue to use them.
+          if grep -qiE '^(self-hosted|aiimmich)$' <<< "${LABELS}"; then
+            if [[ "${IS_FORK_PR}" == "true" ]]; then
+              echo "::error::runner-mapping references a self-hosted runner label but caller is a fork PR. Refusing to schedule build."
+              exit 1
+            fi
+            case "${REPO}" in
+              adamtaylor152/immich|immich-app/immich) ;;
+              *)
+                echo "::error::runner-mapping references a self-hosted runner label but caller is repository '${REPO}', not a canonical immich slug. Refusing to schedule build."
+                exit 1
+                ;;
+            esac
+          fi
+          echo "runner-mapping validation passed"
+
       - name: Generate build matrix
         id: matrix
         shell: bash
@@ -99,6 +144,19 @@ jobs:
 
   build:
     needs: matrix
+    # SECURITY: hard guard against fork PRs reaching the `aiimmich` self-hosted
+    # runner. Self-hosted runners on `pull_request` from fork heads are GitHub's
+    # number-one persistence-attack vector (an attacker writes a malicious step
+    # into their PR's Dockerfile or workflow change and it executes on the host).
+    # Even if a future caller forgets the event_name guard, this workflow refuses
+    # to schedule a build for any fork PR. The defense-in-depth `github.repository`
+    # check additionally pins execution to the canonical fork repository so a
+    # re-fork of `adamtaylor152/immich` cannot accidentally route builds onto
+    # the runner pool.
+    if: >-
+      ${{ !github.event.pull_request.head.repo.fork
+          && (github.repository == 'adamtaylor152/immich'
+              || github.repository == 'immich-app/immich') }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -161,14 +219,27 @@ jobs:
           SUFFIX: ${{ steps.cache-key-suffix.outputs.suffix }}
           PLATFORM_PAIR: ${{ steps.prepare.outputs.platform-pair }}
           IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           HASH=$(sha256sum <<< "${BUILD_ARGS}" | cut -d' ' -f1)
           CACHE_KEY="${PLATFORM_PAIR}-${HASH}"
           echo "cache-key-base=${CACHE_KEY}" >> "$GITHUB_OUTPUT"
+          # Cache poisoning defense: only allow cache-to writes from push events
+          # on the canonical mainline branches. Fork PRs, same-repo feature
+          # branches, and workflow_dispatch all read from cache but cannot
+          # overwrite it. This prevents a malicious same-repo branch from
+          # publishing a poisoned cache layer that contaminates `main`/`fork/main`
+          # via the cross-suffix fallback at the cache-from step.
           if [[ "${IS_FORK_PR}" == "true" ]]; then
             echo "cache-to=type=local,dest=/tmp/discard,ignore-error=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [[ "${EVENT_NAME}" == "push" && ( "${REF_NAME}" == "main" || "${REF_NAME}" == "fork/main" ) ]]; then
             echo "cache-to=type=registry,ref=${IMAGE}-build-cache:${CACHE_KEY}-${SUFFIX},mode=max,compression=zstd" >> "$GITHUB_OUTPUT"
+          else
+            # Non-mainline event (workflow_dispatch, non-mainline push, etc).
+            # Read from cache but do not write — prevents cache poisoning from
+            # any branch that isn't the canonical mainline.
+            echo "cache-to=type=local,dest=/tmp/discard,ignore-error=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate docker image tags

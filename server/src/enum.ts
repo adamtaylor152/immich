@@ -42,10 +42,12 @@ export enum AssetType {
 export const AssetTypeSchema = z.enum(AssetType).describe('Asset type').meta({ id: 'AssetTypeEnum' });
 
 export enum ChecksumAlgorithm {
-  /** sha1 checksum of the whole file contents */
+  /** sha1 checksum of the whole file contents — legacy, accepted on read but never written for new uploads */
   sha1File = 'sha1',
   /** sha1 checksum of "path:" plus the file path, currently used in external libraries, deprecated */
   sha1Path = 'sha1-path',
+  /** sha256 checksum of the whole file contents — default for new server-handled uploads */
+  sha256File = 'sha256',
 }
 
 export enum AssetFileType {
@@ -372,6 +374,12 @@ export enum SystemMetadataKey {
   License = 'license',
   PhysicalDeduplicationMigration = 'physical-deduplication-migration',
   RunPodState = 'runpod-state',
+  /**
+   * References to RunPod templates that the teardown path could not delete
+   * (typically because they were already gone from RunPod's side). Tracked so
+   * an admin can audit possible orphan HF tokens — see security.md H2.
+   */
+  RunPodOrphans = 'runpod-orphans',
 }
 
 export enum UserMetadataKey {

@@ -45,6 +45,7 @@ export const newAssetRepositoryMock = (): Mocked<RepositoryInterface<AssetReposi
     getMetadata: vitest.fn(),
     getMetadataByKey: vitest.fn(),
     upsertMetadata: vitest.fn(),
+    updateIsNsfw: vitest.fn(),
     upsertBulkMetadata: vitest.fn(),
     deleteMetadataByKey: vitest.fn(),
     deleteBulkMetadata: vitest.fn(),

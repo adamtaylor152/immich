@@ -75,6 +75,7 @@ export class AssetFactory {
       width: null,
       height: null,
       isEdited: false,
+      is_nsfw: false,
       ...dto,
     });
   }

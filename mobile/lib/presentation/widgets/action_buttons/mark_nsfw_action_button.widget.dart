@@ -10,6 +10,9 @@ import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 
+/// Returns whether the current selection contains at least one remote asset
+/// owned by the signed-in user. Must be called from a widget `build` method
+/// — Riverpod tracks the underlying `ref.watch` calls per build frame.
 bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
   if (source != ActionSource.timeline) {
     return true;
@@ -34,16 +37,31 @@ Future<void> performMarkNsfwAction(BuildContext context, WidgetRef ref, {require
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_nsfw_action_prompt'.t(context: context, args: {'count': result.count.toString()});
-
-  if (context.mounted) {
-    ImmichToast.show(
-      context: context,
-      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
-      gravity: ToastGravity.BOTTOM,
-      toastType: result.success ? ToastType.success : ToastType.error,
-    );
+  if (!context.mounted) {
+    return;
   }
+
+  // Three-way toast: full success, partial failure, or full failure. Mirrors
+  // the web behavior in `MarkNsfwAction.svelte` so users see when some assets
+  // in the selection failed to update even though others succeeded.
+  final String message;
+  final ToastType toastType;
+  if (result.success && result.failedCount == 0) {
+    message = 'mark_nsfw_action_prompt'.t(context: context, args: {'count': result.count.toString()});
+    toastType = ToastType.success;
+  } else if (result.success && result.failedCount > 0) {
+    final total = result.count + result.failedCount;
+    message = 'mark_nsfw_action_partial'.t(
+      context: context,
+      args: {'succeeded': result.count.toString(), 'total': total.toString(), 'failed': result.failedCount.toString()},
+    );
+    toastType = ToastType.info;
+  } else {
+    message = 'scaffold_body_error_occurred'.t(context: context);
+    toastType = ToastType.error;
+  }
+
+  ImmichToast.show(context: context, msg: message, gravity: ToastGravity.BOTTOM, toastType: toastType);
 }
 
 class MarkNsfwActionButton extends ConsumerWidget {
@@ -84,16 +102,31 @@ Future<void> performMarkSafeAction(BuildContext context, WidgetRef ref, {require
     ref.read(multiSelectProvider.notifier).reset();
   }
 
-  final successMessage = 'mark_safe_action_prompt'.t(context: context, args: {'count': result.count.toString()});
-
-  if (context.mounted) {
-    ImmichToast.show(
-      context: context,
-      msg: result.success ? successMessage : 'scaffold_body_error_occurred'.t(context: context),
-      gravity: ToastGravity.BOTTOM,
-      toastType: result.success ? ToastType.success : ToastType.error,
-    );
+  if (!context.mounted) {
+    return;
   }
+
+  // Three-way toast: full success, partial failure, or full failure. Mirrors
+  // the web behavior in `MarkNsfwAction.svelte` so users see when some assets
+  // in the selection failed to update even though others succeeded.
+  final String message;
+  final ToastType toastType;
+  if (result.success && result.failedCount == 0) {
+    message = 'mark_safe_action_prompt'.t(context: context, args: {'count': result.count.toString()});
+    toastType = ToastType.success;
+  } else if (result.success && result.failedCount > 0) {
+    final total = result.count + result.failedCount;
+    message = 'mark_safe_action_partial'.t(
+      context: context,
+      args: {'succeeded': result.count.toString(), 'total': total.toString(), 'failed': result.failedCount.toString()},
+    );
+    toastType = ToastType.info;
+  } else {
+    message = 'scaffold_body_error_occurred'.t(context: context);
+    toastType = ToastType.error;
+  }
+
+  ImmichToast.show(context: context, msg: message, gravity: ToastGravity.BOTTOM, toastType: toastType);
 }
 
 class MarkSafeActionButton extends ConsumerWidget {

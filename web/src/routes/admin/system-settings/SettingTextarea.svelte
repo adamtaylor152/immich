@@ -26,16 +26,36 @@
     onChange,
   }: Props = $props();
 
+  // The previous implementation used the (translated) `label` as the DOM id,
+  // which collides whenever the same label string appears more than once
+  // (e.g. the NSFW indicators label used as accordion title AND nested
+  // textarea label). Duplicate ids are invalid HTML and break for/labelledby
+  // resolution. Use `crypto.randomUUID()` so each mount has its own id.
+  const uniqueId =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `setting-textarea-${Math.random().toString(36).slice(2)}`;
+  const descId = description ? `${uniqueId}-desc` : undefined;
+
+  // The handler intentionally only calls onChange — letting the parent's
+  // bind: (or `value=`) own the assignment. Previously this also did
+  // `value = next`, which double-wrote when the parent passed `bind:value`
+  // (race) and dead-wrote when the parent passed only `value=` (the parent's
+  // next $derived recalc clobbered it on the next reactive tick). Callers
+  // should pick exactly one of `bind:value` or `onChange`.
   const handleInput = (e: Event) => {
     const next = (e.target as HTMLInputElement).value;
-    value = next;
-    onChange?.(next);
+    if (onChange) {
+      onChange(next);
+    } else {
+      value = next;
+    }
   };
 </script>
 
 <div class="mb-4 w-full">
   <div class="flex h-6.5 place-items-center gap-1">
-    <label class="text-sm font-medium text-primary" for={label}>{label}</label>
+    <label class="text-sm font-medium text-primary" for={uniqueId}>{label}</label>
     {#if required}
       <div class="text-red-400">*</div>
     {/if}
@@ -51,7 +71,7 @@
   </div>
 
   {#if description}
-    <p class="pb-2 text-sm immich-form-label" id="{label}-desc">
+    <p class="pb-2 text-sm immich-form-label" id={descId}>
       {description}
     </p>
   {:else}
@@ -60,10 +80,9 @@
 
   <textarea
     class="immich-form-input w-full pb-2"
-    aria-describedby={description ? `${label}-desc` : undefined}
-    aria-labelledby="{label}-label"
-    id={label}
-    name={label}
+    aria-describedby={descId}
+    id={uniqueId}
+    name={uniqueId}
     {required}
     {value}
     oninput={handleInput}
