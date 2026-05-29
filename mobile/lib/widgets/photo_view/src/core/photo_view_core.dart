@@ -341,16 +341,34 @@ class PhotoViewCoreState extends State<PhotoViewCore>
       // Preserve user-applied zoom across a scaleBoundaries change (e.g.
       // resize / rotation / image swap) by scaling the current value by the
       // ratio of new-to-old initialScale. Falls back to a full recalc if we
-      // don't have enough information to scale proportionally.
+      // don't have enough information to scale proportionally. The scaled
+      // value is clamped into the new bounds so the user doesn't briefly
+      // see an over-zoom that snaps back on the next gesture.
       final prev = cachedScaleBoundaries;
+      final newBounds = widget.scaleBoundaries;
       final currentScale = controller.scale;
       if (currentScale != null && prev.initialScale > 0) {
-        final ratio = widget.scaleBoundaries.initialScale / prev.initialScale;
-        controller.setScaleInvisibly(currentScale * ratio);
+        // If the user was sitting exactly at one of the previous extremes
+        // (min or initial), preserve that semantic by snapping to the new
+        // extreme rather than scaling by ratio — avoids drift on repeated
+        // resizes when the user never zoomed.
+        final double targetScale;
+        if (currentScale == prev.initialScale) {
+          targetScale = newBounds.initialScale;
+        } else if (currentScale == prev.minScale) {
+          targetScale = newBounds.minScale;
+        } else {
+          final ratio = newBounds.initialScale / prev.initialScale;
+          targetScale = currentScale * ratio;
+        }
+        // Clamp into the new bounds so the rendered transform never exceeds
+        // [minScale, maxScale] for the new layout.
+        final clamped = targetScale.clamp(newBounds.minScale, newBounds.maxScale);
+        controller.setScaleInvisibly(clamped);
       } else {
         markNeedsScaleRecalc = true;
       }
-      cachedScaleBoundaries = widget.scaleBoundaries;
+      cachedScaleBoundaries = newBounds;
     }
 
     return StreamBuilder(

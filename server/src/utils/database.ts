@@ -130,12 +130,20 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
  */
 export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`exists (
       select 1
-      from asset
-      where asset.id = ${assetId}
-        and asset.is_nsfw = true
+      from asset as nsfw_asset
+      where nsfw_asset.id = ${assetId}
+        and nsfw_asset.is_nsfw = true
     )`;
 
-const nsfwAssetExists = (assetAlias = 'asset') => sql<boolean>`${sql.ref(`${assetAlias}.is_nsfw`)} = true`;
+// NOTE: COALESCE protects callers that LEFT JOIN `asset` and pass `not nsfwAssetExists(...)`
+// to a WHERE clause. Without it, a row whose left-joined asset is NULL (e.g. an
+// album-only activity comment) would evaluate `null = true` → NULL, `not NULL` →
+// NULL, and the WHERE filter would silently drop the row. The old correlated-EXISTS
+// implementation didn't have this hazard because `NOT EXISTS` returns TRUE for an
+// empty subquery. Treating the absent boolean as `false` (i.e., "not NSFW")
+// preserves the previous semantics.
+const nsfwAssetExists = (assetAlias = 'asset') =>
+  sql<boolean>`coalesce(${sql.ref(`${assetAlias}.is_nsfw`)}, false) = true`;
 
 export function withNsfwAssets<O>(qb: SelectQueryBuilder<DB, any, O>, assetAlias = 'asset') {
   return qb.where(nsfwAssetExists(assetAlias));

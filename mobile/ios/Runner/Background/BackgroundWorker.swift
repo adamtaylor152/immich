@@ -94,8 +94,10 @@ class BackgroundWorker: BackgroundWorkerBgHostApi {
     
     // Register plugins in the new engine
     GeneratedPluginRegistrant.register(with: engine)
-    // Register custom plugins
-    AppDelegate.registerPlugins(with: engine, messenger: engine.binaryMessenger)
+    // Register custom plugins. Pass the engine so AppDelegate can tie the
+    // FileTrash channel's lifetime to this background engine and release
+    // it in `cancelPlugins(with:)` to avoid leaking one channel per task.
+    AppDelegate.registerPlugins(with: engine, messenger: engine.binaryMessenger, engine: engine)
     flutterApi = BackgroundWorkerFlutterApi(binaryMessenger: engine.binaryMessenger)
     BackgroundWorkerBgHostApiSetup.setUp(binaryMessenger: engine.binaryMessenger, api: self)
     

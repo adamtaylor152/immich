@@ -64,7 +64,11 @@ jobs:
           # grep returns 1 on no matches which would kill the pipeline under
           # pipefail; wrap so the first-ever run (no fork-v* tags yet) is fine
           # and LAST_N stays empty, letting NEXT_N default to 1.
-          API_TAGS=$(gh api "repos/${OWNER_REPO}/releases?per_page=100" \
+          #
+          # PAGINATION: --paginate walks all pages so very long-lived forks with
+          # >100 releases still find the highest fork-vX-N tag correctly. The
+          # git-tags fallback below also covers any API hiccup mid-pagination.
+          API_TAGS=$(gh api --paginate "repos/${OWNER_REPO}/releases?per_page=100" \
             --jq '.[].tag_name' 2>/dev/null || true)
           if [[ -z "${API_TAGS}" ]]; then
             echo "GitHub API returned no releases; falling back to local git tags"

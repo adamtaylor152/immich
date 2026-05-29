@@ -66,9 +66,11 @@ class TextRecognizer(InferenceModel):
         model_root_dir = self.model_path.parent
         keys_marker = model_root_dir / "ppocr_keys_v1.txt"
         if not keys_marker.exists():
-            # Only warn — rapidocr may locate the keys via its own search; the
-            # absence is a hint that the version skew may be at play.
-            log.debug(
+            # Warn (not debug) so operators see this at default log level when
+            # a rapidocr-version skew causes the dictionary file to land
+            # elsewhere. rapidocr may still locate the keys via its own
+            # search; the absence is a hint, not a hard failure.
+            log.warning(
                 f"OCR recognition model_root_dir={model_root_dir} does not contain ppocr_keys_v1.txt. "
                 "If rapidocr fails to load, check the model directory layout against the rapidocr version."
             )

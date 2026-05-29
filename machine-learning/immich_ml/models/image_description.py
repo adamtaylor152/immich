@@ -139,38 +139,25 @@ FLORENCE_MODEL_NAMES = {
     "microsoft/Florence-2-large-ft",
 }
 
-# Max characters per face/person name when interpolated into a VLM prompt.
-# Defensive cap mirroring the server-side validation; the server is the
-# authoritative source of truth, this is belt-and-braces in case the server
-# regresses or the ML endpoint is reached from another caller.
-MAX_NAME_LENGTH = 64
-
-
-def _sanitize_prompt_name(name: str) -> str:
-    """Strip control characters and cap length on a person-name string.
-
-    Defense-in-depth against prompt-injection via face names. The server is
-    expected to perform the primary sanitization (see Person.name validation
-    in server/src). We re-apply here so a regression on either side does not
-    open the injection vector.
-    """
-    if not name:
-        return ""
-    # Remove control characters (Cc) and format characters (Cf) — newlines,
-    # zero-width joiners, tab, etc. — that could break out of the bullet
-    # list or impersonate role markers.
-    cleaned = "".join(ch for ch in name if unicodedata.category(ch) not in {"Cc", "Cf"})
-    # Collapse interior whitespace runs to a single space.
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    if len(cleaned) > MAX_NAME_LENGTH:
-        cleaned = cleaned[:MAX_NAME_LENGTH].rstrip()
-    return cleaned
-
+# NOTE: Person/face names never reach the ML side as standalone strings —
+# the server (see ``server/src/services/prompt-assembler.service.ts``)
+# performs the primary sanitization and emits a fully-assembled
+# ``external_prompt`` that already contains the name bullets. The ML-side
+# defense in depth lives in ``_strip_dangerous_control_chars`` below,
+# applied to the entire ``external_prompt`` in ``_make_prompt``. A
+# ``_sanitize_prompt_name`` helper that took a bare name was removed
+# because no predict path receives a bare name on this side.
 
 # Whitelist of control characters preserved in the assembled prompt: tab,
 # newline, carriage return. The server's prompt assembler emits these
 # legitimately for layout/structure.
 _ALLOWED_CONTROL_CHARS = frozenset({"\t", "\n", "\r"})
+
+# Legacy-cache warning is deduplicated per (model_name × base path) so we
+# don't spam the log on every cache miss / model_cache.get. See
+# _cache_dir_default below.
+_legacy_cache_warned: set[Path] = set()
+_legacy_cache_warned_lock = threading.Lock()
 
 
 def _strip_dangerous_control_chars(text: str) -> str:
@@ -228,13 +215,21 @@ class ImageDescriptionModel(InferenceModel):
         # the wrong weights and the loader crashes opaquely. See ml.md Critical #2.
         base = settings.cache_folder / self.model_task.value / self.model_name
         scoped = base / str(self.acceleration)
-        # If a legacy (unscoped) cache exists alongside, log once so operators
-        # can reclaim the disk space manually. We do not auto-delete.
+        # If a legacy (unscoped) cache exists alongside, log ONCE per base
+        # path so operators can reclaim the disk space manually. We do not
+        # auto-delete. Without the dedupe guard this fired on every
+        # ``model_cache.get`` cache miss; see ml.md verify-ml.md
+        # "log once" gap.
         if base.exists() and any(p for p in base.iterdir() if p.is_file()):
-            log.warning(
-                f"Legacy image-description cache detected at {base}. "
-                f"New runs will populate {scoped}. The old directory can be removed manually."
-            )
+            with _legacy_cache_warned_lock:
+                already_warned = base in _legacy_cache_warned
+                if not already_warned:
+                    _legacy_cache_warned.add(base)
+            if not already_warned:
+                log.warning(
+                    f"Legacy image-description cache detected at {base}. "
+                    f"New runs will populate {scoped}. The old directory can be removed manually."
+                )
         return scoped
 
     def predict(self, *inputs: Any, **model_kwargs: Any) -> Any:
@@ -418,9 +413,19 @@ class ImageDescriptionModel(InferenceModel):
         return self._normalize_response(text)
 
     def _predict_florence(self, image: Image.Image) -> dict[str, Any]:
-        caption = self._run_florence_task("<MORE_DETAILED_CAPTION>", image)
-        ocr = self._run_florence_task("<OCR>", image)
-        detection = self._run_florence_task("<OD>", image)
+        # Hold ``_cuda_lock`` across ALL THREE Florence sub-calls so two
+        # concurrent Florence requests do not interleave (T1.caption →
+        # T2.caption → T1.ocr → …). Interleaving still races on the shared
+        # KV-cache / tokenizer state across sub-tasks even though each
+        # individual generate is itself serialized. Per-request locking is
+        # the right granularity here. See ml.md T4 (Florence inference lock
+        # is per-task).
+        session = cast(dict[str, Any], self.session)
+        torch = session["torch"]
+        with self._cuda_lock, torch.inference_mode():
+            caption = self._run_florence_task("<MORE_DETAILED_CAPTION>", image)
+            ocr = self._run_florence_task("<OCR>", image)
+            detection = self._run_florence_task("<OD>", image)
 
         description = str(caption.get("<MORE_DETAILED_CAPTION>") or caption.get("<DETAILED_CAPTION>") or "").strip()
         visible_text = self._list_of_strings([ocr.get("<OCR>")])
@@ -438,26 +443,27 @@ class ImageDescriptionModel(InferenceModel):
         }
 
     def _run_florence_task(self, task_prompt: str, image: Image.Image) -> dict[str, Any]:
+        # NOTE: lock acquisition lives in ``_predict_florence`` so two
+        # concurrent Florence requests do not race on shared KV-cache /
+        # tokenizer state across sub-tasks. Do not move the lock back in
+        # here without re-reading ml.md T4.
         session = cast(dict[str, Any], self.session)
         model = session["model"]
         processor = session["processor"]
         device = session["device"]
-        torch = session["torch"]
         torch_dtype = session["torch_dtype"]
         inputs = processor(text=task_prompt, images=image.convert("RGB"), return_tensors="pt")
         inputs = {key: value.to(device) for key, value in inputs.items()}
         if "pixel_values" in inputs:
             inputs["pixel_values"] = inputs["pixel_values"].to(dtype=torch_dtype)
 
-        # Serialize CUDA generate() calls per model instance — see _predict_qwen.
-        with self._cuda_lock, torch.inference_mode():
-            generated_ids = model.generate(
-                input_ids=inputs["input_ids"],
-                pixel_values=inputs["pixel_values"],
-                max_new_tokens=1024,
-                num_beams=3,
-                do_sample=False,
-            )
+        generated_ids = model.generate(
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=1024,
+            num_beams=3,
+            do_sample=False,
+        )
 
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
         parsed = processor.post_process_generation(generated_text, task=task_prompt, image_size=image.size)
@@ -812,7 +818,22 @@ class ImageDescriptionModel(InferenceModel):
 
     @property
     def cached(self) -> bool:
-        return self.cache_dir.exists() and any(self.cache_dir.iterdir())
+        # A non-empty directory is not enough: a partial download or operator
+        # intervention can leave junk behind that ``snapshot_download`` will
+        # silently skip over, then the loader crashes opaquely on missing
+        # weight files. Require ``config.json`` (every Phi/Qwen/Florence
+        # checkpoint ships one) as a cheap sanity marker. See ml.md
+        # Critical #2 (cache marker absence).
+        if not (self.cache_dir.exists() and any(self.cache_dir.iterdir())):
+            return False
+        config_path = self.cache_dir / "config.json"
+        if not config_path.is_file():
+            log.warning(
+                f"Image-description cache at {self.cache_dir} is non-empty but missing config.json; "
+                "treating as uncached and re-downloading. If this is unexpected, check the snapshot."
+            )
+            return False
+        return True
 
     @property
     def model_path(self) -> Path:

@@ -145,7 +145,11 @@ export class WorkflowRepository {
       .selectFrom('asset')
       .select((eb) => [
         'asset.visibility',
-        sql<boolean>`coalesce(${nsfwAssetIdExists(sql.ref('asset.id'))}, false)`.as('isNsfw'),
+        // `asset.is_nsfw` is a non-nullable boolean (DEFAULT false), so the predicate
+        // is never NULL and `coalesce(...)` is unnecessary. The predicate body
+        // lives in `nsfwAssetIdExists` (utils/database.ts) and resolves to an
+        // aliased EXISTS subquery against the `asset` table.
+        nsfwAssetIdExists(sql.ref('asset.id')).as('isNsfw'),
         eb
           .exists(
             eb

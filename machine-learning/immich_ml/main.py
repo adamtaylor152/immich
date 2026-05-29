@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import ipaddress
 import os
 import secrets
 import signal
@@ -73,18 +74,28 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
             await preload_models(settings.preload)
         yield
     finally:
-        log.handlers.clear()
+        # IMPORTANT ordering for actual GPU memory release:
+        #   1. Quiesce the thread pool so no in-flight `predict` thread still
+        #      holds a model instance via its local stack.
+        #   2. Drop the cache's strong refs to model instances.
+        #   3. gc.collect() to release the now-unreferenced sessions.
+        #   4. torch.cuda.empty_cache() to return pinned GPU memory.
+        # `log.handlers.clear()` is deferred to the end so warnings emitted
+        # by the shutdown branches above are still visible to operators.
+        # See ml.md Medium "Lifespan teardown doesn't release model GPU memory".
+        if thread_pool is not None:
+            try:
+                thread_pool.shutdown(wait=True)
+            except Exception as error:
+                log.warning(f"Failed to shut down thread pool during shutdown: {error}")
         # Drop strong references held by the cache so Torch/OpenVINO sessions
         # (which may hold multi-GB of pinned GPU memory) are eligible for GC
         # before the worker is respawned. Without this, `del model` only
         # deleted the loop variable and the cache dict kept references alive.
-        # See ml.md Medium "Lifespan teardown doesn't release model GPU memory".
         try:
             model_cache.cache._cache.clear()
         except Exception as error:
             log.warning(f"Failed to clear model cache during shutdown: {error}")
-        if thread_pool is not None:
-            thread_pool.shutdown()
         gc.collect()
         # If torch is present, also drop any cached CUDA allocator state.
         try:
@@ -96,6 +107,8 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
             pass
         except Exception as error:
             log.warning(f"Failed to empty CUDA cache during shutdown: {error}")
+        # Final step — after this, log.warning is a no-op. Keep this LAST.
+        log.handlers.clear()
 
 
 async def preload_models(preload: PreloadModelData) -> None:
@@ -213,39 +226,57 @@ def _normalize_auth_path(path: str) -> str:
 
 
 def _is_loopback_host(host: str) -> bool:
-    """Return True if `host` is a loopback bind (127.0.0.0/8 or ::1)."""
+    """Return True if `host` is a loopback bind (127.0.0.0/8 or ::1).
+
+    Uses `ipaddress` for proper classification so we don't false-positive on
+    hostnames like ``127.example.com`` and we correctly handle the bracketed
+    IPv6 form ``[::1]`` plus the literal hostname ``localhost``.
+    """
     if not host:
         return False
-    lowered = host.strip().lower()
-    return (
-        lowered == "localhost"
-        or lowered.startswith("127.")
-        or lowered == "::1"
-        or lowered == "[::1]"
-    )
+    cleaned = host.strip().lower()
+    if cleaned == "localhost":
+        return True
+    # Tolerate bracketed IPv6 literals (e.g. "[::1]" or "[::1]:3003").
+    if cleaned.startswith("["):
+        closing = cleaned.find("]")
+        if closing > 0:
+            cleaned = cleaned[1:closing]
+    else:
+        # Strip ":port" suffix on bare IPv4 ("127.0.0.1:3003").
+        if cleaned.count(":") == 1:
+            cleaned = cleaned.split(":", 1)[0]
+    try:
+        return ipaddress.ip_address(cleaned).is_loopback
+    except ValueError:
+        return False
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, expected_token: str | None, warn_when_unset: bool) -> None:
+    def __init__(self, app: ASGIApp, expected_token: str | None, allow_unauthenticated: bool) -> None:
         super().__init__(app)
         # Encode once so compare_digest sees bytes of consistent type.
         self._expected_bytes: bytes | None = expected_token.encode("utf-8") if expected_token else None
-        self._warn_when_unset = warn_when_unset
+        # When ``allow_unauthenticated`` is True the operator explicitly chose
+        # a loopback bind without a token (local-dev UX). Outside of that,
+        # ``expected_token`` must be set — startup refuses otherwise.
+        self._allow_unauthenticated = allow_unauthenticated
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         normalized_path = _normalize_auth_path(request.url.path)
-        if self._expected_bytes is None:
-            # Auth was not configured. We loudly warn every inference attempt
-            # so operators see this in logs in the default-UX local deploy.
-            if self._warn_when_unset and normalized_path not in _AUTH_EXEMPT_PATHS:
-                log.warning(
-                    "IMMICH_ML_AUTH_TOKEN is unset and ML is bound to a non-loopback "
-                    "address. Inference endpoint is reachable without authentication. "
-                    "Set IMMICH_ML_AUTH_TOKEN to enable bearer auth."
-                )
-            return await call_next(request)
         if normalized_path in _AUTH_EXEMPT_PATHS:
             return await call_next(request)
+        if self._expected_bytes is None:
+            # Only possible when the operator explicitly opted into the
+            # loopback-no-token mode (allow_unauthenticated=True). On any
+            # other bind, startup raised — see _build_auth_config.
+            if self._allow_unauthenticated:
+                return await call_next(request)
+            # Fail closed. This branch should not be reachable in practice
+            # because startup refuses to construct the middleware in this
+            # state, but we never serve an unauthenticated request on a
+            # non-loopback bind. ml.md R3 (fail-closed bearer auth).
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
         header = request.headers.get("authorization", "")
         if len(header) > _MAX_AUTH_HEADER_LENGTH:
             return JSONResponse({"message": "Unauthorized"}, status_code=401)
@@ -259,32 +290,54 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class AuthConfigurationError(RuntimeError):
+    """Raised at startup when ML is bound to a non-loopback address with no
+    ``IMMICH_ML_AUTH_TOKEN``. We refuse to serve unauthenticated inference on
+    a network-reachable bind. ml.md R3 (fail-closed bearer auth)."""
+
+
+def _build_auth_config(
+    auth_token: str | None,
+    immich_host: str,
+) -> tuple[str | None, bool]:
+    """Validate the (token, bind) combination at startup.
+
+    Returns ``(token, allow_unauthenticated)``. Raises
+    ``AuthConfigurationError`` on the disallowed combination
+    (no token + non-loopback bind) so the operator notices immediately
+    rather than after an attacker hits the unauthenticated ``/predict``.
+    """
+    if auth_token:
+        return auth_token, False
+    if _is_loopback_host(immich_host):
+        # Local-dev UX: explicit loopback bind without a token is fine.
+        return None, True
+    raise AuthConfigurationError(
+        "IMMICH_ML_AUTH_TOKEN is unset and IMMICH_HOST "
+        f"{immich_host!r} is not a loopback address. ML will not start "
+        "without authentication on a network-reachable bind. Set "
+        "IMMICH_ML_AUTH_TOKEN to enable bearer auth, or bind ML to "
+        "127.0.0.1/::1/localhost for trusted local-only use."
+    )
+
+
 _auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
 _immich_host = os.environ.get("IMMICH_HOST", "[::]").strip()
-_bound_loopback = _is_loopback_host(_immich_host)
+_expected_token, _allow_unauthenticated = _build_auth_config(_auth_token, _immich_host)
 
-if _auth_token:
+if _expected_token:
     log.info("Bearer-token authentication enabled for /predict")
-elif not _bound_loopback:
-    # Loud, one-shot warning at boot. The middleware will additionally warn
-    # on every inference request when token is unset and host is non-loopback.
-    log.warning(
-        "SECURITY: IMMICH_ML_AUTH_TOKEN is unset and IMMICH_HOST '%s' is not a loopback "
-        "address. /predict will accept unauthenticated requests. Set IMMICH_ML_AUTH_TOKEN, "
-        "bind ML to 127.0.0.1/::1, or place ML behind a reverse proxy that enforces network ACLs.",
-        _immich_host,
-    )
 else:
     log.warning(
-        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback '%s'); /predict is unauthenticated. "
+        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback %r); /predict is unauthenticated. "
         "Acceptable for local development only.",
         _immich_host,
     )
 
 app.add_middleware(
     BearerAuthMiddleware,
-    expected_token=_auth_token,
-    warn_when_unset=not _bound_loopback,
+    expected_token=_expected_token,
+    allow_unauthenticated=_allow_unauthenticated,
 )
 
 

@@ -21,12 +21,16 @@ jobs:
       security-events: write
 
   zizmor-skipped:
-    # Required-check satisfaction: when the `zizmor` reusable workflow is
-    # skipped (fork environment), this job posts a passing status with the
-    # same name pattern so any branch-protection rule that lists "Zizmor"
-    # as required does not block the PR. Stays neutral on the upstream repo
-    # where the real `zizmor` job runs.
-    name: Zizmor (skipped on fork)
+    # Required-check satisfaction: when the upstream `zizmor` reusable workflow
+    # is skipped (fork environment), this job posts a passing status under the
+    # EXACT same name (`Zizmor`) so any branch-protection rule listing `Zizmor`
+    # as a required check is satisfied. GitHub matches required checks by
+    # exact name string — `Zizmor (skipped on fork)` would be a DIFFERENT check
+    # and would NOT satisfy a `Zizmor` required-check rule. The mutually
+    # exclusive `if:` conditions on the two jobs (one runs only upstream, the
+    # other only on forks) guarantee exactly one runs per workflow execution,
+    # so name collision is benign and the status check is unambiguous.
+    name: Zizmor
     if: github.repository_owner != 'immich-app'
     runs-on: ubuntu-latest
     permissions: {}

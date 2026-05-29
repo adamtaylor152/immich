@@ -2,8 +2,13 @@ import native_video_player
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
-  // Retains FileTrash channels across the lifetime of the engine.
-  private static var fileTrashChannels: [FlutterMethodChannel] = []
+  // Retains FileTrash channels per-engine so they can be released when the
+  // engine is torn down. Keyed by `ObjectIdentifier(engine)` for engines
+  // with a clean lifecycle (e.g. BackgroundWorker). The implicit Flutter
+  // engine has no `FlutterEngine` reference exposed at registration time
+  // and lives for the lifetime of the app, so it uses the nil key — a
+  // single retained entry that never needs release.
+  private static var fileTrashChannels: [ObjectIdentifier?: FlutterMethodChannel] = [:]
 
   override func application(
     _ application: UIApplication,
@@ -24,21 +29,33 @@ import native_video_player
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
-    AppDelegate.registerPlugins(with: engineBridge.pluginRegistry, messenger: messenger)
+    AppDelegate.registerPlugins(with: engineBridge.pluginRegistry, messenger: messenger, engine: nil)
   }
 
-  public static func registerPlugins(with registry: FlutterPluginRegistry, messenger: FlutterBinaryMessenger) {
+  public static func registerPlugins(
+    with registry: FlutterPluginRegistry,
+    messenger: FlutterBinaryMessenger,
+    engine: FlutterEngine? = nil
+  ) {
     NativeSyncApiImpl.register(with: registry.registrar(forPlugin: NativeSyncApiImpl.name)!)
     LocalImageApiSetup.setUp(binaryMessenger: messenger, api: LocalImageApiImpl())
     RemoteImageApiSetup.setUp(binaryMessenger: messenger, api: RemoteImageApiImpl())
     BackgroundWorkerFgHostApiSetup.setUp(binaryMessenger: messenger, api: BackgroundWorkerApiImpl())
     ConnectivityApiSetup.setUp(binaryMessenger: messenger, api: ConnectivityApiImpl())
     NetworkApiSetup.setUp(binaryMessenger: messenger, api: NetworkApiImpl())
-    registerFileTrashChannel(messenger: messenger)
+    registerFileTrashChannel(messenger: messenger, engine: engine)
   }
 
   public static func cancelPlugins(with engine: FlutterEngine) {
     (engine.valuePublished(byPlugin: NativeSyncApiImpl.name) as? NativeSyncApiImpl)?.detachFromEngine()
+    // Release the FileTrash channel tied to this engine so it doesn't leak
+    // one `FlutterMethodChannel` per background-task lifecycle. Clearing the
+    // handler is belt-and-suspenders in case the channel is referenced
+    // elsewhere; the dictionary entry removal is the actual fix.
+    let key = ObjectIdentifier(engine)
+    if let channel = fileTrashChannels.removeValue(forKey: key) {
+      channel.setMethodCallHandler(nil)
+    }
   }
 
   // Backs the Dart `MethodChannel('file_trash')` used by
@@ -48,7 +65,7 @@ import native_video_player
   // iOS users go through the PhotoKit lifecycle for deletes/restores via the
   // stock Photos UI, so every call here is a benign no-op that reports
   // false. Matches the upstream pigeon stub behavior (hard-coded false).
-  private static func registerFileTrashChannel(messenger: FlutterBinaryMessenger) {
+  private static func registerFileTrashChannel(messenger: FlutterBinaryMessenger, engine: FlutterEngine?) {
     let channel = FlutterMethodChannel(name: "file_trash", binaryMessenger: messenger)
     channel.setMethodCallHandler { call, result in
       switch call.method {
@@ -62,6 +79,10 @@ import native_video_player
         result(FlutterMethodNotImplemented)
       }
     }
-    fileTrashChannels.append(channel)
+    let key: ObjectIdentifier? = engine.map(ObjectIdentifier.init)
+    // If a channel was already registered for this engine (e.g. registerPlugins
+    // is called twice), release the old handler before replacing.
+    fileTrashChannels[key]?.setMethodCallHandler(nil)
+    fileTrashChannels[key] = channel
   }
 }

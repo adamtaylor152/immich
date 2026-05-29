@@ -143,11 +143,17 @@ class _OptionsBase(BaseModel):
     schema drift between server and ML service, and provides a defensive
     barrier against an attacker who controls the server side from sending
     arbitrary kwargs to model constructors.
+
+    NOTE: ``ttl`` is intentionally NOT declared here. ``main.run_inference``
+    passes ``ttl=settings.model_ttl`` to ``model_cache.get`` alongside
+    ``**entry["options"]``; declaring ``ttl`` as a per-task option would
+    let a caller send ``ttl`` in the validated payload, then collide with
+    the explicit keyword and raise ``TypeError: got multiple values for
+    keyword argument 'ttl'``.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    ttl: int | None = Field(default=None, ge=0)
     device: str | None = Field(default=None, max_length=64)
 
 

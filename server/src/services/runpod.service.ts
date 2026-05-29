@@ -1320,8 +1320,20 @@ export class RunPodService extends BaseService {
   /**
    * Persist a reference to a serverless template that could not be deleted on
    * teardown (likely because it was already gone from RunPod's side). The
-   * orphan reference lives in system metadata so an admin can later audit and
-   * the HF token rotation reminder surfaces in the UI.
+   * orphan reference lives in `SystemMetadataKey.RunPodOrphans` as a
+   * write-only operator-side log: nothing in the server, web, or mobile
+   * stack currently reads this key. Operators retrieve it ad-hoc via a
+   * direct `system_metadata` query when investigating a stale token or pod.
+   *
+   * The one-time `logger.warn` in the caller (see the 404 branch in the
+   * delete-template error handler) is still the only automated signal to
+   * the operator. We record the templateId here so post-mortem inspection
+   * remains possible after log rotation.
+   *
+   * TODO: Wire an admin endpoint + RunPod-settings UI banner that reads
+   * `SystemMetadataKey.RunPodOrphans` and offers an explicit "mark
+   * resolved" / "rotate HF token" action. Until that lands, no UI surface
+   * exists for these orphans.
    */
   private async recordOrphanTemplate(templateId: string): Promise<void> {
     try {

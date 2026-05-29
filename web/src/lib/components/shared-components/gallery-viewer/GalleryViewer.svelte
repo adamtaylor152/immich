@@ -407,6 +407,13 @@
         onAction={handleAction}
         onRandom={handleRandom}
         onAssetChange={updateCurrentAsset}
+        onAssetUpdate={(updatedAsset) => {
+          // assetCursor is `$derived` from `assetViewerManager.asset`. Push the
+          // refreshed asset into the manager so the derived cursor recomputes
+          // and the viewer reflects the change (e.g. NSFW review, refresh-people).
+          updateCurrentAsset(updatedAsset);
+          assetViewerManager.setAsset(updatedAsset);
+        }}
         onClose={() => {
           assetViewerManager.showAssetViewer(false);
           handlePromiseError(navigate({ targetRoute: 'current', assetId: null }));

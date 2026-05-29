@@ -255,6 +255,15 @@
     onAssetChange={(asset) => {
       timelineManager?.upsertAssets([toTimelineAsset(asset)]);
     }}
+    onAssetUpdate={(updatedAsset) => {
+      // Refresh the cursor's `current` from the parent that owns the `$state`.
+      // Reassigning `cursor` inside AssetViewer would only mutate the local
+      // prop — production builds drop the ownership warning, so the parent
+      // would silently never see the update.
+      if (assetCursor.current.id === updatedAsset.id) {
+        assetCursor = { ...assetCursor, current: updatedAsset };
+      }
+    }}
     preAction={handlePreAction}
     onAction={(action) => {
       handleAction(action);

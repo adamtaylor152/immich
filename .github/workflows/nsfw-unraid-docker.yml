@@ -31,6 +31,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # `id-token: write` is required for `docker/build-push-action` to mint
+      # a GitHub OIDC token, which BuildKit uses to produce signed SLSA
+      # provenance attestations alongside the `provenance: mode=min` metadata
+      # embedded in the image manifest. Without this permission, the build
+      # still succeeds but the provenance is unsigned BuildKit-embedded data
+      # only — not the verifiable SLSA attestation chain Unraid consumers
+      # need to validate `commit-<sha>` came from this exact workflow.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -89,6 +97,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # See build-server above: required for signed SLSA provenance via OIDC.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

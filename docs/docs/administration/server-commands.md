@@ -18,7 +18,6 @@ The `immich-server` docker image comes preinstalled with an administrative CLI (
 | `version`                   | Print Immich version                                                                                                                                                                    |
 | `change-media-location`     | Change database file paths to align with a new media location                                                                                                                           |
 | `schema-check`              | Verify database migrations and check for schema drift                                                                                                                                   |
-| `schema-revert-to-upstream` | Roll back fork-only DB migrations so this database can be served by the official `immich-app/immich` image. See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md). |
 
 ## How to run a command
 
@@ -156,24 +155,6 @@ Migrations are up to date
 No schema drift detected
 ```
 
-Schema Revert to Upstream
+Downgrading to upstream Immich
 
-See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md) for the full procedure (backup, downgrade, verification).
-
-```bash
-immich-admin schema-revert-to-upstream
-... destructive operation warning ...
-? Type "revert" to confirm:  revert
-Reverted 11 fork migrations:
-  - 1779500000000-ReconcileSchemaDrift
-  - 1779400000000-UpdateWorkflowTables
-  - ...
-Recorded upstream "1778614946174-UpdateWorkflowTables" as applied.
-
-Schema revert complete. To finish downgrading to upstream:
-  1. Stop this container (e.g. `docker compose stop immich-server`).
-  2. In your docker-compose.yml, set:
-       image: ghcr.io/immich-app/immich-server:release
-     (or a specific upstream version).
-  3. `docker compose pull && docker compose up -d`
-```
+There is no `immich-admin` command for downgrading to upstream. The previously documented `schema-revert-to-upstream` CLI was removed (several fork migrations had empty `down()` stubs that silently reported success while leaving fork-only tables intact). See [Reverting Back to Upstream Immich](../features/revert-to-upstream.md) for the supported `pg_restore`-from-backup procedure.

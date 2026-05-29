@@ -880,6 +880,144 @@ describe(AssetService.name, () => {
         ]),
       );
     });
+
+    /**
+     * Regression test for W2: A user with `AssetUpdate` could write
+     * `key='ml-enrichment'` directly via the public metadata-write API,
+     * bypassing `ImageEnrichmentService.saveEnrichmentMetadata` and leaving
+     * the denormalized `asset.is_nsfw` column out of sync with the JSONB.
+     * `AssetService.upsertBulkMetadata` now mirrors the derived NSFW state
+     * into the boolean column via `deriveIsNsfwFromMetadata` + `updateIsNsfw`.
+     */
+    it('syncs asset.is_nsfw when ml-enrichment is written via bulk metadata', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertBulkMetadata(auth, {
+        items: [
+          {
+            assetId: asset.id,
+            key: AssetMetadataKey.MlEnrichment,
+            value: { nsfwDetection: { status: 'success', result: { isNsfw: true, score: 0.95, labels: {} } } },
+          },
+        ],
+      });
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: true }),
+      );
+
+      // Flipping the value should re-sync.
+      await sut.upsertBulkMetadata(auth, {
+        items: [
+          {
+            assetId: asset.id,
+            key: AssetMetadataKey.MlEnrichment,
+            value: { nsfwDetection: { status: 'success', result: { isNsfw: false, score: 0.05, labels: {} } } },
+          },
+        ],
+      });
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: false }),
+      );
+    });
+  });
+
+  describe('upsertMetadata', () => {
+    it('syncs asset.is_nsfw when ml-enrichment is written via single-asset metadata API', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [
+          {
+            key: AssetMetadataKey.MlEnrichment,
+            value: { nsfwDetection: { status: 'success', result: { isNsfw: true, score: 0.95, labels: {} } } },
+          },
+        ],
+      });
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: true }),
+      );
+    });
+
+    it('honors review override (marked-safe) when syncing asset.is_nsfw', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      // Model says NSFW but reviewer marked it safe — the boolean should reflect the override.
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [
+          {
+            key: AssetMetadataKey.MlEnrichment,
+            value: {
+              nsfwDetection: {
+                status: 'success',
+                result: { isNsfw: true, score: 0.95, labels: {} },
+                review: { action: 'marked-safe', isNsfw: false },
+              },
+            },
+          },
+        ],
+      });
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: false }),
+      );
+    });
+
+    it('leaves asset.is_nsfw alone when a non-ml-enrichment key is written', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      // Force the column to true via direct DB write.
+      await defaultDatabase.updateTable('asset').set({ is_nsfw: true }).where('id', '=', asset.id).execute();
+
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [{ key: AssetMetadataKey.MobileApp, value: { iCloudId: 'foo' } }],
+      });
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: true }),
+      );
+    });
+  });
+
+  describe('deleteMetadataByKey (W2 sync)', () => {
+    it('resets asset.is_nsfw when ml-enrichment is removed via single-key delete', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [
+          {
+            key: AssetMetadataKey.MlEnrichment,
+            value: { nsfwDetection: { status: 'success', result: { isNsfw: true, score: 0.95, labels: {} } } },
+          },
+        ],
+      });
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: true }),
+      );
+
+      await sut.deleteMetadataByKey(auth, asset.id, AssetMetadataKey.MlEnrichment);
+
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: false }),
+      );
+    });
   });
 
   describe('deleteBulkMetadata', () => {

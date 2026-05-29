@@ -44,8 +44,25 @@ jobs:
         # vector (a malicious package.json `preinstall` running shell on the
         # runner) without changing the trigger semantics. Formatting tooling
         # (prettier, eslint) does not require lifecycle scripts to run.
+        #
+        # KNOWN RESIDUAL SURFACE: the `pnpm run ... format:fix` invocation below
+        # executes each workspace's `format:fix` package.json script. A
+        # same-repo collaborator with `pull-requests: write` (label-apply
+        # rights) plus `contents: write` (commit rights) can land an arbitrary
+        # `format:fix` script in any workspace's package.json, label their
+        # PR `fix:formatting`, and obtain RCE on the runner — because
+        # `persist-credentials: true` (line 33) preserves the GITHUB_TOKEN in
+        # the checkout. `--ignore-scripts` does NOT cover `pnpm run <script>`.
+        # The job-level `head.repo.fork == false` guard limits the abuser pool
+        # to existing same-repo collaborators (the existing trust model), but
+        # it does not close the path. Long-term fix: migrate the commit step
+        # to a scoped GitHub App token and drop `persist-credentials: true`.
+        # Tracked as known-issue; sandboxing `pnpm run` here is more invasive
+        # than the residual risk warrants in the same-repo trust model.
         run: |
           pnpm --recursive install --ignore-scripts
+          # See above: format:fix is workspace-controlled. Treat as trusted only
+          # to the extent the same-repo write-access pool is trusted.
           pnpm run --recursive --if-present --parallel format:fix
 
       - name: Commit and push

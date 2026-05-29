@@ -6,6 +6,7 @@
   import { AssetImageEnrichmentAction, updateAssetImageEnrichment } from '@immich/sdk';
   import { IconButton, toastManager } from '@immich/ui';
   import { mdiShieldAlert, mdiShieldCheck, mdiTimerSand } from '@mdi/js';
+  import { onDestroy } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -29,9 +30,15 @@
   // 5xx responses don't sink the whole batch.
   const MAX_CONCURRENCY = 5;
 
+  // Tracks the active batch so we can abort if the component unmounts mid-run.
+  // Without this, workers would settle after destroy and produce
+  // setState-after-unmount warnings (and stray toasts).
+  let activeAbortController: AbortController | undefined;
+
   const runWithConcurrency = async (
     items: readonly string[],
-    worker: (id: string) => Promise<unknown>,
+    worker: (id: string, signal: AbortSignal) => Promise<unknown>,
+    signal: AbortSignal,
   ): Promise<{ succeeded: string[]; failed: string[] }> => {
     const succeeded: string[] = [];
     const failed: string[] = [];
@@ -39,12 +46,21 @@
 
     const run = async () => {
       while (cursor < items.length) {
+        if (signal.aborted) {
+          return;
+        }
         const index = cursor++;
         const id = items[index];
         try {
-          await worker(id);
+          await worker(id, signal);
+          if (signal.aborted) {
+            return;
+          }
           succeeded.push(id);
         } catch (error) {
+          if (signal.aborted) {
+            return;
+          }
           failed.push(id);
           console.warn(`Failed to update enrichment for asset ${id}`, error);
         }
@@ -63,15 +79,28 @@
       return;
     }
 
+    // Cancel any prior in-flight batch so a rapid double-click can't race.
+    activeAbortController?.abort();
+    const controller = new AbortController();
+    activeAbortController = controller;
     loading = true;
 
     try {
-      const { succeeded, failed } = await runWithConcurrency(ids, (id) =>
-        updateAssetImageEnrichment({
-          id,
-          assetImageEnrichmentActionRequestDto: { action },
-        }),
+      const { succeeded, failed } = await runWithConcurrency(
+        ids,
+        (id) =>
+          updateAssetImageEnrichment({
+            id,
+            assetImageEnrichmentActionRequestDto: { action },
+          }),
+        controller.signal,
       );
+
+      // Component unmounted (or a newer batch superseded) mid-run — don't
+      // emit events or touch UI state owned by other batches.
+      if (controller.signal.aborted) {
+        return;
+      }
 
       if (action === AssetImageEnrichmentAction.MarkNsfw && succeeded.length > 0) {
         eventManager.emit('AssetsMarkNsfw', succeeded);
@@ -86,10 +115,7 @@
           $t(markSafe ? 'mark_safe_action_prompt' : 'mark_nsfw_action_prompt', { values: { count: succeeded.length } }),
         );
       } else if (succeeded.length === 0) {
-        handleError(
-          new Error(`All ${failed.length} updates failed`),
-          $t('errors.unable_to_update_image_enrichment'),
-        );
+        handleError(new Error(`All ${failed.length} updates failed`), $t('errors.unable_to_update_image_enrichment'));
       } else {
         toastManager.primary(
           $t(markSafe ? 'mark_safe_action_partial' : 'mark_nsfw_action_partial', {
@@ -102,11 +128,20 @@
         assetMultiSelectManager.clear();
       }
     } catch (error) {
-      handleError(error, $t('errors.unable_to_update_image_enrichment'));
+      if (!controller.signal.aborted) {
+        handleError(error, $t('errors.unable_to_update_image_enrichment'));
+      }
     } finally {
-      loading = false;
+      if (activeAbortController === controller) {
+        activeAbortController = undefined;
+        loading = false;
+      }
     }
   };
+
+  onDestroy(() => {
+    activeAbortController?.abort();
+  });
 </script>
 
 {#if menuItem}

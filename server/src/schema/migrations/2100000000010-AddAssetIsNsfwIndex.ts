@@ -34,7 +34,7 @@ export async function up(db: Kysely<any>): Promise<void> {
             SELECT 1
             FROM asset_metadata am
             WHERE am."assetId" = a.id
-              AND am.key = 'ml_enrichment'
+              AND am.key = 'ml-enrichment'
               AND CASE
                 WHEN am.value #> '{nsfwDetection,review}' IS NOT NULL THEN
                   COALESCE((am.value #>> '{nsfwDetection,review,isNsfw}')::boolean, false)

@@ -111,15 +111,24 @@ export class FileUploadInterceptor implements NestInterceptor {
       );
 
       const writeStream = this.storageRepository.createWriteStream(path);
-      // SECURITY: SHA-1 is preserved for the asset checksum so duplicate-detection,
-      // library scan, and existing client integrations keep working — they all
-      // assume SHA-1. The fork's physical-dedup feature mitigates the
-      // collision risk (CWE-327 — see security.md M1) by ALSO requiring
-      // matching `fileSizeInByte` AND a same-tenant boundary check before
-      // linking storage. Migration story: when a cross-tenant physical dedup
-      // candidate is detected, compute a SHA-256 second-pass before linking
-      // (see physical-file.repository.ts). For new uploads, the algorithm
-      // column is tracked so a future opportunistic rehash pass can upgrade.
+      // SECURITY DEFERRED (SHAttered / CWE-327): The checksum below is still
+      // SHA-1. A real upgrade to SHA-256 would touch the server checksum
+      // pipeline, the OpenAPI types regenerated for web/mobile SDKs, the web
+      // client-side hasher (`web/src/lib/workers/hash-file.ts` uses
+      // `@noble/hashes/legacy.js` for SHA-1), the dedup linker, and all
+      // existing rows in `asset.checksum` — well above the safe scope for a
+      // single mitigation patch. SHA-1 is preserved here so duplicate
+      // detection, library scan, and existing client integrations keep
+      // working. The physical-dedup feature's same-tenant + matching
+      // `fileSizeInByte` gate is the partial mitigation that ships now.
+      //
+      // TODO(security/M1): Implement a real SHA-256 transition. Tracking
+      // task: add a `ChecksumAlgorithm.sha256File` enum value; tee a second
+      // SHA-256 hasher in this interceptor; persist it on new uploads; and
+      // add a SHA-256 confirmation pass in
+      // `getPhysicalDeduplicationCandidate` before linking cross-tenant
+      // storage. See `.claude/review/verify-integration.md` "Thread 4" and
+      // security.md M1 for the SHAttered finding.
       const hash = file.fieldname === UploadFieldName.ASSET_DATA ? createHash('sha1') : null;
 
       let size = 0;

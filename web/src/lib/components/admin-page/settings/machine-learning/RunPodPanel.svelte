@@ -322,9 +322,17 @@
     backfilling = true;
     try {
       const result = await runBackfill();
-      toastManager.info(
-        `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length > 0 ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
-      );
+      const enqueued = result.enqueued.join(', ');
+      // Use a separate "none enqueued" key so translators can tailor the copy
+      // (e.g. negative phrasing) instead of receiving a literal "nothing".
+      const enqueuedMessage = enqueued
+        ? $t('admin.machine_learning_runpod_backfill_enqueued_toast', { values: { jobs: enqueued } })
+        : $t('admin.machine_learning_runpod_backfill_enqueued_none_toast');
+      const message =
+        result.skipped.length > 0
+          ? `${enqueuedMessage} · ${$t('admin.machine_learning_runpod_backfill_skipped_toast', { values: { jobs: result.skipped.join(', ') } })}`
+          : enqueuedMessage;
+      toastManager.info(message);
     } catch (error) {
       handleError(error, $t('admin.machine_learning_runpod_failed_to_backfill'));
     } finally {
@@ -436,7 +444,9 @@
           {/if}
           {#if podState.runningSince}
             <div class="mt-1 text-xs text-immich-gray">
-              {$t('admin.machine_learning_runpod_running_since', { values: { time: minutesAgo(podState.runningSince) } })}
+              {$t('admin.machine_learning_runpod_running_since', {
+                values: { time: minutesAgo(podState.runningSince) },
+              })}
             </div>
           {/if}
           {#if podState.lastBusyAt && isRunning}
@@ -493,9 +503,7 @@
         <div class="flex shrink-0 flex-col gap-1">
           {#if isRunning}
             <Button size="small" onclick={handleStop} disabled={stopping}>
-              {stopping
-                ? $t('admin.machine_learning_runpod_stopping')
-                : $t('admin.machine_learning_runpod_stop')}
+              {stopping ? $t('admin.machine_learning_runpod_stopping') : $t('admin.machine_learning_runpod_stop')}
             </Button>
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
               {terminating
@@ -606,9 +614,7 @@
 
       <div class="flex justify-end gap-2">
         <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
-          {testing
-            ? $t('admin.machine_learning_runpod_testing')
-            : $t('admin.machine_learning_runpod_test_connection')}
+          {testing ? $t('admin.machine_learning_runpod_testing') : $t('admin.machine_learning_runpod_test_connection')}
         </Button>
         {#if isServerlessReady || status === 'serverless-provisioning'}
           <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
@@ -759,7 +765,8 @@
     <div class="rounded-sm border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
       <FormatMessage key="admin.machine_learning_runpod_security_pod">
         {#snippet children({ tag, message })}
-          {#if tag === 'strong'}<strong>{message}</strong>{:else if tag === 'code'}<code>{message}</code>{:else}{message}{/if}
+          {#if tag === 'strong'}<strong>{message}</strong>{:else if tag === 'code'}<code>{message}</code
+            >{:else}{message}{/if}
         {/snippet}
       </FormatMessage>
     </div>

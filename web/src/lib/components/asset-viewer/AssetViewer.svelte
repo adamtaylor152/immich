@@ -67,6 +67,11 @@
     album?: AlbumResponseDto;
     person?: PersonResponseDto;
     onAssetChange?: (asset: AssetResponseDto) => void;
+    // Bubbled up so the owner of the cursor `$state` (parent caller) can
+    // refresh its own state when the open asset changes (e.g. NSFW review,
+    // refresh-people). Reassigning `cursor` locally would silently fail in
+    // production builds because `cursor` is a non-bindable prop.
+    onAssetUpdate?: (asset: AssetResponseDto) => void;
     preAction?: PreAction;
     onAction?: OnAction;
     onUndoDelete?: OnUndoDelete;
@@ -84,6 +89,7 @@
     album,
     person,
     onAssetChange,
+    onAssetUpdate,
     preAction,
     onAction,
     onUndoDelete,
@@ -145,9 +151,12 @@
     }
   };
 
-  const onAssetUpdate = (updatedAsset: AssetResponseDto) => {
+  // Forward the updated asset to the parent (which owns the cursor `$state`)
+  // and only emit when the open asset matches — otherwise a delayed refresh
+  // from a stale view would clobber the freshly-navigated cursor.
+  const handleAssetUpdate = (updatedAsset: AssetResponseDto) => {
     if (asset.id === updatedAsset.id) {
-      cursor = { ...cursor, current: updatedAsset };
+      onAssetUpdate?.(updatedAsset);
     }
   };
 
@@ -476,7 +485,7 @@
 </script>
 
 <CommandPaletteDefaultProvider name={$t('assets')} actions={[Tag, TagPeople]} />
-<OnEvents {onAssetUpdate} />
+<OnEvents onAssetUpdate={handleAssetUpdate} />
 
 <svelte:document bind:fullscreenElement />
 
@@ -619,7 +628,7 @@
       translate="yes"
     >
       {#if showDetailPanel}
-        <DetailPanel {asset} currentAlbum={album} {onAssetSuppressed} {onAssetUpdate} />
+        <DetailPanel {asset} currentAlbum={album} {onAssetSuppressed} onAssetUpdate={handleAssetUpdate} />
       {:else if assetViewerManager.isShowEditor}
         <EditorPanel {asset} onClose={closeEditor} />
       {/if}

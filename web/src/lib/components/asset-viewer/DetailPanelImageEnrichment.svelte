@@ -13,6 +13,7 @@
   } from '@immich/sdk';
   import { Button, LoadingSpinner, Text, toastManager } from '@immich/ui';
   import { mdiBroom, mdiCheckCircleOutline, mdiRefresh, mdiShieldAlert, mdiShieldCheck, mdiTagRemove } from '@mdi/js';
+  import { onDestroy } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -177,6 +178,14 @@
     if (canReview) {
       handlePromiseError(loadEnrichment(asset.id));
     }
+  });
+
+  // Abort any in-flight enrichment fetch when the panel unmounts. Without
+  // this, the request runs to completion (defeating the bandwidth-saving
+  // intent of the AbortController) and writes back into a destroyed component.
+  onDestroy(() => {
+    enrichmentController?.abort();
+    enrichmentController = undefined;
   });
 </script>
 
