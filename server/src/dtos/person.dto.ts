@@ -12,9 +12,22 @@ import { transformFaceBoundingBox } from 'src/utils/transform';
 import { emptyStringToNull, hexColor, stringToBool } from 'src/validation';
 import z from 'zod';
 
+// Person names flow into VLM prompts shipped to RunPod (see
+// prompt-assembler.service.ts identityHint). Cap length and reject control
+// characters / newlines so a malicious user cannot inject a multi-thousand-char
+// prompt-injection payload via `Person.name`. Also closes a log-noise vector.
+// eslint-disable-next-line no-control-regex
+const PERSON_NAME_CONTROL_PATTERN = /[\u0000-\u001F]/;
+const personNameSchema = z
+  .string()
+  .max(256, { error: 'Person name must be 256 characters or fewer' })
+  .refine((value) => !PERSON_NAME_CONTROL_PATTERN.test(value), {
+    error: 'Person name cannot contain control characters or newlines',
+  });
+
 const PersonCreateSchema = z
   .object({
-    name: z.string().optional().describe('Person name'),
+    name: personNameSchema.optional().describe('Person name'),
     // Note: the mobile app cannot currently set the birth date to null.
     birthDate: emptyStringToNull(z.string().meta({ format: 'date' }).nullable())
       .optional()

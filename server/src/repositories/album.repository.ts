@@ -363,10 +363,7 @@ export class AlbumRepository {
         .executeTakeFirstOrThrow();
 
       // Closure table: every album is its own ancestor.
-      await tx
-        .insertInto('album_closure')
-        .values({ id_ancestor: result.id, id_descendant: result.id })
-        .execute();
+      await tx.insertInto('album_closure').values({ id_ancestor: result.id, id_descendant: result.id }).execute();
 
       // If parented, copy every ancestor of the parent to be an ancestor of this new node.
       if (result.parentId) {

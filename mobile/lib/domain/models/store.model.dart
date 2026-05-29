@@ -6,24 +6,41 @@ enum StoreKey<T> {
   version<int>._(0),
   currentUser<UserDto>._(2),
   deviceId<String>._(4),
-  backupRequireCharging<bool>._(7),
-  backupTriggerDelay<int>._(8),
   serverUrl<String>._(10),
   accessToken<String>._(11),
   serverEndpoint<String>._(12),
   advancedTroubleshooting<bool>._(114),
   enableHapticFeedback<bool>._(126),
-  syncAlbums<bool>._(131),
 
   manageLocalMediaAndroid<bool>._(137),
   // Read-only Mode settings
   readonlyModeEnabled<bool>._(138),
 
-  // Experimental stuff
-  enableBackup<bool>._(1003),
-  useWifiForUploadVideos<bool>._(1004),
-  useWifiForUploadPhotos<bool>._(1005),
+  // Fork-specific backup settings. New IDs chosen to NOT collide with upstream's
+  // legacy `legacyBackup*` IDs (7/8/131/1003-1005) that upstream's migration 26
+  // deletes after copying into MetadataKey. Choosing fresh IDs lets a user who
+  // had previously run an upstream build (where the rows were deleted) start
+  // clean on these keys without being shadowed by a deleted legacy row.
+  // See `_migrateTo27` in `lib/utils/migration.dart` for the recovery path.
+  backupRequireCharging<bool>._(200),
+  backupTriggerDelay<int>._(201),
+  syncAlbums<bool>._(202),
+  enableBackup<bool>._(203),
+  useWifiForUploadVideos<bool>._(204),
+  useWifiForUploadPhotos<bool>._(205),
   syncMigrationStatus<String>._(1013),
+
+  // Legacy fork IDs (7/8/131/1003/1004/1005) — readable only as a recovery
+  // source by the fork-specific migration. Do NOT read these directly from app
+  // code; use the `backup*` keys above. These ids collide with upstream's
+  // `legacyBackup*` keys, which upstream's migration 26 deletes — so on a
+  // device that has gone through upstream, these rows will be empty.
+  legacyForkBackupRequireCharging<bool>._(7),
+  legacyForkBackupTriggerDelay<int>._(8),
+  legacyForkSyncAlbums<bool>._(131),
+  legacyForkEnableBackup<bool>._(1003),
+  legacyForkUseWifiForUploadVideos<bool>._(1004),
+  legacyForkUseWifiForUploadPhotos<bool>._(1005),
 
   // Legacy keys that have been migrated to the new metadata store
   legacySelectedAlbumSortOrder<int>._(113),

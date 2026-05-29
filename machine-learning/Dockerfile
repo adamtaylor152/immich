@@ -124,7 +124,18 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN ln -s "/usr/lib/$(arch)-linux-gnu/libmimalloc.so.2" /usr/lib/libmimalloc.so.2
+# Only create the libmimalloc symlink on backends that installed it. On rocm
+# and openvino the package is intentionally omitted (incompatible/unavailable),
+# so the ln would silently dangle. Skipping the link there keeps the healthcheck
+# safe and matches the apt-install conditional above.
+# Note: prod-rocm and prod-openvino do NOT set ENV LD_PRELOAD upstream, so the
+# Python healthcheck won't attempt to dlopen a missing library on those backends.
+# If a future change adds LD_PRELOAD inheritance to those stages, this Dockerfile
+# must add an explicit `ENV LD_PRELOAD=` line at the end of prod-rocm/prod-openvino
+# to clear it before reaching the shared `prod` stage.
+RUN if [ "$DEVICE" != "openvino" ] && [ "$DEVICE" != "rocm" ]; then \
+        ln -s "/usr/lib/$(arch)-linux-gnu/libmimalloc.so.2" /usr/lib/libmimalloc.so.2; \
+    fi
 
 WORKDIR /usr/src
 ENV TRANSFORMERS_CACHE=/cache \

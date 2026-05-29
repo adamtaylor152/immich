@@ -38,11 +38,14 @@ export enum UploadFieldName {
 // Fork-only: legacy clients (immich-go, pre-3.0 mobile) send `duration` as an
 // `hh:mm:ss[.SSSSSS]` string instead of integer milliseconds. Convert that
 // shape here so the rest of the chain (.int().min(0)) sees a number.
+// SECURITY (security.md L4): hours and fractional-seconds parts are bounded
+// to a sane upper digit count so a pathological multi-megabyte input string
+// is rejected at regex time rather than coerced into Number().
 const hmsToMillisecondsPreprocess = (value: unknown) => {
-  if (typeof value !== 'string') {
+  if (typeof value !== 'string' || value.length > 64) {
     return value;
   }
-  const match = /^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(value);
+  const match = /^(\d{1,6}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/.exec(value);
   if (!match) {
     return value;
   }

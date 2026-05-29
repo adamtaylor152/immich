@@ -46,7 +46,13 @@ type ResolveRequest = {
   mergedTagValues: string[];
 };
 
+// Minimum number of sampled frame timestamps required before we attempt
+// enhanced video duplicate detection. (Used as a count threshold.)
 const VIDEO_DUPLICATE_FRAME_MIN_COUNT = 2;
+// Minimum video duration in seconds for enhanced video duplicate detection to
+// be attempted. Coincidentally the same numeric value as the min count above,
+// but separated for clarity since the units are different.
+const VIDEO_DUPLICATE_MIN_DURATION_SECONDS = 2;
 const VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS = 1;
 const VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS = 1;
 
@@ -155,9 +161,23 @@ export class DuplicateService extends BaseService {
 
     const groupAssetIds = new Set(duplicateGroup.assets.map((a) => a.id));
 
-    // ignore/skip asset IDs not in the group
-    const idsToKeep = keepAssetIds.filter((id) => groupAssetIds.has(id));
-    const idsToTrash = trashAssetIds.filter((id) => groupAssetIds.has(id));
+    // SECURITY (server.md Medium #nsfwOptions): explicitly reject ids the
+    // user didn't see when their NSFW privacy is on. Silently filtering would
+    // let an attacker probe for hidden ids by guessing UUIDs in the
+    // trashAssetIds list.
+    const submittedIds = [...keepAssetIds, ...trashAssetIds];
+    const unknownIds = submittedIds.filter((id) => !groupAssetIds.has(id));
+    if (unknownIds.length > 0) {
+      return {
+        id: duplicateId,
+        success: false,
+        error: BulkIdErrorReason.NOT_FOUND,
+        errorMessage: 'One or more assetIds are not part of this duplicate group',
+      };
+    }
+
+    const idsToKeep = keepAssetIds;
+    const idsToTrash = trashAssetIds;
 
     for (const assetId of groupAssetIds) {
       if (idsToKeep.includes(assetId) && idsToTrash.includes(assetId)) {
@@ -542,7 +562,7 @@ export class DuplicateService extends BaseService {
 
   private getVideoDuplicateFrameTimestamps(frameCount: number, format: { duration: number }): number[] {
     const duration = format.duration / 1000;
-    if (!Number.isFinite(duration) || duration <= VIDEO_DUPLICATE_FRAME_MIN_COUNT) {
+    if (!Number.isFinite(duration) || duration <= VIDEO_DUPLICATE_MIN_DURATION_SECONDS) {
       return [];
     }
 

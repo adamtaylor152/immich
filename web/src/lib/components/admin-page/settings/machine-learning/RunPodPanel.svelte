@@ -12,10 +12,12 @@
     type RunPodProvisionDto,
     type RunPodStateDto,
   } from '@immich/sdk';
+  import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
-  import { Button, toastManager } from '@immich/ui';
+  import { Button, modalManager, toastManager } from '@immich/ui';
   import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+  import { t } from 'svelte-i18n';
 
   // Optionally accept the in-progress form state so visibility of the launch
   // fieldsets reacts to dropdown changes the admin hasn't saved yet. Falls
@@ -141,24 +143,29 @@
     endpointBusy = true;
     try {
       podState = await setupServerlessEndpoint();
-      toastManager.primary('Serverless endpoint ready');
+      toastManager.primary($t('admin.machine_learning_runpod_endpoint_ready_toast'));
     } catch (error) {
-      handleError(error, 'Failed to set up serverless endpoint');
+      handleError(error, $t('admin.machine_learning_runpod_failed_setup_endpoint'));
     } finally {
       endpointBusy = false;
     }
   };
 
   const handleServerlessTeardown = async () => {
-    if (!confirm('Delete the serverless endpoint and its template? ML jobs will fall back to local URLs.')) {
+    const confirmed = await modalManager.showDialog({
+      title: $t('admin.machine_learning_runpod_teardown_confirm_title'),
+      prompt: $t('admin.machine_learning_runpod_teardown_confirm_prompt'),
+      confirmColor: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
     endpointBusy = true;
     try {
       podState = await teardownServerlessEndpoint();
-      toastManager.primary('Serverless endpoint torn down');
+      toastManager.primary($t('admin.machine_learning_runpod_endpoint_torn_down_toast'));
     } catch (error) {
-      handleError(error, 'Failed to tear down serverless endpoint');
+      handleError(error, $t('admin.machine_learning_runpod_failed_teardown_endpoint'));
     } finally {
       endpointBusy = false;
     }
@@ -168,19 +175,29 @@
   // notifications. Only surface an error once per consecutive failure streak,
   // and clear the flag on the first successful refresh.
   let pollErrorShown = $state(false);
+  // Track in-flight refresh so the 5s tick skips when a slow request is
+  // still outstanding. Without this, network blips stack pending requests
+  // and late-resolving stale responses overwrite newer state.
+  let refreshInFlight = false;
 
   const refresh = async (options: { notifyOnError?: boolean } = {}) => {
+    if (refreshInFlight) {
+      return;
+    }
     const notify = options.notifyOnError ?? true;
+    refreshInFlight = true;
     try {
       podState = await fetchCurrent();
       pollErrorShown = false;
     } catch (error) {
       if (notify && !pollErrorShown) {
-        handleError(error, 'Failed to load RunPod state');
+        handleError(error, $t('admin.machine_learning_runpod_failed_load_state'));
         pollErrorShown = true;
       } else if (!notify) {
         console.debug('RunPod state poll failed:', error);
       }
+    } finally {
+      refreshInFlight = false;
     }
   };
 
@@ -221,7 +238,7 @@
     try {
       testResult = await testRunPodConnection({ runPodConnectionTestDto: {} });
       if (testResult.ok) {
-        toastManager.primary('RunPod connection OK');
+        toastManager.primary($t('admin.machine_learning_runpod_connection_test_ok_toast'));
         await refreshGpus();
       }
     } catch (error) {
@@ -233,11 +250,11 @@
 
   const handleLaunch = async () => {
     if (!consent) {
-      toastManager.warning('Please acknowledge the data-privacy notice first.');
+      toastManager.warning($t('admin.machine_learning_runpod_consent_required_title'));
       return;
     }
     if (!selectedGpu) {
-      toastManager.warning('Pick a GPU type first.');
+      toastManager.warning($t('admin.machine_learning_runpod_pick_gpu_first'));
       return;
     }
     provisioning = true;
@@ -249,9 +266,9 @@
         ...(maxHoursOverride ? { maxRuntimeHours: maxHoursOverride } : {}),
       };
       podState = await provisionRunPodPod({ runPodProvisionDto: dto });
-      toastManager.info('Pod launching. This usually takes 2–3 minutes.');
+      toastManager.info($t('admin.machine_learning_runpod_launching_toast'));
     } catch (error) {
-      handleError(error, 'Failed to launch pod');
+      handleError(error, $t('admin.machine_learning_runpod_failed_to_launch'));
     } finally {
       provisioning = false;
     }
@@ -261,9 +278,9 @@
     stopping = true;
     try {
       podState = await stopRunPodPod();
-      toastManager.info('Stop requested');
+      toastManager.info($t('admin.machine_learning_runpod_stop_requested'));
     } catch (error) {
-      handleError(error, 'Failed to stop pod');
+      handleError(error, $t('admin.machine_learning_runpod_failed_to_stop'));
     } finally {
       stopping = false;
     }
@@ -273,26 +290,29 @@
     provisioning = true;
     try {
       podState = await startRunPodPod();
-      toastManager.info('Resuming pod');
+      toastManager.info($t('admin.machine_learning_runpod_resuming_toast'));
     } catch (error) {
-      handleError(error, 'Failed to resume pod');
+      handleError(error, $t('admin.machine_learning_runpod_failed_to_resume'));
     } finally {
       provisioning = false;
     }
   };
 
   const handleTerminate = async () => {
-    if (
-      !confirm('Terminate destroys the pod and its model cache. The next launch will be a full cold-start. Continue?')
-    ) {
+    const confirmed = await modalManager.showDialog({
+      title: $t('admin.machine_learning_runpod_terminate_confirm_title'),
+      prompt: $t('admin.machine_learning_runpod_terminate_confirm_prompt'),
+      confirmColor: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
     terminating = true;
     try {
       podState = await terminateRunPodPod();
-      toastManager.primary('Pod terminated');
+      toastManager.primary($t('admin.machine_learning_runpod_pod_terminated_toast'));
     } catch (error) {
-      handleError(error, 'Failed to terminate pod');
+      handleError(error, $t('admin.machine_learning_runpod_failed_to_terminate'));
     } finally {
       terminating = false;
     }
@@ -306,7 +326,7 @@
         `Enqueued: ${result.enqueued.join(', ') || 'nothing'}${result.skipped.length > 0 ? ` · skipped: ${result.skipped.join(', ')}` : ''}`,
       );
     } catch (error) {
-      handleError(error, 'Failed to enqueue backfill');
+      handleError(error, $t('admin.machine_learning_runpod_failed_to_backfill'));
     } finally {
       backfilling = false;
     }
@@ -322,10 +342,10 @@
     }
     const m = Math.floor(ms / 60_000);
     if (m < 1) {
-      return 'just now';
+      return $t('admin.machine_learning_runpod_just_now');
     }
     if (m < 60) {
-      return `${m} min ago`;
+      return $t('admin.machine_learning_runpod_minutes_ago', { values: { minutes: m } });
     }
     const h = Math.floor(m / 60);
     return `${h}h ${m % 60}m ago`;
@@ -351,8 +371,11 @@
   {#if !enabled}
     <div class="rounded-sm bg-immich-bg/50 p-3 text-sm">
       <p>
-        Cloud GPU provisioning is off. Enable machine learning above, then pick a
-        <strong>Mode</strong> (Pod or Serverless) in this section to activate it.
+        <FormatMessage key="admin.machine_learning_runpod_cloud_gpu_disabled">
+          {#snippet children({ tag, message })}
+            {#if tag === 'strong'}<strong>{message}</strong>{:else}{message}{/if}
+          {/snippet}
+        </FormatMessage>
       </p>
     </div>
   {/if}
@@ -362,7 +385,7 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <div class="flex items-center gap-2">
-            <span class="font-semibold">Status:</span>
+            <span class="font-semibold">{$t('admin.machine_learning_runpod_status_label')}</span>
             <span
               class="rounded-sm px-2 py-0.5 font-mono text-xs tracking-wide uppercase"
               class:bg-green-200={isRunning || isServerlessReady}
@@ -377,87 +400,138 @@
             </span>
           </div>
           {#if podState.podId}
-            <div class="mt-1 font-mono text-xs text-immich-gray">pod: {podState.podId}</div>
+            <div class="mt-1 font-mono text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_pod_id', { values: { id: podState.podId } })}
+            </div>
           {/if}
           {#if podState.endpointId}
-            <div class="mt-1 font-mono text-xs text-immich-gray">endpoint: {podState.endpointId}</div>
+            <div class="mt-1 font-mono text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_endpoint_id', { values: { id: podState.endpointId } })}
+            </div>
           {/if}
           {#if podState.templateId}
-            <div class="mt-1 font-mono text-xs text-immich-gray">template: {podState.templateId}</div>
+            <div class="mt-1 font-mono text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_template_id', { values: { id: podState.templateId } })}
+            </div>
           {/if}
           {#if podState.endpointUrl}
-            <div class="mt-1 font-mono text-xs break-all text-immich-gray">endpoint URL: {podState.endpointUrl}</div>
+            <div class="mt-1 font-mono text-xs break-all text-immich-gray">
+              {$t('admin.machine_learning_runpod_endpoint_url', { values: { url: podState.endpointUrl } })}
+            </div>
           {/if}
           {#if podState.imageName}
-            <div class="mt-1 text-xs break-all text-immich-gray">image: {podState.imageName}</div>
+            <div class="mt-1 text-xs break-all text-immich-gray">
+              {$t('admin.machine_learning_runpod_image', { values: { image: podState.imageName } })}
+            </div>
           {/if}
           {#if podState.gpuTypeId}
-            <div class="mt-1 text-xs text-immich-gray">gpu: {podState.gpuTypeId}</div>
+            <div class="mt-1 text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_gpu', { values: { gpu: podState.gpuTypeId } })}
+            </div>
           {/if}
           {#if podState.mlUrl}
-            <div class="mt-1 font-mono text-xs break-all text-immich-gray">url: {podState.mlUrl}</div>
+            <div class="mt-1 font-mono text-xs break-all text-immich-gray">
+              {$t('admin.machine_learning_runpod_pod_running_url', { values: { url: podState.mlUrl } })}
+            </div>
           {/if}
           {#if podState.runningSince}
-            <div class="mt-1 text-xs text-immich-gray">running since: {minutesAgo(podState.runningSince)}</div>
+            <div class="mt-1 text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_running_since', { values: { time: minutesAgo(podState.runningSince) } })}
+            </div>
           {/if}
           {#if podState.lastBusyAt && isRunning}
-            <div class="mt-1 text-xs text-immich-gray">last ML job: {minutesAgo(podState.lastBusyAt)}</div>
+            <div class="mt-1 text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_last_busy_at', { values: { time: minutesAgo(podState.lastBusyAt) } })}
+            </div>
           {/if}
           {#if isRunning}
             {@const cost = formatCost(podState)}
             {#if cost}
-              <div class="mt-1 text-xs text-immich-gray">estimated cost: {cost}</div>
+              <div class="mt-1 text-xs text-immich-gray">
+                {$t('admin.machine_learning_runpod_cost_estimate', { values: { cost } })}
+              </div>
             {/if}
           {/if}
           {#if isServerlessReady}
             <div class="mt-1 text-xs text-immich-gray">
-              billing: scale-to-zero (RunPod's dashboard shows exact per-second usage)
+              {$t('admin.machine_learning_runpod_billing_scale_to_zero')}
             </div>
             {#if podState.workersMin !== undefined && podState.workersMax !== undefined}
               <div class="mt-1 text-xs text-immich-gray">
-                workers: min {podState.workersMin} · max {podState.workersMax}
-                {#if podState.idleTimeoutSeconds !== undefined}· idle {podState.idleTimeoutSeconds}s{/if}
+                {#if podState.idleTimeoutSeconds !== undefined}
+                  {$t('admin.machine_learning_runpod_workers_summary_with_idle', {
+                    values: {
+                      min: podState.workersMin,
+                      max: podState.workersMax,
+                      idle: podState.idleTimeoutSeconds,
+                    },
+                  })}
+                {:else}
+                  {$t('admin.machine_learning_runpod_workers_summary', {
+                    values: { min: podState.workersMin, max: podState.workersMax },
+                  })}
+                {/if}
               </div>
             {/if}
           {/if}
           {#if podState.stoppedAt}
-            <div class="mt-1 text-xs text-immich-gray">stopped: {minutesAgo(podState.stoppedAt)}</div>
+            <div class="mt-1 text-xs text-immich-gray">
+              {$t('admin.machine_learning_runpod_stopped_at', { values: { time: minutesAgo(podState.stoppedAt) } })}
+            </div>
           {/if}
           {#if podState.errorMessage}
             <div class="mt-2 text-xs wrap-break-word text-red-700">{podState.errorMessage}</div>
           {/if}
           {#if podState.unhealthySince}
-            <div class="mt-1 text-xs text-yellow-700">pod unresponsive since {minutesAgo(podState.unhealthySince)}</div>
+            <div class="mt-1 text-xs text-yellow-700">
+              {$t('admin.machine_learning_runpod_pod_unresponsive', {
+                values: { time: minutesAgo(podState.unhealthySince) },
+              })}
+            </div>
           {/if}
         </div>
         <div class="flex shrink-0 flex-col gap-1">
           {#if isRunning}
-            <Button size="small" onclick={handleStop} disabled={stopping}>{stopping ? 'Stopping…' : 'Stop'}</Button>
+            <Button size="small" onclick={handleStop} disabled={stopping}>
+              {stopping
+                ? $t('admin.machine_learning_runpod_stopping')
+                : $t('admin.machine_learning_runpod_stop')}
+            </Button>
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
-              {terminating ? 'Terminating…' : 'Terminate'}
+              {terminating
+                ? $t('admin.machine_learning_runpod_terminating')
+                : $t('admin.machine_learning_runpod_terminate')}
             </Button>
           {:else if isStopped}
-            <Button size="small" onclick={handleStart} disabled={provisioning}
-              >{provisioning ? 'Starting…' : 'Resume'}</Button
-            >
+            <Button size="small" onclick={handleStart} disabled={provisioning}>
+              {provisioning
+                ? $t('admin.machine_learning_runpod_resume_starting')
+                : $t('admin.machine_learning_runpod_resume')}
+            </Button>
             <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
-              {terminating ? 'Terminating…' : 'Terminate'}
+              {terminating
+                ? $t('admin.machine_learning_runpod_terminating')
+                : $t('admin.machine_learning_runpod_terminate')}
             </Button>
           {:else if isServerlessReady}
             <Button size="small" color="secondary" onclick={handleServerlessSetup} disabled={endpointBusy}>
-              {endpointBusy ? 'Recreating…' : 'Recreate endpoint'}
+              {endpointBusy
+                ? $t('admin.machine_learning_runpod_recreating')
+                : $t('admin.machine_learning_runpod_recreate_endpoint')}
             </Button>
             <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
-              {endpointBusy ? 'Tearing down…' : 'Tear down'}
+              {endpointBusy
+                ? $t('admin.machine_learning_runpod_tearing_down')
+                : $t('admin.machine_learning_runpod_tear_down')}
             </Button>
           {:else if status === 'error'}
             {#if isServerlessMode}
               <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
-                Clear
+                {$t('admin.machine_learning_runpod_clear')}
               </Button>
             {:else}
               <Button size="small" color="danger" onclick={handleTerminate} disabled={terminating}>
-                Clear / terminate
+                {$t('admin.machine_learning_runpod_clear_terminate')}
               </Button>
             {/if}
           {/if}
@@ -476,19 +550,19 @@
           {/if}
           <div class="absolute inset-0 flex items-center justify-center text-xs font-medium">
             {#if (isRunning || isServerlessReady) && workerReady}
-              <span class="text-green-900">Ready. RunPod GPU is responding.</span>
+              <span class="text-green-900">{$t('admin.machine_learning_runpod_ready')}</span>
             {:else if isServerlessReady}
-              <span class="text-yellow-900">Endpoint ready — worker initializing…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_endpoint_ready')}</span>
             {:else if isRunning}
-              <span class="text-yellow-900">Pod running — worker initializing…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_pod_initializing')}</span>
             {:else if status === 'serverless-provisioning'}
-              <span class="text-yellow-900">Provisioning serverless endpoint…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_provisioning_serverless')}</span>
             {:else if status === 'provisioning'}
-              <span class="text-yellow-900">Provisioning pod…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_provisioning_pod')}</span>
             {:else if status === 'starting'}
-              <span class="text-yellow-900">Starting pod…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_resume_starting')}</span>
             {:else if status === 'stopping'}
-              <span class="text-yellow-900">Stopping pod…</span>
+              <span class="text-yellow-900">{$t('admin.machine_learning_runpod_stopping_pod')}</span>
             {/if}
           </div>
         </div>
@@ -498,16 +572,21 @@
 
   {#if enabled && isServerlessMode && (status === 'idle' || status === 'error' || status === 'serverless-provisioning')}
     <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
-      <legend class="px-1 text-sm font-semibold">Serverless endpoint</legend>
+      <legend class="px-1 text-sm font-semibold">
+        {$t('admin.machine_learning_runpod_serverless_endpoint_legend')}
+      </legend>
 
       {#if !apiKeyConfigured}
         <div class="text-sm text-yellow-700">
-          Set <strong>API key</strong> above and click <strong>Test connection</strong> first.
+          <FormatMessage key="admin.machine_learning_runpod_set_api_key_first">
+            {#snippet children({ tag, message })}
+              {#if tag === 'strong'}<strong>{message}</strong>{:else}{message}{/if}
+            {/snippet}
+          </FormatMessage>
         </div>
       {:else}
         <p class="text-sm text-immich-gray">
-          The endpoint is created automatically the first time an ML job runs. Click below to provision it now (typical
-          setup: 5–10 seconds; first cold start of a worker is ~30–60s).
+          {$t('admin.machine_learning_runpod_serverless_endpoint_help')}
         </p>
       {/if}
 
@@ -518,36 +597,43 @@
       >
         <input type="checkbox" bind:checked={consent} onchange={() => (consentError = false)} class="mt-0.5" />
         <span>
-          I understand that image previews will be sent to RunPod (an external service) and that the configured API key
-          can spin up paid serverless workers. Your images are not stored and are processed in memory, then discarded.
+          {$t('admin.machine_learning_runpod_consent')}
         </span>
       </label>
       {#if consentError}
-        <p class="-mt-2 text-xs text-red-600">Must consent before GPU can be launched.</p>
+        <p class="-mt-2 text-xs text-red-600">{$t('admin.machine_learning_runpod_consent_required')}</p>
       {/if}
 
       <div class="flex justify-end gap-2">
         <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
-          {testing ? 'Testing…' : 'Test connection'}
+          {testing
+            ? $t('admin.machine_learning_runpod_testing')
+            : $t('admin.machine_learning_runpod_test_connection')}
         </Button>
         {#if isServerlessReady || status === 'serverless-provisioning'}
           <Button size="small" color="danger" onclick={handleServerlessTeardown} disabled={endpointBusy}>
-            {endpointBusy ? 'Terminating…' : 'Terminate Pod'}
+            {endpointBusy
+              ? $t('admin.machine_learning_runpod_terminating')
+              : $t('admin.machine_learning_runpod_terminate')}
           </Button>
         {/if}
         <Button
           size="small"
           onclick={attemptServerlessLaunch}
           disabled={endpointBusy}
-          title={consent ? undefined : 'Must consent before GPU can be launched'}
+          title={consent ? undefined : $t('admin.machine_learning_runpod_consent_required_tooltip')}
         >
-          {endpointBusy ? 'Launching…' : 'Launch RunPod GPU'}
+          {endpointBusy
+            ? $t('admin.machine_learning_runpod_launch_button_launching')
+            : $t('admin.machine_learning_runpod_serverless_launch_button')}
         </Button>
       </div>
 
       {#if testResult}
         <div class="text-xs" class:text-green-700={testResult.ok} class:text-red-700={!testResult.ok}>
-          {testResult.ok ? 'Connection OK' : `Failed: ${testResult.message ?? 'unknown error'}`}
+          {testResult.ok
+            ? $t('admin.machine_learning_runpod_connection_ok')
+            : `Failed: ${testResult.message ?? 'unknown error'}`}
         </div>
       {/if}
     </fieldset>
@@ -556,23 +642,31 @@
   {#if enabled && isPodMode}
     {#if status === 'idle' || status === 'error'}
       <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
-        <legend class="px-1 text-sm font-semibold">Launch new pod</legend>
+        <legend class="px-1 text-sm font-semibold">{$t('admin.machine_learning_runpod_launch_pod_legend')}</legend>
 
         {#if !apiKeyConfigured}
           <div class="text-sm text-yellow-700">
-            Set <strong>API key</strong> below and click <strong>Test connection</strong> first.
+            <FormatMessage key="admin.machine_learning_runpod_set_api_key_first_pod">
+              {#snippet children({ tag, message })}
+                {#if tag === 'strong'}<strong>{message}</strong>{:else}{message}{/if}
+              {/snippet}
+            </FormatMessage>
           </div>
         {/if}
 
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium" for="runpod-gpu-select">GPU type</label>
+          <label class="text-sm font-medium" for="runpod-gpu-select">
+            {$t('admin.machine_learning_runpod_gpu_type')}
+          </label>
           <select id="runpod-gpu-select" bind:value={selectedGpu} class="rounded-sm border px-2 py-1 text-sm">
             {#if gpuLoading}
-              <option value="">Loading…</option>
+              <option value="">{$t('admin.machine_learning_runpod_gpu_loading')}</option>
             {:else if gpuTypes.length === 0}
-              <option value={rp.defaultGpuTypeId}
-                >{rp.defaultGpuTypeId} (default — click Test connection to refresh)</option
-              >
+              <option value={rp.defaultGpuTypeId}>
+                {$t('admin.machine_learning_runpod_default_gpu_type_dropdown_placeholder', {
+                  values: { gpu: rp.defaultGpuTypeId },
+                })}
+              </option>
             {:else}
               {#each gpuTypes as g (g.id)}
                 <option value={g.id}
@@ -589,7 +683,9 @@
         </div>
 
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium" for="runpod-image-override">Container image (override)</label>
+          <label class="text-sm font-medium" for="runpod-image-override">
+            {$t('admin.machine_learning_runpod_container_image_override')}
+          </label>
           <input
             id="runpod-image-override"
             type="text"
@@ -597,11 +693,15 @@
             placeholder={rp.imageName}
             class="rounded-sm border px-2 py-1 font-mono text-sm"
           />
-          <span class="text-xs text-immich-gray">Leave blank to use the configured default.</span>
+          <span class="text-xs text-immich-gray">
+            {$t('admin.machine_learning_runpod_container_image_override_help')}
+          </span>
         </div>
 
         <div class="flex flex-col gap-1">
-          <label class="text-sm font-medium" for="runpod-max-hours">Max runtime override (hours)</label>
+          <label class="text-sm font-medium" for="runpod-max-hours">
+            {$t('admin.machine_learning_runpod_max_hours_help')}
+          </label>
           <input
             id="runpod-max-hours"
             type="number"
@@ -616,23 +716,28 @@
         <label class="flex items-start gap-2 text-sm">
           <input type="checkbox" bind:checked={consent} class="mt-0.5" />
           <span>
-            I understand that image previews will be sent to RunPod (an external service) and that the configured API
-            key can spin up paid infrastructure.
+            {$t('admin.machine_learning_runpod_consent_pod')}
           </span>
         </label>
 
         <div class="flex justify-end gap-2">
           <Button size="small" color="secondary" onclick={handleTestConnection} disabled={testing}>
-            {testing ? 'Testing…' : 'Test connection'}
+            {testing
+              ? $t('admin.machine_learning_runpod_testing')
+              : $t('admin.machine_learning_runpod_test_connection')}
           </Button>
           <Button size="small" onclick={handleLaunch} disabled={provisioning || !consent || !selectedGpu}>
-            {provisioning ? 'Launching…' : 'Launch pod'}
+            {provisioning
+              ? $t('admin.machine_learning_runpod_launch_button_launching')
+              : $t('admin.machine_learning_runpod_launch_button')}
           </Button>
         </div>
 
         {#if testResult}
           <div class="text-xs" class:text-green-700={testResult.ok} class:text-red-700={!testResult.ok}>
-            {testResult.ok ? 'Connection OK' : `Failed: ${testResult.message ?? 'unknown error'}`}
+            {testResult.ok
+              ? $t('admin.machine_learning_runpod_connection_ok')
+              : `Failed: ${testResult.message ?? 'unknown error'}`}
           </div>
         {/if}
       </fieldset>
@@ -641,37 +746,43 @@
     {#if isRunning}
       <div class="flex items-center gap-2">
         <Button size="small" onclick={handleBackfill} disabled={!canBackfill}>
-          {backfilling ? 'Enqueuing…' : 'Run ML backfill now'}
+          {backfilling
+            ? $t('admin.machine_learning_runpod_run_backfill_enqueuing')
+            : $t('admin.machine_learning_runpod_run_backfill')}
         </Button>
         <span class="text-xs text-immich-gray">
-          Queues smart search, face detection, OCR, duplicates, image description, and NSFW detection for every eligible
-          asset.
+          {$t('admin.machine_learning_runpod_run_backfill_description')}
         </span>
       </div>
     {/if}
 
     <div class="rounded-sm border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-900">
-      <strong>Security:</strong> The pod's URL is reachable from the public internet. Immich protects it with a
-      per-launch bearer token (the server sends <code>Authorization: Bearer ...</code> on every request). Unauthenticated
-      requests get a 401. Stopping a pod releases the GPU but keeps the model cache for fast resume.
+      <FormatMessage key="admin.machine_learning_runpod_security_pod">
+        {#snippet children({ tag, message })}
+          {#if tag === 'strong'}<strong>{message}</strong>{:else if tag === 'code'}<code>{message}</code>{:else}{message}{/if}
+        {/snippet}
+      </FormatMessage>
     </div>
   {/if}
 
   {#if enabled && isServerlessMode && isServerlessReady}
     <div class="flex items-center gap-2">
       <Button size="small" onclick={handleBackfill} disabled={!canBackfill}>
-        {backfilling ? 'Enqueuing…' : 'Run ML backfill now'}
+        {backfilling
+          ? $t('admin.machine_learning_runpod_run_backfill_enqueuing')
+          : $t('admin.machine_learning_runpod_run_backfill')}
       </Button>
       <span class="text-xs text-immich-gray">
-        Queues smart search, face detection, OCR, duplicates, image description, and NSFW detection for every eligible
-        asset. Workers spin up automatically.
+        {$t('admin.machine_learning_runpod_run_backfill_description_serverless')}
       </span>
     </div>
 
     <div class="rounded-sm border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-      <strong>Security:</strong> Each request to the endpoint URL is signed with your RunPod API key as a bearer token. RunPod's
-      proxy rejects unauthenticated requests at the edge — Immich's per-pod random secret is not needed in this mode. Workers
-      scale to zero when idle (no billing).
+      <FormatMessage key="admin.machine_learning_runpod_security_serverless">
+        {#snippet children({ tag, message })}
+          {#if tag === 'strong'}<strong>{message}</strong>{:else}{message}{/if}
+        {/snippet}
+      </FormatMessage>
     </div>
   {/if}
 </div>

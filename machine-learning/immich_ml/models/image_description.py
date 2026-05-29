@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import unicodedata
 from pathlib import Path
 from typing import Any, cast
 
@@ -11,7 +12,7 @@ import orjson
 from huggingface_hub import snapshot_download
 from PIL import Image
 
-from immich_ml.config import log
+from immich_ml.config import log, settings
 from immich_ml.models.base import InferenceModel
 from immich_ml.schemas import ImageDescriptionAcceleration, ModelTask, ModelType
 
@@ -138,6 +139,61 @@ FLORENCE_MODEL_NAMES = {
     "microsoft/Florence-2-large-ft",
 }
 
+# Max characters per face/person name when interpolated into a VLM prompt.
+# Defensive cap mirroring the server-side validation; the server is the
+# authoritative source of truth, this is belt-and-braces in case the server
+# regresses or the ML endpoint is reached from another caller.
+MAX_NAME_LENGTH = 64
+
+
+def _sanitize_prompt_name(name: str) -> str:
+    """Strip control characters and cap length on a person-name string.
+
+    Defense-in-depth against prompt-injection via face names. The server is
+    expected to perform the primary sanitization (see Person.name validation
+    in server/src). We re-apply here so a regression on either side does not
+    open the injection vector.
+    """
+    if not name:
+        return ""
+    # Remove control characters (Cc) and format characters (Cf) — newlines,
+    # zero-width joiners, tab, etc. — that could break out of the bullet
+    # list or impersonate role markers.
+    cleaned = "".join(ch for ch in name if unicodedata.category(ch) not in {"Cc", "Cf"})
+    # Collapse interior whitespace runs to a single space.
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > MAX_NAME_LENGTH:
+        cleaned = cleaned[:MAX_NAME_LENGTH].rstrip()
+    return cleaned
+
+
+# Whitelist of control characters preserved in the assembled prompt: tab,
+# newline, carriage return. The server's prompt assembler emits these
+# legitimately for layout/structure.
+_ALLOWED_CONTROL_CHARS = frozenset({"\t", "\n", "\r"})
+
+
+def _strip_dangerous_control_chars(text: str) -> str:
+    """Remove non-printable / format-class characters from a prompt string,
+    preserving only the structural whitespace the server's prompt assembler
+    uses. Format-class (Cf) characters like zero-width joiners and BOMs are
+    always stripped — they are a known prompt-injection vector and have no
+    legitimate use in a VLM prompt.
+    """
+    if not text:
+        return text
+    out: list[str] = []
+    for ch in text:
+        if ch in _ALLOWED_CONTROL_CHARS:
+            out.append(ch)
+            continue
+        category = unicodedata.category(ch)
+        if category in {"Cc", "Cf"}:
+            # Drop NUL, escape sequences, ZWJ, BOM, …
+            continue
+        out.append(ch)
+    return "".join(out)
+
 
 class ImageDescriptionModel(InferenceModel):
     depends = []
@@ -148,8 +204,38 @@ class ImageDescriptionModel(InferenceModel):
         self.acceleration = self._resolve_acceleration(self.requested_acceleration)
         self.hf_model_name = self._model_name_for_acceleration(model_name, self.acceleration)
         self.device = str(model_kwargs.get("device", "AUTO") or "AUTO")
+        # A single lock guards both swap-to-CPU on dimension failure AND each
+        # OpenVINO generate(). A long-running generate on one thread will hold
+        # the lock during the swap on another, which is the desired behavior:
+        # we never want a swap concurrent with an in-flight generate. Do not
+        # split this lock without re-validating the concurrent-CPU-fallback
+        # invariants exercised in test_concurrent_cpu_fallback_does_not_spuriously_raise.
         self._openvino_lock = threading.Lock()
+        # Mirror the OpenVINO inference serialization on the CUDA path. The
+        # shared transformers model object is not safe for concurrent
+        # `.generate()` calls — KV cache + tokenizer state races produce both
+        # RuntimeErrors and silent caption swaps between requests. Single-flight
+        # per-model instance is the right default for GPU-bound work.
+        self._cuda_lock = threading.Lock()
         super().__init__(model_name, **model_kwargs)
+
+    @property
+    def _cache_dir_default(self) -> Path:
+        # Scope cache directory by acceleration backend so CUDA (full-precision
+        # PyTorch weights) and OpenVINO (int4 IR) snapshots do not collide on
+        # the same path. Without this scoping, switching acceleration with a
+        # persistent /cache volume (RunPod-style deployments) silently loads
+        # the wrong weights and the loader crashes opaquely. See ml.md Critical #2.
+        base = settings.cache_folder / self.model_task.value / self.model_name
+        scoped = base / str(self.acceleration)
+        # If a legacy (unscoped) cache exists alongside, log once so operators
+        # can reclaim the disk space manually. We do not auto-delete.
+        if base.exists() and any(p for p in base.iterdir() if p.is_file()):
+            log.warning(
+                f"Legacy image-description cache detected at {base}. "
+                f"New runs will populate {scoped}. The old directory can be removed manually."
+            )
+        return scoped
 
     def predict(self, *inputs: Any, **model_kwargs: Any) -> Any:
         self.load()
@@ -209,6 +295,13 @@ class ImageDescriptionModel(InferenceModel):
                     )
                     self.session = self._load_openvino("CPU")
                     self.device = "CPU"
+                    # NOTE: the ModelCache key is computed at request time from
+                    # the requested kwargs (see models/cache.py), so a future
+                    # request with device='GPU' will still find this instance —
+                    # which is now CPU-bound. The log line above is the only
+                    # observable signal. Operators who want to force a GPU
+                    # reload after a fallback should set MACHINE_LEARNING_MODEL_TTL
+                    # to a small value, or restart the container.
             result = self._generate_openvino(prompt, images)
 
         text = self._result_text(result)
@@ -238,10 +331,10 @@ class ImageDescriptionModel(InferenceModel):
 
         device = self._torch_device(torch)
         torch_dtype = torch.float16 if str(device).startswith("cuda") else torch.float32
-        trust_remote_code = self.hf_model_name in FLORENCE_MODEL_NAMES
+        trust_remote_code = self._is_florence_model()
         processor = AutoProcessor.from_pretrained(str(self.cache_dir), trust_remote_code=trust_remote_code)
 
-        if self.hf_model_name in FLORENCE_MODEL_NAMES:
+        if self._is_florence_model():
             model = AutoModelForCausalLM.from_pretrained(
                 str(self.cache_dir),
                 torch_dtype=torch_dtype,
@@ -262,10 +355,20 @@ class ImageDescriptionModel(InferenceModel):
         return {"model": model, "processor": processor, "device": device, "torch": torch, "torch_dtype": torch_dtype}
 
     def _predict_cuda(self, image: Image.Image, nsfw: Any = None, external_prompt: str | None = None) -> dict[str, Any]:
-        if self.hf_model_name in FLORENCE_MODEL_NAMES:
+        if self._is_florence_model():
             # Florence uses task tokens, not prompts. external_prompt is ignored intentionally.
             return self._predict_florence(image)
         return self._predict_qwen(image, nsfw, external_prompt)
+
+    def _is_florence_model(self) -> bool:
+        """Case-insensitive Florence model check.
+
+        Original FLORENCE_MODEL_NAMES membership was case-sensitive; an admin
+        entering ``Microsoft/Florence-2-base`` (capital M) would silently skip
+        ``trust_remote_code`` and the load would fail. Matches the substring
+        style used by ``_uses_phi_openvino_model`` / ``_uses_qwen_openvino_model``.
+        """
+        return "florence-2" in self.hf_model_name.lower()
 
     def _predict_qwen(self, image: Image.Image, nsfw: Any = None, external_prompt: str | None = None) -> dict[str, Any]:
         prompt = self._make_prompt(nsfw, external_prompt)
@@ -300,7 +403,11 @@ class ImageDescriptionModel(InferenceModel):
             inputs = processor(text=[text], images=[image], padding=True, return_tensors="pt")
 
         inputs = inputs.to(device)
-        with torch.inference_mode():
+        # Serialize CUDA generate() calls per model instance. The shared
+        # transformers model object is not safe for concurrent generates —
+        # KV cache + tokenizer state races produce both RuntimeErrors and
+        # silent caption swaps. Mirrors the OpenVINO _openvino_lock fix.
+        with self._cuda_lock, torch.inference_mode():
             generated_ids = model.generate(**inputs, max_new_tokens=768, do_sample=False)
         generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)]
         text = processor.batch_decode(
@@ -342,7 +449,8 @@ class ImageDescriptionModel(InferenceModel):
         if "pixel_values" in inputs:
             inputs["pixel_values"] = inputs["pixel_values"].to(dtype=torch_dtype)
 
-        with torch.inference_mode():
+        # Serialize CUDA generate() calls per model instance — see _predict_qwen.
+        with self._cuda_lock, torch.inference_mode():
             generated_ids = model.generate(
                 input_ids=inputs["input_ids"],
                 pixel_values=inputs["pixel_values"],
@@ -404,7 +512,16 @@ class ImageDescriptionModel(InferenceModel):
             # NSFW conditional content and structured fields. Any string
             # (including "") is treated as caller-provided; only None falls
             # back to the bundled default.
-            return external_prompt
+            #
+            # Defensive sanitization: strip non-printable / format-class
+            # control characters (zero-width joiners, BOMs, NULs, …) that
+            # could be smuggled in via user-typed face names to break the
+            # prompt structure or impersonate role markers. We intentionally
+            # PRESERVE newlines and tabs — they are part of the structured
+            # prompt the server assembles. The primary defense lives in
+            # server/src; this is belt-and-braces against a regression.
+            # See ml.md Critical #1 (prompt injection via face names).
+            return _strip_dangerous_control_chars(external_prompt)
         prompt = IMAGE_DESCRIPTION_PROMPT
         if isinstance(nsfw, dict) and nsfw.get("isNsfw"):
             prompt += NSFW_PROMPT_SUFFIX
@@ -458,18 +575,27 @@ class ImageDescriptionModel(InferenceModel):
         return Tensor(image_data)
 
     def _openvino_max_image_edge(self) -> int:
+        # Settings group is parsed once at boot (see config.ImageDescriptionRuntimeSettings).
+        # An env-var change after boot does NOT take effect — this was true with
+        # the previous per-request os.getenv read as well, since the process's
+        # environ snapshot doesn't change. The legacy env-var read is preserved
+        # below so tests that monkeypatch the env without rebuilding `settings`
+        # still observe the override. See ml.md Medium "Per-request env-var read".
         value = os.getenv("MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE")
-        if value is None:
-            return DEFAULT_OPENVINO_MAX_IMAGE_EDGE
+        if value is not None:
+            try:
+                return max(1, int(value))
+            except ValueError:
+                log.warning(
+                    "Invalid MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE "
+                    f"value '{value}'. Using settings default."
+                )
 
-        try:
-            return max(1, int(value))
-        except ValueError:
-            log.warning(
-                "Invalid MACHINE_LEARNING_IMAGE_DESCRIPTION__OPENVINO_MAX_IMAGE_EDGE "
-                f"value '{value}'. Using {DEFAULT_OPENVINO_MAX_IMAGE_EDGE}."
-            )
-            return DEFAULT_OPENVINO_MAX_IMAGE_EDGE
+        configured = settings.image_description.openvino_max_image_edge
+        if configured > 0:
+            return configured
+
+        return DEFAULT_OPENVINO_MAX_IMAGE_EDGE
 
     def _result_text(self, result: Any) -> str:
         texts = getattr(result, "texts", None)
@@ -570,8 +696,12 @@ class ImageDescriptionModel(InferenceModel):
         if boolean_match:
             boolean_value = boolean_match.group(1).strip('"')
 
+        # Coerce to bool here so salvaged and successful paths produce
+        # identical shapes; downstream callers that read the dict directly
+        # (e.g. future testing or telemetry) get the same shape as
+        # _normalize_signal.
         return {
-            boolean_key: boolean_value,
+            boolean_key: self._bool_value(boolean_value),
             "confidence": self._extract_string_field(body, "confidence"),
             "indicators": self._extract_string_array_field(body, "indicators"),
             "reason": self._extract_string_field(body, "reason"),

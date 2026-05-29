@@ -81,9 +81,12 @@ const RunPodStateSchema = z
     endpointId: z.string().optional(),
     endpointUrl: z.string().optional(),
     templateId: z.string().optional(),
-    workersMin: z.number().nullish(),
-    workersMax: z.number().nullish(),
-    idleTimeoutSeconds: z.number().nullish(),
+    // .nullish() (rather than .optional()) so the generated Dart parse path
+    // accepts a literal JSON `null` from the server when the endpoint hasn't
+    // been created yet (e.g. response shape during `serverless-provisioning`).
+    workersMin: z.number().nullish().describe('Serverless workersMin; may be null when not yet provisioned.'),
+    workersMax: z.number().nullish().describe('Serverless workersMax; may be null when not yet provisioned.'),
+    idleTimeoutSeconds: z.number().nullish().describe('Serverless idle timeout; may be null when not yet provisioned.'),
     // True when the RunPod endpoint exists AND the worker behind it is
     // currently responding to /ping. Distinct from `status === 'serverless-ready'`,
     // which only means the endpoint+template are provisioned on RunPod's

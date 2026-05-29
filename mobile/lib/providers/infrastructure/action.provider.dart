@@ -201,8 +201,16 @@ class ActionNotifier extends Notifier<void> {
     }
 
     try {
-      await _service.markNsfw(ids);
-      return ActionResult(count: ids.length, success: true);
+      final result = await _service.markNsfw(ids);
+      if (result.anyFailed) {
+        _logger.warning('Mark NSFW partial failure: ${result.failed.length}/${result.total} failed');
+        return ActionResult(
+          count: result.succeeded.length,
+          success: result.succeeded.isNotEmpty,
+          error: '${result.failed.length} of ${result.total} failed',
+        );
+      }
+      return ActionResult(count: result.succeeded.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to mark assets as NSFW', error, stack);
       return ActionResult(count: ids.length, success: false, error: error.toString());
@@ -216,8 +224,16 @@ class ActionNotifier extends Notifier<void> {
     }
 
     try {
-      await _service.markSafe(ids);
-      return ActionResult(count: ids.length, success: true);
+      final result = await _service.markSafe(ids);
+      if (result.anyFailed) {
+        _logger.warning('Mark Safe partial failure: ${result.failed.length}/${result.total} failed');
+        return ActionResult(
+          count: result.succeeded.length,
+          success: result.succeeded.isNotEmpty,
+          error: '${result.failed.length} of ${result.total} failed',
+        );
+      }
+      return ActionResult(count: result.succeeded.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to mark assets as safe', error, stack);
       return ActionResult(count: ids.length, success: false, error: error.toString());
@@ -566,6 +582,11 @@ class ActionNotifier extends Notifier<void> {
       return ActionResult(count: ids.length, success: false, error: 'Expected single asset for applying edits');
     }
 
+    // Fork only ships against server >= 3.0.0 (where AssetEditReadyV2 is
+    // emitted). Connecting to a pre-3.0.0 server will time out after 10s
+    // — surfaced as a server-incompatibility error to the user. The
+    // upstream V1-fallback branch was intentionally removed because the
+    // fork's edit pipeline depends on V2-shaped event payloads.
     final completer = ref.read(websocketProvider.notifier).waitForEvent("AssetEditReadyV2", (dynamic data) {
       final eventAsset = SyncAssetV2.fromJson(data["asset"]);
       return eventAsset?.id == ids.first;

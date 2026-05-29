@@ -69,5 +69,16 @@ services:
       start_period: 10s
 
 secrets:
+  # GITHUB_TOKEN is used by the immich-server build (mise install) to authenticate
+  # against the GitHub releases API for cached binary downloads.
+  #
+  # Inside CI: test.yml sets `env: { GITHUB_TOKEN: ${{ github.token }} }` on the
+  # `docker compose up` step, so the host env has the token.
+  #
+  # For local reproduction (`docker compose up --build`): export a token first.
+  #   - personal classic PAT with `read:packages` is sufficient
+  #   - or run `export GITHUB_TOKEN=$(gh auth token)` after `gh auth login`
+  # Without the token mise will be rate-limited or 401 and the build fails with
+  # opaque "release not found" errors deep in the layer build.
   GITHUB_TOKEN:
     environment: GITHUB_TOKEN

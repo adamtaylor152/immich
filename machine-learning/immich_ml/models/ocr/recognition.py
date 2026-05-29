@@ -58,10 +58,24 @@ class TextRecognizer(InferenceModel):
         # TODO: support other runtimes
         session = OrtSession(self.model_path)
         max_batch_size = settings.max_batch_size and settings.max_batch_size.ocr
+        # `model_root_dir` was added to RapidTextRecognizer in rapidocr 3.1+.
+        # Future rapidocr versions may expect the parent further up the tree
+        # (where the dict files live). Warn loudly if the recognition keys
+        # file is missing so operators have a debuggable signal instead of a
+        # silent failure on first inference. See ml.md Medium "rapidocr model_root_dir".
+        model_root_dir = self.model_path.parent
+        keys_marker = model_root_dir / "ppocr_keys_v1.txt"
+        if not keys_marker.exists():
+            # Only warn — rapidocr may locate the keys via its own search; the
+            # absence is a hint that the version skew may be at play.
+            log.debug(
+                f"OCR recognition model_root_dir={model_root_dir} does not contain ppocr_keys_v1.txt. "
+                "If rapidocr fails to load, check the model directory layout against the rapidocr version."
+            )
         self.model = RapidTextRecognizer(
             OcrOptions(
                 session=session.session,
-                model_root_dir=self.model_path.parent,
+                model_root_dir=model_root_dir,
                 rec_batch_num=max_batch_size if max_batch_size else 6,
                 rec_img_shape=(3, 48, 320),
                 lang_type=self.language,

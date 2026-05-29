@@ -13,8 +13,8 @@
   import { serverConfigManager } from '$lib/managers/server-config-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import ImageDescriptionRequeueModal from '$lib/modals/ImageDescriptionRequeueModal.svelte';
-  import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
-  import { mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
+  import { Button, Icon, IconButton, modalManager, toastManager } from '@immich/ui';
+  import { mdiCheck, mdiOpenInNew, mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
   import {
     getImageDescriptionRequeueEstimate,
     getMachineLearningHardware,
@@ -29,6 +29,12 @@
   import { t } from 'svelte-i18n';
   import { onDestroy, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+
+  // refactor needed: file exceeds 500-line project rule (see CLAUDE.md).
+  // Tracked separately — DO NOT inline-refactor while we still have an
+  // active backlog of behavioural fixes. The accordion subcomponents
+  // (image description, RunPod, NSFW detection, etc.) should be split into
+  // their own files in a follow-up PR.
 
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
@@ -70,32 +76,39 @@
     runpod.enabled = mode !== RunPodMode.Disabled;
   };
 
-  const runpodModeOptions = [
+  const runpodModeOptions = $derived([
     {
       value: RunPodMode.Disabled,
-      text: 'Disabled — use only the local URLs above',
+      text: $t('admin.machine_learning_runpod_mode_disabled'),
     },
     {
       value: RunPodMode.Pod,
-      text: 'Dedicated Pod — cheapest active rate; admin stops it manually',
+      text: $t('admin.machine_learning_runpod_mode_pod'),
     },
     {
       value: RunPodMode.Serverless,
-      text: 'On-demand Serverless — scales to zero; higher per-second cost but $0 idle',
+      text: $t('admin.machine_learning_runpod_mode_serverless'),
     },
-  ];
+  ]);
 
   const runpodServerless = $derived(runpod.serverless!);
   const savedRunpodServerless = $derived(savedRunpod.serverless!);
   const runpodGpuTypeIdsText = $derived((runpod.serverless?.gpuTypeIds ?? []).join('\n'));
   const savedRunpodGpuTypeIdsText = $derived((savedRunpod.serverless?.gpuTypeIds ?? []).join('\n'));
 
-  $effect(() => {
+  // Clamp minMatchingFrames to frameCount at save time, NOT in a $effect.
+  // The previous `$effect` reactively clamped on every keystroke, so typing
+  // a two-digit number in `frameCount` clobbered `minMatchingFrames` between
+  // digits. The SettingInputField `max={frameCount}` already gives a visible
+  // UI bound; this `onBeforeSave` hook just enforces it once at submit.
+  // Marked async to satisfy SystemConfigButtonRow's onBeforeSave: () => Promise<boolean>.
+  const validateBeforeSave = (): Promise<boolean> => {
     const enhancedVideo = configToEdit.machineLearning.duplicateDetection.enhancedVideo;
     if (enhancedVideo.minMatchingFrames > enhancedVideo.frameCount) {
       enhancedVideo.minMatchingFrames = enhancedVideo.frameCount;
     }
-  });
+    return Promise.resolve(true);
+  };
 
   const hardwareAcceleration = {
     Auto: MachineLearningHardwareAcceleration.Auto,
@@ -213,12 +226,12 @@
       value: p.value,
       text: `${p.label} — ${p.vramHint}`,
     })),
-    { value: CUSTOM_MODEL, text: 'Custom… (enter Hugging Face model ID)' },
+    { value: CUSTOM_MODEL, text: $t('admin.machine_learning_runpod_custom_model_option') },
   ]);
 
   const fallbackModelOptions = $derived([
     ...FALLBACK_MODEL_PROFILES.map((p) => ({ value: p.value, text: p.label })),
-    { value: CUSTOM_MODEL, text: 'Custom… (enter Hugging Face model ID)' },
+    { value: CUSTOM_MODEL, text: $t('admin.machine_learning_runpod_custom_model_option') },
   ]);
 
   let descriptionModelChoice = $state<string>(CUSTOM_MODEL);
@@ -446,7 +459,9 @@
 
         {#if managedRunPodUrl}
           <div class="rounded-sm border border-immich-gray/30 bg-immich-bg/30 p-2 font-mono text-xs break-all">
-            <span class="font-sans text-immich-gray not-italic">Managed by RunPod (auto):</span>
+            <span class="font-sans text-immich-gray not-italic"
+              >{$t('admin.machine_learning_runpod_managed_url_label')}</span
+            >
             {managedRunPodUrl}
           </div>
         {/if}
@@ -490,15 +505,15 @@
 
       <SettingAccordion
         key="runpod"
-        title="Cloud GPU (RunPod)"
-        subtitle="Provision the ML container on RunPod when local hardware can't keep up. Choose Pod for cheap active rates, or Serverless for scale-to-zero billing."
+        title={$t('admin.machine_learning_runpod_pod_accordion_title')}
+        subtitle={$t('admin.machine_learning_runpod_pod_accordion_subtitle')}
       >
         <div class="ms-4 mt-4 flex flex-col gap-4">
           <RunPodReferralBanner />
 
           <SettingSelect
-            label="Mode"
-            desc="Pod = a dedicated GPU pod you stop manually (cheapest while active). Serverless = an on-demand endpoint that scales to zero (~4× per-second cost but $0 when idle)."
+            label={$t('admin.machine_learning_runpod_mode')}
+            desc={$t('admin.machine_learning_runpod_mode_description')}
             name="runpod-mode"
             value={runpodMode}
             options={runpodModeOptions}
@@ -517,7 +532,7 @@
           <div class="flex flex-col gap-1">
             <SettingInputField
               inputType={SettingInputFieldType.PASSWORD}
-              label="RunPod API Key"
+              label={$t('admin.machine_learning_runpod_api_key')}
               bind:value={runpod.apiKey}
               disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
               isEdited={runpod.apiKey !== savedRunpod.apiKey}
@@ -527,21 +542,8 @@
               <span
                 class="inline-flex w-fit items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Key Saved
+                <Icon icon={mdiCheck} size="12" />
+                {$t('admin.machine_learning_runpod_key_saved')}
               </span>
             {/if}
           </div>
@@ -549,8 +551,8 @@
           <div class="flex flex-col gap-1">
             <SettingInputField
               inputType={SettingInputFieldType.PASSWORD}
-              label="HuggingFace Token (optional)"
-              description="Forwarded to the worker as HF_TOKEN so it can pull gated/large models (Qwen-VL etc.) without unauthenticated rate limits. Leave blank to skip."
+              label={$t('admin.machine_learning_runpod_hf_token')}
+              description={$t('admin.machine_learning_runpod_hf_token_description')}
               bind:value={runpod.hfToken as string}
               disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
               isEdited={runpod.hfToken !== savedRunpod.hfToken}
@@ -560,29 +562,16 @@
               <span
                 class="inline-flex w-fit items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-                Token Saved
+                <Icon icon={mdiCheck} size="12" />
+                {$t('admin.machine_learning_runpod_token_saved')}
               </span>
             {/if}
           </div>
 
           <SettingInputField
             inputType={SettingInputFieldType.TEXT}
-            label="Container image"
-            description="The ML container image to run on RunPod. Defaults to the fork's RunPod-tuned CUDA build."
+            label={$t('admin.machine_learning_runpod_container_image')}
+            description={$t('admin.machine_learning_runpod_container_image_description')}
             bind:value={runpod.imageName}
             disabled={disabled || !configToEdit.machineLearning.enabled || runpodMode === 'disabled'}
             isEdited={runpod.imageName !== savedRunpod.imageName}
@@ -591,8 +580,8 @@
           {#if runpodMode === 'pod'}
             <SettingInputField
               inputType={SettingInputFieldType.TEXT}
-              label="Default GPU type"
-              description="Pre-fill for the launch dialog (e.g. 'NVIDIA RTX A5000')."
+              label={$t('admin.machine_learning_runpod_default_gpu_type_id')}
+              description={$t('admin.machine_learning_runpod_default_gpu_type_id_description')}
               bind:value={runpod.defaultGpuTypeId}
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpod.defaultGpuTypeId !== savedRunpod.defaultGpuTypeId}
@@ -600,7 +589,7 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Container disk (GB)"
+              label={$t('admin.machine_learning_runpod_container_disk_gb')}
               bind:value={runpod.containerDiskGb}
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpod.containerDiskGb !== savedRunpod.containerDiskGb}
@@ -608,40 +597,40 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Persistent volume (GB)"
-              description="Mounted at /cache for model weight reuse across stop/start. 0 disables the volume."
+              label={$t('admin.machine_learning_runpod_volume_gb')}
+              description={$t('admin.machine_learning_runpod_volume_gb_description')}
               bind:value={runpod.volumeGb}
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpod.volumeGb !== savedRunpod.volumeGb}
             />
 
             <SettingSwitch
-              title="Auto-stop when idle"
-              subtitle="Stop the pod when no ML jobs have run for the grace window. Strongly recommended."
+              title={$t('admin.machine_learning_runpod_auto_stop_enabled')}
+              subtitle={$t('admin.machine_learning_runpod_auto_stop_enabled_description')}
               bind:checked={runpod.autoStopEnabled}
               disabled={disabled || !configToEdit.machineLearning.enabled}
             />
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Idle grace (minutes)"
-              description="How long the pod can stay idle before auto-stop fires."
+              label={$t('admin.machine_learning_runpod_auto_stop_grace_minutes')}
+              description={$t('admin.machine_learning_runpod_auto_stop_grace_minutes_description')}
               bind:value={runpod.autoStopGraceMinutes}
               disabled={disabled || !configToEdit.machineLearning.enabled || !runpod.autoStopEnabled}
               isEdited={runpod.autoStopGraceMinutes !== savedRunpod.autoStopGraceMinutes}
             />
 
             <SettingSwitch
-              title="Auto-backfill on launch"
-              subtitle="When the pod reaches Running, queue smart search, face detection, OCR, duplicates, image description, and NSFW for every eligible asset."
+              title={$t('admin.machine_learning_runpod_auto_backfill_on_launch')}
+              subtitle={$t('admin.machine_learning_runpod_auto_backfill_on_launch_description')}
               bind:checked={runpod.autoBackfillOnLaunch}
               disabled={disabled || !configToEdit.machineLearning.enabled}
             />
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Max runtime (hours)"
-              description="Hard ceiling — pod is force-stopped if it runs longer than this, regardless of activity. Default 24."
+              label={$t('admin.machine_learning_runpod_max_runtime_hours')}
+              description={$t('admin.machine_learning_runpod_max_runtime_hours_description')}
               bind:value={runpod.maxRuntimeHours}
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpod.maxRuntimeHours !== savedRunpod.maxRuntimeHours}
@@ -649,8 +638,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Provision timeout (minutes)"
-              description="How long to wait for the pod to reach RUNNING + healthy /ping before giving up. Increase if large models take longer than 5 minutes to download on cold boot. Default 5."
+              label={$t('admin.machine_learning_runpod_provision_timeout_minutes')}
+              description={$t('admin.machine_learning_runpod_provision_timeout_minutes_description')}
               bind:value={runpod.provisionTimeoutMinutes}
               min={1}
               max={60}
@@ -659,7 +648,7 @@
             />
           {:else if runpodMode === 'serverless'}
             <SettingTextarea
-              label="GPU pool IDs (one per line, in priority order)"
+              label={$t('admin.machine_learning_runpod_gpu_pool_ids_label')}
               value={runpodGpuTypeIdsText}
               onChange={(text) =>
                 (runpodServerless.gpuTypeIds = text
@@ -677,23 +666,8 @@
                     rel="noopener noreferrer"
                     class="inline-flex items-center gap-1 underline hover:no-underline"
                   >
-                    GPU pool reference
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                      <polyline points="15 3 21 3 21 9"></polyline>
-                      <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
+                    {$t('admin.machine_learning_runpod_gpu_pool_reference')}
+                    <Icon icon={mdiOpenInNew} size="12" />
                   </a>.
                 </p>
               {/snippet}
@@ -701,8 +675,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Min workers"
-              description="Keep at least this many workers warm. 0 = true scale-to-zero (cold start ~30–60s on first request)."
+              label={$t('admin.machine_learning_runpod_workers_min')}
+              description={$t('admin.machine_learning_runpod_workers_min_description')}
               bind:value={runpodServerless.workersMin}
               min={0}
               max={10}
@@ -712,8 +686,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Max workers"
-              description="Upper bound on concurrent workers. RunPod's scaler will burst up to this when queues build."
+              label={$t('admin.machine_learning_runpod_workers_max')}
+              description={$t('admin.machine_learning_runpod_workers_max_description')}
               bind:value={runpodServerless.workersMax}
               min={1}
               max={20}
@@ -723,8 +697,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Idle timeout (seconds)"
-              description="How long a worker keeps running after its last request before scaling down."
+              label={$t('admin.machine_learning_runpod_idle_timeout_seconds')}
+              description={$t('admin.machine_learning_runpod_idle_timeout_seconds_description')}
               bind:value={runpodServerless.idleTimeoutSeconds}
               min={5}
               max={3600}
@@ -734,8 +708,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Execution timeout (ms)"
-              description="Per-request timeout. ML jobs typically take seconds; the default 10 min ceiling is forgiving."
+              label={$t('admin.machine_learning_runpod_execution_timeout_ms')}
+              description={$t('admin.machine_learning_runpod_execution_timeout_ms_description')}
               bind:value={runpodServerless.executionTimeoutMs}
               min={5000}
               max={3_600_000}
@@ -744,13 +718,13 @@
             />
 
             <SettingSelect
-              label="Scaler type"
-              desc="QUEUE_DELAY scales on queued requests; REQUEST_COUNT on absolute throughput."
+              label={$t('admin.machine_learning_runpod_scaler_type')}
+              desc={$t('admin.machine_learning_runpod_scaler_type_description')}
               name="runpod-scaler-type"
               bind:value={runpodServerless.scalerType}
               options={[
-                { value: 'QUEUE_DELAY', text: 'QUEUE_DELAY (recommended)' },
-                { value: 'REQUEST_COUNT', text: 'REQUEST_COUNT' },
+                { value: 'QUEUE_DELAY', text: $t('admin.machine_learning_runpod_scaler_type_queue_delay') },
+                { value: 'REQUEST_COUNT', text: $t('admin.machine_learning_runpod_scaler_type_request_count') },
               ]}
               disabled={disabled || !configToEdit.machineLearning.enabled}
               isEdited={runpodServerless.scalerType !== savedRunpodServerless.scalerType}
@@ -758,8 +732,8 @@
 
             <SettingInputField
               inputType={SettingInputFieldType.NUMBER}
-              label="Scaler value"
-              description="Threshold for the scaler. For QUEUE_DELAY, scales when delay exceeds this many seconds."
+              label={$t('admin.machine_learning_runpod_scaler_value')}
+              description={$t('admin.machine_learning_runpod_scaler_value_description')}
               bind:value={runpodServerless.scalerValue}
               min={1}
               max={300}
@@ -1144,7 +1118,7 @@
           {#if descriptionModelChoice === CUSTOM_MODEL}
             <SettingInputField
               inputType={SettingInputFieldType.TEXT}
-              label="Custom model (Hugging Face ID)"
+              label={$t('admin.machine_learning_custom_model_hf_id')}
               bind:value={imageDescription.modelName}
               required={true}
               disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
@@ -1157,7 +1131,7 @@
               class="-mt-2 mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
             >
               <p class="mb-1">
-                Recommended RunPod GPU pools for this model:
+                {$t('admin.machine_learning_image_description_recommended_gpu_pools')}
                 <code class="rounded-sm bg-blue-100 px-1 dark:bg-blue-900">
                   {recommendedPoolsForCurrentModel.join(', ')}
                 </code>
@@ -1168,14 +1142,14 @@
                 onclick={applyRecommendedPools}
                 {disabled}
               >
-                Apply to GPU pool list
+                {$t('admin.machine_learning_image_description_recommended_gpu_apply')}
               </button>
             </div>
           {/if}
 
           <SettingSelect
             label={$t('admin.machine_learning_image_description_fallback_model')}
-            desc="Used only when RunPod is not the active backend. RunPod always uses the primary model with no fallback."
+            desc={$t('admin.machine_learning_image_description_fallback_model_description')}
             value={fallbackModelChoice}
             options={fallbackModelOptions}
             onSelect={onFallbackModelChange}
@@ -1187,7 +1161,7 @@
           {#if fallbackModelChoice === CUSTOM_MODEL}
             <SettingInputField
               inputType={SettingInputFieldType.TEXT}
-              label="Custom fallback model (Hugging Face ID)"
+              label={$t('admin.machine_learning_custom_fallback_model_hf_id')}
               bind:value={imageDescription.fallbackModelName}
               required={true}
               disabled={disabled || !configToEdit.machineLearning.enabled || !imageDescription.enabled}
@@ -1521,6 +1495,7 @@
             subtitle={$t('admin.machine_learning_nsfw_detection_enabled_description')}
             bind:checked={nsfwDetection.enabled}
             disabled={disabled || !configToEdit.machineLearning.enabled}
+            isEdited={nsfwDetection.enabled !== savedNsfwDetection.enabled}
           />
 
           <SettingSwitch
@@ -1564,7 +1539,7 @@
           />
         </div>
       </SettingAccordion>
-      <SettingButtonsRow bind:configToEdit keys={['machineLearning']} {disabled} />
+      <SettingButtonsRow bind:configToEdit keys={['machineLearning']} {disabled} onBeforeSave={validateBeforeSave} />
     </form>
   </div>
 </div>

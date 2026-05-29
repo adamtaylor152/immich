@@ -508,7 +508,10 @@ describe(DuplicateService.name, () => {
       expect(mocks.duplicateRepository.get).toHaveBeenCalledWith('group-1', { excludeNsfw: true });
     });
 
-    it('should skip when keepAssetIds contains non-member', async () => {
+    it('should reject when keepAssetIds contains non-member (server.md Medium #nsfwOptions)', async () => {
+      // Security fix: previously this silently dropped non-member IDs, which
+      // would let an attacker probe for NSFW-hidden asset IDs by guessing.
+      // Now we reject the whole group with a NOT_FOUND error.
       const asset = AssetFactory.create();
       mocks.access.duplicate.checkOwnerAccess.mockResolvedValue(new Set(['group-1']));
       mocks.duplicateRepository.get.mockResolvedValue({
@@ -516,14 +519,14 @@ describe(DuplicateService.name, () => {
         assets: [asset as unknown as MapAsset],
       });
 
-      await expect(
-        sut.resolve(authStub.admin, {
-          groups: [{ duplicateId: 'group-1', keepAssetIds: ['asset-999', asset.id], trashAssetIds: [] }],
-        }),
-      ).resolves.toEqual([{ id: 'group-1', success: true }]);
+      const result = await sut.resolve(authStub.admin, {
+        groups: [{ duplicateId: 'group-1', keepAssetIds: ['asset-999', asset.id], trashAssetIds: [] }],
+      });
+      expect(result[0].success).toBe(false);
+      expect(result[0].errorMessage).toMatch(/not part of this duplicate group/);
     });
 
-    it('should skip when trashAssetIds contains non-member', async () => {
+    it('should reject when trashAssetIds contains non-member (server.md Medium #nsfwOptions)', async () => {
       const asset = AssetFactory.create();
       mocks.access.duplicate.checkOwnerAccess.mockResolvedValue(new Set(['group-1']));
       mocks.duplicateRepository.get.mockResolvedValue({
@@ -531,11 +534,11 @@ describe(DuplicateService.name, () => {
         assets: [asset as unknown as MapAsset],
       });
 
-      await expect(
-        sut.resolve(authStub.admin, {
-          groups: [{ duplicateId: 'group-1', keepAssetIds: [asset.id], trashAssetIds: ['asset-999'] }],
-        }),
-      ).resolves.toEqual([{ id: 'group-1', success: true }]);
+      const result = await sut.resolve(authStub.admin, {
+        groups: [{ duplicateId: 'group-1', keepAssetIds: [asset.id], trashAssetIds: ['asset-999'] }],
+      });
+      expect(result[0].success).toBe(false);
+      expect(result[0].errorMessage).toMatch(/not part of this duplicate group/);
     });
 
     it('should fail if keepAssetIds and trashAssetIds overlap', async () => {

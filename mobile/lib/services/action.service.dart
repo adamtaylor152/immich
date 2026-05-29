@@ -88,12 +88,12 @@ class ActionService {
     await _remoteAssetRepository.updateVisibility(remoteIds, AssetVisibility.timeline);
   }
 
-  Future<void> markNsfw(List<String> remoteIds) async {
-    await _assetApiRepository.markNsfw(remoteIds);
+  Future<AssetEnrichmentResult> markNsfw(List<String> remoteIds) {
+    return _assetApiRepository.markNsfw(remoteIds);
   }
 
-  Future<void> markSafe(List<String> remoteIds) async {
-    await _assetApiRepository.markSafe(remoteIds);
+  Future<AssetEnrichmentResult> markSafe(List<String> remoteIds) {
+    return _assetApiRepository.markSafe(remoteIds);
   }
 
   Future<void> moveToLockFolder(List<String> remoteIds, List<String> localIds) async {

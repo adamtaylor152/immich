@@ -256,7 +256,11 @@ export class WorkflowExecutionService extends BaseService {
 
     // Compute eligibility once per asset rather than once per (workflow × asset).
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const requireEnrichment = machineLearning.nsfwDetection.enabled;
+    // Either NSFW detection OR image-description can flag an asset as NSFW
+    // (description.safety.is_nsfw_likely flows through nsfwAssetIdExists). If
+    // EITHER is enabled, require the asset to be enriched so the workflow gate
+    // never fires before the NSFW signal lands.
+    const requireEnrichment = machineLearning.nsfwDetection.enabled || machineLearning.imageDescription.enabled;
     if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
       return;
     }
@@ -335,7 +339,8 @@ export class WorkflowExecutionService extends BaseService {
     }
 
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const requireEnrichment = machineLearning.nsfwDetection.enabled;
+    // Match `onAssetMetadataExtracted` — either NSFW OR description can flag NSFW.
+    const requireEnrichment = machineLearning.nsfwDetection.enabled || machineLearning.imageDescription.enabled;
     for (const assetId of assetIds) {
       if (!(await this.workflowRepository.isWorkflowEligible(assetId, { requireEnrichment }))) {
         return JobStatus.Skipped;

@@ -1,6 +1,7 @@
 import asyncio
 import gc
 import os
+import secrets
 import signal
 import threading
 import time
@@ -39,6 +40,7 @@ from .schemas import (
     ModelType,
     PipelineRequest,
     T,
+    validate_options,
 )
 
 MultiPartParser.spool_max_size = 2**26  # spools to disk if payload is 64 MiB or larger
@@ -72,11 +74,28 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         yield
     finally:
         log.handlers.clear()
-        for model in model_cache.cache._cache.values():
-            del model
+        # Drop strong references held by the cache so Torch/OpenVINO sessions
+        # (which may hold multi-GB of pinned GPU memory) are eligible for GC
+        # before the worker is respawned. Without this, `del model` only
+        # deleted the loop variable and the cache dict kept references alive.
+        # See ml.md Medium "Lifespan teardown doesn't release model GPU memory".
+        try:
+            model_cache.cache._cache.clear()
+        except Exception as error:
+            log.warning(f"Failed to clear model cache during shutdown: {error}")
         if thread_pool is not None:
             thread_pool.shutdown()
         gc.collect()
+        # If torch is present, also drop any cached CUDA allocator state.
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+        except Exception as error:
+            log.warning(f"Failed to empty CUDA cache during shutdown: {error}")
 
 
 async def preload_models(preload: PreloadModelData) -> None:
@@ -150,11 +169,18 @@ def get_entries(entries: str = Form()) -> InferenceEntries:
         with_deps: list[InferenceEntry] = []
         for task, types in request.items():
             for type, entry in types.items():
+                # Validate per-task option keyspace. Unknown keys are rejected
+                # to prevent schema drift / arbitrary kwargs to model constructors.
+                # See ml.md High concern "external_prompt and other ML model options".
+                raw_options = entry.get("options", {}) or {}
+                if not isinstance(raw_options, dict):
+                    raise HTTPException(422, "Invalid request format: options must be an object.")
+                validated_options = validate_options(task, type, raw_options)
                 parsed: InferenceEntry = {
                     "name": entry["modelName"],
                     "task": task,
                     "type": type,
-                    "options": entry.get("options", {}),
+                    "options": validated_options,
                 }
                 dep = get_model_deps(parsed["name"], type, task)
                 (with_deps if dep else without_deps).append(parsed)
@@ -170,30 +196,96 @@ app = FastAPI(lifespan=lifespan)
 # Health endpoints stay unauthenticated so RunPod's proxy probes and LAN deployments
 # (the default UX) keep working unchanged. Auth only kicks in for paths that actually
 # do inference, and only when IMMICH_ML_AUTH_TOKEN is set in the environment.
-_AUTH_EXEMPT_PATHS = {"/", "/ping"}
+# Normalised exempt paths — comparison strips trailing slash and lowercases.
+_AUTH_EXEMPT_PATHS = frozenset({"/", "/ping"})
+# Cap on the Authorization header byte length to avoid degenerate-input
+# denial-of-service from arbitrary-length headers. Starlette already caps but
+# making this explicit here is defensive and cheap.
+_MAX_AUTH_HEADER_LENGTH = 8 * 1024
+
+
+def _normalize_auth_path(path: str) -> str:
+    """Lowercase + trailing-slash strip, but never strip the root '/'."""
+    normalized = path.lower()
+    if len(normalized) > 1 and normalized.endswith("/"):
+        normalized = normalized.rstrip("/")
+    return normalized
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return True if `host` is a loopback bind (127.0.0.0/8 or ::1)."""
+    if not host:
+        return False
+    lowered = host.strip().lower()
+    return (
+        lowered == "localhost"
+        or lowered.startswith("127.")
+        or lowered == "::1"
+        or lowered == "[::1]"
+    )
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, expected_token: str | None) -> None:
+    def __init__(self, app: ASGIApp, expected_token: str | None, warn_when_unset: bool) -> None:
         super().__init__(app)
-        self._expected = expected_token
+        # Encode once so compare_digest sees bytes of consistent type.
+        self._expected_bytes: bytes | None = expected_token.encode("utf-8") if expected_token else None
+        self._warn_when_unset = warn_when_unset
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if not self._expected:
+        normalized_path = _normalize_auth_path(request.url.path)
+        if self._expected_bytes is None:
+            # Auth was not configured. We loudly warn every inference attempt
+            # so operators see this in logs in the default-UX local deploy.
+            if self._warn_when_unset and normalized_path not in _AUTH_EXEMPT_PATHS:
+                log.warning(
+                    "IMMICH_ML_AUTH_TOKEN is unset and ML is bound to a non-loopback "
+                    "address. Inference endpoint is reachable without authentication. "
+                    "Set IMMICH_ML_AUTH_TOKEN to enable bearer auth."
+                )
             return await call_next(request)
-        if request.url.path in _AUTH_EXEMPT_PATHS:
+        if normalized_path in _AUTH_EXEMPT_PATHS:
             return await call_next(request)
         header = request.headers.get("authorization", "")
+        if len(header) > _MAX_AUTH_HEADER_LENGTH:
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
         scheme, _, token = header.partition(" ")
-        if scheme.lower() != "bearer" or token != self._expected:
+        if scheme.lower() != "bearer":
+            return JSONResponse({"message": "Unauthorized"}, status_code=401)
+        # Constant-time comparison to prevent the matching-prefix timing leak
+        # that ``token != self._expected`` exposed. ml.md High #1.
+        if not secrets.compare_digest(token.encode("utf-8"), self._expected_bytes):
             return JSONResponse({"message": "Unauthorized"}, status_code=401)
         return await call_next(request)
 
 
 _auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
+_immich_host = os.environ.get("IMMICH_HOST", "[::]").strip()
+_bound_loopback = _is_loopback_host(_immich_host)
+
 if _auth_token:
     log.info("Bearer-token authentication enabled for /predict")
-app.add_middleware(BearerAuthMiddleware, expected_token=_auth_token)
+elif not _bound_loopback:
+    # Loud, one-shot warning at boot. The middleware will additionally warn
+    # on every inference request when token is unset and host is non-loopback.
+    log.warning(
+        "SECURITY: IMMICH_ML_AUTH_TOKEN is unset and IMMICH_HOST '%s' is not a loopback "
+        "address. /predict will accept unauthenticated requests. Set IMMICH_ML_AUTH_TOKEN, "
+        "bind ML to 127.0.0.1/::1, or place ML behind a reverse proxy that enforces network ACLs.",
+        _immich_host,
+    )
+else:
+    log.warning(
+        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback '%s'); /predict is unauthenticated. "
+        "Acceptable for local development only.",
+        _immich_host,
+    )
+
+app.add_middleware(
+    BearerAuthMiddleware,
+    expected_token=_auth_token,
+    warn_when_unset=not _bound_loopback,
+)
 
 
 @app.get("/")
@@ -208,6 +300,16 @@ def ping() -> PlainTextResponse:
 
 @app.get("/hardware")
 def hardware() -> ORJSONResponse:
+    """Report available hardware acceleration providers.
+
+    Public contract — KEEP IN SYNC WITH ``server/src/repositories/machine-learning.repository.ts``
+    (``MachineLearningHardware``) and ``server/src/enum.ts`` (``MachineLearningHardwareAcceleration``).
+    ``preferredAcceleration`` is serialized as the lowercase string value of
+    ``ImageDescriptionAcceleration`` (``"cuda"`` / ``"openvino"`` / ``"auto"``).
+    Changing the enum requires a coordinated update on the server side and
+    a corresponding Zod schema parse — adding a new variant without updating
+    the server will silently break the front-end auto-detect UX.
+    """
     providers = ort.get_available_providers()
     openvino_device_ids = _openvino_device_ids(providers)
     torch_cuda_available, cuda_device_count = _torch_cuda_info()

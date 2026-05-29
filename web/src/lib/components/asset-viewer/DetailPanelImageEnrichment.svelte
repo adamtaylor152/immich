@@ -29,19 +29,31 @@
   let isLoading = $state(false);
   let activeAction = $state<AssetImageEnrichmentAction | null>(null);
   let canReview = $derived(isOwner && isAdmin && asset.type === AssetTypeEnum.Image);
+  // Track the in-flight enrichment fetch so we can abort it when the user
+  // swipes to a new asset before the previous request resolved.
+  let enrichmentController: AbortController | undefined;
 
   const loadEnrichment = async (assetId: string) => {
+    // Cancel any previous in-flight enrichment request — when the user
+    // rapidly swipes through assets, the previous fetch should be aborted
+    // rather than allowed to run to completion and consume bandwidth.
+    enrichmentController?.abort();
+    const controller = new AbortController();
+    enrichmentController = controller;
     isLoading = true;
     try {
-      const result = await getAssetImageEnrichment({ id: assetId });
-      if (asset.id === assetId) {
+      const result = await getAssetImageEnrichment({ id: assetId }, { signal: controller.signal });
+      if (asset.id === assetId && !controller.signal.aborted) {
         enrichment = result;
       }
     } catch (error) {
-      handleError(error, $t('errors.unable_to_load_image_enrichment'));
+      if (!controller.signal.aborted) {
+        handleError(error, $t('errors.unable_to_load_image_enrichment'));
+      }
     } finally {
-      if (asset.id === assetId) {
+      if (asset.id === assetId && enrichmentController === controller) {
         isLoading = false;
+        enrichmentController = undefined;
       }
     }
   };

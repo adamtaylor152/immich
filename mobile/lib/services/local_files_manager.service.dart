@@ -12,7 +12,7 @@ class LocalFilesManagerService {
 
   Future<bool> moveToTrash(List<String> mediaUrls) async {
     try {
-      return await _channel.invokeMethod('moveToTrash', {'mediaUrls': mediaUrls});
+      return await _channel.invokeMethod<bool>('moveToTrash', {'mediaUrls': mediaUrls}) ?? false;
     } catch (e, s) {
       _logger.warning('Error moving file to trash', e, s);
       return false;
@@ -21,7 +21,7 @@ class LocalFilesManagerService {
 
   Future<bool> restoreFromTrash(String fileName, int type) async {
     try {
-      return await _channel.invokeMethod('restoreFromTrash', {'fileName': fileName, 'type': type});
+      return await _channel.invokeMethod<bool>('restoreFromTrash', {'fileName': fileName, 'type': type}) ?? false;
     } catch (e, s) {
       _logger.warning('Error restore file from trash', e, s);
       return false;
@@ -30,7 +30,7 @@ class LocalFilesManagerService {
 
   Future<bool> restoreFromTrashById(String mediaId, int type) async {
     try {
-      return await _channel.invokeMethod('restoreFromTrash', {'mediaId': mediaId, 'type': type});
+      return await _channel.invokeMethod<bool>('restoreFromTrash', {'mediaId': mediaId, 'type': type}) ?? false;
     } catch (e, s) {
       _logger.warning('Error restore file from trash by Id', e, s);
       return false;
@@ -39,7 +39,7 @@ class LocalFilesManagerService {
 
   Future<bool> requestManageMediaPermission() async {
     try {
-      return await _channel.invokeMethod('requestManageMediaPermission');
+      return await _channel.invokeMethod<bool>('requestManageMediaPermission') ?? false;
     } catch (e, s) {
       _logger.warning('Error requesting manage media permission', e, s);
       return false;
@@ -48,7 +48,7 @@ class LocalFilesManagerService {
 
   Future<bool> hasManageMediaPermission() async {
     try {
-      return await _channel.invokeMethod('hasManageMediaPermission');
+      return await _channel.invokeMethod<bool>('hasManageMediaPermission') ?? false;
     } catch (e, s) {
       _logger.warning('Error requesting manage media permission state', e, s);
       return false;
@@ -57,7 +57,7 @@ class LocalFilesManagerService {
 
   Future<bool> manageMediaPermission() async {
     try {
-      return await _channel.invokeMethod('manageMediaPermission');
+      return await _channel.invokeMethod<bool>('manageMediaPermission') ?? false;
     } catch (e, s) {
       _logger.warning('Error requesting manage media permission settings', e, s);
       return false;

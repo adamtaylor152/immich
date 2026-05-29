@@ -48,6 +48,32 @@ interface ClaimOptions<T> {
 const ELEVATED_SESSION_DURATION_MINUTES = 60;
 const ELEVATED_SESSION_REFRESH_THRESHOLD_MINUTES = 5;
 
+// SECURITY (security.md M5): exponential backoff for PIN unlock attempts.
+// The PIN is only 6 digits (~10^6 keyspace), so without throttling an attacker
+// with a stolen session token can brute-force the full space in minutes.
+// Track failed attempts per user in-process. State resets on process restart,
+// which is conservative — fewer false lockouts at the cost of bypass via
+// process kill (only available to admins).
+const PIN_FAILURE_THRESHOLDS = [
+  { attempts: 5, lockoutMs: 60 * 1000 }, // 5 failures -> 1 minute
+  { attempts: 10, lockoutMs: 60 * 60 * 1000 }, // 10 failures -> 1 hour
+  { attempts: 15, lockoutMs: 24 * 60 * 60 * 1000 }, // 15 failures -> 24 hours
+];
+const PIN_FAILURE_RESET_MS = 30 * 60 * 1000; // failures expire after 30 min of inactivity
+
+type PinAttemptState = { failureCount: number; lastFailureAt: number; lockedUntil: number };
+const pinAttemptsByUser = new Map<string, PinAttemptState>();
+
+function lookupPinLockoutMs(failureCount: number): number {
+  let lockout = 0;
+  for (const tier of PIN_FAILURE_THRESHOLDS) {
+    if (failureCount >= tier.attempts) {
+      lockout = tier.lockoutMs;
+    }
+  }
+  return lockout;
+}
+
 export type ValidateRequest = {
   headers: IncomingHttpHeaders;
   queryParams: Record<string, string>;
@@ -613,8 +639,35 @@ export class AuthService extends BaseService {
       throw new BadRequestException('This endpoint can only be used with a session token');
     }
 
+    // Throttle PIN brute-force per user (security.md M5).
+    const now = Date.now();
+    const state = pinAttemptsByUser.get(auth.user.id);
+    if (state && state.lockedUntil > now) {
+      const retryAfterSec = Math.ceil((state.lockedUntil - now) / 1000);
+      throw new UnauthorizedException(`Too many failed PIN attempts. Try again in ${retryAfterSec} seconds.`);
+    }
+
     const user = await this.userRepository.getForPinCode(auth.user.id);
-    this.validatePinCode(user, { pinCode: dto.pinCode });
+    try {
+      this.validatePinCode(user, { pinCode: dto.pinCode });
+    } catch (error) {
+      // Record failure and apply backoff. Failures expire after a quiet window.
+      const prev =
+        state && now - state.lastFailureAt < PIN_FAILURE_RESET_MS
+          ? state
+          : { failureCount: 0, lastFailureAt: 0, lockedUntil: 0 };
+      const failureCount = prev.failureCount + 1;
+      const lockoutMs = lookupPinLockoutMs(failureCount);
+      pinAttemptsByUser.set(auth.user.id, {
+        failureCount,
+        lastFailureAt: now,
+        lockedUntil: lockoutMs > 0 ? now + lockoutMs : 0,
+      });
+      throw error;
+    }
+
+    // Successful unlock — reset the per-user counter.
+    pinAttemptsByUser.delete(auth.user.id);
 
     await this.sessionRepository.update(auth.session.id, {
       pinExpiresAt: DateTime.now().plus({ minutes: ELEVATED_SESSION_DURATION_MINUTES }).toJSDate(),

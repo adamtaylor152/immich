@@ -149,4 +149,13 @@ export class AssetTable {
 
   @Column({ type: 'boolean', default: false })
   isEdited!: Generated<boolean>;
+
+  /**
+   * Denormalized NSFW flag. Owned by ImageEnrichmentService — updated inside
+   * the per-asset advisory lock whenever the asset_metadata blob is written.
+   * See migration `2100000000010-AddAssetIsNsfwIndex.ts`. Index is partial on
+   * `is_nsfw = true` so the privacy-filter probe is a single index scan.
+   */
+  @Column({ type: 'boolean', default: false })
+  is_nsfw!: Generated<boolean>;
 }

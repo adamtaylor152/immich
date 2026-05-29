@@ -14,6 +14,11 @@ const _systemConfigWithRunPod = (overrides: Partial<SystemConfig['machineLearnin
     runpod: {
       ...defaults.machineLearning.runpod,
       enabled: true,
+      // Default to 'pod' mode for legacy test fixtures. Tests that need
+      // disabled/serverless can override via the `overrides` param. This
+      // matches the security-tightened effectiveMode() that no longer
+      // coerces `enabled: true, mode: 'disabled'` to 'pod'.
+      mode: 'pod',
       apiKey: 'rp_test',
       ...overrides,
     },
@@ -76,8 +81,8 @@ describe(RunPodService.name, () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('refuses when runpod.enabled is false', async () => {
-      stubConfig({ enabled: false });
+    it('refuses when runpod mode is disabled', async () => {
+      stubConfig({ enabled: false, mode: 'disabled' });
       await expect(
         sut.provision({ gpuTypeId: 'NVIDIA RTX A5000', acknowledgeDataPrivacy: true }),
       ).rejects.toBeInstanceOf(BadRequestException);

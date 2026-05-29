@@ -372,6 +372,12 @@ export enum SystemMetadataKey {
   License = 'license',
   PhysicalDeduplicationMigration = 'physical-deduplication-migration',
   RunPodState = 'runpod-state',
+  /**
+   * References to RunPod templates that the teardown path could not delete
+   * (typically because they were already gone from RunPod's side). Tracked so
+   * an admin can audit possible orphan HF tokens — see security.md H2.
+   */
+  RunPodOrphans = 'runpod-orphans',
 }
 
 export enum UserMetadataKey {

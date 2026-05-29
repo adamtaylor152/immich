@@ -49,14 +49,44 @@ class AssetApiRepository extends ApiRepository {
     return _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: isFavorite));
   }
 
-  Future<void> markNsfw(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markNsfw);
-    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
+  // TODO(server): replace per-asset POSTs with a bulk endpoint
+  // (mirrors AssetBulkUpdateDto) once the API supports it.
+  static const int _imageEnrichmentChunkSize = 16;
+
+  Future<AssetEnrichmentResult> markNsfw(List<String> ids) async {
+    return _runImageEnrichment(ids, AssetImageEnrichmentAction.markNsfw);
   }
 
-  Future<void> markSafe(List<String> ids) async {
-    final dto = AssetImageEnrichmentActionRequestDto(action: AssetImageEnrichmentAction.markSafe);
-    await Future.wait(ids.map((id) => _api.updateAssetImageEnrichment(id, dto)));
+  Future<AssetEnrichmentResult> markSafe(List<String> ids) async {
+    return _runImageEnrichment(ids, AssetImageEnrichmentAction.markSafe);
+  }
+
+  Future<AssetEnrichmentResult> _runImageEnrichment(List<String> ids, AssetImageEnrichmentAction action) async {
+    final dto = AssetImageEnrichmentActionRequestDto(action: action);
+    final succeeded = <String>[];
+    final failed = <String>[];
+    for (var i = 0; i < ids.length; i += _imageEnrichmentChunkSize) {
+      final end = (i + _imageEnrichmentChunkSize) > ids.length ? ids.length : (i + _imageEnrichmentChunkSize);
+      final chunk = ids.sublist(i, end);
+      final results = await Future.wait(
+        chunk.map((id) async {
+          try {
+            await _api.updateAssetImageEnrichment(id, dto);
+            return _IdResult(id, true);
+          } catch (_) {
+            return _IdResult(id, false);
+          }
+        }),
+      );
+      for (final r in results) {
+        if (r.success) {
+          succeeded.add(r.id);
+        } else {
+          failed.add(r.id);
+        }
+      }
+    }
+    return AssetEnrichmentResult(succeeded: succeeded, failed: failed);
   }
 
   Future<void> updateLocation(List<String> ids, LatLng location) async {
@@ -135,4 +165,22 @@ extension on AssetEdit {
       ),
     };
   }
+}
+
+/// Per-asset outcome for batched image-enrichment actions.
+class AssetEnrichmentResult {
+  final List<String> succeeded;
+  final List<String> failed;
+
+  const AssetEnrichmentResult({required this.succeeded, required this.failed});
+
+  int get total => succeeded.length + failed.length;
+  bool get allSucceeded => failed.isEmpty && succeeded.isNotEmpty;
+  bool get anyFailed => failed.isNotEmpty;
+}
+
+class _IdResult {
+  final String id;
+  final bool success;
+  const _IdResult(this.id, this.success);
 }

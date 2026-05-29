@@ -422,6 +422,21 @@ export class AssetRepository {
       .execute();
   }
 
+  /**
+   * Mirror the derived NSFW state into `asset.is_nsfw` so the privacy filter
+   * (utils/database.ts nsfwAssetIdExists) can do a single boolean probe instead
+   * of a correlated JSONB EXISTS. Called by ImageEnrichmentService inside the
+   * per-asset advisory lock.
+   */
+  async updateIsNsfw(assetId: string, isNsfw: boolean, kysely: Kysely<DB> = this.db): Promise<void> {
+    await kysely
+      .updateTable('asset')
+      .set({ is_nsfw: isNsfw })
+      .where('id', '=', asUuid(assetId))
+      .where('is_nsfw', '!=', isNsfw)
+      .execute();
+  }
+
   upsertBulkMetadata(items: Insertable<AssetMetadataTable>[]) {
     return this.db
       .insertInto('asset_metadata')

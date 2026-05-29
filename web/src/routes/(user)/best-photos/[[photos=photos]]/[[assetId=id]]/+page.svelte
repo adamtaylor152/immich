@@ -99,7 +99,7 @@
         showArchiveIcon={true}
         {viewport}
         onReload={reload}
-        slidingWindowOffset={resultsElement.offsetTop}
+        slidingWindowOffset={resultsElement?.offsetTop ?? 0}
       />
     {:else if !isLoading}
       <div class="flex min-h-[calc(66vh-11rem)] w-full place-content-center items-center">

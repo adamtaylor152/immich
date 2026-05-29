@@ -8,6 +8,7 @@
     type SmartAlbumReevaluateRequestDto,
   } from '@immich/sdk';
   import { Button, LoadingSpinner, Modal, ModalBody, ModalFooter } from '@immich/ui';
+  import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -27,19 +28,34 @@
   let estimate = $state<SmartAlbumReevaluateEstimateDto | undefined>(undefined);
   let loadError = $state<string | undefined>(undefined);
   let isTriggering = $state(false);
+  // Held in state so the markup can await it without Svelte 5 re-invoking
+  // the loader on every reactive tick (the previous hoisted top-level
+  // `const` did that part right but ran the fetch before mount; we now
+  // start the fetch on mount and abort it on destroy if the user dismisses
+  // mid-flight).
+  let estimatePromise: Promise<void> | undefined = $state(undefined);
+  let estimateController: AbortController | undefined;
 
-  const loadEstimate = async () => {
+  const loadEstimate = async (signal?: AbortSignal) => {
     try {
-      estimate = await getSmartAlbumReevaluateEstimate();
+      estimate = await getSmartAlbumReevaluateEstimate({ signal });
     } catch (error) {
+      if (signal?.aborted) {
+        return;
+      }
       loadError = $t('admin.smart_albums_reevaluate_modal_error');
       handleError(error, $t('admin.smart_albums_reevaluate_modal_error'));
     }
   };
 
-  // Hoist out of the markup so Svelte 5 doesn't re-invoke loadEstimate on
-  // every reactive update to the await block.
-  const estimatePromise = loadEstimate();
+  onMount(() => {
+    estimateController = new AbortController();
+    estimatePromise = loadEstimate(estimateController.signal);
+  });
+
+  onDestroy(() => {
+    estimateController?.abort();
+  });
 
   const handleReevaluate = async () => {
     isTriggering = true;

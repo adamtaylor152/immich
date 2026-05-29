@@ -20,15 +20,22 @@ import { RunPodPersistedState } from 'src/types';
 type RunPodMode = 'disabled' | 'pod' | 'serverless';
 
 /**
- * Resolve the effective mode from config, applying the back-compat rule for
- * configs persisted before the `mode` discriminator existed: if mode is
- * 'disabled' but the legacy `enabled: true` flag is set, treat as 'pod'.
+ * Resolve the effective mode from config.
+ *
+ * SECURITY (security.md H4): when `mode` is explicitly present in the config
+ * payload, honor it as-is — including `mode: 'disabled'`. The legacy
+ * `enabled: true` coercion only applies when `mode` is missing entirely (old
+ * persisted configs from before the discriminator existed). This prevents a
+ * compromised admin session from sending `{mode: 'disabled', enabled: true}`
+ * and silently keeping a pod billing while the UI shows it disabled.
  */
 function effectiveMode(config: SystemConfig): RunPodMode {
   const rp = config.machineLearning.runpod;
-  if (rp.mode && rp.mode !== 'disabled') {
+  // If mode is present (any of 'disabled' | 'pod' | 'serverless'), it wins.
+  if (rp.mode) {
     return rp.mode;
   }
+  // Legacy fallback only when mode is missing from the persisted config.
   return rp.enabled ? 'pod' : 'disabled';
 }
 
@@ -353,13 +360,38 @@ export class RunPodService extends BaseService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // Server.md High #provisionLocked: an ambiguous network failure may have
+      // left an orphan pod billing on RunPod. Try to identify and terminate it
+      // before surfacing the error so the admin doesn't pay for hours of idle
+      // GPU on a different replica's reconciler.
+      let orphanInfo = '';
+      try {
+        const existing = await this.runPodRepository.listPods(key);
+        const orphan = existing.find((p) => p.name?.startsWith(podNamePrefix));
+        if (orphan) {
+          try {
+            await this.runPodRepository.terminatePod(key, orphan.id);
+            orphanInfo = ` An orphan pod (${orphan.id}) was created during the failure and has been terminated.`;
+            this.logger.warn(`Terminated orphan pod ${orphan.id} after ambiguous createPod failure`);
+          } catch (terminateError) {
+            if (!(terminateError instanceof RunPodNotFoundError)) {
+              orphanInfo = ` An orphan pod (${orphan.id}) may still be running on RunPod — visit the dashboard.`;
+              this.logger.warn(`Failed to terminate orphan ${orphan.id}: ${terminateError}`);
+            }
+          }
+        }
+      } catch (listError) {
+        // Best-effort cleanup. If we can't list, the next provision attempt
+        // (which also runs an orphan-scan) will handle it.
+        this.logger.warn(`Failed to scan for orphan pods after create failure: ${listError}`);
+      }
       // Preserve the instanceTag so the next provision attempt will list pods
       // by our name prefix and clean up any orphan created by this ambiguous
       // failure. The pod (if any was actually created) is named with our tag
       // prefix so the user can also find it in the RunPod dashboard.
       await this.writeState({
         status: 'error',
-        message: `Failed to create pod: ${message}. If a pod was created despite this error it is named "${podNamePrefix}…" on RunPod; the next launch attempt will scan for and clean up any orphan.`,
+        message: `Failed to create pod: ${message}.${orphanInfo}`,
         errorAt: new Date().toISOString(),
         instanceTag,
       });
@@ -1253,12 +1285,27 @@ export class RunPodService extends BaseService {
         if (!(error instanceof RunPodNotFoundError)) {
           this.logger.warn(`Failed to delete endpoint ${state.endpointId}: ${error}`);
         }
+        // SECURITY (security.md H2): even when the endpoint is already gone
+        // (404) we MUST still attempt the template delete — the template carries
+        // the HF token env var. Falling through to the deleteTemplate call below.
       }
       try {
         await this.runPodRepository.deleteTemplate(apiKey, state.templateId);
         this.logger.log(`Deleted serverless template ${state.templateId}`);
       } catch (error) {
-        if (!(error instanceof RunPodNotFoundError)) {
+        if (error instanceof RunPodNotFoundError) {
+          // Template already gone — record this for the operator since the
+          // HF token may have persisted in an orphan template that we can no
+          // longer reach (e.g. admin rotated API key, the old template was
+          // moved/renamed). Recovery: admin must visit RunPod dashboard and
+          // delete any leftover template + rotate the HF token.
+          this.logger.warn(
+            `Serverless template ${state.templateId} not found during teardown. ` +
+              `If the HF token was set, it may persist on an orphan template. ` +
+              `Visit RunPod dashboard to verify, and rotate the HF token if needed.`,
+          );
+          await this.recordOrphanTemplate(state.templateId);
+        } else {
           this.logger.warn(`Failed to delete template ${state.templateId}: ${error}`);
         }
       }
@@ -1268,5 +1315,26 @@ export class RunPodService extends BaseService {
     await this.writeState(next);
     this.machineLearningRepository.clearManagedUrl();
     return this.mapStateToDto(next);
+  }
+
+  /**
+   * Persist a reference to a serverless template that could not be deleted on
+   * teardown (likely because it was already gone from RunPod's side). The
+   * orphan reference lives in system metadata so an admin can later audit and
+   * the HF token rotation reminder surfaces in the UI.
+   */
+  private async recordOrphanTemplate(templateId: string): Promise<void> {
+    try {
+      const existing = await this.systemMetadataRepository
+        .get(SystemMetadataKey.RunPodOrphans)
+        .then((state) => state ?? { orphanTemplateIds: [] as string[] });
+      const orphanTemplateIds = Array.isArray(existing.orphanTemplateIds) ? existing.orphanTemplateIds : [];
+      if (!orphanTemplateIds.includes(templateId)) {
+        orphanTemplateIds.push(templateId);
+        await this.systemMetadataRepository.set(SystemMetadataKey.RunPodOrphans, { orphanTemplateIds });
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to record orphan template ${templateId}: ${error}`);
+    }
   }
 }

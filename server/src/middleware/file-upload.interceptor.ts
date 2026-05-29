@@ -111,6 +111,15 @@ export class FileUploadInterceptor implements NestInterceptor {
       );
 
       const writeStream = this.storageRepository.createWriteStream(path);
+      // SECURITY: SHA-1 is preserved for the asset checksum so duplicate-detection,
+      // library scan, and existing client integrations keep working — they all
+      // assume SHA-1. The fork's physical-dedup feature mitigates the
+      // collision risk (CWE-327 — see security.md M1) by ALSO requiring
+      // matching `fileSizeInByte` AND a same-tenant boundary check before
+      // linking storage. Migration story: when a cross-tenant physical dedup
+      // candidate is detected, compute a SHA-256 second-pass before linking
+      // (see physical-file.repository.ts). For new uploads, the algorithm
+      // column is tracked so a future opportunistic rehash pass can upgrade.
       const hash = file.fieldname === UploadFieldName.ASSET_DATA ? createHash('sha1') : null;
 
       let size = 0;

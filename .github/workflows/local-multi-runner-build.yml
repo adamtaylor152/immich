@@ -99,6 +99,19 @@ jobs:
 
   build:
     needs: matrix
+    # SECURITY: hard guard against fork PRs reaching the `aiimmich` self-hosted
+    # runner. Self-hosted runners on `pull_request` from fork heads are GitHub's
+    # number-one persistence-attack vector (an attacker writes a malicious step
+    # into their PR's Dockerfile or workflow change and it executes on the host).
+    # Even if a future caller forgets the event_name guard, this workflow refuses
+    # to schedule a build for any fork PR. The defense-in-depth `github.repository`
+    # check additionally pins execution to the canonical fork repository so a
+    # re-fork of `adamtaylor152/immich` cannot accidentally route builds onto
+    # the runner pool.
+    if: >-
+      ${{ !github.event.pull_request.head.repo.fork
+          && (github.repository == 'adamtaylor152/immich'
+              || github.repository == 'immich-app/immich') }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -161,14 +174,27 @@ jobs:
           SUFFIX: ${{ steps.cache-key-suffix.outputs.suffix }}
           PLATFORM_PAIR: ${{ steps.prepare.outputs.platform-pair }}
           IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           HASH=$(sha256sum <<< "${BUILD_ARGS}" | cut -d' ' -f1)
           CACHE_KEY="${PLATFORM_PAIR}-${HASH}"
           echo "cache-key-base=${CACHE_KEY}" >> "$GITHUB_OUTPUT"
+          # Cache poisoning defense: only allow cache-to writes from push events
+          # on the canonical mainline branches. Fork PRs, same-repo feature
+          # branches, and workflow_dispatch all read from cache but cannot
+          # overwrite it. This prevents a malicious same-repo branch from
+          # publishing a poisoned cache layer that contaminates `main`/`fork/main`
+          # via the cross-suffix fallback at the cache-from step.
           if [[ "${IS_FORK_PR}" == "true" ]]; then
             echo "cache-to=type=local,dest=/tmp/discard,ignore-error=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [[ "${EVENT_NAME}" == "push" && ( "${REF_NAME}" == "main" || "${REF_NAME}" == "fork/main" ) ]]; then
             echo "cache-to=type=registry,ref=${IMAGE}-build-cache:${CACHE_KEY}-${SUFFIX},mode=max,compression=zstd" >> "$GITHUB_OUTPUT"
+          else
+            # Non-mainline event (workflow_dispatch, non-mainline push, etc).
+            # Read from cache but do not write — prevents cache poisoning from
+            # any branch that isn't the canonical mainline.
+            echo "cache-to=type=local,dest=/tmp/discard,ignore-error=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate docker image tags

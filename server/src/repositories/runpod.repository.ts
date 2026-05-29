@@ -130,6 +130,36 @@ export class RunPodNotFoundError extends RunPodApiError {
   }
 }
 
+/**
+ * Allow-list extraction of a user-safe error message from RunPod's response
+ * body. RunPod's contract is brittle — they could change it to echo
+ * request envelope fields (env vars, HF token) — so we only ever return values
+ * from a small set of known-safe message keys. The full body is logged
+ * server-side at warn level for debugging; only the extracted snippet is
+ * surfaced to the admin UI.
+ *
+ * Result is also truncated and stripped of control characters as a final
+ * defense before being concatenated into a thrown error message.
+ */
+const SAFE_MESSAGE_KEYS = ['error', 'message', 'errorCode', 'detail'] as const;
+const SAFE_MESSAGE_MAX_LEN = 200;
+// eslint-disable-next-line no-control-regex
+const SAFE_MESSAGE_CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
+
+const extractSafeUpstreamMessage = (body: unknown): string | undefined => {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const obj = body as Record<string, unknown>;
+  for (const key of SAFE_MESSAGE_KEYS) {
+    const value = obj[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value.replaceAll(SAFE_MESSAGE_CONTROL_CHARS, ' ').slice(0, SAFE_MESSAGE_MAX_LEN);
+    }
+  }
+  return undefined;
+};
+
 @Injectable()
 export class RunPodRepository {
   constructor(private logger: LoggingRepository) {
@@ -482,10 +512,13 @@ export class RunPodRepository {
       } catch {
         // keep the raw text
       }
+      // SECURITY (security.md H3): never surface raw upstream body in the
+      // user-facing message — RunPod can change its contract and accidentally
+      // echo env vars (HF token, ML_AUTH_TOKEN). Log full body server-side at
+      // warn level for debugging; bubble only an allow-listed message field.
       this.logger.warn(`RunPod ${method} ${path} failed: ${response.status} ${response.statusText} ${text}`);
-      // Truncate the body before mixing it into the user-facing message so a
-      // huge HTML error page doesn't bloat the response.
-      const snippet = text ? `: ${text.slice(0, 400)}` : '';
+      const safeMessage = extractSafeUpstreamMessage(parsed);
+      const snippet = safeMessage ? `: ${safeMessage}` : '';
       throw new RunPodApiError(
         `RunPod ${method} ${path} failed: ${response.status} ${response.statusText}${snippet}`,
         response.status,

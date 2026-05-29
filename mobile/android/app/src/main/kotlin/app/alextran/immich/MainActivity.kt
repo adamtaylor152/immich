@@ -12,6 +12,7 @@ import app.alextran.immich.connectivity.ConnectivityApiImpl
 import app.alextran.immich.core.HttpClientManager
 import app.alextran.immich.core.ImmichPlugin
 import app.alextran.immich.core.NetworkApiPlugin
+import app.alextran.immich.filetrash.FileTrashPlugin
 import me.albemala.native_video_player.NativeVideoPlayerPlugin
 import app.alextran.immich.images.LocalImageApi
 import app.alextran.immich.images.LocalImagesImpl
@@ -53,6 +54,7 @@ class MainActivity : FlutterFragmentActivity() {
 
       flutterEngine.plugins.add(backgroundEngineLockImpl)
       flutterEngine.plugins.add(nativeSyncApiImpl)
+      flutterEngine.plugins.add(FileTrashPlugin())
     }
 
     fun cancelPlugins(flutterEngine: FlutterEngine) {
@@ -60,6 +62,8 @@ class MainActivity : FlutterFragmentActivity() {
         flutterEngine.plugins.get(NativeSyncApiImpl26::class.java) as ImmichPlugin?
           ?: flutterEngine.plugins.get(NativeSyncApiImpl30::class.java) as ImmichPlugin?
       nativeApi?.detachFromEngine()
+      val fileTrash = flutterEngine.plugins.get(FileTrashPlugin::class.java) as ImmichPlugin?
+      fileTrash?.detachFromEngine()
     }
   }
 }

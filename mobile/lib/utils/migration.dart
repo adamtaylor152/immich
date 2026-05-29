@@ -16,7 +16,7 @@ import 'package:immich_mobile/infrastructure/repositories/network.repository.dar
 import 'package:immich_mobile/models/auth/auxilary_endpoint.model.dart';
 import 'package:immich_mobile/providers/album/album_sort_by_options.provider.dart';
 
-const int targetVersion = 26;
+const int targetVersion = 27;
 
 Future<void> migrateDatabaseIfNeeded(Drift drift) async {
   final int version = Store.get(StoreKey.version, targetVersion);
@@ -29,8 +29,63 @@ Future<void> migrateDatabaseIfNeeded(Drift drift) async {
     await _migrateTo26(drift);
   }
 
+  if (version < 27) {
+    await _migrateTo27();
+  }
+
   await Store.put(StoreKey.version, targetVersion);
   return;
+}
+
+/// Copies fork backup settings from their legacy upstream-colliding IDs
+/// (7/8/131/1003-1005) into the new fork-only IDs (200-205). Fork users
+/// who never ran an upstream build will have data at the legacy IDs from
+/// previous fork releases; this migration moves it to the safe IDs.
+///
+/// Users who DID run an upstream build will have empty legacy rows (upstream's
+/// migration 26 deletes them) so the migration is a no-op for them and they
+/// get fork-default values.
+Future<void> _migrateTo27() async {
+  await _copyLegacyForkBackup<bool>(
+    StoreKey.legacyForkBackupRequireCharging,
+    StoreKey.backupRequireCharging,
+  );
+  await _copyLegacyForkBackup<int>(
+    StoreKey.legacyForkBackupTriggerDelay,
+    StoreKey.backupTriggerDelay,
+  );
+  await _copyLegacyForkBackup<bool>(
+    StoreKey.legacyForkSyncAlbums,
+    StoreKey.syncAlbums,
+  );
+  await _copyLegacyForkBackup<bool>(
+    StoreKey.legacyForkEnableBackup,
+    StoreKey.enableBackup,
+  );
+  await _copyLegacyForkBackup<bool>(
+    StoreKey.legacyForkUseWifiForUploadVideos,
+    StoreKey.useWifiForUploadVideos,
+  );
+  await _copyLegacyForkBackup<bool>(
+    StoreKey.legacyForkUseWifiForUploadPhotos,
+    StoreKey.useWifiForUploadPhotos,
+  );
+}
+
+Future<void> _copyLegacyForkBackup<T>(StoreKey<T> from, StoreKey<T> to) async {
+  // Don't overwrite if the new key already has a value (e.g. fresh install
+  // wrote to it before this migration ran).
+  if (Store.tryGet(to) != null) {
+    return;
+  }
+  final legacyValue = Store.tryGet(from);
+  if (legacyValue == null) {
+    return;
+  }
+  await Store.put(to, legacyValue);
+  // Delete the legacy row to avoid leaving stale data behind. Safe because
+  // app code only reads the new keys.
+  await Store.delete(from);
 }
 
 Future<void> _migrateTo25() async {

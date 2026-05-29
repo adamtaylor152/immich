@@ -10,6 +10,9 @@ import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 
+/// Returns whether the current selection contains at least one remote asset
+/// owned by the signed-in user. Must be called from a widget `build` method
+/// — Riverpod tracks the underlying `ref.watch` calls per build frame.
 bool _hasOwnedRemoteAssets(WidgetRef ref, ActionSource source) {
   if (source != ActionSource.timeline) {
     return true;

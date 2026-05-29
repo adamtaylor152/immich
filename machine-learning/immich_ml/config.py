@@ -39,6 +39,14 @@ class ImageDescriptionSettings(BaseModel):
     visual: str | None = None
 
 
+class ImageDescriptionRuntimeSettings(BaseModel):
+    # Pydantic-settings group for runtime tunables on the image-description path.
+    # Cached module-level (read once on settings construction) so the value is
+    # not re-parsed on every request — see ml.md Medium "Per-request env-var read
+    # in OpenVINO image resize".
+    openvino_max_image_edge: int = 512
+
+
 class PreloadModelData(BaseModel):
     clip: ClipSettings = ClipSettings()
     facial_recognition: FacialRecognitionSettings = FacialRecognitionSettings()
@@ -77,6 +85,7 @@ class Settings(BaseSettings):
     rknn_threads: int = 1
     preload: PreloadModelData | None = None
     max_batch_size: MaxBatchSize | None = None
+    image_description: ImageDescriptionRuntimeSettings = ImageDescriptionRuntimeSettings()
     openvino_precision: ModelPrecision = ModelPrecision.FP32
     rocm_precision: ModelPrecision = ModelPrecision.FP32
 

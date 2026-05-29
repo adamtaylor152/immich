@@ -2,7 +2,12 @@ import Foundation
 import SwiftUI
 import WidgetKit
 
-let IMMICH_SHARE_GROUP = "group.app.immich.share"
+// Read from Info.plist (driven by CUSTOM_GROUP_ID build setting) so
+// downstream rebrands can override one env var instead of editing every
+// literal. Fall back to the project default to keep older test harnesses
+// booting.
+let IMMICH_SHARE_GROUP: String =
+  (Bundle.main.object(forInfoDictionaryKey: "AppGroupId") as? String) ?? "group.app.immich.share"
 
 enum WidgetError: Error, Codable {
   case noLogin

@@ -338,7 +338,18 @@ class PhotoViewCoreState extends State<PhotoViewCore>
   Widget build(BuildContext context) {
     // Check if we need a recalc on the scale
     if (widget.scaleBoundaries != cachedScaleBoundaries) {
-      markNeedsScaleRecalc = true;
+      // Preserve user-applied zoom across a scaleBoundaries change (e.g.
+      // resize / rotation / image swap) by scaling the current value by the
+      // ratio of new-to-old initialScale. Falls back to a full recalc if we
+      // don't have enough information to scale proportionally.
+      final prev = cachedScaleBoundaries;
+      final currentScale = controller.scale;
+      if (currentScale != null && prev.initialScale > 0) {
+        final ratio = widget.scaleBoundaries.initialScale / prev.initialScale;
+        controller.setScaleInvisibly(currentScale * ratio);
+      } else {
+        markNeedsScaleRecalc = true;
+      }
       cachedScaleBoundaries = widget.scaleBoundaries;
     }
 

@@ -9,7 +9,14 @@ permissions: {}
 jobs:
   fix-formatting:
     runs-on: ubuntu-latest
-    if: ${{ github.event.label.name == 'fix:formatting' }}
+    # SECURITY: only run for PRs from the same repository. A label can be applied
+    # by anyone with triage rights, but this workflow checks out the PR head ref
+    # and executes `pnpm install` with credentials persisted — running that on a
+    # fork's branch is a code-injection pivot (preinstall/postinstall scripts,
+    # malicious .npmrc, malicious patches in patches/, etc).
+    if: >-
+      ${{ github.event.label.name == 'fix:formatting'
+          && github.event.pull_request.head.repo.fork == false }}
     permissions:
       contents: write
       pull-requests: write
@@ -18,6 +25,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          # Credentials are kept persisted because the EndBug/add-and-commit step
+          # below needs them to push the formatting commit back. The PR head is
+          # restricted to same-repo branches via the job-level `if:` guard, so
+          # a fork-PR cannot reach this checkout. Consider migrating to a
+          # GitHub App token scoped to `contents:write` on this repo only.
           persist-credentials: true
           token: ${{ github.token }}
 
@@ -27,7 +39,14 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Fix formatting
-        run: pnpm --recursive install && pnpm run --recursive --if-present --parallel format:fix
+        # SECURITY: `--ignore-scripts` disables preinstall/postinstall/prepare
+        # script execution. This neutralizes the most common pnpm install RCE
+        # vector (a malicious package.json `preinstall` running shell on the
+        # runner) without changing the trigger semantics. Formatting tooling
+        # (prettier, eslint) does not require lifecycle scripts to run.
+        run: |
+          pnpm --recursive install --ignore-scripts
+          pnpm run --recursive --if-present --parallel format:fix
 
       - name: Commit and push
         uses: EndBug/add-and-commit@290ea2c423ad77ca9c62ae0f5b224379612c0321 # v10.0.0

@@ -33,6 +33,16 @@
   let selectedPeople: PersonResponseDto[] = $state([]);
   let selectedPersonIds: string[] = $state(authManager.preferences.privacy?.suppression?.personIds ?? []);
   let scope: SuppressionScope = $state(authManager.preferences.privacy?.suppression?.scope ?? SuppressionScope.Owned);
+  // Mirror the auth preferences snapshot we last initialised from so we can
+  // detect if the source moves out from under us (saved-then-reloaded in
+  // another tab, etc.) and re-sync local state without forcing a full reload.
+  let lastPrefsSnapshotKey = $state(
+    JSON.stringify({
+      tagIds: authManager.preferences.privacy?.suppression?.tagIds ?? [],
+      personIds: authManager.preferences.privacy?.suppression?.personIds ?? [],
+      scope: authManager.preferences.privacy?.suppression?.scope ?? SuppressionScope.Owned,
+    }),
+  );
 
   let tagOption: ComboBoxOption | undefined = $state();
   let peopleSearch = $state('');
@@ -49,6 +59,32 @@
 
   onMount(async () => {
     await refreshLockState();
+  });
+
+  // Re-sync local state if the auth preferences change underneath us while
+  // the settings panel is open and the user hasn't edited anything yet.
+  // Guard against the unauthenticated case (where the preferences getter
+  // throws) so the effect doesn't blow up during teardown.
+  $effect(() => {
+    if (!authManager.authenticated) {
+      return;
+    }
+    const prefs = authManager.preferences?.privacy?.suppression;
+    const key = JSON.stringify({
+      tagIds: prefs?.tagIds ?? [],
+      personIds: prefs?.personIds ?? [],
+      scope: prefs?.scope ?? SuppressionScope.Owned,
+    });
+    if (key === lastPrefsSnapshotKey) {
+      return;
+    }
+    lastPrefsSnapshotKey = key;
+    selectedTagIds = prefs?.tagIds ?? [];
+    selectedPersonIds = prefs?.personIds ?? [];
+    scope = prefs?.scope ?? SuppressionScope.Owned;
+    if (isElevated && hasPinCode) {
+      void loadSuppressionNames();
+    }
   });
 
   onDestroy(() => {
@@ -149,7 +185,10 @@
 
     try {
       const results = await searchPerson({ name, withHidden: true }, { signal: controller.signal });
-      peopleResults = results.filter((person) => !selectedPeopleIds.has(person.id));
+      // Don't apply results if we've been superseded by a newer search.
+      if (abortController === controller) {
+        peopleResults = results.filter((person) => !selectedPeopleIds.has(person.id));
+      }
     } catch (error) {
       if (!controller.signal.aborted) {
         handleError(error, $t('errors.cant_search_people'));
@@ -157,14 +196,22 @@
     } finally {
       if (abortController === controller) {
         isSearchingPeople = false;
+        abortController = undefined;
       }
     }
   };
 
   const searchPeople = () => {
-    abortController?.abort();
+    // Cancel any in-flight request and clear the reference immediately so
+    // the finally-block of the previous run doesn't fight with this one
+    // for ownership of `abortController` / `isSearchingPeople`.
+    if (abortController) {
+      abortController.abort();
+      abortController = undefined;
+    }
     if (searchTimeout) {
       clearTimeout(searchTimeout);
+      searchTimeout = undefined;
     }
 
     const name = peopleSearch.trim();

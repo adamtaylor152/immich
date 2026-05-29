@@ -39,9 +39,10 @@
     asset: AssetResponseDto;
     currentAlbum?: AlbumResponseDto | null;
     onAssetSuppressed?: (asset: AssetResponseDto) => void | Promise<void>;
+    onAssetUpdate?: (asset: AssetResponseDto) => void;
   }
 
-  let { asset, currentAlbum = null, onAssetSuppressed }: Props = $props();
+  let { asset, currentAlbum = null, onAssetSuppressed, onAssetUpdate }: Props = $props();
 
   let isOwner = $derived(authManager.authenticated && authManager.user.id === asset.ownerId);
   let latlng = $derived(
@@ -97,7 +98,8 @@
   };
 
   const handleRefreshPeople = async () => {
-    asset = await getAssetInfo({ id: asset.id });
+    const updatedAsset = await getAssetInfo({ id: asset.id });
+    onAssetUpdate?.(updatedAsset);
     assetViewerManager.closeEditFacesPanel();
   };
 
@@ -154,7 +156,7 @@
       {asset}
       {isOwner}
       isAdmin={authManager.authenticated && authManager.user.isAdmin}
-      onAssetRefresh={(updatedAsset) => (asset = updatedAsset)}
+      onAssetRefresh={(updatedAsset) => onAssetUpdate?.(updatedAsset)}
       {onAssetSuppressed}
     />
     <DetailPanelRating {asset} {isOwner} />
