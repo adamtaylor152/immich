@@ -144,16 +144,22 @@ void main() {
       unawaited(
         expectLater(
           stream,
+          // watchAll() emits rows in StoreKey id order (the select has no
+          // explicit orderBy, so SQLite returns by primary-key id ascending).
+          // Ids: version(0) < accessToken(11) < backupRequireCharging(200).
+          // backupRequireCharging was relocated to 200 to avoid colliding with
+          // upstream's reclaimed ids, so it now sorts last — keep this order in
+          // sync with mobile/lib/domain/models/store.model.dart.
           emitsInOrder([
             [
               const StoreDto<Object>(StoreKey.version, _kTestVersion),
-              const StoreDto<Object>(StoreKey.backupRequireCharging, _kTestBackupRequireCharging),
               const StoreDto<Object>(StoreKey.accessToken, _kTestAccessToken),
+              const StoreDto<Object>(StoreKey.backupRequireCharging, _kTestBackupRequireCharging),
             ],
             [
               const StoreDto<Object>(StoreKey.version, _kTestVersion + 10),
-              const StoreDto<Object>(StoreKey.backupRequireCharging, _kTestBackupRequireCharging),
               const StoreDto<Object>(StoreKey.accessToken, _kTestAccessToken),
+              const StoreDto<Object>(StoreKey.backupRequireCharging, _kTestBackupRequireCharging),
             ],
           ]),
         ),
