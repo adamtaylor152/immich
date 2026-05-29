@@ -46,8 +46,7 @@ class ActionResult {
   const ActionResult({required this.count, required this.success, this.error, this.failedCount = 0});
 
   @override
-  String toString() =>
-      'ActionResult(count: $count, success: $success, error: $error, failedCount: $failedCount)';
+  String toString() => 'ActionResult(count: $count, success: $success, error: $error, failedCount: $failedCount)';
 }
 
 class ActionNotifier extends Notifier<void> {

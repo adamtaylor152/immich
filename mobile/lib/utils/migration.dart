@@ -46,30 +46,12 @@ Future<void> migrateDatabaseIfNeeded(Drift drift) async {
 /// migration 26 deletes them) so the migration is a no-op for them and they
 /// get fork-default values.
 Future<void> _migrateTo27() async {
-  await _copyLegacyForkBackup<bool>(
-    StoreKey.legacyForkBackupRequireCharging,
-    StoreKey.backupRequireCharging,
-  );
-  await _copyLegacyForkBackup<int>(
-    StoreKey.legacyForkBackupTriggerDelay,
-    StoreKey.backupTriggerDelay,
-  );
-  await _copyLegacyForkBackup<bool>(
-    StoreKey.legacyForkSyncAlbums,
-    StoreKey.syncAlbums,
-  );
-  await _copyLegacyForkBackup<bool>(
-    StoreKey.legacyForkEnableBackup,
-    StoreKey.enableBackup,
-  );
-  await _copyLegacyForkBackup<bool>(
-    StoreKey.legacyForkUseWifiForUploadVideos,
-    StoreKey.useWifiForUploadVideos,
-  );
-  await _copyLegacyForkBackup<bool>(
-    StoreKey.legacyForkUseWifiForUploadPhotos,
-    StoreKey.useWifiForUploadPhotos,
-  );
+  await _copyLegacyForkBackup<bool>(StoreKey.legacyForkBackupRequireCharging, StoreKey.backupRequireCharging);
+  await _copyLegacyForkBackup<int>(StoreKey.legacyForkBackupTriggerDelay, StoreKey.backupTriggerDelay);
+  await _copyLegacyForkBackup<bool>(StoreKey.legacyForkSyncAlbums, StoreKey.syncAlbums);
+  await _copyLegacyForkBackup<bool>(StoreKey.legacyForkEnableBackup, StoreKey.enableBackup);
+  await _copyLegacyForkBackup<bool>(StoreKey.legacyForkUseWifiForUploadVideos, StoreKey.useWifiForUploadVideos);
+  await _copyLegacyForkBackup<bool>(StoreKey.legacyForkUseWifiForUploadPhotos, StoreKey.useWifiForUploadPhotos);
 }
 
 Future<void> _copyLegacyForkBackup<T>(StoreKey<T> from, StoreKey<T> to) async {

@@ -53,11 +53,7 @@ Future<void> performMarkNsfwAction(BuildContext context, WidgetRef ref, {require
     final total = result.count + result.failedCount;
     message = 'mark_nsfw_action_partial'.t(
       context: context,
-      args: {
-        'succeeded': result.count.toString(),
-        'total': total.toString(),
-        'failed': result.failedCount.toString(),
-      },
+      args: {'succeeded': result.count.toString(), 'total': total.toString(), 'failed': result.failedCount.toString()},
     );
     toastType = ToastType.info;
   } else {
@@ -65,12 +61,7 @@ Future<void> performMarkNsfwAction(BuildContext context, WidgetRef ref, {require
     toastType = ToastType.error;
   }
 
-  ImmichToast.show(
-    context: context,
-    msg: message,
-    gravity: ToastGravity.BOTTOM,
-    toastType: toastType,
-  );
+  ImmichToast.show(context: context, msg: message, gravity: ToastGravity.BOTTOM, toastType: toastType);
 }
 
 class MarkNsfwActionButton extends ConsumerWidget {
@@ -127,11 +118,7 @@ Future<void> performMarkSafeAction(BuildContext context, WidgetRef ref, {require
     final total = result.count + result.failedCount;
     message = 'mark_safe_action_partial'.t(
       context: context,
-      args: {
-        'succeeded': result.count.toString(),
-        'total': total.toString(),
-        'failed': result.failedCount.toString(),
-      },
+      args: {'succeeded': result.count.toString(), 'total': total.toString(), 'failed': result.failedCount.toString()},
     );
     toastType = ToastType.info;
   } else {
@@ -139,12 +126,7 @@ Future<void> performMarkSafeAction(BuildContext context, WidgetRef ref, {require
     toastType = ToastType.error;
   }
 
-  ImmichToast.show(
-    context: context,
-    msg: message,
-    gravity: ToastGravity.BOTTOM,
-    toastType: toastType,
-  );
+  ImmichToast.show(context: context, msg: message, gravity: ToastGravity.BOTTOM, toastType: toastType);
 }
 
 class MarkSafeActionButton extends ConsumerWidget {
