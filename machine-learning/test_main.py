@@ -678,20 +678,57 @@ class TestImageDescriptionModel:
         # locked calls. Two concurrent requests could interleave between
         # sub-tasks (T1.caption → T2.caption → T1.ocr → …) and race on
         # KV-cache + tokenizer state. The fix holds ``_cuda_lock`` ONCE
-        # around the whole 3-call sequence. This test exercises 2
-        # concurrent _predict_florence calls and asserts that no other
-        # caller's generate() runs between any two generates from the
-        # same caller (i.e. the runs of sub-tasks per caller are
-        # contiguous in the global generate-call sequence).
-        model = ImageDescriptionModel(
-            "microsoft/Florence-2-base", acceleration="cuda"
-        )
+        # around the whole 3-call sequence.
+        #
+        # Strategy: assert the lock-granularity invariant directly by
+        # instrumenting ``_cuda_lock`` and counting acquire/release
+        # events. The per-request invariant is "exactly one acquire per
+        # ``_predict_florence`` call regardless of how many sub-tasks
+        # run inside". Under the broken per-task implementation each
+        # ``_run_florence_task`` would acquire the lock, producing 3×
+        # the count. This count is deterministic — it does not depend
+        # on thread scheduling, sleeps, or barriers — so it stays
+        # robust under heavy CI oversubscription.
+        model = ImageDescriptionModel("microsoft/Florence-2-base", acceleration="cuda")
         # We need the model to think it's Florence — _predict_florence is
         # only invoked for Florence and is the API surface we want to test.
         assert model._is_florence_model() is True
 
-        global_seq: list[int] = []
-        seq_guard = threading.Lock()
+        events: list[tuple[int, str]] = []
+        events_guard = threading.Lock()
+
+        class TracingLock:
+            """Wrapper around ``threading.Lock`` that records every
+            acquire/release with the calling thread's identity so the
+            test can assert the lock-granularity invariant directly."""
+
+            def __init__(self) -> None:
+                self._inner = threading.Lock()
+
+            def __enter__(self) -> "TracingLock":
+                self._inner.acquire()
+                with events_guard:
+                    events.append((threading.get_ident(), "acquire"))
+                return self
+
+            def __exit__(self, *args: Any) -> None:
+                with events_guard:
+                    events.append((threading.get_ident(), "release"))
+                self._inner.release()
+
+            def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+                acquired = self._inner.acquire(blocking, timeout)
+                if acquired:
+                    with events_guard:
+                        events.append((threading.get_ident(), "acquire"))
+                return acquired
+
+            def release(self) -> None:
+                with events_guard:
+                    events.append((threading.get_ident(), "release"))
+                self._inner.release()
+
+        model._cuda_lock = TracingLock()  # type: ignore[assignment]
 
         class FakeProcessor:
             def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -715,10 +752,6 @@ class TestImageDescriptionModel:
 
         class FakeModel:
             def generate(self, **kwargs: Any) -> list[list[int]]:
-                with seq_guard:
-                    global_seq.append(threading.get_ident())
-                # Sleep so any concurrent caller has a chance to interleave.
-                time.sleep(0.03)
                 return [[0, 1, 2, 3, 4, 5]]
 
         class FakeTorch:
@@ -749,19 +782,26 @@ class TestImageDescriptionModel:
             for future in futures:
                 future.result()
 
-        # 2 callers × 3 sub-tasks = 6 generates total.
-        assert len(global_seq) == 6
-        # Per-request serialization invariant: each caller's three calls
-        # must be contiguous in the global ordering. We can detect a
-        # violation by counting transitions between caller identities —
-        # serialized correctly there should be exactly one transition
-        # (caller A finishes its 3 calls, then caller B does its 3).
-        transitions = sum(
-            1 for prev, curr in zip(global_seq, global_seq[1:]) if prev != curr
+        # Per-request invariant: exactly one acquire+release per
+        # ``_predict_florence`` call, so 2 acquires + 2 releases
+        # across two concurrent callers. If the lock were per-task we
+        # would see 6/6 (one acquire per ``_run_florence_task``).
+        acquires = [event for event in events if event[1] == "acquire"]
+        releases = [event for event in events if event[1] == "release"]
+        assert len(acquires) == 2, (
+            f"Expected 2 lock acquires (one per _predict_florence call), got {len(acquires)}: {events}"
         )
-        assert transitions == 1, (
-            "Florence sub-tasks interleaved across concurrent requests "
-            f"(transitions={transitions}, seq={global_seq})"
+        assert len(releases) == 2, f"Expected 2 lock releases, got {len(releases)}: {events}"
+        # Mutual exclusion: the lock guarantees the second caller's
+        # acquire cannot land between the first caller's acquire and
+        # release. Verify acquire/release events strictly alternate
+        # (acq, rel, acq, rel) — any other order means the callers'
+        # lock holds overlapped, which the lock should prevent.
+        # (The ThreadPoolExecutor may reuse a worker thread when the
+        # first task finishes fast, so we do NOT assert distinct
+        # thread identities here — that would flake.)
+        assert [e[1] for e in events] == ["acquire", "release", "acquire", "release"], (
+            f"Florence callers' lock holds overlapped: {events}"
         )
 
 

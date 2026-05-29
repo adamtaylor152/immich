@@ -1,6 +1,6 @@
 import { WorkflowStepConfig } from '@immich/plugin-sdk';
 import { Kysely } from 'kysely';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
 import { AssetVisibility, JobStatus, LogLevel, WorkflowTrigger } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
@@ -107,11 +107,25 @@ const createWorkflow = async (template: WorkflowTemplate) => {
 
 let ctx: WorkflowTestContext;
 
+// `dist/plugin.wasm` is produced by `pnpm --filter @immich/plugin-core build:wasm`,
+// which shells out to the `extism-js` Rust CLI. The binary is not part of any
+// npm install; environments without it (CI without the install step, local
+// machines without an extism-js install) cannot load the core plugin. Skip
+// the suite cleanly so the failure is informative rather than a long
+// "Plugin method not found" cascade for every step type.
+const corePluginWasmPath = '../packages/plugin-core/dist/plugin.wasm';
+const corePluginAvailable = existsSync(corePluginWasmPath);
+
 beforeAll(async () => {
+  if (!corePluginAvailable) {
+    return;
+  }
   const db = await getKyselyDB();
   ctx = new WorkflowTestContext(db);
   await ctx.init();
 }, 30_000);
+
+const describeIfPluginBuilt = corePluginAvailable ? describe : describe.skip;
 
 describe('core plugin', () => {
   describe('validation', () => {
@@ -131,7 +145,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetArchive', () => {
+  describeIfPluginBuilt('assetArchive', () => {
     it('should archive an asset', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id });
@@ -167,7 +181,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetLock', () => {
+  describeIfPluginBuilt('assetLock', () => {
     it('should lock an asset', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id });
@@ -210,7 +224,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetFavorite', () => {
+  describeIfPluginBuilt('assetFavorite', () => {
     it('should favorite an asset', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id });
@@ -242,7 +256,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetAddToAlbums', () => {
+  describeIfPluginBuilt('assetAddToAlbums', () => {
     it('should add an asset to an album', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });

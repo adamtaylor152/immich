@@ -69,8 +69,11 @@
     onAssetChange?: (asset: AssetResponseDto) => void;
     // Bubbled up so the owner of the cursor `$state` (parent caller) can
     // refresh its own state when the open asset changes (e.g. NSFW review,
-    // refresh-people). Reassigning `cursor` locally would silently fail in
-    // production builds because `cursor` is a non-bindable prop.
+    // refresh-people, stack navigation, rating). Reassigning `cursor` or
+    // mutating `cursor.current` locally only works when the parent's cursor
+    // is a proxied $state — callers that pass an inline literal (e.g.
+    // IndividualSharedViewer, map/+page.svelte) need this callback to see
+    // any update from inside the viewer.
     onAssetUpdate?: (asset: AssetResponseDto) => void;
     preAction?: PreAction;
     onAction?: OnAction;
@@ -273,7 +276,12 @@
     if (nextIndex < 0 || nextIndex >= assets.length) {
       return;
     }
+    // Route through onAssetUpdate so callers that pass a non-`$state` cursor
+    // (inline literal in IndividualSharedViewer, map +page.svelte) still see
+    // the navigation. Mutating cursor.current directly only works when the
+    // parent owns a proxied $state cursor.
     cursor.current = assets[nextIndex];
+    onAssetUpdate?.(assets[nextIndex]);
   };
 
   /**
@@ -334,6 +342,7 @@
         stack = action.stack;
         if (stack) {
           cursor.current = stack.assets[0];
+          onAssetUpdate?.(stack.assets[0]);
         }
         break;
       }
@@ -344,18 +353,22 @@
       }
       case AssetAction.SET_PERSON_FEATURED_PHOTO: {
         const assetInfo = await getAssetInfo({ id: asset.id });
-        cursor.current = { ...asset, people: assetInfo.people };
-        eventManager.emit('AssetUpdate', cursor.current);
+        const updatedAsset = { ...asset, people: assetInfo.people };
+        cursor.current = updatedAsset;
+        onAssetUpdate?.(updatedAsset);
+        eventManager.emit('AssetUpdate', updatedAsset);
         break;
       }
       case AssetAction.RATING: {
-        cursor.current = {
+        const updatedAsset = {
           ...asset,
           exifInfo: {
             ...asset.exifInfo,
             rating: action.rating,
           },
         };
+        cursor.current = updatedAsset;
+        onAssetUpdate?.(updatedAsset);
         break;
       }
       case AssetAction.UNSTACK: {
@@ -651,6 +664,7 @@
               asset={toTimelineAsset(stackedAsset)}
               onClick={() => {
                 cursor.current = stackedAsset;
+                onAssetUpdate?.(stackedAsset);
                 previewStackedAsset = undefined;
               }}
               onMouseEvent={({ isMouseOver }) => handleStackedAssetMouseEvent(isMouseOver, stackedAsset)}

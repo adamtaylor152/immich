@@ -437,7 +437,7 @@ describe(StorageTemplateService.name, () => {
 
       mocks.storage.checkFileExists.mockImplementation((path) => Promise.resolve(path === previousFailedNewPath));
       mocks.storage.stat.mockResolvedValue({ size: 5000 } as Stats);
-      mocks.crypto.hashFile.mockResolvedValue(asset.checksum);
+      mocks.crypto.hashFileMatching.mockResolvedValue(asset.checksum);
       mocks.move.getByEntity.mockResolvedValue({
         id: '123',
         entityId: asset.id,
@@ -479,7 +479,7 @@ describe(StorageTemplateService.name, () => {
 
       mocks.storage.rename.mockRejectedValue({ code: 'EXDEV' });
       mocks.storage.stat.mockResolvedValue({ size: 5000 } as Stats);
-      mocks.crypto.hashFile.mockResolvedValue(Buffer.from('different-hash', 'utf8'));
+      mocks.crypto.hashFileMatching.mockResolvedValue(Buffer.from('different-hash', 'utf8'));
       mocks.assetJob.getForStorageTemplateJob.mockResolvedValue(getForStorageTemplate(asset));
       mocks.move.create.mockResolvedValue({
         id: '123',
@@ -522,7 +522,7 @@ describe(StorageTemplateService.name, () => {
 
         mocks.storage.checkFileExists.mockImplementation((path) => Promise.resolve(previousFailedNewPath === path));
         mocks.storage.stat.mockResolvedValue({ size: failedPathSize } as Stats);
-        mocks.crypto.hashFile.mockResolvedValue(failedPathChecksum);
+        mocks.crypto.hashFileMatching.mockResolvedValue(failedPathChecksum);
         mocks.move.getByEntity.mockResolvedValue({
           id: '123',
           entityId: testAsset.id,
@@ -724,7 +724,7 @@ describe(StorageTemplateService.name, () => {
         atime: new Date(),
         mtime: new Date(),
       } as Stats);
-      mocks.crypto.hashFile.mockResolvedValue(asset.checksum);
+      mocks.crypto.hashFileMatching.mockResolvedValue(asset.checksum);
 
       await sut.handleMigration();
 

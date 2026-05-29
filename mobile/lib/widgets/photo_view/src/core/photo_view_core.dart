@@ -334,6 +334,17 @@ class PhotoViewCoreState extends State<PhotoViewCore>
     widget.onTapDown?.call(context, details, controller.value);
   }
 
+  // Tolerance for "is the user sitting at an extreme?" comparisons on
+  // `currentScale` vs the cached boundary extremes. Double-precision is
+  // used for the underlying scale values, so an epsilon comfortably below
+  // any user-meaningful pinch delta is appropriate. Today the relevant
+  // values flow from `ScaleBoundaries.initialScale` / `.minScale` straight
+  // into `controller.scale` without intermediate arithmetic, so a strict
+  // `==` would also work — the tolerance defends against future refactors
+  // that introduce math (e.g. easing, rounding) between set and compare.
+  // See: ScaleBoundaries (photo_view_utils.dart), setScaleInvisibly.
+  static const double _scaleExtremeEpsilon = 1e-6;
+
   @override
   Widget build(BuildContext context) {
     // Check if we need a recalc on the scale
@@ -351,11 +362,12 @@ class PhotoViewCoreState extends State<PhotoViewCore>
         // If the user was sitting exactly at one of the previous extremes
         // (min or initial), preserve that semantic by snapping to the new
         // extreme rather than scaling by ratio — avoids drift on repeated
-        // resizes when the user never zoomed.
+        // resizes when the user never zoomed. Compared with an epsilon
+        // tolerance rather than `==`; see `_scaleExtremeEpsilon` doc.
         final double targetScale;
-        if (currentScale == prev.initialScale) {
+        if ((currentScale - prev.initialScale).abs() < _scaleExtremeEpsilon) {
           targetScale = newBounds.initialScale;
-        } else if (currentScale == prev.minScale) {
+        } else if ((currentScale - prev.minScale).abs() < _scaleExtremeEpsilon) {
           targetScale = newBounds.minScale;
         } else {
           final ratio = newBounds.initialScale / prev.initialScale;

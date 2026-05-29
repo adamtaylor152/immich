@@ -4,6 +4,14 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, edited, labeled]
 
+# Serialize close/reopen state transitions per-PR. The workflow performs
+# mutating GraphQL operations (close/reopen, label add/remove) — racing two
+# in-flight runs on the same PR risks toggling state inconsistently. Queue
+# instead of cancel so the cleanup half of every transition completes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 permissions: {}
 
 jobs:

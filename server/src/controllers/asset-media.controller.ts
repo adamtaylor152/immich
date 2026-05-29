@@ -54,7 +54,8 @@ export class AssetMediaController {
   @ApiConsumes('multipart/form-data')
   @ApiHeader({
     name: ImmichHeader.Checksum,
-    description: 'sha1 checksum that can be used for duplicate detection before the file is uploaded',
+    description:
+      'SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded',
     required: false,
   })
   @ApiBody({ description: 'Asset Upload Information', type: AssetMediaCreateDto })

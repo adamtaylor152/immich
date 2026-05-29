@@ -45,14 +45,35 @@ export class CryptoRepository {
     return createHash('sha1').update(value).digest();
   }
 
-  hashFile(filepath: string | Buffer): Promise<Buffer> {
+  /**
+   * Streams a file from disk and returns a digest.
+   *
+   * @param filepath Path to the file (or Buffer accepted by createReadStream).
+   * @param algorithm Hash algorithm; defaults to `sha1` for backward
+   *   compatibility with legacy callers (library scan, motion-photo extract).
+   *   New code that needs to verify against a stored asset checksum should
+   *   pass the algorithm explicitly — see `hashFileMatching` for a helper.
+   */
+  hashFile(filepath: string | Buffer, algorithm: 'sha1' | 'sha256' = 'sha1'): Promise<Buffer> {
     return new Promise<Buffer>((resolve, reject) => {
-      const hash = createHash('sha1');
+      const hash = createHash(algorithm);
       const stream = createReadStream(filepath);
       stream.on('error', (error) => reject(error));
       stream.on('data', (chunk) => hash.update(chunk));
       stream.on('end', () => resolve(hash.digest()));
     });
+  }
+
+  /**
+   * Hashes a file with the algorithm that produces the same digest length as
+   * the supplied reference. Used when comparing a freshly-computed digest of a
+   * moved/copied file against the checksum already stored for the asset, where
+   * the stored algorithm may be either SHA-1 (legacy rows, 20 bytes) or
+   * SHA-256 (new rows, 32 bytes). Unknown lengths fall back to SHA-1.
+   */
+  hashFileMatching(filepath: string | Buffer, reference: Buffer): Promise<Buffer> {
+    const algorithm = reference.length === 32 ? 'sha256' : 'sha1';
+    return this.hashFile(filepath, algorithm);
   }
 
   randomBytesAsText(bytes: number) {

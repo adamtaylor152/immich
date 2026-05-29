@@ -64,6 +64,25 @@ abstract class PhotoViewControllerBase<T extends PhotoViewControllerValue> {
   late double? scale;
 
   double? get initialScale;
+
+  /// Mirror of the active [ScaleBoundaries] for the rendered image, written
+  /// by [ImageWrapper] once the image has resolved. Internal callers in
+  /// `photo_view/` consume the boundaries via `widget.scaleBoundaries`
+  /// (see [PhotoViewControllerDelegate.scaleBoundaries]); this field exists
+  /// so external callers — currently `asset_page.widget.dart` —
+  /// can:
+  /// 1. Read computed image-display dimensions
+  ///    (`childSize.height * initialScale`) for laying out chrome around
+  ///    the photo (`_getImageHeight`), and
+  /// 2. Detect "image has finished loading and is ready to render" by
+  ///    watching the field transition from null → non-null
+  ///    (`_listenForScaleBoundaries`).
+  ///
+  /// Stays null when the controller is bound to a [CustomChildWrapper]
+  /// flow because no image stream resolves there; `asset_page` handles
+  /// that case by falling back to the asset's intrinsic dimensions. Do
+  /// NOT remove this field without updating the external readers in
+  /// `mobile/lib/presentation/widgets/asset_viewer/asset_page.widget.dart`.
   ScaleBoundaries? scaleBoundaries;
 
   /// Nevermind this method :D, look away

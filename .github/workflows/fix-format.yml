@@ -4,6 +4,15 @@ on:
   pull_request:
     types: [labeled]
 
+# Cancel a stale in-flight format run when the same PR triggers another fix
+# (e.g. the reviewer re-applies the label after a force-push). The label-removal
+# step at the end is `if: always()`, so cancellations still clean up the label
+# on the PR. No risk on non-PR contexts because the workflow only triggers on
+# `pull_request`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions: {}
 
 jobs:

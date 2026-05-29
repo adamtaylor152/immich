@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
 
+# Cancel previous Zizmor runs for the same PR/branch when a new push lands.
+# The push-to-main case still serializes (one run per commit) so the audit
+# results posted to the security tab reflect the latest tip. Standard
+# pattern: cancel only for PR triggers, queue for push to avoid losing
+# the post-merge audit on rapid back-to-back merges.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions: {}
 
 jobs:

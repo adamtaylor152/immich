@@ -91,7 +91,7 @@ export class AssetTable {
   duration!: number | null;
 
   @Column({ type: 'bytea', index: true })
-  checksum!: Buffer; // sha1 checksum
+  checksum!: Buffer; // SHA-256 for new uploads (32 bytes), SHA-1 for legacy rows (20 bytes); see `checksumAlgorithm`
 
   @Column({ enum: asset_checksum_algorithm_enum })
   checksumAlgorithm!: ChecksumAlgorithm;

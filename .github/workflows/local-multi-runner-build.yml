@@ -73,6 +73,51 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       key: ${{ steps.artifact-key.outputs.base }}
     steps:
+      - name: Validate runner-mapping
+        # SECURITY (defense-in-depth): the `build` job below carries a hard
+        # workflow-level `if:` guard that refuses fork-PR execution and pins
+        # to the canonical repository slugs. That guard is the primary control.
+        # This step is a *secondary* deny-list that rejects any runner-mapping
+        # whose resolved label set references a self-hosted runner *before* the
+        # matrix is generated, so a misconfigured caller surfaces as a clear
+        # validation error at the `matrix` job (GitHub-hosted, safe to fail)
+        # rather than silently relying on the `build`-job guard. The deny-list
+        # catches `self-hosted` (the canonical GitHub label) and `aiimmich`
+        # (the fork's runner-group identifier) — extend if a new self-hosted
+        # pool is added. Allow-listed GitHub-hosted runner labels (`ubuntu-*`,
+        # `pokedex-*` for the upstream cuda-rocm builder which is org-hosted)
+        # pass through unchanged.
+        id: validate
+        shell: bash
+        env:
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":["self-hosted","linux","x64","aiimmich","docker-build"],"linux/arm64":"ubuntu-24.04-arm"}' }}
+          IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Flatten every label string referenced anywhere in the mapping.
+          LABELS=$(jq -r '
+            [ .. | strings ] | unique | .[]
+          ' <<< "${RUNNER_MAPPING}")
+          # `self-hosted` is the GitHub-canonical signal. `aiimmich` is the fork
+          # runner-group label — both are denied to fork-PR callers regardless
+          # of who is calling. Same-repo PR or push from the canonical slugs
+          # continue to use them.
+          if grep -qiE '^(self-hosted|aiimmich)$' <<< "${LABELS}"; then
+            if [[ "${IS_FORK_PR}" == "true" ]]; then
+              echo "::error::runner-mapping references a self-hosted runner label but caller is a fork PR. Refusing to schedule build."
+              exit 1
+            fi
+            case "${REPO}" in
+              adamtaylor152/immich|immich-app/immich) ;;
+              *)
+                echo "::error::runner-mapping references a self-hosted runner label but caller is repository '${REPO}', not a canonical immich slug. Refusing to schedule build."
+                exit 1
+                ;;
+            esac
+          fi
+          echo "runner-mapping validation passed"
+
       - name: Generate build matrix
         id: matrix
         shell: bash

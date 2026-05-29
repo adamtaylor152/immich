@@ -272,6 +272,8 @@ export const utils = {
 
   sha1: (bytes: Buffer) => createHash('sha1').update(bytes).digest('base64'),
 
+  sha256: (bytes: Buffer) => createHash('sha256').update(bytes).digest('base64'),
+
   connectWebsocket: async (accessToken: string) => {
     const websocket = io(baseUrl, {
       path: '/api/socket.io',

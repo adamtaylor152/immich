@@ -8,6 +8,14 @@ import native_video_player
   // engine has no `FlutterEngine` reference exposed at registration time
   // and lives for the lifetime of the app, so it uses the nil key — a
   // single retained entry that never needs release.
+  //
+  // Thread-safety: accessed without a lock. Safe because the two callers
+  // — `didInitializeImplicitFlutterEngine(_:)` and
+  // `BackgroundWorker.run` — both invoke FlutterEngine setup on the main
+  // thread per Flutter's engine lifecycle contract, as does
+  // `cancelPlugins(with:)`. Matches the pre-refactor invariant; do not
+  // call `registerPlugins` / `cancelPlugins` off the main thread without
+  // adding a serial queue here.
   private static var fileTrashChannels: [ObjectIdentifier?: FlutterMethodChannel] = [:]
 
   override func application(

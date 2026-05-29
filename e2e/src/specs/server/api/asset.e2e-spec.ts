@@ -692,8 +692,10 @@ describe('/asset', () => {
       const asset = await utils.getAssetInfo(admin.accessToken, locationAsset.id);
 
       const original = await readFile(locationAssetFilepath);
-      const originalChecksum = utils.sha1(original);
-      const downloadChecksum = utils.sha1(body);
+      // New uploads use SHA-256; legacy fixtures may still be SHA-1. Match by length.
+      const hash = asset.checksum.length === 44 ? utils.sha256 : utils.sha1;
+      const originalChecksum = hash(original);
+      const downloadChecksum = hash(body);
 
       expect(originalChecksum).toBe(downloadChecksum);
       expect(downloadChecksum).toBe(asset.checksum);

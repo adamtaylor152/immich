@@ -165,6 +165,13 @@
         cursor={assetCursor}
         showNavigation={false}
         onClose={() => assetViewerManager.showAssetViewer(false)}
+        onAssetUpdate={(updatedAsset) => {
+          // assetCursor is `$derived` from `assetViewerManager.asset`. Mutating
+          // cursor.current locally would be lost on the next recompute. Push
+          // the refreshed asset into the manager so the derived cursor
+          // recomputes and the viewer reflects the change.
+          assetViewerManager.setAsset(updatedAsset);
+        }}
       />
     </Portal>
   {/await}

@@ -101,7 +101,11 @@ export const AssetResponseSchema = SanitizedAssetResponseSchema.extend(
     exifInfo: ExifResponseSchema.optional(),
     tags: z.array(TagResponseSchema).optional(),
     people: z.array(PersonResponseSchema).optional(),
-    checksum: z.string().describe('Base64 encoded SHA1 hash'),
+    checksum: z
+      .string()
+      .describe(
+        'Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.',
+      ),
     stack: AssetStackResponseSchema.nullish(),
     duplicateId: z.string().nullish().describe('Duplicate group ID'),
     resized: z

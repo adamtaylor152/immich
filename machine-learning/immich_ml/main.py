@@ -323,14 +323,37 @@ def _build_auth_config(
 
 _auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
 _immich_host = os.environ.get("IMMICH_HOST", "[::]").strip()
+# NOTE: ``_build_auth_config`` raises ``AuthConfigurationError`` at import
+# time when the (token, bind) combination is unsafe (no token + non-loopback
+# bind). This is intentional — the only known importer of this module is
+# ``__main__.py`` via gunicorn workers, and tooling that imported the app
+# without setting envs would silently expose ``/predict``. A bright,
+# multi-line banner is logged below so operators can spot the auth state
+# in worker logs without scanning for a single line. If a future workflow
+# needs to import this module for introspection without serving traffic
+# (e.g. an OpenAPI dump), move the validation into ``lifespan`` startup so
+# the import stays side-effect-free.
 _expected_token, _allow_unauthenticated = _build_auth_config(_auth_token, _immich_host)
 
-if _expected_token:
-    log.info("Bearer-token authentication enabled for /predict")
-else:
+# Prominent startup banner so the auth state is visible in worker logs.
+# A single log.info/warning line is easy to miss when gunicorn boots; the
+# banner format mirrors other Immich startup output and prints the bind
+# host so operators can correlate it with their compose / k8s config.
+_auth_state = (
+    "ENABLED  (bearer token required for /predict)"
+    if _expected_token
+    else "DISABLED (loopback bind; /predict open to local processes)"
+)
+log.info("=" * 64)
+log.info("Immich ML auth: %s", _auth_state)
+log.info("  IMMICH_HOST              = %s", _immich_host)
+log.info("  IMMICH_ML_AUTH_TOKEN set = %s", "yes" if _expected_token else "no")
+log.info("=" * 64)
+if not _expected_token:
     log.warning(
-        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback %r); /predict is unauthenticated. "
-        "Acceptable for local development only.",
+        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback %r); /predict is "
+        "unauthenticated. Acceptable for local development only — any "
+        "non-loopback bind without a token will refuse to start.",
         _immich_host,
     )
 
