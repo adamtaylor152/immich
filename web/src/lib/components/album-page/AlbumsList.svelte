@@ -24,7 +24,13 @@
   import { normalizeSearchString } from '$lib/utils/string-utils';
   import { AlbumUserRole, type AlbumResponseDto, type SharedLinkResponseDto } from '@immich/sdk';
   import { modalManager } from '@immich/ui';
-  import { mdiDeleteOutline, mdiDownload, mdiFolderMoveOutline, mdiRenameOutline, mdiShareVariantOutline } from '@mdi/js';
+  import {
+    mdiDeleteOutline,
+    mdiDownload,
+    mdiFolderMoveOutline,
+    mdiRenameOutline,
+    mdiShareVariantOutline,
+  } from '@mdi/js';
   import { groupBy } from 'lodash-es';
   import { onMount, type Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -310,6 +316,7 @@
           onShowContextMenu={albumContextMenuHandler}
           {onAlbumDrop}
           {canAcceptDrop}
+          bind:draggedId
         />
       {/each}
     {/if}

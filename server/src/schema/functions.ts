@@ -287,3 +287,32 @@ export const asset_edit_audit = registerFunction({
       RETURN NULL;
     END`,
 });
+
+// Cycle guard for the album closure tree. Rejects any parentId write that would
+// make an album its own ancestor. Defense-in-depth behind the app-level check in
+// AlbumService.validateAndReparent. Created by migration 2100000000020; declared
+// here so the schema generator treats it as part of the canonical schema.
+export const album_parent_cycle_check = registerFunction({
+  name: 'album_parent_cycle_check',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      -- Setting parent to self is always a cycle.
+      IF NEW."parentId" IS NOT NULL AND NEW."parentId" = NEW.id THEN
+        RAISE EXCEPTION 'Album % cannot be its own parent', NEW.id;
+      END IF;
+      -- New parent must not already be a descendant of this album (excluding the
+      -- self-row, which is always present per closure semantics).
+      IF NEW."parentId" IS NOT NULL AND EXISTS (
+        SELECT 1
+        FROM album_closure
+        WHERE id_ancestor = NEW.id
+          AND id_descendant = NEW."parentId"
+          AND id_ancestor <> id_descendant
+      ) THEN
+        RAISE EXCEPTION 'Album % cannot have % as parent (would create a cycle)', NEW.id, NEW."parentId";
+      END IF;
+      RETURN NEW;
+    END`,
+});

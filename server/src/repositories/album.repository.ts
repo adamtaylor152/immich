@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   ExpressionBuilder,
   Insertable,
@@ -441,10 +441,29 @@ export class AlbumRepository {
    *      pair so the subtree picks up the new chain.
    * Self-rows are preserved by step 1 (subtree ancestors are also subtree descendants).
    *
-   * The caller (service layer) is responsible for cycle prevention.
+   * Cycle prevention is atomic: the descendant check below runs inside the same
+   * transaction as the parent update, reading `album_closure` under the
+   * transaction's snapshot. This closes the TOCTOU window that existed when the
+   * caller checked descendants in a separate statement before calling reparent.
+   * The DB-level `album_parent_cycle_check` trigger (migration 2100000000020) is
+   * the final backstop and will abort the transaction if a concurrent writer
+   * still manages to introduce a cycle.
    */
   async reparent(id: string, newParentId: string | null): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
+      if (newParentId !== null) {
+        const cycle = await tx
+          .selectFrom('album_closure')
+          .select('id_descendant')
+          .where('id_ancestor', '=', id)
+          .where('id_descendant', '=', newParentId)
+          .where('id_descendant', '!=', id)
+          .executeTakeFirst();
+        if (cycle) {
+          throw new BadRequestException('Cannot move an album under one of its own descendants');
+        }
+      }
+
       await tx.updateTable('album').set({ parentId: newParentId }).where('id', '=', id).execute();
 
       await tx

@@ -47,11 +47,7 @@ describe(WorkflowRepository.name, () => {
       // Mark only nsfwAsset as NSFW. This row triggers the inner-table
       // shadowing bug because the broken EXISTS would match for ANY asset
       // having is_nsfw=true.
-      await defaultDatabase
-        .updateTable('asset')
-        .set({ is_nsfw: true })
-        .where('id', '=', nsfwAsset.id)
-        .execute();
+      await defaultDatabase.updateTable('asset').set({ is_nsfw: true }).where('id', '=', nsfwAsset.id).execute();
 
       await ctx.newMetadata({
         assetId: nsfwAsset.id,

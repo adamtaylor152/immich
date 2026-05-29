@@ -156,7 +156,11 @@
         {disabled}
       />
 
-      <SmartSearchSection workingConfig={configToEdit.machineLearning} savedConfig={config.machineLearning} {disabled} />
+      <SmartSearchSection
+        workingConfig={configToEdit.machineLearning}
+        savedConfig={config.machineLearning}
+        {disabled}
+      />
 
       <DuplicateDetectionSection
         workingConfig={configToEdit.machineLearning}

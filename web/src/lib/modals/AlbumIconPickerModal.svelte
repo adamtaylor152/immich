@@ -30,7 +30,7 @@
         <button
           type="button"
           aria-pressed={isActive}
-          aria-label={key}
+          aria-label={key.replaceAll('-', ' ')}
           onclick={() => (selected = key === DEFAULT_ALBUM_ICON_KEY ? null : key)}
           class={`flex aspect-square items-center justify-center rounded-lg border transition-colors ${
             isActive

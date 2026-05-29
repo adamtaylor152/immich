@@ -41,15 +41,16 @@
   const candidates = $derived(
     albums
       .filter((album) => !forbiddenIds.has(album.id))
-      .filter((album) =>
-        search.trim() ? album.albumName.toLowerCase().includes(search.toLowerCase().trim()) : true,
-      )
+      .filter((album) => (search.trim() ? album.albumName.toLowerCase().includes(search.toLowerCase().trim()) : true))
       .sort((a, b) => a.albumName.localeCompare(b.albumName)),
   );
 
   onMount(async () => {
-    albums = await getAllAlbums({ isOwned: true });
-    loading = false;
+    try {
+      albums = await getAllAlbums({ isOwned: true });
+    } finally {
+      loading = false;
+    }
   });
 
   const handleSubmit = () => onClose({ parentId: selectedParentId });
@@ -75,9 +76,7 @@
           </label>
 
           {#each candidates as album (album.id)}
-            <label
-              class="flex cursor-pointer items-center gap-3 px-5 py-3 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
+            <label class="flex cursor-pointer items-center gap-3 px-5 py-3 hover:bg-slate-100 dark:hover:bg-slate-800">
               <input type="radio" name="parent" value={album.id} bind:group={selectedParentId} />
               <span class="text-sm">{album.albumName}</span>
             </label>

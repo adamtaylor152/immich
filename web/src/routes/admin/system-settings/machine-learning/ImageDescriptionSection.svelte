@@ -150,7 +150,9 @@
 
   // Recommended GPU pools hint ────────────────────────────────────────────
 
-  const runpodMode = $derived<RunPodMode>(computeRunpodMode(workingConfig.runpod?.mode, workingConfig.runpod?.enabled ?? false));
+  const runpodMode = $derived<RunPodMode>(
+    computeRunpodMode(workingConfig.runpod?.mode, workingConfig.runpod?.enabled ?? false),
+  );
   const recommendedPoolsForCurrentModel = $derived(findDescriptionProfile(imageDescription.modelName)?.gpuPoolIds);
 
   const currentPoolsMatchRecommended = $derived.by(() => {
@@ -288,9 +290,7 @@
     {/if}
 
     {#if runpodMode === RunPodMode.Serverless && recommendedPoolsForCurrentModel && !currentPoolsMatchRecommended}
-      <div
-        class="-mt-2 mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
-      >
+      <div class="-mt-2 mb-4 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200">
         <p class="mb-1">
           {$t('admin.machine_learning_image_description_recommended_gpu_pools')}
           <code class="rounded-sm bg-blue-100 px-1 dark:bg-blue-900">

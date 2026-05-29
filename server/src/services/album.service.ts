@@ -219,13 +219,10 @@ export class AlbumService extends BaseService {
     if (newParentId !== null) {
       // Owner-only nesting: require AlbumUpdate on the proposed new parent.
       await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [newParentId] });
-
-      const descendants = await this.albumRepository.getDescendantIds(id);
-      if (descendants.has(newParentId)) {
-        throw new BadRequestException('Cannot move an album under one of its own descendants');
-      }
     }
 
+    // The descendant/cycle check runs inside reparent's transaction (atomic with
+    // the parent update) to avoid a TOCTOU race between concurrent reparents.
     await this.albumRepository.reparent(id, newParentId);
   }
 

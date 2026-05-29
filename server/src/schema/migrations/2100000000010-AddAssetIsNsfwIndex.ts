@@ -127,7 +127,10 @@ export async function up(db: Kysely<any>): Promise<void> {
   //  - The hot privacy-gate query is the "is THIS asset NSFW" probe (see
   //    `nsfwAssetIdExists`), which always reads the TRUE side.
   await sql`CREATE INDEX IF NOT EXISTS "idx_asset_is_nsfw" ON "asset" ("is_nsfw") WHERE "is_nsfw" = true;`.execute(db);
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('index_idx_asset_is_nsfw', '{"type":"index","name":"idx_asset_is_nsfw","sql":"CREATE INDEX \\"idx_asset_is_nsfw\\" ON \\"asset\\" (\\"is_nsfw\\") WHERE \\"is_nsfw\\" = true;"}'::jsonb) ON CONFLICT ("name") DO NOTHING;`.execute(
+  // The override SQL must byte-match `asIndexCreate` for the AssetTable @Index
+  // declaration of idx_asset_is_nsfw (where: 'is_nsfw = true') so schema:generate
+  // stays clean. ON CONFLICT DO UPDATE corrects any previously-registered value.
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('index_idx_asset_is_nsfw', '{"type":"index","name":"idx_asset_is_nsfw","sql":"CREATE INDEX \\"idx_asset_is_nsfw\\" ON \\"asset\\" (\\"is_nsfw\\") WHERE (is_nsfw = true);"}'::jsonb) ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value";`.execute(
     db,
   );
 

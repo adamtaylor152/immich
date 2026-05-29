@@ -1492,7 +1492,6 @@ describe(AlbumService.name, () => {
 
         mocks.access.album.checkOwnerAccess.mockImplementation((_userId, ids) => Promise.resolve(new Set(ids)));
         mocks.album.getById.mockResolvedValue(getForAlbum(album));
-        mocks.album.getDescendantIds.mockResolvedValue(new Set());
         mocks.album.update.mockResolvedValue(getForAlbum(album));
 
         await sut.update(auth, album.id, { parentId: newParentId });
@@ -1526,20 +1525,25 @@ describe(AlbumService.name, () => {
         expect(mocks.album.reparent).not.toHaveBeenCalled();
       });
 
-      it('rejects moving an album under one of its own descendants (cycle)', async () => {
+      it('propagates the cycle rejection raised atomically inside reparent', async () => {
+        // The descendant/cycle check now runs inside albumRepository.reparent's
+        // transaction (atomic with the parent update) to close the TOCTOU window.
+        // The service delegates to reparent and surfaces its BadRequestException.
         const album = AlbumFactory.from().albumUser().build();
         const { user: owner } = album.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
         const descendantId = newUuid();
         const auth = AuthFactory.create(owner);
 
-        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id, descendantId]));
+        mocks.access.album.checkOwnerAccess.mockImplementation((_userId, ids) => Promise.resolve(new Set(ids)));
         mocks.album.getById.mockResolvedValue(getForAlbum(album));
-        mocks.album.getDescendantIds.mockResolvedValue(new Set([descendantId]));
+        mocks.album.reparent.mockRejectedValue(
+          new BadRequestException('Cannot move an album under one of its own descendants'),
+        );
 
         await expect(sut.update(auth, album.id, { parentId: descendantId })).rejects.toBeInstanceOf(
           BadRequestException,
         );
-        expect(mocks.album.reparent).not.toHaveBeenCalled();
+        expect(mocks.album.reparent).toHaveBeenCalledWith(album.id, descendantId);
       });
 
       it('rejects moving under a parent the caller does not own', async () => {

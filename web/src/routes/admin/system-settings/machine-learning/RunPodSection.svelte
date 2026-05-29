@@ -295,6 +295,6 @@
 
     <hr />
 
-    <RunPodPanel workingConfig={workingConfig} />
+    <RunPodPanel {workingConfig} />
   </div>
 </SettingAccordion>

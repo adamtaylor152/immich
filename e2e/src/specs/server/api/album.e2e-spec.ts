@@ -664,9 +664,7 @@ describe('/albums', () => {
         const b = await utils.createAlbum(user1.accessToken, { albumName: 'CascadeB', parentId: a.id });
         const c = await utils.createAlbum(user1.accessToken, { albumName: 'CascadeC', parentId: b.id });
 
-        const del = await request(app)
-          .delete(`/albums/${a.id}`)
-          .set('Authorization', `Bearer ${user1.accessToken}`);
+        const del = await request(app).delete(`/albums/${a.id}`).set('Authorization', `Bearer ${user1.accessToken}`);
         expect(del.status).toBe(204);
 
         for (const id of [a.id, b.id, c.id]) {

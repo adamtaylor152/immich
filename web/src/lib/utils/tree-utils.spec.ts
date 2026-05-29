@@ -1,5 +1,5 @@
-import { getAlbumIdPath, getLastIdSegment, TreeNode } from '$lib/utils/tree-utils';
 import type { AlbumResponseDto } from '@immich/sdk';
+import { getAlbumIdPath, getLastIdSegment, TreeNode } from '$lib/utils/tree-utils';
 
 const albumLike = (overrides: Partial<AlbumResponseDto>): AlbumResponseDto =>
   ({
@@ -29,6 +29,18 @@ describe('TreeNode.fromAlbums', () => {
     expect(root.children.map((n) => n.id)).toEqual(['trips']);
     expect(root.children[0].children.map((n) => n.id).sort()).toEqual(['disney', 'iceland']);
     expect(root.children[0].path).toBe('trips');
+    expect(root.children[0].children[0].path).toBe('trips/disney');
+  });
+
+  it('builds correct paths when a child is listed before its parent', () => {
+    const disney = albumLike({ id: 'disney', albumName: 'Disneyland 2024', parentId: 'trips' });
+    const trips = albumLike({ id: 'trips', albumName: 'Trips' });
+
+    const root = TreeNode.fromAlbums([disney, trips]);
+
+    expect(root.children.map((n) => n.id)).toEqual(['trips']);
+    expect(root.children[0].path).toBe('trips');
+    expect(root.children[0].children[0].id).toBe('disney');
     expect(root.children[0].children[0].path).toBe('trips/disney');
   });
 

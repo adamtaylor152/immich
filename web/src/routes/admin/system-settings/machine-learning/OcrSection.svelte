@@ -16,7 +16,11 @@
   let { workingConfig, savedConfig, disabled }: Props = $props();
 </script>
 
-<SettingAccordion key="ocr" title={$t('admin.machine_learning_ocr')} subtitle={$t('admin.machine_learning_ocr_description')}>
+<SettingAccordion
+  key="ocr"
+  title={$t('admin.machine_learning_ocr')}
+  subtitle={$t('admin.machine_learning_ocr_description')}
+>
   <div class="mt-4 ml-4 flex flex-col gap-4">
     <SettingSwitch
       title={$t('admin.machine_learning_ocr_enabled')}

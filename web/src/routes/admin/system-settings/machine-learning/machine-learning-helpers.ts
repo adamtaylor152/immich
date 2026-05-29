@@ -145,5 +145,4 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /** Local-format ISO timestamps, with a dash for null/undefined. */
-export const formatTimestamp = (iso: string | null | undefined): string =>
-  iso ? new Date(iso).toLocaleString() : '—';
+export const formatTimestamp = (iso: string | null | undefined): string => (iso ? new Date(iso).toLocaleString() : '—');

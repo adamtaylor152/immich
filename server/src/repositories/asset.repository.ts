@@ -58,9 +58,9 @@ import {
   withTagId,
   withTags,
 } from 'src/utils/database';
-import { deriveIsNsfwFromMetadata } from 'src/utils/nsfw';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { globToSqlPattern } from 'src/utils/misc';
+import { deriveIsNsfwFromMetadata } from 'src/utils/nsfw';
 
 export type AssetStats = Record<AssetType, number>;
 
@@ -426,7 +426,10 @@ export class AssetRepository {
     // The privacy filter (`utils/database.ts:nsfwAssetIdExists`) reads the boolean,
     // so any write to the JSONB key must keep the column in sync — including
     // writes coming directly from the public API (see AssetService).
-    await this.syncIsNsfwForItems(kysely, items.map((item) => ({ assetId: id, ...item })));
+    await this.syncIsNsfwForItems(
+      kysely,
+      items.map((item) => ({ assetId: id, ...item })),
+    );
 
     return result;
   }

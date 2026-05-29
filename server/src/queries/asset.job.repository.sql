@@ -1125,8 +1125,7 @@ from
   inner join "asset_metadata" on "asset_metadata"."assetId" = "asset"."id"
   and "asset_metadata"."key" = $1
 where
-  "asset"."type" = 'IMAGE'
-  and "asset"."deletedAt" is null
+  "asset"."deletedAt" is null
   and "asset"."visibility" in ('archive', 'timeline')
   and exists (
     select

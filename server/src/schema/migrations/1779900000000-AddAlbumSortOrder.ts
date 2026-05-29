@@ -13,9 +13,26 @@ export async function up(db: Kysely<any>): Promise<void> {
     db,
   );
   await sql`CREATE INDEX "album_root_sort_idx" ON "album" ("sortOrder") WHERE "parentId" IS NULL;`.execute(db);
+
+  // Register overrides so schema:generate matches the partial @Index decorators
+  // on AlbumTable. SQL must byte-match `asIndexCreate` for those declarations.
+  await sql`
+    INSERT INTO "migration_overrides" ("name", "value") VALUES (
+      'index_album_parent_sort_idx',
+      '{"type":"index","name":"album_parent_sort_idx","sql":"CREATE INDEX \\"album_parent_sort_idx\\" ON \\"album\\" (\\"parentId\\", \\"sortOrder\\") WHERE ((\\"parentId\\" IS NOT NULL));"}'::jsonb
+    ) ON CONFLICT ("name") DO NOTHING;
+  `.execute(db);
+  await sql`
+    INSERT INTO "migration_overrides" ("name", "value") VALUES (
+      'index_album_root_sort_idx',
+      '{"type":"index","name":"album_root_sort_idx","sql":"CREATE INDEX \\"album_root_sort_idx\\" ON \\"album\\" (\\"sortOrder\\") WHERE ((\\"parentId\\" IS NULL));"}'::jsonb
+    ) ON CONFLICT ("name") DO NOTHING;
+  `.execute(db);
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
+  await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_album_root_sort_idx';`.execute(db);
+  await sql`DELETE FROM "migration_overrides" WHERE "name" = 'index_album_parent_sort_idx';`.execute(db);
   await sql`DROP INDEX IF EXISTS "album_root_sort_idx";`.execute(db);
   await sql`DROP INDEX IF EXISTS "album_parent_sort_idx";`.execute(db);
   await sql`ALTER TABLE "album" DROP COLUMN IF EXISTS "sortOrder";`.execute(db);

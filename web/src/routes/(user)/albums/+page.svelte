@@ -49,10 +49,7 @@
 
   const getLink = (path: string) => Route.viewAlbum({ id: getLastIdSegment(path) });
 
-  const applyUpdate = async (
-    draggedAlbumId: string,
-    update: { parentId?: string | null; sortOrder?: number },
-  ) => {
+  const applyUpdate = async (draggedAlbumId: string, update: { parentId?: string | null; sortOrder?: number }) => {
     const album = ownedAlbums.find((a) => a.id === draggedAlbumId);
     if (!album) {
       return;
@@ -99,7 +96,7 @@
     const newSortOrder = computeSiblingSortOrder(siblings, target, position);
     void applyUpdate(dropped, { parentId: target.parentId, sortOrder: newSortOrder });
   };
-  const canDropOnTree = (dropped: string, targetPath: string, position: 'before' | 'inside' | 'after') => {
+  const canDropOnTree = (dropped: string, targetPath: string) => {
     const targetId = getLastIdSegment(targetPath);
     if (!targetId) {
       return false;
@@ -109,9 +106,10 @@
     if (dropped === targetId) {
       return false;
     }
-    // Subtree containment matters only for nesting — moving the same album to
-    // a different position among its current siblings is fine.
-    if (position === 'inside' && subtreeOfDragged.has(targetId)) {
+    // Reject descendants for every position. A before/after drop reparents the
+    // dragged album to `target.parentId`; if the target is inside the dragged
+    // subtree, that new parent is also inside it, creating a self/cycle.
+    if (subtreeOfDragged.has(targetId)) {
       return false;
     }
     return true;

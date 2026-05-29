@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
 import { Kysely } from 'kysely';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { AssetType } from 'src/enum';
 import { DB } from 'src/schema';

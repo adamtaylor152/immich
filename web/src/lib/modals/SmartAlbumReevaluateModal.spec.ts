@@ -1,10 +1,10 @@
+import type { SmartAlbumReevaluateEstimateDto } from '@immich/sdk';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
-import type { SmartAlbumReevaluateEstimateDto } from '@immich/sdk';
 import SmartAlbumReevaluateModal from './SmartAlbumReevaluateModal.svelte';
 
 describe('SmartAlbumReevaluateModal component', () => {

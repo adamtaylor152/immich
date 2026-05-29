@@ -61,6 +61,12 @@ import { ASSET_CHECKSUM_CONSTRAINT } from 'src/utils/database';
   columns: ['id'],
   where: `visibility = 'timeline' AND "deletedAt" IS NULL`,
 })
+// Partial index backing the privacy-gate NSFW probe (migration 2100000000010).
+@Index({
+  name: 'idx_asset_is_nsfw',
+  columns: ['is_nsfw'],
+  where: 'is_nsfw = true',
+})
 // For all assets, each originalpath must be unique per user and library
 export class AssetTable {
   @PrimaryGeneratedColumn()

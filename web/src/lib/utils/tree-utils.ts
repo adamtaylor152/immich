@@ -61,19 +61,30 @@ export class TreeNode extends Map<string, TreeNode> {
       byId.set(album.id, node);
     }
 
+    // First pass: link parents and children. Don't derive `path` here — input
+    // order isn't guaranteed, so a child can be visited before its parent and
+    // would read a not-yet-computed `parentNode.path`.
     for (const album of albums) {
       const node = byId.get(album.id)!;
       const parentNode = album.parentId ? byId.get(album.parentId) : undefined;
       if (parentNode) {
         node.parent = parentNode;
-        node.path = parentNode.path ? `${parentNode.path}/${album.id}` : album.id;
         parentNode.set(album.id, node);
       } else {
         node.parent = root;
-        node.path = album.id;
         root.set(album.id, node);
       }
     }
+
+    // Second pass: assign paths root-to-leaf so each node's `path` is built
+    // from its parent's already-finalized `path`, regardless of input order.
+    const assignPaths = (parent: TreeNode) => {
+      for (const [id, node] of parent) {
+        node.path = parent.path ? `${parent.path}/${id}` : id;
+        assignPaths(node);
+      }
+    };
+    assignPaths(root);
 
     return root;
   }
