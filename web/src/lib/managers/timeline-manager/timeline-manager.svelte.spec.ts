@@ -9,6 +9,10 @@ import { assetFactory, timelineAssetFactory, toResponseDto } from '@test-data/fa
 import { TimelineManager } from './timeline-manager.svelte';
 import type { TimelineAsset } from './types';
 
+vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
+  featureFlagsManager: { value: { nsfwHiding: true } },
+}));
+
 async function getAssets(timelineManager: TimelineManager) {
   const assets = [];
   for await (const asset of timelineManager.assetsIterator()) {
@@ -535,6 +539,50 @@ describe('TimelineManager', () => {
 
       expect(timelineManager.assetCount).toEqual(0);
       expect(timelineManager.months.length).toEqual(1);
+    });
+  });
+
+  describe('AssetsMarkNsfw events', () => {
+    let timelineManager: TimelineManager;
+
+    beforeEach(async () => {
+      timelineManager = new TimelineManager();
+      sdkMock.getTimeBuckets.mockResolvedValue([]);
+      await timelineManager.updateViewport({ width: 1588, height: 1000 });
+    });
+
+    afterEach(() => {
+      timelineManager.destroy();
+    });
+
+    it('removes the asset locally when marked NSFW', () => {
+      const asset = deriveLocalDateTimeFromFileCreatedAt(
+        timelineAssetFactory.build({
+          fileCreatedAt: fromISODateTimeUTCToObject('2024-01-20T12:00:00.000Z'),
+        }),
+      );
+      timelineManager.upsertAssets([asset]);
+      expect(timelineManager.assetCount).toEqual(1);
+
+      eventManager.emit('AssetsMarkNsfw', [asset.id]);
+      expect(timelineManager.assetCount).toEqual(0);
+    });
+
+    it('does not re-add a marked-NSFW asset on a later websocket update', () => {
+      const asset = deriveLocalDateTimeFromFileCreatedAt(
+        timelineAssetFactory.build({
+          fileCreatedAt: fromISODateTimeUTCToObject('2024-01-20T12:00:00.000Z'),
+        }),
+      );
+      timelineManager.upsertAssets([asset]);
+      eventManager.emit('AssetsMarkNsfw', [asset.id]);
+      expect(timelineManager.assetCount).toEqual(0);
+
+      // Server emits on_asset_update after persisting the enrichment, which the
+      // websocket layer turns into an upsert. The asset is still NSFW, so it
+      // must stay hidden rather than flashing back into the timeline.
+      timelineManager.upsertAssets([asset]);
+      expect(timelineManager.assetCount).toEqual(0);
     });
   });
 

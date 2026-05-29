@@ -71,6 +71,11 @@ export class TimelineManager extends VirtualScrollManager {
   isScrollingOnLoad = false;
   months: TimelineMonth[] = $state([]);
   albumAssets: Set<string> = new SvelteSet();
+  // Assets hidden in this view because they were just marked NSFW. The server
+  // hides NSFW assets via a query-time filter (not the `visibility` enum), so a
+  // subsequent `on_asset_update` websocket event would otherwise re-add them.
+  // Tracking their ids lets isExcluded() keep them out until the next refresh.
+  #nsfwHiddenAssetIds: Set<string> = new SvelteSet();
   scrubberMonths: ScrubberMonth[] = $state([]);
   scrubberTimelineHeight: number = $state(0);
   viewportTopMonthIntersection: ViewportTopMonthIntersection | undefined;
@@ -302,6 +307,9 @@ export class TimelineManager extends VirtualScrollManager {
     this.isInitialized = false;
     this.months = [];
     this.albumAssets.clear();
+    // The server re-applies its NSFW filter on reload, so drop the locally
+    // tracked ids to avoid hiding assets that may since have been marked safe.
+    this.#nsfwHiddenAssetIds.clear();
     await this.initTask.execute(async () => {
       this.#options = options;
       await this.#initializeTimelineMonths();
@@ -492,6 +500,9 @@ export class TimelineManager extends VirtualScrollManager {
     if (!featureFlagsManager.value.nsfwHiding || this.#options.suppressedOnly) {
       return;
     }
+    for (const id of ids) {
+      this.#nsfwHiddenAssetIds.add(id);
+    }
     this.removeAssets(ids);
   }
 
@@ -635,6 +646,7 @@ export class TimelineManager extends VirtualScrollManager {
 
   isExcluded(asset: TimelineAsset) {
     return (
+      this.#nsfwHiddenAssetIds.has(asset.id) ||
       isMismatched(this.#options.visibility, asset.visibility) ||
       isMismatched(this.#options.isFavorite, asset.isFavorite) ||
       isMismatched(this.#options.isTrashed, asset.isTrashed) ||
