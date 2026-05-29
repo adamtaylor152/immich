@@ -38,8 +38,19 @@
     mdiTrashCan,
     mdiTrashCanOutline,
   } from '@mdi/js';
+  import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
+
+  interface Props {
+    // Optional extra content rendered inside the primary sidebar, below the
+    // global navigation and above the bottom info (storage/server status).
+    // Used by album routes to surface the album tree without replacing the
+    // global nav (Photos/Favorites/Archive/Trash/etc.).
+    children?: Snippet;
+  }
+
+  let { children }: Props = $props();
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>
@@ -123,6 +134,8 @@
   {#if featureFlagsManager.value.trash}
     <NavbarItem title={$t('trash')} href={Route.trash()} icon={mdiTrashCanOutline} activeIcon={mdiTrashCan} />
   {/if}
+
+  {@render children?.()}
 
   <BottomInfo />
 </Sidebar>
