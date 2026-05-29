@@ -26,6 +26,7 @@ It is designed for users who want to keep the Immich experience they already kno
 - Local AI-generated descriptions and tags for **both images and videos**
 - Free-form **custom-instructions** prompt control (e.g. "if you see a car, identify the make and model")
 - **Identity-aware descriptions** that name every recognized person and avoid generic group nouns
+- **Nested album folders** with custom icons, drag-and-drop organization, and manual reordering
 - Family-library physical deduplication
 - Enhanced RAW support for difficult camera files
 - Media Health utilities for missing or corrupt source files
@@ -166,6 +167,22 @@ Six built-in auto-curated albums populated automatically from generated descript
 Each album has independently configurable tag triggers and a confidence threshold, and supports per-album re-evaluation against an existing library. Admins can also permanently exclude individual assets from a smart album without affecting their other album memberships.
 
 Smart albums are disabled by default. See the [configurable descriptions, identity, and smart albums guide](docs/docs/features/descriptions-and-smart-albums.md#smart-album-tag-tuning) for tuning details.
+
+---
+
+## Nested Albums and Folder Organization
+
+Standard Immich albums are a single flat list. This fork lets you organize them into **nested folders**, so a large family library can be grouped the way you actually think about it — for example, `2024 ▸ Summer ▸ Beach Trip` — instead of scrolling one long alphabetical wall of albums.
+
+- **Folders within folders** — nest albums to any depth and group related albums together by year, event, trip, person, or however you like
+- **Drag-and-drop organization** — drag one album onto another to nest it, or drag to reorder; works in both the album grid and the album tree
+- **Custom album icons** — give any album an icon from a built-in catalog so folders are easy to recognize at a glance
+- **Album tree in the sidebar** — browse and jump around your hierarchy from a collapsible tree, with breadcrumbs on every album page so you always know where you are
+- **Manual reordering** — arrange albums and sub-albums in the order that makes sense to you, not just by name or date
+- **Top-level or fully expanded** — toggle between seeing only your top-level folders or your whole album tree at once
+- **Safe by design** — you can't accidentally nest an album inside one of its own sub-albums, and deleting a folder that still contains sub-albums warns you first, with a count of what would be affected
+
+Nested albums are purely an organization layer on top of the albums you already have: your photos, album contents, and sharing are unchanged — you're simply grouping albums into folders. Album organization (the tree, drag-and-drop, icons, and reordering) lives in the web app.
 
 ---
 
