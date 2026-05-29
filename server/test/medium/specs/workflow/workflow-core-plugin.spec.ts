@@ -2,7 +2,7 @@ import { WorkflowStepConfig } from '@immich/plugin-sdk';
 import { Kysely } from 'kysely';
 import { existsSync, readFileSync } from 'node:fs';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
-import { AssetVisibility, JobStatus, LogLevel, WorkflowTrigger } from 'src/enum';
+import { AssetMetadataKey, AssetVisibility, JobStatus, LogLevel, WorkflowTrigger } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -107,6 +107,27 @@ const createWorkflow = async (template: WorkflowTemplate) => {
 
 let ctx: WorkflowTestContext;
 
+// The fork's workflow eligibility gate (`isWorkflowEligible`) requires an asset
+// to be enrichment-complete before plugins may observe it whenever NSFW
+// detection OR image description is enabled — and `imageDescription.enabled`
+// defaults to true (see `defaults` in src/config.ts), so the gate is active
+// under the medium context's default ML config. In production this is never a
+// problem because workflows trigger on `AssetMetadataExtracted`, which only
+// fires after enrichment lands. These execution tests call `handleAssetCreate`
+// directly, so they must reproduce that realistic post-extraction state by
+// attaching a (non-NSFW) ml-enrichment metadata row. `newMetadata` also keeps
+// `asset.is_nsfw` in sync via `syncIsNsfwForItems`, so a `result.isNsfw=false`
+// row leaves the asset both enriched and not-NSFW → eligible.
+const newEligibleAsset = async (dto: Parameters<WorkflowTestContext['newAsset']>[0] = {}) => {
+  const { asset } = await ctx.newAsset(dto);
+  await ctx.newMetadata({
+    assetId: asset.id,
+    key: AssetMetadataKey.MlEnrichment,
+    value: { nsfwDetection: { status: 'success', result: { isNsfw: false } } },
+  });
+  return { asset };
+};
+
 // `dist/plugin.wasm` is produced by `pnpm --filter @immich/plugin-core build:wasm`,
 // which shells out to the `extism-js` Rust CLI. The binary is not part of any
 // npm install; environments without it (CI without the install step, local
@@ -148,7 +169,7 @@ describe('core plugin', () => {
   describeIfPluginBuilt('assetArchive', () => {
     it('should archive an asset', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -165,7 +186,7 @@ describe('core plugin', () => {
 
     it('should unarchive an asset', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -184,7 +205,7 @@ describe('core plugin', () => {
   describeIfPluginBuilt('assetLock', () => {
     it('should lock an asset', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -227,7 +248,7 @@ describe('core plugin', () => {
   describeIfPluginBuilt('assetFavorite', () => {
     it('should favorite an asset', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -242,7 +263,7 @@ describe('core plugin', () => {
 
     it('should unfavorite an asset', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, isFavorite: true });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -259,7 +280,7 @@ describe('core plugin', () => {
   describeIfPluginBuilt('assetAddToAlbums', () => {
     it('should add an asset to an album', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, isFavorite: true });
       const { album } = await ctx.newAlbum({ ownerId: user.id });
 
       const workflow = await createWorkflow({
@@ -276,7 +297,7 @@ describe('core plugin', () => {
     it('should add an asset to multiple albums', async () => {
       const { user } = await ctx.newUser();
       const [{ asset }, { album: album1 }, { album: album2 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, isFavorite: true }),
+        newEligibleAsset({ ownerId: user.id, isFavorite: true }),
         ctx.newAlbum({ ownerId: user.id }),
         ctx.newAlbum({ ownerId: user.id }),
       ]);
@@ -296,7 +317,7 @@ describe('core plugin', () => {
     it('should require album access', async () => {
       const { user: user1 } = await ctx.newUser();
       const { user: user2 } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user1.id, isFavorite: true });
+      const { asset } = await newEligibleAsset({ ownerId: user1.id, isFavorite: true });
       const { album } = await ctx.newAlbum({ ownerId: user2.id });
 
       const workflow = await createWorkflow({

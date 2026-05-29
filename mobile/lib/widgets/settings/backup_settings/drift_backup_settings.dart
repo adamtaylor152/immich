@@ -345,7 +345,9 @@ class _BackupDelaySliderState extends ConsumerState<_BackupDelaySlider> {
             });
           },
           onChangeEnd: (double v) async {
-            if (!mounted) return;
+            if (!mounted) {
+              return;
+            }
             final seconds = backupDelayToSeconds(v.toInt());
             await ref.read(appSettingsServiceProvider).setSetting(AppSettingsEnum.backupTriggerDelay, seconds);
           },
