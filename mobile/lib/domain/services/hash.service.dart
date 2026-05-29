@@ -11,6 +11,53 @@ import 'package:logging/logging.dart';
 
 const String _kHashCancelledCode = "HASH_CANCELLED";
 
+/// Hashes local assets and persists the digest into
+/// `local_asset_entity.checksum`.
+///
+/// Algorithm: **SHA-1**, base64-encoded (28 chars including `=` padding).
+/// - iOS: `Insecure.SHA1()` in `mobile/ios/Runner/Sync/MessagesImpl.swift`.
+/// - Android: `MessageDigest.getInstance("SHA-1")` in
+///   `mobile/android/app/src/main/kotlin/app/alextran/immich/sync/MessagesImplBase.kt`.
+///
+/// Encoding is `Base64.NO_WRAP` on Android and `base64EncodedString()` on
+/// iOS — both produce 28-char strings with `=` padding for a 20-byte digest.
+///
+/// ### Usage
+///
+/// The hash is the **only** local-to-remote join key — `local_asset_entity`
+/// has no explicit `remoteId` column. Sites that link local + remote assets
+/// do so via `local.checksum.equalsExp(remote.checksum)` (see
+/// `local_asset.repository.dart`, `remote_asset.repository.dart`,
+/// `backup.repository.dart`, `timeline.repository.dart`,
+/// `remote_album.repository.dart`, `trashed_local_asset.repository.dart`).
+///
+/// The hash is **not** sent to the server on upload — the server computes
+/// its own digest from the uploaded byte stream (`file-upload.interceptor.ts`).
+///
+/// ### SHA-256 server-side transition (commit `3dbbb1e6e`)
+///
+/// As of commit `3dbbb1e6e`, the server computes **SHA-256** (32 bytes,
+/// 44-char base64) for all new uploads and stores it in
+/// `remote_asset_entity.checksum`. Legacy SHA-1 rows (28-char base64) remain.
+///
+/// **Consequence:** for any asset uploaded after the server transition, the
+/// local hash (SHA-1) will never equal the remote hash (SHA-256), so the
+/// `local.checksum.equalsExp(remote.checksum)` join silently fails. The
+/// asset will then:
+///   - Show as "not yet backed up" in `getBackupCounts` /
+///     `DriftBackupRepository.getAllCounts` (UI breaks).
+///   - Be re-included in `getCandidates` on every backup cycle (wasted
+///     bandwidth — the server returns `AssetMediaStatus.DUPLICATE` on the
+///     unique-constraint violation, but mobile still re-uploads the bytes).
+///   - Never resolve a `remoteId` in the LEFT JOIN-derived
+///     `LocalAsset.toDto(remoteId: ...)` path, so timeline + troubleshoot
+///     UI cannot follow the asset to its server-side record.
+///
+/// The proper fix is dual-hash native code (compute both SHA-1 and SHA-256
+/// in one stream pass) + a new `localAssetEntity.sha256` column + JOIN
+/// updates to match on either column. This is a coordinated change across
+/// Swift, Kotlin, Pigeon API, and a Drift migration. Tracked separately;
+/// see `.claude/review/mobile-sha256-audit.md`.
 class HashService {
   final int _batchSize;
   final DriftLocalAlbumRepository _localAlbumRepository;

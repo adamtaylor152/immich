@@ -50,7 +50,7 @@ class BestPhotoAssetResponseDto {
 
   BestPhotoScoreDto bestPhotoScore;
 
-  /// Base64 encoded SHA1 hash
+  /// Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.
   String checksum;
 
   /// The UTC timestamp when the asset was originally uploaded to Immich.

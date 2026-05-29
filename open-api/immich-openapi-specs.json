@@ -2988,7 +2988,7 @@
           {
             "name": "x-immich-checksum",
             "in": "header",
-            "description": "sha1 checksum that can be used for duplicate detection before the file is uploaded",
+            "description": "SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded",
             "required": false,
             "schema": {
               "type": "string"
@@ -17953,7 +17953,7 @@
       "AssetBulkUploadCheckItem": {
         "properties": {
           "checksum": {
-            "description": "Base64 or hex encoded SHA1 hash",
+            "description": "Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets.",
             "type": "string"
           },
           "id": {
@@ -18885,7 +18885,7 @@
       "AssetResponseDto": {
         "properties": {
           "checksum": {
-            "description": "Base64 encoded SHA1 hash",
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
             "type": "string"
           },
           "createdAt": {
@@ -19245,7 +19245,7 @@
             "$ref": "#/components/schemas/BestPhotoScoreDto"
           },
           "checksum": {
-            "description": "Base64 encoded SHA1 hash",
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
             "type": "string"
           },
           "createdAt": {
@@ -23105,6 +23105,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23298,6 +23299,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23427,6 +23429,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -24401,6 +24404,7 @@
             "type": "string"
           },
           "idleTimeoutSeconds": {
+            "description": "Serverless idle timeout; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           },
@@ -24458,10 +24462,12 @@
             "type": "boolean"
           },
           "workersMax": {
+            "description": "Serverless workersMax; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           },
           "workersMin": {
+            "description": "Serverless workersMin; may be null when not yet provisioned.",
             "nullable": true,
             "type": "number"
           }
@@ -25600,6 +25606,7 @@
           "clipQueries": {
             "description": "CLIP query phrases used when no tag trigger matches",
             "items": {
+              "maxLength": 256,
               "type": "string"
             },
             "type": "array"
@@ -25610,11 +25617,13 @@
           },
           "name": {
             "description": "User-visible album name",
+            "maxLength": 256,
             "type": "string"
           },
           "tagTriggers": {
             "description": "Tags that mark an asset as belonging to this album",
             "items": {
+              "maxLength": 256,
               "type": "string"
             },
             "type": "array"

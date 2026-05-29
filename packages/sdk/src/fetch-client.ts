@@ -705,7 +705,7 @@ export type AssetBulkUpdateDto = {
     visibility?: AssetVisibility;
 };
 export type AssetBulkUploadCheckItem = {
-    /** Base64 or hex encoded SHA1 hash */
+    /** Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets. */
     checksum: string;
     /** Asset ID */
     id: string;
@@ -874,7 +874,7 @@ export type TagResponseDto = {
     value: string;
 };
 export type AssetResponseDto = {
-    /** Base64 encoded SHA1 hash */
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1248,7 +1248,7 @@ export type BestPhotoScoreDto = {
 };
 export type BestPhotoAssetResponseDto = {
     bestPhotoScore: BestPhotoScoreDto;
-    /** Base64 encoded SHA1 hash */
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1893,6 +1893,7 @@ export type RunPodStateDto = {
     errorMessage?: string;
     estimatedCostUsd?: number;
     gpuTypeId?: string;
+    /** Serverless idle timeout; may be null when not yet provisioned. */
     idleTimeoutSeconds?: number | null;
     imageName?: string;
     instanceTag?: string;
@@ -1908,7 +1909,9 @@ export type RunPodStateDto = {
     templateId?: string;
     unhealthySince?: string;
     workerReady?: boolean;
+    /** Serverless workersMax; may be null when not yet provisioned. */
     workersMax?: number | null;
+    /** Serverless workersMin; may be null when not yet provisioned. */
     workersMin?: number | null;
 };
 export type RunPodGpuTypeDto = {

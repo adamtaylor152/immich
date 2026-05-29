@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { Kysely } from 'kysely';
 import { resolve } from 'node:path';
 import { AssetType } from 'src/enum';
@@ -9,13 +10,36 @@ import { getKyselyDB } from 'test/utils';
 
 let database: Kysely<DB>;
 
+// The fixtures in test/fixtures/media.stub.ts are byte-equal snapshots of
+// jellyfin-ffmpeg 7.1.3-6 output (pinned in mise.toml). Other ffmpeg builds
+// produce deterministically different packet-duration accounting, which is
+// expected: ffmpeg 8.x rounds MP4 packet durations differently for certain
+// VFR/B-frame patterns. Skip the whole suite with a clear message rather
+// than fail loudly on the wrong binary.
+const EXPECTED_FFMPEG_VERSION_RE = /version (?:n)?7\.1\.3/;
+const ffprobeVersion = (() => {
+  try {
+    return execFileSync('ffprobe', ['-version'], { encoding: 'utf8' });
+  } catch {
+    return '';
+  }
+})();
+const wrongFfmpegSkipReason = EXPECTED_FFMPEG_VERSION_RE.test(ffprobeVersion)
+  ? null
+  : `requires jellyfin-ffmpeg 7.1.3 (see mise.toml). Detected: ${
+      ffprobeVersion.split('\n', 1)[0] || '(ffprobe not found)'
+    }. Install via mise or run \`mise run ci-medium\`.`;
+
 beforeAll(async () => {
+  if (wrongFfmpegSkipReason) {
+    console.warn(`[audio-video.spec] SKIP — ${wrongFfmpegSkipReason}`);
+  }
   database = await getKyselyDB();
 });
 
 const fixtures = [eiffelTower, waterfall, train];
 
-describe('video metadata extraction', () => {
+describe.skipIf(wrongFfmpegSkipReason !== null)('video metadata extraction', () => {
   it.each(fixtures)('$originalPath', async ({ originalPath: path, videoStream, audioStream, packets, format }) => {
     const ctx = new ExifTestContext(database);
     const { user } = await ctx.newUser();
