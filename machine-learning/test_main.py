@@ -1968,7 +1968,7 @@ def test_bearer_auth_constant_time_compare() -> None:
             Route("/predict", home, methods=["POST"]),
         ]
     )
-    app.add_middleware(BearerAuthMiddleware, expected_token="my-token", allow_unauthenticated=False)
+    app.add_middleware(BearerAuthMiddleware, expected_token="my-token")
     client = TestClient(app)
 
     # Exempt path
@@ -1998,42 +1998,18 @@ def test_bearer_auth_rejects_oversized_header() -> None:
         return _PR("ok")
 
     app = Starlette(routes=[Route("/predict", home, methods=["POST"])])
-    app.add_middleware(BearerAuthMiddleware, expected_token="my-token", allow_unauthenticated=False)
+    app.add_middleware(BearerAuthMiddleware, expected_token="my-token")
     client = TestClient(app)
     huge = "Bearer " + ("x" * (16 * 1024))
     assert client.post("/predict", headers={"Authorization": huge}).status_code == 401
 
 
-def test_bearer_auth_fails_closed_when_unset_on_non_loopback_bind() -> None:
-    # R3 fail-closed: when IMMICH_ML_AUTH_TOKEN is unset and the bind is not
-    # loopback, the application must refuse to start. We can't easily relaunch
-    # the FastAPI app from a test, so exercise the startup helper directly —
-    # the middleware itself is constructed via this helper, so a misconfigured
-    # bind never reaches request-serving code.
-    from immich_ml.main import AuthConfigurationError, _build_auth_config
-
-    with pytest.raises(AuthConfigurationError):
-        _build_auth_config(None, "[::]")
-    with pytest.raises(AuthConfigurationError):
-        _build_auth_config(None, "0.0.0.0")
-    with pytest.raises(AuthConfigurationError):
-        _build_auth_config(None, "192.168.1.10")
-    # Loopback binds are allowed without a token (local-dev UX).
-    assert _build_auth_config(None, "127.0.0.1") == (None, True)
-    assert _build_auth_config(None, "127.5.6.7") == (None, True)
-    assert _build_auth_config(None, "::1") == (None, True)
-    assert _build_auth_config(None, "[::1]") == (None, True)
-    assert _build_auth_config(None, "[::1]:3003") == (None, True)
-    assert _build_auth_config(None, "127.0.0.1:3003") == (None, True)
-    assert _build_auth_config(None, "localhost") == (None, True)
-    # Token configured: any bind is fine.
-    assert _build_auth_config("secret", "0.0.0.0") == ("secret", False)
-
-
-def test_bearer_auth_fails_closed_middleware_returns_401_when_misconfigured() -> None:
-    # Defense in depth: even if a future caller bypasses _build_auth_config and
-    # constructs the middleware in a misconfigured state (no token,
-    # allow_unauthenticated=False), every non-exempt request must return 401.
+def test_bearer_auth_open_when_no_token() -> None:
+    # With no token configured the middleware is disabled and serves every
+    # request, including inference paths. This matches upstream Immich (the ML
+    # service ships without auth) and is the default for local / same-LAN
+    # deployments. A token is only expected when something sets
+    # IMMICH_ML_AUTH_TOKEN, e.g. RunPod Pod mode.
     from starlette.applications import Starlette
     from starlette.responses import PlainTextResponse as _PR
     from starlette.routing import Route
@@ -2049,35 +2025,13 @@ def test_bearer_auth_fails_closed_middleware_returns_401_when_misconfigured() ->
     app = Starlette(
         routes=[Route("/ping", ping_endpoint), Route("/predict", home, methods=["POST"])]
     )
-    app.add_middleware(BearerAuthMiddleware, expected_token=None, allow_unauthenticated=False)
+    app.add_middleware(BearerAuthMiddleware, expected_token=None)
     client = TestClient(app)
-    # Exempt path still serves (health checks must continue working).
+    # Health endpoint serves.
     assert client.get("/ping").status_code == 200
-    # Non-exempt path returns 401 regardless of header.
-    assert client.post("/predict").status_code == 401
-    assert client.post("/predict", headers={"Authorization": "Bearer x"}).status_code == 401
-
-
-def test_is_loopback_host_rejects_non_loopback_strings() -> None:
-    # Hostnames that LOOK like loopback addresses must NOT be treated as
-    # loopback. The previous `startswith("127.")` check would have passed
-    # "127.example.com"; ip_address() rejects it as ValueError -> False.
-    from immich_ml.main import _is_loopback_host
-
-    assert _is_loopback_host("127.0.0.1") is True
-    assert _is_loopback_host("127.255.255.255") is True
-    assert _is_loopback_host("::1") is True
-    assert _is_loopback_host("[::1]") is True
-    assert _is_loopback_host("[::1]:3003") is True
-    assert _is_loopback_host("127.0.0.1:3003") is True
-    assert _is_loopback_host("LOCALHOST") is True
-    assert _is_loopback_host("0.0.0.0") is False
-    assert _is_loopback_host("[::]") is False
-    assert _is_loopback_host("192.168.1.1") is False
-    # The string-prefix bug: "127.example.com" must NOT be treated as loopback.
-    assert _is_loopback_host("127.example.com") is False
-    assert _is_loopback_host("127a.b.c") is False
-    assert _is_loopback_host("") is False
+    # Inference path is open — no auth required, with or without a header.
+    assert client.post("/predict").status_code == 200
+    assert client.post("/predict", headers={"Authorization": "Bearer anything"}).status_code == 200
 
 
 def test_options_validation_rejects_unknown_keys(deployed_app: TestClient) -> None:

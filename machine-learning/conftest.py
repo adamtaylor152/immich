@@ -1,5 +1,4 @@
 import json
-import os
 from typing import Any, Iterator
 from unittest import mock
 
@@ -8,14 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 from numpy.typing import NDArray
 from PIL import Image
-
-# Default bind for tests mirrors local-dev UX (loopback). The bearer-auth
-# startup check would otherwise refuse to import the app, since the default
-# bind in __main__.py is "[::]" which is non-loopback. Production behavior
-# is unchanged — operators on a non-loopback bind must set
-# IMMICH_ML_AUTH_TOKEN. See immich_ml/main.py _build_auth_config and
-# test_bearer_auth_fails_closed_when_unset_on_non_loopback_bind.
-os.environ.setdefault("IMMICH_HOST", "127.0.0.1")
 
 from immich_ml.config import log  # noqa: E402
 from immich_ml.main import app  # noqa: E402

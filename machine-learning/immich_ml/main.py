@@ -1,6 +1,5 @@
 import asyncio
 import gc
-import ipaddress
 import os
 import secrets
 import signal
@@ -225,58 +224,25 @@ def _normalize_auth_path(path: str) -> str:
     return normalized
 
 
-def _is_loopback_host(host: str) -> bool:
-    """Return True if `host` is a loopback bind (127.0.0.0/8 or ::1).
-
-    Uses `ipaddress` for proper classification so we don't false-positive on
-    hostnames like ``127.example.com`` and we correctly handle the bracketed
-    IPv6 form ``[::1]`` plus the literal hostname ``localhost``.
-    """
-    if not host:
-        return False
-    cleaned = host.strip().lower()
-    if cleaned == "localhost":
-        return True
-    # Tolerate bracketed IPv6 literals (e.g. "[::1]" or "[::1]:3003").
-    if cleaned.startswith("["):
-        closing = cleaned.find("]")
-        if closing > 0:
-            cleaned = cleaned[1:closing]
-    else:
-        # Strip ":port" suffix on bare IPv4 ("127.0.0.1:3003").
-        if cleaned.count(":") == 1:
-            cleaned = cleaned.split(":", 1)[0]
-    try:
-        return ipaddress.ip_address(cleaned).is_loopback
-    except ValueError:
-        return False
-
-
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, expected_token: str | None, allow_unauthenticated: bool) -> None:
+    def __init__(self, app: ASGIApp, expected_token: str | None) -> None:
         super().__init__(app)
         # Encode once so compare_digest sees bytes of consistent type.
         self._expected_bytes: bytes | None = expected_token.encode("utf-8") if expected_token else None
-        # When ``allow_unauthenticated`` is True the operator explicitly chose
-        # a loopback bind without a token (local-dev UX). Outside of that,
-        # ``expected_token`` must be set — startup refuses otherwise.
-        self._allow_unauthenticated = allow_unauthenticated
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # No token configured -> auth disabled; serve every request. This is the
+        # default for local / same-LAN deployments — upstream Immich ships the ML
+        # service without authentication. A token is only present when something
+        # sets IMMICH_ML_AUTH_TOKEN, e.g. RunPod Pod mode, whose endpoint is
+        # exposed on the public internet and must stay authenticated.
+        if self._expected_bytes is None:
+            return await call_next(request)
+        # Token configured: enforce bearer auth on everything except the health
+        # endpoints, which stay open so RunPod's proxy probes keep working.
         normalized_path = _normalize_auth_path(request.url.path)
         if normalized_path in _AUTH_EXEMPT_PATHS:
             return await call_next(request)
-        if self._expected_bytes is None:
-            # Only possible when the operator explicitly opted into the
-            # loopback-no-token mode (allow_unauthenticated=True). On any
-            # other bind, startup raised — see _build_auth_config.
-            if self._allow_unauthenticated:
-                return await call_next(request)
-            # Fail closed. This branch should not be reachable in practice
-            # because startup refuses to construct the middleware in this
-            # state, but we never serve an unauthenticated request on a
-            # non-loopback bind. ml.md R3 (fail-closed bearer auth).
-            return JSONResponse({"message": "Unauthorized"}, status_code=401)
         header = request.headers.get("authorization", "")
         if len(header) > _MAX_AUTH_HEADER_LENGTH:
             return JSONResponse({"message": "Unauthorized"}, status_code=401)
@@ -290,78 +256,30 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-class AuthConfigurationError(RuntimeError):
-    """Raised at startup when ML is bound to a non-loopback address with no
-    ``IMMICH_ML_AUTH_TOKEN``. We refuse to serve unauthenticated inference on
-    a network-reachable bind. ml.md R3 (fail-closed bearer auth)."""
+_expected_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
 
-
-def _build_auth_config(
-    auth_token: str | None,
-    immich_host: str,
-) -> tuple[str | None, bool]:
-    """Validate the (token, bind) combination at startup.
-
-    Returns ``(token, allow_unauthenticated)``. Raises
-    ``AuthConfigurationError`` on the disallowed combination
-    (no token + non-loopback bind) so the operator notices immediately
-    rather than after an attacker hits the unauthenticated ``/predict``.
-    """
-    if auth_token:
-        return auth_token, False
-    if _is_loopback_host(immich_host):
-        # Local-dev UX: explicit loopback bind without a token is fine.
-        return None, True
-    raise AuthConfigurationError(
-        "IMMICH_ML_AUTH_TOKEN is unset and IMMICH_HOST "
-        f"{immich_host!r} is not a loopback address. ML will not start "
-        "without authentication on a network-reachable bind. Set "
-        "IMMICH_ML_AUTH_TOKEN to enable bearer auth, or bind ML to "
-        "127.0.0.1/::1/localhost for trusted local-only use."
-    )
-
-
-_auth_token = os.environ.get("IMMICH_ML_AUTH_TOKEN", "").strip() or None
-_immich_host = os.environ.get("IMMICH_HOST", "[::]").strip()
-# NOTE: ``_build_auth_config`` raises ``AuthConfigurationError`` at import
-# time when the (token, bind) combination is unsafe (no token + non-loopback
-# bind). This is intentional — the only known importer of this module is
-# ``__main__.py`` via gunicorn workers, and tooling that imported the app
-# without setting envs would silently expose ``/predict``. A bright,
-# multi-line banner is logged below so operators can spot the auth state
-# in worker logs without scanning for a single line. If a future workflow
-# needs to import this module for introspection without serving traffic
-# (e.g. an OpenAPI dump), move the validation into ``lifespan`` startup so
-# the import stays side-effect-free.
-_expected_token, _allow_unauthenticated = _build_auth_config(_auth_token, _immich_host)
-
-# Prominent startup banner so the auth state is visible in worker logs.
-# A single log.info/warning line is easy to miss when gunicorn boots; the
-# banner format mirrors other Immich startup output and prints the bind
-# host so operators can correlate it with their compose / k8s config.
+# Startup banner so the auth state is visible in worker logs — a single log
+# line is easy to miss when gunicorn boots, so the banner mirrors other Immich
+# startup output. Bearer auth is enforced only when a token is set (e.g. RunPod
+# Pod mode injects one); otherwise the service is open, matching upstream
+# Immich, which ships the ML service without authentication.
 _auth_state = (
     "ENABLED  (bearer token required for /predict)"
     if _expected_token
-    else "DISABLED (loopback bind; /predict open to local processes)"
+    else "DISABLED (no token; /predict open to anything that can reach this port)"
 )
 log.info("=" * 64)
 log.info("Immich ML auth: %s", _auth_state)
-log.info("  IMMICH_HOST              = %s", _immich_host)
 log.info("  IMMICH_ML_AUTH_TOKEN set = %s", "yes" if _expected_token else "no")
 log.info("=" * 64)
 if not _expected_token:
     log.warning(
-        "IMMICH_ML_AUTH_TOKEN unset (bound to loopback %r); /predict is "
-        "unauthenticated. Acceptable for local development only — any "
-        "non-loopback bind without a token will refuse to start.",
-        _immich_host,
+        "IMMICH_ML_AUTH_TOKEN is not set; /predict is unauthenticated. Treat the "
+        "ML service URL as a trusted internal endpoint — anything able to reach "
+        "this port can submit inference requests."
     )
 
-app.add_middleware(
-    BearerAuthMiddleware,
-    expected_token=_expected_token,
-    allow_unauthenticated=_allow_unauthenticated,
-)
+app.add_middleware(BearerAuthMiddleware, expected_token=_expected_token)
 
 
 @app.get("/")
