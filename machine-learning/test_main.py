@@ -1229,11 +1229,10 @@ class TestCLIP:
         clip_tokenizer_cfg: Callable[[Path], dict[str, Any]],
     ) -> None:
         # Regression: a `language` option must survive the full predict() path
-        # (predict -> configure -> _predict -> tokenize), not just a direct
-        # tokenize() call. base.predict() applies options via configure() and
-        # calls _predict(*inputs) WITHOUT forwarding kwargs, so the CLIP encoder
-        # must read the configured language itself. Otherwise multilingual (NLLB)
-        # search silently drops the query language and tokenizes as English.
+        # (predict -> _predict -> tokenize), not just a direct tokenize() call.
+        # base.predict() calls _predict(*inputs) WITHOUT forwarding kwargs, so
+        # the CLIP encoder threads `language` through itself. Otherwise
+        # multilingual (NLLB) search silently drops the query language.
         mocker.patch.object(OpenClipTextualEncoder, "download")
         mocker.patch.object(OpenClipTextualEncoder, "model_cfg", clip_model_cfg)
         mocker.patch.object(OpenClipTextualEncoder, "tokenizer_cfg", clip_tokenizer_cfg)
@@ -1246,6 +1245,13 @@ class TestCLIP:
         clip_encoder.predict("test search query", language="de")
 
         mock_tokenizer.encode.assert_called_once_with("deu_Latntest search query")
+
+        # `language` must be per-call, not persisted on the shared cached
+        # instance: a later request without a language must not inherit "de".
+        # This guards against the race-prone instance-state approach.
+        mock_tokenizer.encode.reset_mock()
+        clip_encoder.predict("another query")
+        mock_tokenizer.encode.assert_called_once_with("another query")
 
     def test_openclip_tokenizer(
         self,

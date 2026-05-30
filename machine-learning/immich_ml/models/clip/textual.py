@@ -18,19 +18,23 @@ from immich_ml.schemas import ModelSession, ModelTask, ModelType
 class BaseCLIPTextualEncoder(InferenceModel):
     depends = []
     identity = (ModelType.TEXTUAL, ModelTask.SEARCH)
-    language: str | None = None
 
-    def configure(self, **kwargs: Any) -> None:
-        # `language` is a per-request search option (the query locale). The base
-        # InferenceModel.predict() applies options via configure() and calls
-        # _predict() WITHOUT forwarding kwargs, so stash it here for tokenize()
-        # to read. Assigning unconditionally (rather than `if "language" in
-        # kwargs`) resets it when a later request omits the option, so a prior
-        # request's language can't leak through the cached model instance.
-        self.language = kwargs.get("language")
+    def predict(self, *inputs: Any, **model_kwargs: Any) -> str:
+        # `language` is a per-request option (the query locale). The base
+        # predict() applies options via configure() and then calls _predict()
+        # without forwarding them — stashing `language` on the instance would
+        # put per-request state on the shared, cached encoder (ModelCache reuses
+        # one instance across requests) and race across concurrent searches in
+        # different languages. Mirror the base flow but thread `language`
+        # straight through to _predict() as a call-local argument, so there is
+        # no shared mutable state to race on.
+        self.load()
+        if model_kwargs:
+            self.configure(**model_kwargs)
+        return self._predict(*inputs, language=model_kwargs.get("language"))
 
-    def _predict(self, inputs: str) -> str:
-        tokens = self.tokenize(inputs, language=self.language)
+    def _predict(self, inputs: str, *, language: str | None = None) -> str:
+        tokens = self.tokenize(inputs, language=language)
         res: NDArray[np.float32] = self.session.run(None, tokens)[0][0]
         return serialize_np_array(res)
 
