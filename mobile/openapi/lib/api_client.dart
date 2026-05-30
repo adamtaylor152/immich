@@ -444,6 +444,20 @@ class ApiClient {
           return LibraryStatsResponseDto.fromJson(value);
         case 'LicenseKeyDto':
           return LicenseKeyDto.fromJson(value);
+        case 'LivePhotoCandidateDto':
+          return LivePhotoCandidateDto.fromJson(value);
+        case 'LivePhotoCandidatesResponseDto':
+          return LivePhotoCandidatesResponseDto.fromJson(value);
+        case 'LivePhotoMatchConfidence':
+          return LivePhotoMatchConfidenceTypeTransformer().decode(value);
+        case 'LivePhotoRelinkDto':
+          return LivePhotoRelinkDto.fromJson(value);
+        case 'LivePhotoRelinkItemDto':
+          return LivePhotoRelinkItemDto.fromJson(value);
+        case 'LivePhotoRelinkResponseDto':
+          return LivePhotoRelinkResponseDto.fromJson(value);
+        case 'LivePhotoRelinkResultDto':
+          return LivePhotoRelinkResultDto.fromJson(value);
         case 'LogLevel':
           return LogLevelTypeTransformer().decode(value);
         case 'LoginCredentialDto':
