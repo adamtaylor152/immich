@@ -42,7 +42,10 @@ export class LivePhotoService {
       this.livePhotoRepository.getUnlinkedByFilename(ownerId, FILENAME_MATCH_WINDOW_SECONDS),
     ]);
 
-    const pairs = this.dedupeCandidates(byContentId, byFilename);
+    // Cap the pairs before the bulk relational load, so a large library cannot
+    // pull every matched asset (with all relations) into memory just to discard
+    // most of them while mapping.
+    const pairs = this.dedupeCandidates(byContentId, byFilename).slice(0, MAX_CANDIDATES);
 
     const assetIds = [...new Set(pairs.flatMap(({ photoId, videoId }) => [photoId, videoId]))];
     const assets = await this.assetRepository.getByIdsWithAllRelationsButStacks(assetIds);
@@ -65,10 +68,6 @@ export class LivePhotoService {
             ? 'Matched on the embedded live photo identifier'
             : 'Matched on filename and capture time',
       });
-
-      if (candidates.length >= MAX_CANDIDATES) {
-        break;
-      }
     }
 
     return { candidates, total: candidates.length };
@@ -81,7 +80,17 @@ export class LivePhotoService {
     const assetById = new Map(assets.map((asset) => [asset.id, asset]));
 
     const results: LivePhotoRelinkResponseDto['results'] = [];
+    // `assetById` is a single snapshot, so guard against a request that reuses the
+    // same photo or video across pairs — otherwise a later pair would validate
+    // against stale state and overwrite an already-applied link.
+    const linkedPhotos = new Set<string>();
+    const linkedVideos = new Set<string>();
     for (const { photoId, videoId } of dto.pairs) {
+      if (linkedPhotos.has(photoId) || linkedVideos.has(videoId)) {
+        results.push({ photoId, videoId, success: false, error: 'Asset already relinked in this request' });
+        continue;
+      }
+
       const error = await this.validatePair(ownerId, videoId, assetById.get(photoId), assetById.get(videoId));
       if (error) {
         results.push({ photoId, videoId, success: false, error });
@@ -94,6 +103,8 @@ export class LivePhotoService {
         { asset: this.assetRepository, album: this.albumRepository, event: this.eventRepository },
         { photoAssetId: photoId, motionAssetId: videoId, motionOwnerId: ownerId },
       );
+      linkedPhotos.add(photoId);
+      linkedVideos.add(videoId);
       results.push({ photoId, videoId, success: true });
     }
 

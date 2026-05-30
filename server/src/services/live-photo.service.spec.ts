@@ -157,5 +157,44 @@ describe(LivePhotoService.name, () => {
       expect(result.results[0].success).toBe(false);
       expect(mocks.asset.update).not.toHaveBeenCalled();
     });
+
+    it('does not relink the same photo twice within a single request', async () => {
+      const auth = AuthFactory.create();
+      const ownerId = auth.user.id;
+      const photo = AssetFactory.from({
+        id: 'photo-1',
+        ownerId,
+        type: AssetType.Image,
+        livePhotoVideoId: null,
+        visibility: AssetVisibility.Timeline,
+      }).build();
+      const videoA = AssetFactory.from({
+        id: 'video-a',
+        ownerId,
+        type: AssetType.Video,
+        visibility: AssetVisibility.Timeline,
+      }).build();
+      const videoB = AssetFactory.from({
+        id: 'video-b',
+        ownerId,
+        type: AssetType.Video,
+        visibility: AssetVisibility.Timeline,
+      }).build();
+      mocks.asset.getByIds.mockResolvedValue([photo, videoA, videoB] as never);
+      mocks.asset.getLivePhotoCount.mockResolvedValue(0);
+
+      const result = await sut.relink(auth, {
+        pairs: [
+          { photoId: 'photo-1', videoId: 'video-a' },
+          { photoId: 'photo-1', videoId: 'video-b' },
+        ],
+      });
+
+      expect(result.results[0].success).toBe(true);
+      expect(result.results[1].success).toBe(false);
+      // Only the first pair is linked; the stale snapshot must not overwrite it.
+      expect(mocks.asset.update).toHaveBeenCalledWith({ id: 'photo-1', livePhotoVideoId: 'video-a' });
+      expect(mocks.asset.update).not.toHaveBeenCalledWith({ id: 'photo-1', livePhotoVideoId: 'video-b' });
+    });
   });
 });

@@ -278,7 +278,7 @@ Apple devices capture in **HEIC**, and many cameras shoot **RAW** (DNG and simil
 - Prefers native originals when choosing which duplicate to keep — **RAW first, then HEIC/HEIF**, then everything else
 - Wins even when the JPG copy is larger in file size
 - Falls back to the usual file-size and metadata comparison when every copy is the same kind of file
-- **On by default**, and can be turned off under **Admin > Settings > Machine Learning > Duplicate Detection**
+- **On by default**, and can be turned off under **Admin > System Settings > Machine Learning > Duplicate Detection**
 
 This only changes which asset is pre-selected as the keeper in the duplicate review — nothing is deleted automatically.
 
