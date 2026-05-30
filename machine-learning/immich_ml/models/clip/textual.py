@@ -18,9 +18,19 @@ from immich_ml.schemas import ModelSession, ModelTask, ModelType
 class BaseCLIPTextualEncoder(InferenceModel):
     depends = []
     identity = (ModelType.TEXTUAL, ModelTask.SEARCH)
+    language: str | None = None
 
-    def _predict(self, inputs: str, language: str | None = None) -> str:
-        tokens = self.tokenize(inputs, language=language)
+    def configure(self, **kwargs: Any) -> None:
+        # `language` is a per-request search option (the query locale). The base
+        # InferenceModel.predict() applies options via configure() and calls
+        # _predict() WITHOUT forwarding kwargs, so stash it here for tokenize()
+        # to read. Assigning unconditionally (rather than `if "language" in
+        # kwargs`) resets it when a later request omits the option, so a prior
+        # request's language can't leak through the cached model instance.
+        self.language = kwargs.get("language")
+
+    def _predict(self, inputs: str) -> str:
+        tokens = self.tokenize(inputs, language=self.language)
         res: NDArray[np.float32] = self.session.run(None, tokens)[0][0]
         return serialize_np_array(res)
 

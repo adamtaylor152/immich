@@ -160,6 +160,12 @@ class _OptionsBase(BaseModel):
 class ClipOptions(_OptionsBase):
     """Options for CLIP textual/visual models."""
 
+    # Weblate language code (e.g. "en-US", "de") for multilingual CLIP text
+    # search. The server forwards it via TextEncodingOptions; NLLB tokenizers
+    # map it to a FLORES-200 code (see models/clip/textual.py). Bounded length
+    # preserves the closed-keyspace hardening's defensive posture.
+    language: str | None = Field(default=None, max_length=64)
+
 
 class FacialRecognitionDetectionOptions(_OptionsBase):
     """Options for the facial-recognition detection task."""
