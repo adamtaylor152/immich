@@ -11,6 +11,7 @@ const createAsset = (
   id: string,
   fileSizeInByte: number | null = null,
   exifFields: ExifInfoInput = {},
+  originalFileName = 'asset.jpg',
 ): AssetResponseDto => ({
   id,
   type: AssetType.Image,
@@ -23,7 +24,7 @@ const createAsset = (
   createdAt: new Date().toISOString(),
   ownerId: 'owner-1',
   originalPath: '/path/to/asset',
-  originalFileName: 'asset.jpg',
+  originalFileName,
   fileCreatedAt: new Date().toISOString(),
   fileModifiedAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -39,6 +40,10 @@ const createAsset = (
       ? ExifResponseSchema.parse({ fileSizeInByte, ...exifFields })
       : undefined,
 });
+
+const heic = (id: string, size: number) => createAsset(id, size, {}, `${id}.heic`);
+const jpg = (id: string, size: number) => createAsset(id, size, {}, `${id}.jpg`);
+const raw = (id: string, size: number) => createAsset(id, size, {}, `${id}.dng`);
 
 describe('duplicate utils', () => {
   describe('getExifCount', () => {
@@ -159,6 +164,49 @@ describe('duplicate utils', () => {
       });
 
       expect(suggestDuplicate([largeWithLessExif, smallWithMoreExif])?.id).toBe('large-less-exif');
+    });
+  });
+
+  describe('suggestDuplicate with preferOriginalFormat', () => {
+    it('should prefer a HEIC over a larger JPG when enabled', () => {
+      const largeJpg = jpg('large-jpg', 9000);
+      const smallHeic = heic('small-heic', 1000);
+
+      expect(suggestDuplicate([largeJpg, smallHeic], { preferOriginalFormat: true })?.id).toBe('small-heic');
+    });
+
+    it('should prefer RAW over HEIC and JPG when enabled', () => {
+      const dng = raw('raw-dng', 1000);
+      const heicAsset = heic('heic', 8000);
+      const jpgAsset = jpg('jpg', 9000);
+
+      expect(suggestDuplicate([jpgAsset, heicAsset, dng], { preferOriginalFormat: true })?.id).toBe('raw-dng');
+    });
+
+    it('should fall back to file size among assets of the same format tier', () => {
+      const smallHeic = heic('small-heic', 1000);
+      const largeHeic = heic('large-heic', 5000);
+      const jpgAsset = jpg('jpg', 9000);
+
+      expect(suggestDuplicate([smallHeic, largeHeic, jpgAsset], { preferOriginalFormat: true })?.id).toBe('large-heic');
+    });
+
+    it('should keep the largest file regardless of format when disabled', () => {
+      const largeJpg = jpg('large-jpg', 9000);
+      const smallHeic = heic('small-heic', 1000);
+
+      expect(suggestDuplicate([largeJpg, smallHeic], { preferOriginalFormat: false })?.id).toBe('large-jpg');
+      // disabled is the default
+      expect(suggestDuplicate([largeJpg, smallHeic])?.id).toBe('large-jpg');
+    });
+
+    it('should pass options through suggestDuplicateKeepAssetIds', () => {
+      const largeJpg = jpg('large-jpg', 9000);
+      const smallHeic = heic('small-heic', 1000);
+
+      expect(suggestDuplicateKeepAssetIds([largeJpg, smallHeic], { preferOriginalFormat: true })).toEqual([
+        'small-heic',
+      ]);
     });
   });
 

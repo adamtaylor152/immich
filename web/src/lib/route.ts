@@ -148,6 +148,7 @@ export const Route = {
   utilities: () => '/utilities',
   duplicatesUtility: (params?: { index?: number }) => '/utilities/duplicates' + asQueryString(params),
   largeFileUtility: () => '/utilities/large-files',
+  livePhotosUtility: () => '/utilities/live-photos',
   geolocationUtility: () => '/utilities/geolocation',
   missingMediaUtility: (params?: { status?: MediaHealthStatus }) => '/utilities/missing-media' + asQueryString(params),
   corruptMediaUtility: (params?: { status?: MediaHealthStatus }) => '/utilities/corrupt-media' + asQueryString(params),

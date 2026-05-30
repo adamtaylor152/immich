@@ -1526,6 +1526,36 @@ export type ValidateLibraryResponseDto = {
     /** Validation results for import paths */
     importPaths?: ValidateLibraryImportPathResponseDto[];
 };
+export type LivePhotoCandidateDto = {
+    confidence: LivePhotoMatchConfidence;
+    /** Why these two assets are believed to be a separated live photo pair */
+    matchReason: string;
+    photo: AssetResponseDto;
+    video: AssetResponseDto;
+};
+export type LivePhotoCandidatesResponseDto = {
+    candidates: LivePhotoCandidateDto[];
+    /** Total number of candidate pairs found */
+    total: number;
+};
+export type LivePhotoRelinkItemDto = {
+    /** Still image asset ID */
+    photoId: string;
+    /** Motion video asset ID */
+    videoId: string;
+};
+export type LivePhotoRelinkDto = {
+    pairs: LivePhotoRelinkItemDto[];
+};
+export type LivePhotoRelinkResultDto = {
+    error?: string;
+    photoId: string;
+    success: boolean;
+    videoId: string;
+};
+export type LivePhotoRelinkResponseDto = {
+    results: LivePhotoRelinkResultDto[];
+};
 export type MapReverseGeocodeResponseDto = {
     /** City name */
     city: string | null;
@@ -2915,6 +2945,8 @@ export type DuplicateDetectionConfig = {
     };
     /** Maximum distance threshold for duplicate detection */
     maxDistance: number;
+    /** When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size */
+    preferOriginalFormat: boolean;
 };
 export type FacialRecognitionConfig = {
     /** Whether the task is enabled */
@@ -5442,6 +5474,32 @@ export function validate({ id, validateLibraryDto }: {
         ...opts,
         method: "POST",
         body: validateLibraryDto
+    })));
+}
+/**
+ * List live photo relink candidates
+ */
+export function getLivePhotoCandidates(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: LivePhotoCandidatesResponseDto;
+    }>("/live-photo/candidates", {
+        ...opts
+    }));
+}
+/**
+ * Relink live photos
+ */
+export function relinkLivePhotos({ livePhotoRelinkDto }: {
+    livePhotoRelinkDto: LivePhotoRelinkDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: LivePhotoRelinkResponseDto;
+    }>("/live-photo/relink", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: livePhotoRelinkDto
     })));
 }
 /**
@@ -8223,6 +8281,10 @@ export enum QueueCommand {
     Resume = "resume",
     Empty = "empty",
     ClearFailed = "clear-failed"
+}
+export enum LivePhotoMatchConfidence {
+    High = "high",
+    Low = "low"
 }
 export enum MediaHealthCategory {
     Missing = "missing",

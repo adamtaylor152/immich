@@ -168,6 +168,8 @@ Class | Method | HTTP request | Description
 *LibrariesApi* | [**scanLibrary**](doc//LibrariesApi.md#scanlibrary) | **POST** /libraries/{id}/scan | Scan a library
 *LibrariesApi* | [**updateLibrary**](doc//LibrariesApi.md#updatelibrary) | **PUT** /libraries/{id} | Update a library
 *LibrariesApi* | [**validate**](doc//LibrariesApi.md#validate) | **POST** /libraries/{id}/validate | Validate library settings
+*LivePhotoApi* | [**getLivePhotoCandidates**](doc//LivePhotoApi.md#getlivephotocandidates) | **GET** /live-photo/candidates | List live photo relink candidates
+*LivePhotoApi* | [**relinkLivePhotos**](doc//LivePhotoApi.md#relinklivephotos) | **POST** /live-photo/relink | Relink live photos
 *MaintenanceAdminApi* | [**detectPriorInstall**](doc//MaintenanceAdminApi.md#detectpriorinstall) | **GET** /admin/maintenance/detect-install | Detect existing install
 *MaintenanceAdminApi* | [**getMaintenanceStatus**](doc//MaintenanceAdminApi.md#getmaintenancestatus) | **GET** /admin/maintenance/status | Get maintenance mode status
 *MaintenanceAdminApi* | [**maintenanceLogin**](doc//MaintenanceAdminApi.md#maintenancelogin) | **POST** /admin/maintenance/login | Log into maintenance mode
@@ -481,6 +483,13 @@ Class | Method | HTTP request | Description
  - [LibraryResponseDto](doc//LibraryResponseDto.md)
  - [LibraryStatsResponseDto](doc//LibraryStatsResponseDto.md)
  - [LicenseKeyDto](doc//LicenseKeyDto.md)
+ - [LivePhotoCandidateDto](doc//LivePhotoCandidateDto.md)
+ - [LivePhotoCandidatesResponseDto](doc//LivePhotoCandidatesResponseDto.md)
+ - [LivePhotoMatchConfidence](doc//LivePhotoMatchConfidence.md)
+ - [LivePhotoRelinkDto](doc//LivePhotoRelinkDto.md)
+ - [LivePhotoRelinkItemDto](doc//LivePhotoRelinkItemDto.md)
+ - [LivePhotoRelinkResponseDto](doc//LivePhotoRelinkResponseDto.md)
+ - [LivePhotoRelinkResultDto](doc//LivePhotoRelinkResultDto.md)
  - [LogLevel](doc//LogLevel.md)
  - [LoginCredentialDto](doc//LoginCredentialDto.md)
  - [LoginResponseDto](doc//LoginResponseDto.md)

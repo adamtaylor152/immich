@@ -112,6 +112,9 @@ String parameterToString(dynamic value) {
   if (value is JobName) {
     return JobNameTypeTransformer().encode(value).toString();
   }
+  if (value is LivePhotoMatchConfidence) {
+    return LivePhotoMatchConfidenceTypeTransformer().encode(value).toString();
+  }
   if (value is LogLevel) {
     return LogLevelTypeTransformer().encode(value).toString();
   }

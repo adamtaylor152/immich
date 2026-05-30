@@ -3,10 +3,12 @@ import { AssetMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { TagRepository } from 'src/repositories/tag.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
@@ -21,7 +23,16 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(DuplicateService, {
     database: db || defaultDatabase,
-    real: [AccessRepository, AlbumRepository, AssetRepository, DuplicateRepository, TagRepository, UserRepository],
+    real: [
+      AccessRepository,
+      AlbumRepository,
+      AssetRepository,
+      ConfigRepository,
+      DuplicateRepository,
+      SystemMetadataRepository,
+      TagRepository,
+      UserRepository,
+    ],
     mock: [EventRepository, JobRepository, LoggingRepository],
   });
 };

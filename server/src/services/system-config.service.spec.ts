@@ -120,6 +120,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     duplicateDetection: {
       enabled: true,
       maxDistance: 0.01,
+      preferOriginalFormat: true,
       enhancedVideo: {
         enabled: true,
         frameCount: 4,
