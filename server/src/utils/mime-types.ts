@@ -93,6 +93,8 @@ const transparentCapableExtensions = new Set([
   '.webp',
 ]);
 
+const heicExtensions = new Set(['.heic', '.heif', '.hif']);
+
 const profileExtensions = new Set(['.avif', '.dng', '.heic', '.heif', '.jpeg', '.jpg', '.png', '.webp', '.svg']);
 const profile: Record<string, string[]> = Object.fromEntries(
   Object.entries(image).filter(([key]) => profileExtensions.has(key)),
@@ -153,6 +155,7 @@ export const mimeTypes = {
   isVideo: (filename: string) => isType(filename, video),
   canBeTransparent: (filename: string) => transparentCapableExtensions.has(extname(filename).toLowerCase()),
   isRaw: (filename: string) => isType(filename, raw),
+  isHeic: (filename: string) => heicExtensions.has(extname(filename).toLowerCase()),
   lookup,
   /** return an extension (including a leading `.`) for a mime-type */
   toExtension,

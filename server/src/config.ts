@@ -72,6 +72,7 @@ export type SystemConfig = {
     duplicateDetection: {
       enabled: boolean;
       maxDistance: number;
+      preferOriginalFormat: boolean;
       enhancedVideo: {
         enabled: boolean;
         frameCount: number;
@@ -375,6 +376,7 @@ export const defaults = Object.freeze<SystemConfig>({
     duplicateDetection: {
       enabled: true,
       maxDistance: 0.01,
+      preferOriginalFormat: true,
       enhancedVideo: {
         enabled: true,
         frameCount: 4,

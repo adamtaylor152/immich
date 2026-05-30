@@ -15,6 +15,7 @@ import { DuplicateService } from 'src/services/duplicate.service';
 import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
 import { JobService } from 'src/services/job.service';
 import { LibraryService } from 'src/services/library.service';
+import { LivePhotoService } from 'src/services/live-photo.service';
 import { MaintenanceService } from 'src/services/maintenance.service';
 import { MapService } from 'src/services/map.service';
 import { MediaHealthService } from 'src/services/media-health.service';
@@ -72,6 +73,7 @@ export const services = [
   ImageEnrichmentService,
   JobService,
   LibraryService,
+  LivePhotoService,
   MaintenanceService,
   MapService,
   MediaHealthService,

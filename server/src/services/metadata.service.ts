@@ -32,7 +32,7 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { BaseService } from 'src/services/base.service';
 import { JobItem, JobOf } from 'src/types';
-import { getAssetFiles } from 'src/utils/asset.util';
+import { getAssetFiles, linkLivePhotoAssets } from 'src/utils/asset.util';
 import { isAssetChecksumConstraint } from 'src/utils/database';
 import { mergeTimeZone } from 'src/utils/date';
 import { mimeTypes } from 'src/utils/mime-types';
@@ -197,13 +197,10 @@ export class MetadataService extends BaseService {
     }
 
     const [photoAsset, motionAsset] = asset.type === AssetType.Image ? [asset, match] : [match, asset];
-    await Promise.all([
-      this.assetRepository.update({ id: photoAsset.id, livePhotoVideoId: motionAsset.id }),
-      this.assetRepository.update({ id: motionAsset.id, visibility: AssetVisibility.Hidden }),
-      this.albumRepository.removeAssetsFromAll([motionAsset.id]),
-    ]);
-
-    await this.eventRepository.emit('AssetHide', { assetId: motionAsset.id, userId: motionAsset.ownerId });
+    await linkLivePhotoAssets(
+      { asset: this.assetRepository, album: this.albumRepository, event: this.eventRepository },
+      { photoAssetId: photoAsset.id, motionAssetId: motionAsset.id, motionOwnerId: motionAsset.ownerId },
+    );
   }
 
   private isOrientationSidewards(orientation: ExifOrientation | number): boolean {

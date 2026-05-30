@@ -18,6 +18,7 @@ import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
+import { LivePhotoRepository } from 'src/repositories/live-photo.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { MapRepository } from 'src/repositories/map.repository';
@@ -78,6 +79,7 @@ export const repositories = [
   JobRepository,
   LibraryRepository,
   LoggingRepository,
+  LivePhotoRepository,
   MachineLearningRepository,
   MapRepository,
   MediaHealthRepository,

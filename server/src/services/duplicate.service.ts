@@ -111,13 +111,16 @@ export class DuplicateService extends BaseService {
     // Clean up singleton groups (assets that are the only member of their duplicate group)
     await this.duplicateRepository.cleanupSingletonGroups(auth.user.id);
 
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const { preferOriginalFormat } = machineLearning.duplicateDetection;
+
     const duplicates = await this.duplicateRepository.getAll(auth.user.id, this.nsfwOptions(auth));
     return duplicates.map(({ duplicateId, assets }) => {
       const mappedAssets = assets.map((asset) => mapAsset(asset, { auth }));
       return {
         duplicateId,
         assets: mappedAssets,
-        suggestedKeepAssetIds: suggestDuplicateKeepAssetIds(mappedAssets),
+        suggestedKeepAssetIds: suggestDuplicateKeepAssetIds(mappedAssets, { preferOriginalFormat }),
       };
     });
   }

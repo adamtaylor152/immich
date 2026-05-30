@@ -13,6 +13,7 @@ import { DuplicateController } from 'src/controllers/duplicate.controller';
 import { FaceController } from 'src/controllers/face.controller';
 import { JobController } from 'src/controllers/job.controller';
 import { LibraryController } from 'src/controllers/library.controller';
+import { LivePhotoController } from 'src/controllers/live-photo.controller';
 import { MaintenanceController } from 'src/controllers/maintenance.controller';
 import { MapController } from 'src/controllers/map.controller';
 import { MediaHealthController } from 'src/controllers/media-health.controller';
@@ -57,6 +58,7 @@ export const controllers = [
   FaceController,
   JobController,
   LibraryController,
+  LivePhotoController,
   MaintenanceController,
   MapController,
   MediaHealthController,

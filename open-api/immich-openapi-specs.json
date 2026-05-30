@@ -6433,6 +6433,106 @@
         "x-immich-state": "Stable"
       }
     },
+    "/live-photo/candidates": {
+      "get": {
+        "description": "Find separated live photos (a still image and its motion video that are not linked) that can be reassembled.",
+        "operationId": "getLivePhotoCandidates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePhotoCandidatesResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List live photo relink candidates",
+        "tags": [
+          "Live Photo"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/live-photo/relink": {
+      "post": {
+        "description": "Reassemble the selected still + video pairs into live photos, hiding the standalone videos.",
+        "operationId": "relinkLivePhotos",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LivePhotoRelinkDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePhotoRelinkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Relink live photos",
+        "tags": [
+          "Live Photo"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
     "/map/markers": {
       "get": {
         "description": "Retrieve a list of latitude and longitude coordinates for every asset with location data.",
@@ -16778,6 +16878,10 @@
       "description": "An external library is made up of input file paths or expressions that are scanned for asset files. Discovered files are automatically imported. Assets much be unique within a library, but can be duplicated across libraries. Each user has a default upload library, and can have one or more external libraries."
     },
     {
+      "name": "Live Photo",
+      "description": "Endpoints for finding and reassembling separated live photos (a still image and its paired motion video)."
+    },
+    {
       "name": "Maintenance (admin)",
       "description": "Maintenance mode allows you to put Immich in a read-only state to perform various operations."
     },
@@ -20136,12 +20240,17 @@
             "maximum": 0.1,
             "minimum": 0.001,
             "type": "number"
+          },
+          "preferOriginalFormat": {
+            "description": "When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size",
+            "type": "boolean"
           }
         },
         "required": [
           "enabled",
           "enhancedVideo",
-          "maxDistance"
+          "maxDistance",
+          "preferOriginalFormat"
         ],
         "type": "object"
       },
@@ -21205,6 +21314,135 @@
       },
       "LicenseResponseDto": {
         "$ref": "#/components/schemas/UserLicense"
+      },
+      "LivePhotoCandidateDto": {
+        "properties": {
+          "confidence": {
+            "$ref": "#/components/schemas/LivePhotoMatchConfidence"
+          },
+          "matchReason": {
+            "description": "Why these two assets are believed to be a separated live photo pair",
+            "type": "string"
+          },
+          "photo": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          },
+          "video": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          }
+        },
+        "required": [
+          "confidence",
+          "matchReason",
+          "photo",
+          "video"
+        ],
+        "type": "object"
+      },
+      "LivePhotoCandidatesResponseDto": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoCandidateDto"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total number of candidate pairs found",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidates",
+          "total"
+        ],
+        "type": "object"
+      },
+      "LivePhotoMatchConfidence": {
+        "enum": [
+          "high",
+          "low"
+        ],
+        "type": "string"
+      },
+      "LivePhotoRelinkDto": {
+        "properties": {
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoRelinkItemDto"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "pairs"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkItemDto": {
+        "properties": {
+          "photoId": {
+            "description": "Still image asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "videoId": {
+            "description": "Motion video asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photoId",
+          "videoId"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkResponseDto": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoRelinkResultDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkResultDto": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "photoId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "videoId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photoId",
+          "success",
+          "videoId"
+        ],
+        "type": "object"
       },
       "LogLevel": {
         "description": "Log level",

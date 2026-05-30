@@ -7,6 +7,7 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import { AssetFileType, AssetType, AssetVisibility, Permission } from 'src/enum';
 import { AuthRequest } from 'src/middleware/auth.guard';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
@@ -190,6 +191,35 @@ export const onAfterUnlink = async (
 ) => {
   await assetRepository.update({ id: livePhotoVideoId, visibility });
   await eventRepository.emit('AssetShow', { assetId: livePhotoVideoId, userId });
+};
+
+export type LivePhotoLinkRepositories = {
+  asset: AssetRepository;
+  album: AlbumRepository;
+  event: EventRepository;
+};
+
+/**
+ * Link a still image to its motion video as a live photo: point the photo at the
+ * video, hide the video from the timeline, remove it from any albums, and emit the
+ * hide event. Shared by metadata extraction and the live-photo relink utility so
+ * both code paths behave identically.
+ */
+export const linkLivePhotoAssets = async (
+  { asset: assetRepository, album: albumRepository, event: eventRepository }: LivePhotoLinkRepositories,
+  {
+    photoAssetId,
+    motionAssetId,
+    motionOwnerId,
+  }: { photoAssetId: string; motionAssetId: string; motionOwnerId: string },
+): Promise<void> => {
+  await Promise.all([
+    assetRepository.update({ id: photoAssetId, livePhotoVideoId: motionAssetId }),
+    assetRepository.update({ id: motionAssetId, visibility: AssetVisibility.Hidden }),
+    albumRepository.removeAssetsFromAll([motionAssetId]),
+  ]);
+
+  await eventRepository.emit('AssetHide', { assetId: motionAssetId, userId: motionOwnerId });
 };
 
 export function mapToUploadFile(file: ImmichFile): UploadFile {

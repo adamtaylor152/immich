@@ -36,6 +36,11 @@ export const DuplicateDetectionConfigSchema = TaskConfigSchema.extend({
     .min(0.001)
     .max(0.1)
     .describe('Maximum distance threshold for duplicate detection'),
+  preferOriginalFormat: z
+    .boolean()
+    .describe(
+      'When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size',
+    ),
   enhancedVideo: z
     .object({
       enabled: z.boolean().describe('Whether enhanced video duplicate detection is enabled'),

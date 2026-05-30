@@ -1254,6 +1254,7 @@ export enum ApiTag {
   Faces = 'Faces',
   Jobs = 'Jobs',
   Libraries = 'Libraries',
+  LivePhoto = 'Live Photo',
   Maintenance = 'Maintenance (admin)',
   Map = 'Map',
   MediaHealth = 'Media Health',

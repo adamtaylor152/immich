@@ -12,6 +12,7 @@
     mdiImageSizeSelectLarge,
     mdiImageBrokenVariant,
     mdiLinkEdit,
+    mdiMotionPlayOutline,
     mdiStateMachine,
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -19,6 +20,7 @@
   const links = $derived([
     { href: Route.duplicatesUtility(), icon: mdiContentDuplicate, label: $t('review_duplicates') },
     { href: Route.largeFileUtility(), icon: mdiImageSizeSelectLarge, label: $t('review_large_files') },
+    { href: Route.livePhotosUtility(), icon: mdiMotionPlayOutline, label: $t('relink_live_photos') },
     { href: Route.geolocationUtility(), icon: mdiCrosshairsGps, label: $t('manage_geolocation') },
     ...(authManager.user.isAdmin
       ? [

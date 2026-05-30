@@ -31,6 +31,8 @@ It is designed for users who want to keep the Immich experience they already kno
 - Enhanced RAW support for difficult camera files
 - Media Health utilities for missing or corrupt source files
 - Better duplicate video detection
+- Original-format-aware duplicate cleanup that keeps your HEIC or RAW instead of a re-encoded JPG
+- Live Photo relinking that reunites separated stills and videos
 - Non-destructive photo and video editing
 - Natural-language local discovery
 - A "Recently Added" media view
@@ -214,6 +216,21 @@ This fork adds admin tools for libraries with RAW camera files, external-library
 
 ---
 
+## Live Photo Relinking
+
+An Apple **Live Photo** is really two files — a still photo and a short video — stored together. When those parts get uploaded or imported separately (for example from a backup, a desktop sync, or a third-party export), Immich shows them as two unrelated items instead of one playable live photo.
+
+This fork adds a utility that finds those separated pairs and reassembles them.
+
+- Available to every user under **Utilities → Relink live photos**
+- Matches pairs primarily on the identifier Apple embeds in both files, so confident matches are exact
+- Adds a best-effort fallback for files whose metadata was stripped, matching on filename and capture time — these are shown as lower-confidence matches for you to review before relinking
+- Relinking hides the standalone video and restores the playable live photo, just as if it had been uploaded intact
+
+Note: the optional AAC audio track that some live photos include is not part of the reassembled pair.
+
+---
+
 ## Family-Library Physical Deduplication
 
 This fork adds physical deduplication designed for family and multi-user home libraries.
@@ -249,6 +266,21 @@ This reduces false duplicate groups caused by:
 - Different-resolution copies of the same video
 
 The result is better duplicate detection for real-world video libraries, especially when users import phone videos, edited clips, social-media exports, or multiple-resolution copies.
+
+---
+
+## Smarter Duplicate Keep Suggestions
+
+When you review duplicates, this fork suggests keeping the **original** version of a photo instead of whichever copy happens to be the largest file.
+
+Apple devices capture in **HEIC**, and many cameras shoot **RAW** (DNG and similar). When those originals get re-saved or shared, they often become larger JPGs that look bigger on disk but are actually a lower-quality re-encode. Standard Immich would suggest keeping that bigger JPG; this fork knows the native original is the better one to keep.
+
+- Prefers native originals when choosing which duplicate to keep — **RAW first, then HEIC/HEIF**, then everything else
+- Wins even when the JPG copy is larger in file size
+- Falls back to the usual file-size and metadata comparison when every copy is the same kind of file
+- **On by default**, and can be turned off under **Admin > Settings > Machine Learning > Duplicate Detection**
+
+This only changes which asset is pre-selected as the keeper in the duplicate review — nothing is deleted automatically.
 
 ---
 
