@@ -19,7 +19,21 @@ class BaseCLIPTextualEncoder(InferenceModel):
     depends = []
     identity = (ModelType.TEXTUAL, ModelTask.SEARCH)
 
-    def _predict(self, inputs: str, language: str | None = None) -> str:
+    def predict(self, *inputs: Any, **model_kwargs: Any) -> str:
+        # `language` is a per-request option (the query locale). The base
+        # predict() applies options via configure() and then calls _predict()
+        # without forwarding them — stashing `language` on the instance would
+        # put per-request state on the shared, cached encoder (ModelCache reuses
+        # one instance across requests) and race across concurrent searches in
+        # different languages. Mirror the base flow but thread `language`
+        # straight through to _predict() as a call-local argument, so there is
+        # no shared mutable state to race on.
+        self.load()
+        if model_kwargs:
+            self.configure(**model_kwargs)
+        return self._predict(*inputs, language=model_kwargs.get("language"))
+
+    def _predict(self, inputs: str, *, language: str | None = None) -> str:
         tokens = self.tokenize(inputs, language=language)
         res: NDArray[np.float32] = self.session.run(None, tokens)[0][0]
         return serialize_np_array(res)

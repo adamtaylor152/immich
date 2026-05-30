@@ -1222,6 +1222,37 @@ class TestCLIP:
         assert len(embedding) == clip_model_cfg["embed_dim"]
         mocked.run.assert_called_once()
 
+    def test_predict_passes_language_through_to_tokenizer_for_nllb(
+        self,
+        mocker: MockerFixture,
+        clip_model_cfg: dict[str, Any],
+        clip_tokenizer_cfg: Callable[[Path], dict[str, Any]],
+    ) -> None:
+        # Regression: a `language` option must survive the full predict() path
+        # (predict -> _predict -> tokenize), not just a direct tokenize() call.
+        # base.predict() calls _predict(*inputs) WITHOUT forwarding kwargs, so
+        # the CLIP encoder threads `language` through itself. Otherwise
+        # multilingual (NLLB) search silently drops the query language.
+        mocker.patch.object(OpenClipTextualEncoder, "download")
+        mocker.patch.object(OpenClipTextualEncoder, "model_cfg", clip_model_cfg)
+        mocker.patch.object(OpenClipTextualEncoder, "tokenizer_cfg", clip_tokenizer_cfg)
+        mocked = mocker.patch.object(InferenceModel, "_make_session", autospec=True).return_value
+        mocked.run.return_value = [[self.embedding]]
+        mock_tokenizer = mocker.patch("immich_ml.models.clip.textual.Tokenizer.from_file", autospec=True).return_value
+        mock_tokenizer.encode.return_value = SimpleNamespace(ids=[randint(0, 50000) for _ in range(77)])
+
+        clip_encoder = OpenClipTextualEncoder("nllb-clip-base-siglip__mrl", cache_dir="test_cache")
+        clip_encoder.predict("test search query", language="de")
+
+        mock_tokenizer.encode.assert_called_once_with("deu_Latntest search query")
+
+        # `language` must be per-call, not persisted on the shared cached
+        # instance: a later request without a language must not inherit "de".
+        # This guards against the race-prone instance-state approach.
+        mock_tokenizer.encode.reset_mock()
+        clip_encoder.predict("another query")
+        mock_tokenizer.encode.assert_called_once_with("another query")
+
     def test_openclip_tokenizer(
         self,
         mocker: MockerFixture,
@@ -2102,6 +2133,24 @@ def test_options_validation_rejects_ttl_key(deployed_app: TestClient) -> None:
         files={"image": b"fake"},
     )
     assert response.status_code == 422
+
+
+def test_options_validation_accepts_clip_language() -> None:
+    # Regression: the server sends a `language` option for multilingual CLIP
+    # text search (TextEncodingOptions in machine-learning.repository.ts). The
+    # closed-keyspace hardening (extra="forbid") must whitelist it, otherwise
+    # every search request carrying a language code is rejected with HTTP 422
+    # ("ClipOptions language Extra inputs are not permitted").
+    from pydantic import ValidationError
+
+    from immich_ml.schemas import validate_options
+
+    assert validate_options(ModelTask.SEARCH, ModelType.TEXTUAL, {"language": "en-US"}) == {"language": "en-US"}
+    # An omitted language still yields an empty option set (exclude_none=True).
+    assert validate_options(ModelTask.SEARCH, ModelType.TEXTUAL, {}) == {}
+    # Hardening intact: genuinely unknown keys are still rejected.
+    with pytest.raises(ValidationError):
+        validate_options(ModelTask.SEARCH, ModelType.TEXTUAL, {"bogus": "x"})
 
 
 def test_extract_signal_field_returns_bool_for_non_canonical_values() -> None:
