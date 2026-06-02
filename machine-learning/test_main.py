@@ -2153,6 +2153,32 @@ def test_options_validation_accepts_clip_language() -> None:
         validate_options(ModelTask.SEARCH, ModelType.TEXTUAL, {"bogus": "x"})
 
 
+def test_options_validation_accepts_ocr_max_resolution() -> None:
+    # Regression: the server sends a `maxResolution` option for OCR text
+    # detection (machine-learning.repository.ts -> DETECTION options) and the
+    # detector's configure() consumes it (models/ocr/detection.py). The
+    # closed-keyspace hardening (extra="forbid") must whitelist it, otherwise
+    # every OCR request is rejected with HTTP 422 ("OcrDetectionOptions
+    # maxResolution Extra inputs are not permitted").
+    from pydantic import ValidationError
+
+    from immich_ml.schemas import validate_options
+
+    # 736 is the server default (config.ts); a larger override must also pass.
+    assert validate_options(ModelTask.OCR, ModelType.DETECTION, {"maxResolution": 736}) == {"maxResolution": 736}
+    assert validate_options(
+        ModelTask.OCR, ModelType.DETECTION, {"minScore": 0.5, "maxResolution": 1500}
+    ) == {"minScore": 0.5, "maxResolution": 1500}
+    # An omitted maxResolution still yields a valid option set (exclude_none=True).
+    assert validate_options(ModelTask.OCR, ModelType.DETECTION, {}) == {}
+    # Bound mirrors the server DTO (model-config.dto.ts: z.int().min(1)).
+    with pytest.raises(ValidationError):
+        validate_options(ModelTask.OCR, ModelType.DETECTION, {"maxResolution": 0})
+    # Hardening intact: genuinely unknown keys are still rejected.
+    with pytest.raises(ValidationError):
+        validate_options(ModelTask.OCR, ModelType.DETECTION, {"bogus": "x"})
+
+
 def test_extract_signal_field_returns_bool_for_non_canonical_values() -> None:
     from immich_ml.models.image_description import ImageDescriptionModel
 

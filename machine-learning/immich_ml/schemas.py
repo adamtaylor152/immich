@@ -181,6 +181,11 @@ class OcrDetectionOptions(_OptionsBase):
     """Options for the OCR detection task."""
 
     minScore: float | None = Field(default=None, ge=0.0, le=1.0)
+    # The server forwards maxResolution (machine-learning.repository.ts) and the
+    # detector's configure() consumes it (models/ocr/detection.py). Without it
+    # declared here, extra="forbid" rejects every OCR request. Bound mirrors the
+    # server DTO (model-config.dto.ts: z.int().min(1)).
+    maxResolution: int | None = Field(default=None, ge=1)
 
 
 class OcrRecognitionOptions(_OptionsBase):
