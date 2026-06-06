@@ -76,8 +76,10 @@ RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
   --mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN \
   for attempt in 1 2 3 4 5; do \
   if mise install; then exit 0; fi; \
+  if [ "${attempt}" -lt 5 ]; then \
   echo "mise install failed (attempt ${attempt}/5); retrying in $((attempt * 5))s" >&2; \
   sleep $((attempt * 5)); \
+  fi; \
   done; \
   echo "mise install failed after 5 attempts" >&2; exit 1
 
