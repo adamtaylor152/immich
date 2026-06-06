@@ -55,6 +55,14 @@ const VIDEO_DUPLICATE_FRAME_MIN_COUNT = 2;
 const VIDEO_DUPLICATE_MIN_DURATION_SECONDS = 2;
 const VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS = 1;
 const VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS = 1;
+// The ffmpeg keyframe sampler (`-skip_frame nointra`) emits no frames when the
+// sampled start_time lands in the sparse-keyframe dead zone near EOF, which
+// makes transcode() fail. A flat 1s tail is too small for short clips with a
+// high frameCount (a sample can collapse onto duration-1), so additionally keep
+// the latest sample a fraction of the duration clear of the end. 0.2 matches the
+// last evenly-spaced sample (duration * frameCount / (frameCount + 1)) for the
+// default frameCount of 4, so typical clips are unaffected.
+const VIDEO_DUPLICATE_FRAME_END_PADDING_FRACTION = 0.2;
 
 const getEnhancedVideoDuplicateConfig = (machineLearning: SystemConfig['machineLearning']) => {
   const { duplicateDetection } = machineLearning;
@@ -469,16 +477,34 @@ export class DuplicateService extends BaseService {
         timestamp,
       ).getCommand(TranscodeTarget.Video, asset.videoStream, undefined, asset.format);
 
-      await this.mediaRepository.transcode(asset.originalPath, path, command);
-      const embedding = await this.machineLearningRepository.encodeImage(path, machineLearning.clip);
+      try {
+        await this.mediaRepository.transcode(asset.originalPath, path, command);
+        const embedding = await this.machineLearningRepository.encodeImage(path, machineLearning.clip);
 
-      frames.push({
-        assetId: asset.id,
-        frameIndex,
-        timestampMs: Math.round(timestamp * 1000),
-        path,
-        embedding,
-      });
+        frames.push({
+          assetId: asset.id,
+          frameIndex,
+          timestampMs: Math.round(timestamp * 1000),
+          path,
+          embedding,
+        });
+      } catch (error: Error | any) {
+        // A single frame can fail to extract when its sampled start_time lands in
+        // the sparse-keyframe dead zone near EOF (ffmpeg writes no packets and
+        // exits non-zero). Skip just that frame instead of failing the whole job.
+        this.logger.warn(
+          `Failed to extract video duplicate frame ${frameIndex} for asset ${asset.id} at ${timestamp}s: ${error}`,
+          error?.stack,
+        );
+      }
+    }
+
+    if (frames.length === 0) {
+      // Every frame failed: don't fall through to replaceVideoDuplicateFrames([]),
+      // which would delete any previously-stored frames for this asset. Surface
+      // the job as failed so it can be retried.
+      this.logger.warn(`Failed to extract any video duplicate frames for asset ${asset.id}`);
+      return JobStatus.Failed;
     }
 
     const newConfig = await this.getConfig({ withCache: false });
@@ -569,7 +595,11 @@ export class DuplicateService extends BaseService {
       return [];
     }
 
-    const latest = duration - VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS;
+    const endPadding = Math.max(
+      VIDEO_DUPLICATE_FRAME_END_PADDING_SECONDS,
+      duration * VIDEO_DUPLICATE_FRAME_END_PADDING_FRACTION,
+    );
+    const latest = duration - endPadding;
     if (latest <= VIDEO_DUPLICATE_FRAME_START_PADDING_SECONDS) {
       return [];
     }
