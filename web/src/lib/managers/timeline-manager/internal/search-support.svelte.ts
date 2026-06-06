@@ -125,12 +125,7 @@ async function getAssetByYearOffset(timelineManager: TimelineManager, month: Tim
  * Returns a negative number when `a` is reached before `b` while iterating,
  * positive when after, and zero when they share a position.
  */
-function compareTimelineOrder(
-  order: AssetOrder,
-  dateType: TimeBucketDateType,
-  a: TimelineAsset,
-  b: TimelineAsset,
-) {
+function compareTimelineOrder(order: AssetOrder, dateType: TimeBucketDateType, a: TimelineAsset, b: TimelineAsset) {
   const aDate = getOrderingDate(a, dateType);
   const bDate = getOrderingDate(b, dateType);
   const diff =
