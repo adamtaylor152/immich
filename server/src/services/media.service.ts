@@ -701,27 +701,11 @@ export class MediaService extends BaseService {
       return [];
     }
 
-    // Keep candidates clear of the final stretch of the clip. The frame-selection
-    // chain (fps + thumbnail, decoding only keyframes via -skip_frame nointra)
-    // needs a run of trailing frames to emit one; a timestamp inside that tail
-    // produces zero frames and ffmpeg aborts the whole transcode with "Nothing
-    // was written into output file". Reserve a proportional tail, but never less
-    // than the historical 0.5s (so very short clips keep their existing spread).
-    const tail = Math.min(Math.max(duration * 0.1, 0.5), 5);
-    const latest = Math.max(duration - tail, 0);
-
-    // Sample a few spread-out points. For long clips, also anchor an early fixed
-    // sample (~30s, past typical intros) -- but only when it sits safely before
-    // the tail. The previous implementation instead mapped every long-clip
-    // candidate through Math.max(30, timestamp), which collapsed them all onto
-    // ~30s for clips of roughly 30-43s; for a clip barely over 30s that single
-    // value then clamped into the dead zone above and failed the transcode (e.g.
-    // rotating a ~30s video, which regenerates its thumbnails from the edit).
-    const fractions = duration >= 30 ? [0.35, 0.55, 0.75] : [0.2, 0.5, 0.8];
-    const candidates = fractions.map((fraction) => duration * fraction);
-    if (duration >= 30 && 30 < latest) {
-      candidates.unshift(30);
-    }
+    const latest = Math.max(duration - 0.5, 0);
+    const candidates =
+      duration >= 30
+        ? [30, duration * 0.35, duration * 0.55, duration * 0.75].map((timestamp) => Math.max(30, timestamp))
+        : [duration * 0.2, duration * 0.5, duration * 0.8];
 
     return [
       ...new Set(

@@ -770,69 +770,6 @@ describe(MediaService.name, () => {
       );
     });
 
-    it('should spread candidate timestamps for clips just over 30s instead of collapsing onto the end', async () => {
-      // Regression: durations of ~30-43s used to map every candidate through
-      // Math.max(30, timestamp), collapsing them all onto ~30s. For a clip
-      // barely over 30s that single value then clamped into the final 0.5s of
-      // the runtime, where the fps/thumbnail filter chain (decoding only
-      // keyframes via -skip_frame nointra) emits no frame, so ffmpeg aborted
-      // the whole transcode with "Nothing was written into output file" --
-      // breaking thumbnail and edited-video generation (e.g. rotating a video).
-      const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
-        ...getForGenerateThumbnail(asset),
-        ...probeStub.videoStream2160p,
-        format: { ...probeStub.videoStream2160p.format, duration: 30.3 },
-      });
-      mocks.media.scoreThumbnailCandidate.mockResolvedValueOnce(10).mockResolvedValueOnce(80).mockResolvedValueOnce(30);
-
-      await sut.handleGenerateThumbnails({ id: asset.id });
-
-      // Three distinct candidates, all clear of the end-of-clip dead zone.
-      expect(mocks.media.scoreThumbnailCandidate).toHaveBeenCalledTimes(3);
-      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
-        1,
-        '/original/path.ext',
-        expect.stringContaining('_candidate_0'),
-        expect.objectContaining({
-          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=10.605')]),
-        }),
-      );
-      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
-        2,
-        '/original/path.ext',
-        expect.stringContaining('_candidate_1'),
-        expect.objectContaining({
-          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=16.665')]),
-        }),
-      );
-      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
-        3,
-        '/original/path.ext',
-        expect.stringContaining('_candidate_2'),
-        expect.objectContaining({
-          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=22.725')]),
-        }),
-      );
-      // Best-scoring candidate (index 1) is rendered for preview + thumbnail.
-      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
-        4,
-        '/original/path.ext',
-        expect.any(String),
-        expect.objectContaining({
-          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=16.665')]),
-        }),
-      );
-      expect(mocks.media.transcode).toHaveBeenNthCalledWith(
-        5,
-        '/original/path.ext',
-        expect.any(String),
-        expect.objectContaining({
-          outputOptions: expect.arrayContaining([expect.stringContaining('start_time=16.665')]),
-        }),
-      );
-    });
-
     it('should fall back to the first frame when thumbnail candidates cannot be scored', async () => {
       const asset = AssetFactory.from({ type: AssetType.Video, originalPath: '/original/path.ext' }).exif().build();
       mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({

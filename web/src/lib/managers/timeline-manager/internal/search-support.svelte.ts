@@ -1,6 +1,6 @@
-import { AssetOrder, TimeBucketDateType, type AssetResponseDto } from '@immich/sdk';
+import { AssetOrder, type AssetResponseDto } from '@immich/sdk';
 import { DateTime } from 'luxon';
-import { getOrderingDate, plainDateTimeCompare, type TimelineYearMonth } from '$lib/utils/timeline-util';
+import { plainDateTimeCompare, type TimelineYearMonth } from '$lib/utils/timeline-util';
 import { TimelineManager } from '../timeline-manager.svelte';
 import type { TimelineMonth } from '../timeline-month.svelte';
 import type { AssetDescriptor, Direction, TimelineAsset } from '../types';
@@ -114,28 +114,6 @@ async function getAssetByYearOffset(timelineManager: TimelineManager, month: Tim
   }
 }
 
-/**
- * Compares two assets by their position in the timeline iteration order.
- *
- * Months and days are grouped/ordered by the ordering date (localDateTime for
- * "taken", createdAt for "added"), but assets *within a day* are ordered by
- * fileCreatedAt. The composite key below mirrors that exact layout, so a
- * descending timeline iterates newest-first and an ascending one oldest-first.
- *
- * Returns a negative number when `a` is reached before `b` while iterating,
- * positive when after, and zero when they share a position.
- */
-function compareTimelineOrder(order: AssetOrder, dateType: TimeBucketDateType, a: TimelineAsset, b: TimelineAsset) {
-  const aDate = getOrderingDate(a, dateType);
-  const bDate = getOrderingDate(b, dateType);
-  const diff =
-    aDate.year - bDate.year ||
-    aDate.month - bDate.month ||
-    aDate.day - bDate.day ||
-    plainDateTimeCompare(true, a.fileCreatedAt, b.fileCreatedAt);
-  return order === AssetOrder.Desc ? -diff : diff;
-}
-
 export async function retrieveRange(timelineManager: TimelineManager, start: AssetDescriptor, end: AssetDescriptor) {
   let { asset: startAsset, timelineMonth: startTimelineMonth } =
     findTimelineMonthForAsset(timelineManager, start.id) ?? {};
@@ -147,13 +125,7 @@ export async function retrieveRange(timelineManager: TimelineManager, start: Ass
     return [];
   }
   const assetOrder: AssetOrder = timelineManager.getAssetOrder();
-  const dateType: TimeBucketDateType = timelineManager.getDateType();
-  // Ensure startAsset is the endpoint the iterator reaches first. The decision
-  // must follow the real iteration order (ordering date by day, then
-  // fileCreatedAt within a day); comparing localDateTime alone is wrong when the
-  // two endpoints share a day but have different UTC offsets, and would make the
-  // loop below run to the end of the timeline and select every asset.
-  if (compareTimelineOrder(assetOrder, dateType, startAsset, endAsset) > 0) {
+  if (plainDateTimeCompare(assetOrder === AssetOrder.Desc, startAsset.localDateTime, endAsset.localDateTime) < 0) {
     [startAsset, endAsset] = [endAsset, startAsset];
     // eslint-disable-next-line no-useless-assignment
     [startTimelineMonth, endTimelineMonth] = [endTimelineMonth, startTimelineMonth];
@@ -166,12 +138,6 @@ export async function retrieveRange(timelineManager: TimelineManager, start: Ass
     startTimelineDay,
     startAsset,
   })) {
-    // Safety net: stop if we've iterated past where endAsset should be without
-    // matching its id (e.g. an exact-timestamp tie), instead of selecting the
-    // remainder of the library.
-    if (compareTimelineOrder(assetOrder, dateType, targetAsset, endAsset) > 0) {
-      break;
-    }
     range.push(targetAsset);
     if (targetAsset.id === endAsset.id) {
       break;

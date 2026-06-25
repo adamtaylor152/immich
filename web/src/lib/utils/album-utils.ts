@@ -16,6 +16,29 @@ import {
   type AlbumViewSettings,
 } from '$lib/stores/preferences.store';
 import { handleError } from '$lib/utils/handle-error';
+import { normalizeSearchString } from '$lib/utils/string-utils';
+
+/**
+ * -------------
+ * Album Search
+ * -------------
+ */
+const albumSearchTokens = (value: string) => normalizeSearchString(value).match(/[\p{Letter}\p{Number}]+/gu) ?? [];
+
+/**
+ * Tokenized, order-insensitive album search: every query token must appear
+ * somewhere in the album name or description, so `2004 family vacation`
+ * matches `2004 - Family Vacation - Disneyland` despite the punctuation.
+ */
+export const matchesAlbumSearch = (album: AlbumResponseDto, searchQuery: string) => {
+  const queryTokens = albumSearchTokens(searchQuery);
+  if (queryTokens.length === 0) {
+    return true;
+  }
+
+  const albumText = albumSearchTokens(`${album.albumName} ${album.description}`).join(' ');
+  return queryTokens.every((token) => albumText.includes(token));
+};
 
 /**
  * -------------------------
