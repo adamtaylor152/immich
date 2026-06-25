@@ -1,11 +1,12 @@
 <script lang="ts">
+  import AlbumNavigationTree from '$lib/components/shared-components/side-bar/AlbumNavigationTree.svelte';
   import BottomInfo from '$lib/components/shared-components/side-bar/BottomInfo.svelte';
   import RecentAlbums from '$lib/components/shared-components/side-bar/RecentAlbums.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { Route } from '$lib/route';
-  import { recentAlbumsDropdown } from '$lib/stores/preferences.store';
+  import { albumTreeDropdown, recentAlbumsDropdown } from '$lib/stores/preferences.store';
   import { NavbarGroup, NavbarItem } from '@immich/ui';
   import {
     mdiAccount,
@@ -61,7 +62,14 @@
     href={Route.recentlyAdded()}
     icon={mdiClockPlusOutline}
     activeIcon={mdiClockPlus}
-  />
+    bind:expanded={$recentAlbumsDropdown}
+  >
+    {#snippet items()}
+      <span in:fly={{ y: -20 }} class="hidden md:block">
+        <RecentAlbums />
+      </span>
+    {/snippet}
+  </NavbarItem>
 
   {#if featureFlagsManager.value.search}
     <NavbarItem title={$t('explore')} href={Route.explore()} icon={mdiMagnify} />
@@ -96,11 +104,11 @@
     title={$t('albums')}
     href={Route.albums()}
     icon={{ icon: mdiImageAlbum, flipped: true }}
-    bind:expanded={$recentAlbumsDropdown}
+    bind:expanded={$albumTreeDropdown}
   >
     {#snippet items()}
       <span in:fly={{ y: -20 }} class="hidden md:block">
-        <RecentAlbums />
+        <AlbumNavigationTree />
       </span>
     {/snippet}
   </NavbarItem>

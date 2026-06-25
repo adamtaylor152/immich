@@ -11,7 +11,13 @@
     canAcceptDrop?: (draggedId: string, targetPath: string, position: 'before' | 'inside' | 'after') => boolean;
     draggedId?: string | null;
     getIcons?: (node: TreeNode) => { default: string; active: string };
+    /** Optional per-node thumbnail URL; when returned, rendered instead of the icon (nav style). */
+    getThumbnail?: (node: TreeNode) => string | undefined;
     labelClass?: string;
+    /** Override the `<ul>` class for this level only; nested levels keep the default indent. */
+    listClass?: string;
+    /** Opt into the main-nav row treatment (rounded end cap, thumbnails, nav tokens). Off for tags/folders. */
+    navStyle?: boolean;
     enableDrag?: boolean;
     onDragStart?: (id: string) => void;
     onDragEnd?: () => void;
@@ -26,14 +32,17 @@
     canAcceptDrop,
     draggedId = null,
     getIcons,
+    getThumbnail,
     labelClass,
+    listClass,
+    navStyle = false,
     enableDrag = false,
     onDragStart,
     onDragEnd,
   }: Props = $props();
 </script>
 
-<ul class="ms-2 list-none">
+<ul class={listClass ?? 'ms-2 list-none'}>
   {#each tree.children as node (node.color ? node.path + node.color : node.path)}
     <li>
       <Tree
@@ -45,7 +54,9 @@
         {canAcceptDrop}
         {draggedId}
         {getIcons}
+        {getThumbnail}
         {labelClass}
+        {navStyle}
         {enableDrag}
         {onDragStart}
         {onDragEnd}

@@ -63,25 +63,9 @@ COPY ./packages/plugin-core/mise.toml ./packages/plugin-core/
 ENV MISE_TRUSTED_CONFIG_PATHS=/app/mise.toml
 ENV MISE_DATA_DIR=/buildcache/mise
 ENV MISE_DISABLE_TOOLS=flutter
-# Harden `mise install` against transient GitHub API failures seen on the
-# self-hosted build runner. Two flavors observed: "HTTP timed out" while
-# fetching a version list, and "unexpected EOF" while downloading a release
-# asset. Raise mise's HTTP/version-fetch timeouts above their 30s/20s defaults,
-# and retry with backoff — the retry is what covers the connection-drop (EOF)
-# case that a longer timeout alone cannot. Shell vars below are expanded by
-# /bin/sh (RUN bodies are not subject to Docker variable substitution).
-ENV MISE_HTTP_TIMEOUT=120
-ENV MISE_FETCH_REMOTE_VERSIONS_TIMEOUT=120
 RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
   --mount=type=secret,id=mise_github_token,env=MISE_GITHUB_TOKEN \
-  for attempt in 1 2 3 4 5; do \
-  if mise install; then exit 0; fi; \
-  if [ "${attempt}" -lt 5 ]; then \
-  echo "mise install failed (attempt ${attempt}/5); retrying in $((attempt * 5))s" >&2; \
-  sleep $((attempt * 5)); \
-  fi; \
-  done; \
-  echo "mise install failed after 5 attempts" >&2; exit 1
+  mise install
 
 COPY ./packages/plugin-core ./packages/plugin-core/
 COPY ./packages/plugin-sdk ./packages/plugin-sdk/
