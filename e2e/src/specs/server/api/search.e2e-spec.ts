@@ -160,12 +160,20 @@ describe('/search', () => {
         deferred: () => ({ dto: { order: 'asc', size: 1, page: 2 }, assets: [assetNotocactus] }),
       },
       {
+        // Fork stores asset checksums as SHA-256 (see asset-media.service `checksumAlgorithm: sha256File`),
+        // so search must use cyclamen's SHA-256 digest, not the upstream SHA-1.
         should: 'should search by checksum (base64)',
-        deferred: () => ({ dto: { checksum: '9IXBDMjj9OrQb+1YMHprZJgZ/UQ=' }, assets: [assetCyclamen] }),
+        deferred: () => ({
+          dto: { checksum: '05qUBABumDZTCXxP31s+m+S8jYRtD1XAFyYeXl1WByQ=' },
+          assets: [assetCyclamen],
+        }),
       },
       {
         should: 'should search by checksum (hex)',
-        deferred: () => ({ dto: { checksum: 'f485c10cc8e3f4ead06fed58307a6b649819fd44' }, assets: [assetCyclamen] }),
+        deferred: () => ({
+          dto: { checksum: 'd39a9404006e983653097c4fdf5b3e9be4bc8d846d0f55c017261e5e5d560724' },
+          assets: [assetCyclamen],
+        }),
       },
       { should: 'should search by id', deferred: () => ({ dto: { id: assetCyclamen.id }, assets: [assetCyclamen] }) },
       {
