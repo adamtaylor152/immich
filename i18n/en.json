@@ -2398,6 +2398,7 @@
   "reset_sqlite_done": "App data has been cleared. Please restart Immich and log in again.",
   "reset_sqlite_success": "Successfully reset the SQLite database",
   "reset_to_default": "Reset to default",
+  "resize_sidebar": "Resize sidebar",
   "resolution": "Resolution",
   "resolve_duplicates": "Resolve duplicates",
   "resolved_all_duplicates": "Resolved all duplicates",

@@ -51,7 +51,10 @@
   const MAX_SIDEBAR_WIDTH = 500;
   // Collapsed rail width must fit a single icon (ps-5 padding + ~1.375em icon).
   const COLLAPSED_WIDTH = '4.5rem';
-  const railWidth = $derived($sidebarCollapsed ? COLLAPSED_WIDTH : `${$sidebarWidth}px`);
+  const clampWidth = (value: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
+  // Clamp the persisted value too: a stale/edited localStorage entry could be out of range.
+  const effectiveWidth = $derived(clampWidth($sidebarWidth));
+  const railWidth = $derived($sidebarCollapsed ? COLLAPSED_WIDTH : `${effectiveWidth}px`);
 
   let container = $state<HTMLDivElement>();
 
@@ -60,20 +63,22 @@
       return;
     }
     const left = container.getBoundingClientRect().left;
-    $sidebarWidth = Math.round(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, clientX - left)));
+    $sidebarWidth = Math.round(clampWidth(clientX - left));
   };
 
   const startResize = (event: PointerEvent) => {
     event.preventDefault();
     sidebarStore.isResizing = true;
-    const onMove = (e: PointerEvent) => resizeTo(e.clientX);
-    const onUp = () => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const stopResize = () => {
       sidebarStore.isResizing = false;
-      globalThis.removeEventListener('pointermove', onMove);
-      globalThis.removeEventListener('pointerup', onUp);
+      controller.abort();
     };
-    globalThis.addEventListener('pointermove', onMove);
-    globalThis.addEventListener('pointerup', onUp);
+    globalThis.addEventListener('pointermove', (e: PointerEvent) => resizeTo(e.clientX), { signal });
+    globalThis.addEventListener('pointerup', stopResize, { once: true, signal });
+    globalThis.addEventListener('pointercancel', stopResize, { once: true, signal });
+    globalThis.addEventListener('blur', stopResize, { once: true, signal });
   };
 
   const onResizeKey = (event: KeyboardEvent) => {
@@ -82,7 +87,7 @@
       return;
     }
     event.preventDefault();
-    $sidebarWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, $sidebarWidth + step));
+    $sidebarWidth = clampWidth($sidebarWidth + step);
   };
 </script>
 
@@ -113,8 +118,8 @@
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label={$t('expand')}
-      aria-valuenow={$sidebarWidth}
+      aria-label={$t('resize_sidebar')}
+      aria-valuenow={effectiveWidth}
       aria-valuemin={MIN_SIDEBAR_WIDTH}
       aria-valuemax={MAX_SIDEBAR_WIDTH}
       tabindex="0"
