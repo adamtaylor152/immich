@@ -6,6 +6,8 @@
   import { useActions, type ActionArray } from '$lib/actions/use-actions';
   import NavigationBar from '$lib/components/shared-components/navigation-bar/NavigationBar.svelte';
   import UserSidebar from '$lib/components/shared-components/side-bar/UserSidebar.svelte';
+  import { sidebarCollapsed, sidebarWidth } from '$lib/stores/preferences.store';
+  import { sidebarStore } from '$lib/stores/sidebar.svelte';
   import type { HeaderButtonActionItem } from '$lib/types';
   import { openFileUploadDialog } from '$lib/utils/file-uploader';
   import { Button, ContextMenuButton, HStack, isMenuItemType, type MenuItemType } from '@immich/ui';
@@ -44,6 +46,44 @@
 
   let scrollbarClass = $derived(scrollbar ? 'immich-scrollbar' : 'scrollbar-hidden');
   let hasTitleClass = $derived(title ? 'top-16 h-[calc(100%-(--spacing(16)))]' : 'top-0 h-full');
+
+  const MIN_SIDEBAR_WIDTH = 200;
+  const MAX_SIDEBAR_WIDTH = 500;
+  // Collapsed rail width must fit a single icon (ps-5 padding + ~1.375em icon).
+  const COLLAPSED_WIDTH = '4.5rem';
+  const railWidth = $derived($sidebarCollapsed ? COLLAPSED_WIDTH : `${$sidebarWidth}px`);
+
+  let container = $state<HTMLDivElement>();
+
+  const resizeTo = (clientX: number) => {
+    if (!container) {
+      return;
+    }
+    const left = container.getBoundingClientRect().left;
+    $sidebarWidth = Math.round(Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, clientX - left)));
+  };
+
+  const startResize = (event: PointerEvent) => {
+    event.preventDefault();
+    sidebarStore.isResizing = true;
+    const onMove = (e: PointerEvent) => resizeTo(e.clientX);
+    const onUp = () => {
+      sidebarStore.isResizing = false;
+      globalThis.removeEventListener('pointermove', onMove);
+      globalThis.removeEventListener('pointerup', onUp);
+    };
+    globalThis.addEventListener('pointermove', onMove);
+    globalThis.addEventListener('pointerup', onUp);
+  };
+
+  const onResizeKey = (event: KeyboardEvent) => {
+    const step = event.key === 'ArrowLeft' ? -16 : event.key === 'ArrowRight' ? 16 : 0;
+    if (step === 0) {
+      return;
+    }
+    event.preventDefault();
+    $sidebarWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, $sidebarWidth + step));
+  };
 </script>
 
 <header>
@@ -52,8 +92,11 @@
   {/if}
 </header>
 <div
+  bind:this={container}
   tabindex="-1"
-  class="relative z-0 grid grid-cols-[--spacing(0)_auto] overflow-hidden sidebar:grid-cols-[--spacing(64)_auto]
+  style="--sidebar-width: {railWidth}"
+  class="relative z-0 grid grid-cols-[--spacing(0)_auto] overflow-hidden sidebar:grid-cols-[var(--sidebar-width)_auto]
+    {sidebarStore.isResizing ? '' : 'transition-[grid-template-columns] duration-200'}
     {hideNavbar ? 'h-dvh' : 'h-[calc(100dvh-var(--navbar-height))] max-md:h-[calc(100dvh-var(--navbar-height-md))]'}
     {hideNavbar ? 'pt-(--navbar-height)' : ''}
     {hideNavbar ? 'max-md:pt-(--navbar-height-md)' : ''}"
@@ -62,6 +105,24 @@
     {@render sidebar()}
   {:else}
     <UserSidebar />
+  {/if}
+
+  {#if !$sidebarCollapsed}
+    <!-- Drag handle to resize the sidebar; sits on the sidebar/content boundary (desktop only). -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={$t('expand')}
+      aria-valuenow={$sidebarWidth}
+      aria-valuemin={MIN_SIDEBAR_WIDTH}
+      aria-valuemax={MAX_SIDEBAR_WIDTH}
+      tabindex="0"
+      style="inset-inline-start: var(--sidebar-width)"
+      class="absolute inset-y-0 z-2 hidden w-1.5 -translate-x-1/2 cursor-col-resize hover:bg-primary/40 focus-visible:bg-primary/40 sidebar:block"
+      onpointerdown={startResize}
+      onkeydown={onResizeKey}
+    ></div>
   {/if}
 
   <main class="relative">
