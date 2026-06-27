@@ -61,7 +61,7 @@ describe('Sidebar component', () => {
     const parent = screen.getByTestId('sidebar-parent');
 
     // then
-    expect(parent.classList).toContain('sidebar:w-64'); // sets the initial width for page load
+    expect(parent.classList).toContain('sidebar:w-(--sidebar-width)'); // width driven by the --sidebar-width CSS var
     expect(parent.classList).toContain('w-[min(100vw,16rem)]');
     expect(parent.classList).toContain('shadow-2xl');
   });
