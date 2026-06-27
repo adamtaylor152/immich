@@ -6,7 +6,8 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { Route } from '$lib/route';
-  import { albumTreeDropdown, recentAlbumsDropdown } from '$lib/stores/preferences.store';
+  import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
+  import { albumTreeDropdown, recentAlbumsDropdown, sidebarCollapsed } from '$lib/stores/preferences.store';
   import { NavbarGroup, NavbarItem } from '@immich/ui';
   import {
     mdiAccount,
@@ -52,6 +53,10 @@
   }
 
   let { children }: Props = $props();
+
+  // When collapsed to the icon-only rail, suppress expandable content (recent albums,
+  // album tree), section headers and bottom info — only top-level icons remain.
+  const iconOnly = $derived($sidebarCollapsed && mediaQueryManager.isFullSidebar);
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>
@@ -65,7 +70,7 @@
     bind:expanded={$recentAlbumsDropdown}
   >
     {#snippet items()}
-      <span in:fly={{ y: -20 }} class="hidden md:block">
+      <span in:fly={{ y: -20 }} class={iconOnly ? 'hidden' : 'hidden md:block'}>
         <RecentAlbums />
       </span>
     {/snippet}
@@ -94,7 +99,9 @@
     activeIcon={mdiAccountMultiple}
   />
 
-  <NavbarGroup title={$t('library')} size="tiny" />
+  {#if !iconOnly}
+    <NavbarGroup title={$t('library')} size="tiny" />
+  {/if}
 
   <NavbarItem title={$t('favorites')} href={Route.favorites()} icon={mdiHeartOutline} activeIcon={mdiHeart} />
 
@@ -107,7 +114,7 @@
     bind:expanded={$albumTreeDropdown}
   >
     {#snippet items()}
-      <span in:fly={{ y: -20 }} class="hidden md:block">
+      <span in:fly={{ y: -20 }} class={iconOnly ? 'hidden' : 'hidden md:block'}>
         <AlbumNavigationTree />
       </span>
     {/snippet}
@@ -145,5 +152,7 @@
 
   {@render children?.()}
 
-  <BottomInfo />
+  {#if !iconOnly}
+    <BottomInfo />
+  {/if}
 </Sidebar>

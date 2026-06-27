@@ -149,3 +149,8 @@ export const alwaysLoadOriginalVideo = persisted<boolean>('always-load-original-
 export const recentAlbumsDropdown = persisted<boolean>('recent-albums-open', true, {});
 
 export const albumTreeDropdown = persisted<boolean>('album-tree-open', false, {});
+
+// Primary sidebar width (px) when expanded, and whether it is collapsed to an icon-only rail.
+export const sidebarWidth = persisted<number>('sidebar-width', 256, {});
+
+export const sidebarCollapsed = persisted<boolean>('sidebar-collapsed', false, {});
