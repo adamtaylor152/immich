@@ -4,6 +4,8 @@ import { InjectKysely } from 'nestjs-kysely';
 import { randomUUID } from 'node:crypto';
 import { SystemConfig } from 'src/config';
 import { DB } from 'src/schema';
+import { DeepPartial } from 'src/types';
+import { clearRegisteredConfigCache } from 'src/utils/config-cache';
 
 export type ForkSchemaPhase = 'legacy' | 'dual-write' | 'ready' | 'inactive' | 'active' | 'failed';
 export type BackfillKind = 'privacy' | 'albums' | 'enrichment' | 'automation' | 'health' | 'storage' | 'checksum';
@@ -102,6 +104,30 @@ export class ForkSchemaRepository {
     });
   }
 
+  async persistConfig(partialConfig: DeepPartial<SystemConfig>, config: SystemConfig): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      const state = await sql<{ phase: ForkSchemaPhase }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
+      `.execute(trx);
+      if (!state.rows[0]) {
+        throw new Error('Fork schema state is not initialized');
+      }
+      await sql`
+        INSERT INTO system_metadata (key, value) VALUES ('system-config', ${partialConfig}::jsonb)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+      `.execute(trx);
+      if (state.rows[0].phase !== 'legacy') {
+        for (const [key, value] of [
+          ['machineLearning.runpod', config.machineLearning.runpod],
+          ['smartAlbums', config.smartAlbums],
+        ] as const) {
+          await sql`INSERT INTO immich_fork.config (key, value) VALUES (${key}, ${value}::jsonb)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()`.execute(trx);
+        }
+      }
+    });
+  }
+
   async getState(): Promise<ForkState> {
     const result = await sql<ForkState>`
       SELECT active, phase, "schemaVersion", "upstreamVersion"
@@ -131,7 +157,7 @@ export class ForkSchemaRepository {
   }
 
   async transitionPhase(expected: ForkSchemaPhase, next: ForkSchemaPhase): Promise<boolean> {
-    return this.db.transaction().execute(async (trx) => {
+    const transitioned = await this.db.transaction().execute(async (trx) => {
       const lockedState = await sql<{ phase: ForkSchemaPhase }>`
         SELECT phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
       `.execute(trx);
@@ -150,6 +176,10 @@ export class ForkSchemaRepository {
       `.execute(trx);
       return true;
     });
+    if (transitioned) {
+      clearRegisteredConfigCache();
+    }
+    return transitioned;
   }
 
   async setPhase(phase: ForkSchemaPhase): Promise<void> {
@@ -192,6 +222,7 @@ export class ForkSchemaRepository {
         WHERE id = 1
       `.execute(trx);
     });
+    clearRegisteredConfigCache();
   }
 
   async claimBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {

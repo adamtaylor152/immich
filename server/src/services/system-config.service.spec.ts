@@ -20,7 +20,6 @@ import { SystemConfigService } from 'src/services/system-config.service';
 import { DeepPartial } from 'src/types';
 import { mockEnvData } from 'test/repositories/config.repository.mock';
 import { newTestService, ServiceMocks } from 'test/utils';
-import { vi } from 'vitest';
 
 const partialConfig = {
   ffmpeg: { crf: 30 },
@@ -821,12 +820,10 @@ describe(SystemConfigService.name, () => {
 
       // updateConfig is called with the dto we mutated in-place; verify the
       // preserved-key value is what gets persisted.
-      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
-        ([key]) => key === 'system-config',
-      );
+      const persisted = mocks.forkSchema.persistConfig.mock.calls.at(-1);
       expect(persisted).toBeDefined();
       // The persisted partial config should include the preserved key.
-      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      const partial = persisted![0] as { machineLearning?: { runpod?: { apiKey?: string } } };
       expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_secret_value');
     });
 
@@ -852,11 +849,9 @@ describe(SystemConfigService.name, () => {
         await sut.updateSystemConfig(newConfig);
         const after = Date.now();
 
-        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
-          ([key]) => key === 'system-config',
-        );
+        const persisted = mocks.forkSchema.persistConfig.mock.calls.at(-1);
         expect(persisted).toBeDefined();
-        const partial = persisted![1] as {
+        const partial = persisted![0] as {
           machineLearning?: { imageDescription?: { lastConfigChangeAt?: string | null } };
         };
         const bumped = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
@@ -896,10 +891,8 @@ describe(SystemConfigService.name, () => {
         // imageDescription.lastConfigChangeAt different from the stored one
         // (updateConfig diffs against defaults, so the existing 2024 value
         // would be persisted only if it differs from null — which it does).
-        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
-          ([key]) => key === 'system-config',
-        );
-        const partial = persisted![1] as {
+        const persisted = mocks.forkSchema.persistConfig.mock.calls.at(-1);
+        const partial = persisted![0] as {
           machineLearning?: { imageDescription?: { lastConfigChangeAt?: string | null } };
         };
         const lastChange = partial.machineLearning?.imageDescription?.lastConfigChangeAt;
@@ -947,10 +940,8 @@ describe(SystemConfigService.name, () => {
         const before = Date.now();
         await sut.updateSystemConfig(newConfig);
 
-        const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
-          ([key]) => key === 'system-config',
-        );
-        const partial = persisted![1] as {
+        const persisted = mocks.forkSchema.persistConfig.mock.calls.at(-1);
+        const partial = persisted![0] as {
           machineLearning?: {
             imageDescription?: { lastConfigChangeAt?: string | null; pendingRequeueAt?: string | null };
           };
@@ -991,10 +982,8 @@ describe(SystemConfigService.name, () => {
 
       await sut.updateSystemConfig(newConfig);
 
-      const persisted = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.find(
-        ([key]) => key === 'system-config',
-      );
-      const partial = persisted![1] as { machineLearning?: { runpod?: { apiKey?: string } } };
+      const persisted = mocks.forkSchema.persistConfig.mock.calls.at(-1);
+      const partial = persisted![0] as { machineLearning?: { runpod?: { apiKey?: string } } };
       expect(partial.machineLearning?.runpod?.apiKey).toBe('rp_NEW_value');
     });
   });
@@ -1104,11 +1093,9 @@ describe(SystemConfigService.name, () => {
 
       // The system-config write that clears pendingRequeueAt should be the
       // most-recent persist call.
-      const persistCalls = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.filter(
-        ([key]) => key === 'system-config',
-      );
+      const persistCalls = mocks.forkSchema.persistConfig.mock.calls;
       expect(persistCalls.length).toBeGreaterThan(0);
-      const latest = persistCalls.at(-1)![1] as {
+      const latest = persistCalls.at(-1)![0] as {
         machineLearning?: { imageDescription?: { pendingRequeueAt?: string | null } };
       };
       // Confirm the cleared value made it into the persisted partial diff.
@@ -1162,10 +1149,8 @@ describe(SystemConfigService.name, () => {
       await sut.deferDescriptionRequeue();
       const after = Date.now();
 
-      const persistCalls = (mocks.systemMetadata.set as ReturnType<typeof vi.fn>).mock.calls.filter(
-        ([key]) => key === 'system-config',
-      );
-      const latest = persistCalls.at(-1)![1] as {
+      const persistCalls = mocks.forkSchema.persistConfig.mock.calls;
+      const latest = persistCalls.at(-1)![0] as {
         machineLearning?: { imageDescription?: { pendingRequeueAt?: string | null } };
       };
       const written = latest.machineLearning?.imageDescription?.pendingRequeueAt;

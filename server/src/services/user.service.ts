@@ -275,6 +275,7 @@ export class UserService extends BaseService {
     }
 
     this.logger.warn(`Removing user from database: ${user.id}`);
+    await this.assetRepository.deleteAll(user.id);
     await this.albumRepository.deleteAll(user.id);
     await this.userRepository.delete(user, true);
 

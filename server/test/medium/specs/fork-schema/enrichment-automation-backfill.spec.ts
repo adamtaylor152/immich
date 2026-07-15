@@ -6,8 +6,10 @@ import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
 import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
+import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
@@ -34,7 +36,10 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
         immich_fork.smart_album_match,
         immich_fork.smart_album_rule,
         immich_fork.config,
-        immich_fork.asset_enrichment
+        immich_fork.asset_enrichment,
+        immich_fork.asset_privacy,
+        immich_fork.album_closure,
+        immich_fork.album_metadata
     `.execute(db);
     await sql`UPDATE immich_fork.state SET phase = 'inactive', active = false WHERE id = 1`.execute(db);
     await db.deleteFrom('album').execute();
@@ -257,6 +262,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
 
       await new AssetRepository(db).remove(asset);
       await expect(new ForkEnrichmentRepository(db).get(asset.id)).resolves.toBeUndefined();
+      await expect(new ForkPrivacyRepository(db).get(asset.id)).resolves.toBeUndefined();
       const references = await sql<{ count: number }>`SELECT
         (SELECT count(*) FROM immich_fork.smart_album_match WHERE "assetId" = ${asset.id}::uuid) +
         (SELECT count(*) FROM immich_fork.smart_album_exclusion WHERE "assetId" = ${asset.id}::uuid) AS count`.execute(
@@ -265,6 +271,21 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       expect(Number(references.rows[0]?.count)).toBe(0);
     },
   );
+
+  it('cleans every asset sidecar during owned-asset bulk deletion', async () => {
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    const user = mediumFactory.userInsert();
+    await db.insertInto('user').values(user).execute();
+    const inserts = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
+    const repository = new AssetRepository(db);
+    const ids = await repository.createAll(inserts);
+    await repository.deleteAll(user.id);
+    const remaining = await sql<{ count: number }>`SELECT
+      (SELECT count(*) FROM immich_fork.asset_privacy WHERE "assetId" = ANY(${ids}::uuid[])) +
+      (SELECT count(*) FROM immich_fork.asset_enrichment WHERE "assetId" = ANY(${ids}::uuid[])) AS count`.execute(db);
+    expect(Number(remaining.rows[0]?.count)).toBe(0);
+    await expect(db.selectFrom('asset').select('id').where('ownerId', '=', user.id).execute()).resolves.toHaveLength(0);
+  });
 
   it('cleans rules for an album subtree and all albums owned by a deleted user', async () => {
     const user = mediumFactory.userInsert();
@@ -291,16 +312,24 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
         VALUES (${randomUUID()}::uuid, ${album.id}::uuid, ${user.id}::uuid, ${album.id})`.execute(db);
     }
+    await new ForkAlbumMetadataRepository(db).mirrorFromLegacy([root.id!, child.id!]);
 
     await new AlbumRepository(db).delete(root.id!);
     const unrelated = mediumFactory.albumInsert({});
     await db.insertInto('album').values(unrelated).execute();
+    await new ForkAlbumMetadataRepository(db).mirrorFromLegacy([unrelated.id!]);
     await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
       VALUES (${randomUUID()}::uuid, ${unrelated.id}::uuid, ${user.id}::uuid, 'owner-orphan')`.execute(db);
     await new AlbumRepository(db).deleteAll(user.id);
     const remaining = await sql<{ count: number }>`SELECT count(*)::int AS count FROM immich_fork.smart_album_rule
       WHERE "ownerId" = ${user.id}::uuid`.execute(db);
     expect(remaining.rows[0]?.count).toBe(0);
+    const task5Remaining = await sql<{ count: number }>`SELECT
+      (SELECT count(*) FROM immich_fork.album_metadata WHERE "albumId" = ANY(${[root.id, child.id]}::uuid[])) +
+      (SELECT count(*) FROM immich_fork.album_closure WHERE "ancestorId" = ANY(${[root.id, child.id]}::uuid[]) OR "descendantId" = ANY(${[root.id, child.id]}::uuid[])) AS count`.execute(
+      db,
+    );
+    expect(Number(task5Remaining.rows[0]?.count)).toBe(0);
   });
 
   it('keeps generated descriptions and tags sidecar-only after cutover', async () => {
@@ -312,6 +341,9 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       .insertInto('asset_exif')
       .values({ assetId: asset.id!, description: 'User text\n\nkept exactly' })
       .execute();
+    const userTag = mediumFactory.tagInsert({ userId: user.id, value: 'generated-tag' });
+    await db.insertInto('tag').values(userTag).execute();
+    await db.insertInto('tag_asset').values({ assetId: asset.id!, tagId: userTag.id }).execute();
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
     await new ForkEnrichmentRepository(db).initialize([asset.id!]);
 
@@ -327,6 +359,18 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     };
     const service = sut as unknown as {
       applyVisibleMetadata(input: Record<string, unknown>): Promise<{ metadata: boolean; visible: boolean }>;
+      applyNsfwTags(
+        id: string,
+        ownerId: string,
+        result: Record<string, unknown>,
+        metadata: Record<string, unknown>,
+      ): Promise<{ metadata: boolean; visible: boolean }>;
+      clearAppliedNsfwTags(
+        id: string,
+        ownerId: string,
+        metadata: Record<string, unknown>,
+      ): Promise<{ metadata: boolean; visible: boolean }>;
+      clearGeneratedTags(id: string, ownerId: string, tags: string[]): Promise<{ metadata: boolean; visible: boolean }>;
       saveEnrichmentMetadata(id: string, value: Record<string, unknown>): Promise<void>;
     };
     await expect(
@@ -339,6 +383,23 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
         previousTagValues: [],
       }),
     ).resolves.toEqual({ metadata: true, visible: false });
+    const nsfwMetadata = {
+      nsfwDetection: {
+        status: 'success',
+        result: { isNsfw: true, score: 1, labels: { explicit: 1 } },
+      },
+    };
+    await expect(
+      service.applyNsfwTags(asset.id!, user.id, nsfwMetadata.nsfwDetection.result, nsfwMetadata),
+    ).resolves.toEqual({ metadata: true, visible: false });
+    await expect(service.clearGeneratedTags(asset.id!, user.id, ['generated-tag'])).resolves.toEqual({
+      metadata: false,
+      visible: false,
+    });
+    await expect(service.clearAppliedNsfwTags(asset.id!, user.id, nsfwMetadata)).resolves.toEqual({
+      metadata: true,
+      visible: false,
+    });
     await service.saveEnrichmentMetadata(asset.id!, metadata);
 
     expect(mocks.asset.upsertExif).not.toHaveBeenCalled();
@@ -350,6 +411,9 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     });
     const sidecar = await new ForkEnrichmentRepository(db).get(asset.id!);
     expect(sidecar).toMatchObject({ generatedDescription: 'Generated text', generatedTags: ['generated-tag'] });
+    await expect(
+      db.selectFrom('tag_asset').selectAll().where('assetId', '=', asset.id!).where('tagId', '=', userTag.id).execute(),
+    ).resolves.toHaveLength(1);
   });
 
   it('backfills RunPod configuration and automation without changing official album membership', async () => {
@@ -384,7 +448,9 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     const config = new ForkConfigRepository(db);
     const first = await automation.backfillAutomation([album.id!]);
     const second = await automation.backfillAutomation([album.id!]);
-    const configResult = await config.backfillConfig();
+    const effectiveConfig = structuredClone(defaults);
+    effectiveConfig.machineLearning.runpod = { ...effectiveConfig.machineLearning.runpod, ...runpod };
+    const configResult = await config.backfillConfig(effectiveConfig, 'database');
     const membership = await db.selectFrom('album_asset').selectAll().execute();
     const forkConfig = await sql<{
       value: typeof runpod;
@@ -447,5 +513,97 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     expect(updated.logging.level).toBe('error');
     expect(updated.machineLearning.runpod.enabled).toBe(false);
     expect(updated.smartAlbums.enabled).toBe(false);
+  });
+
+  it('backfills fork configuration from the exact effective config-file value', async () => {
+    const fileConfig = structuredClone(defaults);
+    fileConfig.machineLearning.runpod.enabled = true;
+    fileConfig.machineLearning.runpod.apiKey = 'file-secret';
+    fileConfig.smartAlbums.enabled = true;
+    await db
+      .insertInto('system_metadata')
+      .values({
+        key: SystemMetadataKey.SystemConfig,
+        value: {
+          machineLearning: { runpod: { enabled: false, apiKey: 'database-secret' } },
+          smartAlbums: { enabled: false },
+        },
+      })
+      .execute();
+
+    await new ForkConfigRepository(db).backfillConfig(fileConfig, 'file');
+    const rows = await sql<{ key: string; value: Record<string, unknown> }>`
+      SELECT key, value FROM immich_fork.config ORDER BY key
+    `.execute(db);
+    expect(rows.rows).toEqual([
+      { key: 'machineLearning.runpod', value: expect.objectContaining({ apiKey: 'file-secret', enabled: true }) },
+      { key: 'smartAlbums', value: expect.objectContaining({ enabled: true }) },
+    ]);
+  });
+
+  it('clears cached legacy configuration immediately when authority changes to ready', async () => {
+    const metadataRepo = new SystemMetadataRepository(db);
+    const forkSchemaRepo = new ForkSchemaRepository(db);
+    const repos = {
+      configRepo: new ConfigRepository(),
+      metadataRepo,
+      logger: LoggingRepository.create(),
+      forkSchemaRepo,
+    };
+    const legacy = structuredClone(defaults);
+    legacy.machineLearning.runpod.enabled = false;
+    await metadataRepo.set(SystemMetadataKey.SystemConfig, legacy);
+    await forkSchemaRepo.setPhase('dual-write');
+    await new ForkConfigRepository(db).mirrorConfig({
+      ...legacy,
+      machineLearning: { ...legacy.machineLearning, runpod: { ...legacy.machineLearning.runpod, enabled: true } },
+    });
+    clearConfigCache();
+    await expect(getConfig(repos, { withCache: false })).resolves.toMatchObject({
+      machineLearning: { runpod: { enabled: false } },
+    });
+
+    await expect(forkSchemaRepo.transitionPhase('dual-write', 'ready')).resolves.toBe(true);
+    await expect(getConfig(repos, { withCache: true })).resolves.toMatchObject({
+      machineLearning: { runpod: { enabled: true } },
+    });
+  });
+
+  it('serializes official and fork config updates and rolls both back on mirror failure', async () => {
+    const metadataRepo = new SystemMetadataRepository(db);
+    const forkSchemaRepo = new ForkSchemaRepository(db);
+    const repos = {
+      configRepo: new ConfigRepository(),
+      metadataRepo,
+      logger: LoggingRepository.create(),
+      forkSchemaRepo,
+    };
+    await forkSchemaRepo.setPhase('dual-write');
+    const first = structuredClone(defaults);
+    first.machineLearning.runpod.apiKey = 'first';
+    first.smartAlbums.enabled = true;
+    const second = structuredClone(defaults);
+    second.machineLearning.runpod.apiKey = 'second';
+    second.smartAlbums.enabled = false;
+    await Promise.all([updateConfig(repos, first), updateConfig(repos, second)]);
+
+    clearConfigCache();
+    const officialEffective = await getConfig(
+      { configRepo: repos.configRepo, metadataRepo, logger: repos.logger },
+      { withCache: false },
+    );
+    const official = await metadataRepo.get(SystemMetadataKey.SystemConfig);
+    const forkRunpod = await new ForkConfigRepository(db).get('machineLearning.runpod');
+    const forkSmartAlbums = await new ForkConfigRepository(db).get('smartAlbums');
+    expect(forkRunpod).toEqual(officialEffective.machineLearning.runpod);
+    expect(forkSmartAlbums).toEqual(officialEffective.smartAlbums);
+
+    const before = structuredClone(official);
+    await sql`ALTER TABLE immich_fork.config RENAME TO config_unavailable`.execute(db);
+    const failing = structuredClone(defaults);
+    failing.logging.level = LogLevel.Fatal;
+    await expect(updateConfig(repos, failing)).rejects.toThrow();
+    await sql`ALTER TABLE immich_fork.config_unavailable RENAME TO config`.execute(db);
+    await expect(metadataRepo.get(SystemMetadataKey.SystemConfig)).resolves.toEqual(before);
   });
 });

@@ -63,6 +63,12 @@ export class ForkPrivacyRepository {
     return result.rows[0];
   }
 
+  async delete(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length > 0) {
+      await sql`DELETE FROM immich_fork.asset_privacy WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
+    }
+  }
+
   async shouldReadSidecar(kysely: Kysely<DB> = this.db): Promise<boolean> {
     const phase = await this.getPhase(kysely);
     return phase !== 'legacy' && phase !== 'dual-write';
