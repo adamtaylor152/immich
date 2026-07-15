@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
+import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
@@ -21,6 +22,7 @@ import {
   QueueName,
   StorageFolder,
 } from 'src/enum';
+import { ForkPrivacyRepository, PrivacySidecar } from 'src/repositories/fork-privacy.repository';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
@@ -155,6 +157,9 @@ const normalizeTag = (tag: string) =>
 
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
+  @InjectKysely()
+  private db?: Kysely<DB>;
+
   private readonly promptAssembler = new ImageDescriptionPromptAssembler();
   private readonly identityPostValidator = new IdentityPostValidator();
   private _smartAlbumService: SmartAlbumService | undefined;
@@ -866,7 +871,19 @@ export class ImageEnrichmentService extends BaseService {
 
   private async getEnrichmentMetadata(id: string, kysely?: Kysely<DB>): Promise<EnrichmentMetadata> {
     const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
-    return isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    const metadata = isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    if (!this.db) {
+      return metadata;
+    }
+
+    const repository = new ForkPrivacyRepository(this.db);
+    const database = kysely ?? this.db;
+    if (!(await repository.shouldReadSidecar(database))) {
+      return metadata;
+    }
+
+    const privacy = await repository.get(id, database);
+    return privacy ? this.applyPrivacySidecar(metadata, privacy) : metadata;
   }
 
   private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {
@@ -881,6 +898,37 @@ export class ImageEnrichmentService extends BaseService {
     // by this service — every NSFW-affecting write goes through here.
     const effectiveIsNsfw = this.getEffectiveNsfw(value) ?? false;
     await this.assetRepository.updateIsNsfw(id, effectiveIsNsfw, kysely);
+    if (this.db) {
+      await new ForkPrivacyRepository(this.db).mirrorFromLegacy(id, kysely ?? this.db);
+    }
+  }
+
+  private applyPrivacySidecar(metadata: EnrichmentMetadata, privacy: PrivacySidecar): EnrichmentMetadata {
+    const current = metadata.nsfwDetection;
+    const suppression = privacy.suppression as EnrichmentReview | null;
+    if (current?.status === 'success') {
+      const nsfwDetection: NsfwEnrichmentTask = {
+        ...current,
+        result: { ...current.result, isNsfw: privacy.isNsfw },
+      };
+      if (suppression) {
+        nsfwDetection.review = suppression;
+      } else {
+        delete nsfwDetection.review;
+      }
+      return { ...metadata, nsfwDetection };
+    }
+
+    return {
+      ...metadata,
+      nsfwDetection: {
+        status: 'success',
+        modelName: 'privacy-sidecar',
+        updatedAt: suppression?.reviewedAt ?? new Date(0).toISOString(),
+        result: { isNsfw: privacy.isNsfw, score: privacy.isNsfw ? 1 : 0, labels: {} },
+        ...(suppression ? { review: suppression } : {}),
+      },
+    };
   }
 
   private async applyVisibleMetadata({

@@ -16,6 +16,8 @@ import { DownloadRepository } from 'src/repositories/download.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
@@ -77,6 +79,8 @@ export const repositories = [
   DuplicateRepository,
   EmailRepository,
   EventRepository,
+  ForkAlbumMetadataRepository,
+  ForkPrivacyRepository,
   ForkSchemaRepository,
   JobRepository,
   LibraryRepository,

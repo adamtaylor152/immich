@@ -1,6 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Kysely } from 'kysely';
+import { InjectKysely } from 'nestjs-kysely';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
+import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import {
   BACKFILL_KINDS,
   BackfillClaim,
@@ -8,6 +12,7 @@ import {
   BackfillProgress,
   ForkState,
 } from 'src/repositories/fork-schema.repository';
+import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
 
@@ -21,9 +26,19 @@ export type ForkSchemaMigrationStatus = ForkState & {
 };
 
 @Injectable()
-export class ForkSchemaMigrationService extends BaseService {
+export class ForkSchemaMigrationService extends BaseService implements OnModuleInit {
+  @InjectKysely()
+  private db!: Kysely<DB>;
+
   private readonly handlers = new Map<BackfillKind, BackfillBatchHandler>();
   private seedPromise?: Promise<void>;
+
+  onModuleInit(): void {
+    const privacyRepository = new ForkPrivacyRepository(this.db);
+    const albumRepository = new ForkAlbumMetadataRepository(this.db);
+    this.registerHandler('privacy', (ids) => privacyRepository.backfillPrivacy(ids));
+    this.registerHandler('albums', (ids) => albumRepository.backfillAlbums(ids));
+  }
 
   registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
     if (this.handlers.has(kind)) {
