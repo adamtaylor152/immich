@@ -113,7 +113,13 @@ export class DatabaseService extends BaseService {
 
       const { database } = this.configRepository.getEnv();
       if (!database.skipMigrations) {
-        await this.databaseRepository.runMigrations();
+        const migrationMode = await this.databaseRepository.detectMigrationMode();
+        if (migrationMode === 'legacy') {
+          await this.databaseRepository.runMigrations();
+        } else {
+          await this.databaseRepository.runOfficialMigrations();
+          await this.databaseRepository.runForkMigrations();
+        }
 
         this.logger.log('Checking for schema drift');
         const drift = await this.databaseRepository.getSchemaDrift();

@@ -26,6 +26,7 @@ describe(DatabaseService.name, () => {
       asSql: () => [],
       asHuman: () => [],
     });
+    mocks.database.detectMigrationMode.mockResolvedValue('legacy');
 
     versionBelowRange = '0.1.0';
     minVersionInRange = '0.2.0';
@@ -298,6 +299,38 @@ describe(DatabaseService.name, () => {
       await expect(sut.onBootstrap()).resolves.toBeUndefined();
 
       expect(mocks.database.runMigrations).not.toHaveBeenCalled();
+    });
+
+    it.each(['fresh', 'isolated'] as const)('runs official then fork migrations in %s mode', async (mode) => {
+      const migrationOrder: string[] = [];
+      mocks.database.detectMigrationMode.mockResolvedValue(mode);
+      mocks.database.runOfficialMigrations.mockImplementation(() => {
+        migrationOrder.push('official');
+        return Promise.resolve();
+      });
+      mocks.database.runForkMigrations.mockImplementation(() => {
+        migrationOrder.push('fork');
+        return Promise.resolve();
+      });
+
+      await expect(sut.onBootstrap()).resolves.toBeUndefined();
+
+      expect(migrationOrder).toEqual(['official', 'fork']);
+      expect(mocks.database.runMigrations).not.toHaveBeenCalled();
+    });
+
+    it('refuses unknown migration names before running a migrator', async () => {
+      mocks.database.detectMigrationMode.mockRejectedValue(
+        new Error('Unknown migration in kysely_migrations: 9999999999999-CustomPatch'),
+      );
+
+      await expect(sut.onBootstrap()).rejects.toThrow(
+        'Unknown migration in kysely_migrations: 9999999999999-CustomPatch',
+      );
+
+      expect(mocks.database.runMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();
     });
 
     it(`should throw error if extension could not be created`, async () => {
