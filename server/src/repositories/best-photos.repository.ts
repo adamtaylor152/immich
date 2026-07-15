@@ -3,8 +3,19 @@ import { Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetStatus, AssetType, AssetVisibility } from 'src/enum';
+import {
+  combineVerifications,
+  DerivedBackfillResult,
+  getForkSchemaPhase,
+  readsForkSidecar,
+  TableVerification,
+  verifyRows,
+  writesForkSidecar,
+  writesLegacy,
+} from 'src/repositories/fork-derived-results';
 import { DB } from 'src/schema';
 import { AssetBestPhotoScoreTable } from 'src/schema/tables/asset-best-photo-score.table';
+import { AssetTable } from 'src/schema/tables/asset.table';
 import { anyUuid, asUuid, withHiddenContentFilter } from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { paginationHelper } from 'src/utils/pagination';
@@ -12,6 +23,20 @@ import { paginationHelper } from 'src/utils/pagination';
 export type BestPhotoScore = Selectable<AssetBestPhotoScoreTable>;
 
 export type BestPhotoScoreUpsert = Omit<Insertable<AssetBestPhotoScoreTable>, 'createdAt' | 'updatedAt'>;
+type BestPhotoBackfillTables = { assetBestPhotoScore: TableVerification };
+type BestPhotoAssetRow = Selectable<AssetTable> & {
+  bestPhotoScore: number;
+  bestPhotoAestheticScore: number | null;
+  bestPhotoTechnicalScore: number | null;
+  bestPhotoSubjectScore: number | null;
+  bestPhotoDiversityScore: number | null;
+  bestPhotoScoreVersion: number;
+  bestPhotoComputedAt: Date;
+  bestPhotoMetadata: Record<string, unknown> | null;
+  bestPhotoBestFrameTimestampMs: number | null;
+  bestPhotoFrameScore: number | null;
+  bestPhotoFrameMetadata: Record<string, unknown> | null;
+};
 
 export interface BestPhotosQueryOptions extends HiddenContentQueryOptions {
   ownerId: string;
@@ -26,8 +51,10 @@ export class BestPhotosRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  getScore(assetId: string): Promise<BestPhotoScore | undefined> {
+  async getScore(assetId: string): Promise<BestPhotoScore | undefined> {
+    const phase = await getForkSchemaPhase(this.db);
     return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_best_photo_score')
       .selectAll()
       .where('assetId', '=', asUuid(assetId))
@@ -54,7 +81,29 @@ export class BestPhotosRepository {
     ],
   })
   async upsertScore(score: BestPhotoScoreUpsert): Promise<void> {
-    await this.db
+    const phase = await getForkSchemaPhase(this.db);
+    await this.db.transaction().execute(async (trx) => {
+      if (writesLegacy(phase)) {
+        await this.upsertInto(trx.withSchema('public'), score);
+      }
+      if (writesForkSidecar(phase)) {
+        if (phase === 'dual-write') {
+          const legacy = await trx
+            .withSchema('public')
+            .selectFrom('asset_best_photo_score')
+            .selectAll()
+            .where('assetId', '=', asUuid(score.assetId))
+            .executeTakeFirstOrThrow();
+          await this.copyExact(trx.withSchema('immich_fork'), legacy);
+        } else {
+          await this.upsertInto(trx.withSchema('immich_fork'), score);
+        }
+      }
+    });
+  }
+
+  private async upsertInto(db: Kysely<DB>, score: BestPhotoScoreUpsert): Promise<void> {
+    await db
       .insertInto('asset_best_photo_score')
       .values(score)
       .onConflict((oc) =>
@@ -77,6 +126,14 @@ export class BestPhotosRepository {
       .execute();
   }
 
+  private async copyExact(db: Kysely<DB>, score: BestPhotoScore): Promise<void> {
+    await db
+      .insertInto('asset_best_photo_score')
+      .values(score)
+      .onConflict((oc) => oc.column('assetId').doUpdateSet(score))
+      .execute();
+  }
+
   @GenerateSql({
     params: [
       {
@@ -89,9 +146,11 @@ export class BestPhotosRepository {
     ],
   })
   async getBestPhotos(options: BestPhotosQueryOptions) {
-    const query = this.db
-      .selectFrom('asset_best_photo_score')
-      .innerJoin('asset', 'asset.id', 'asset_best_photo_score.assetId')
+    const phase = await getForkSchemaPhase(this.db);
+    const scoreSchema = readsForkSidecar(phase) ? 'immich_fork' : 'public';
+    const query = (this.db as Kysely<any>)
+      .selectFrom(`${scoreSchema}.asset_best_photo_score as asset_best_photo_score`)
+      .innerJoin('public.asset as asset', 'asset.id', 'asset_best_photo_score.assetId')
       .where('asset_best_photo_score.ownerId', '=', asUuid(options.ownerId))
       .where('asset.ownerId', '=', asUuid(options.ownerId))
       .where('asset.deletedAt', 'is', null)
@@ -128,11 +187,69 @@ export class BestPhotosRepository {
         .execute(),
     ]);
 
-    return { ...paginationHelper(items, options.limit), total: Number(count) };
+    return { ...paginationHelper(items as BestPhotoAssetRow[], options.limit), total: Number(count) };
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async deleteForAssets(assetIds: string[]): Promise<void> {
-    await this.db.deleteFrom('asset_best_photo_score').where('assetId', '=', anyUuid(assetIds)).execute();
+    if (assetIds.length === 0) {
+      return;
+    }
+    const phase = await getForkSchemaPhase(this.db);
+    await this.db.transaction().execute(async (trx) => {
+      if (writesLegacy(phase)) {
+        await trx
+          .withSchema('public')
+          .deleteFrom('asset_best_photo_score')
+          .where('assetId', '=', anyUuid(assetIds))
+          .execute();
+      }
+      if (writesForkSidecar(phase)) {
+        await trx
+          .withSchema('immich_fork')
+          .deleteFrom('asset_best_photo_score')
+          .where('assetId', '=', anyUuid(assetIds))
+          .execute();
+      }
+    });
+  }
+
+  async backfillScores(ids: string[]): Promise<DerivedBackfillResult<BestPhotoBackfillTables>> {
+    return this.db.transaction().execute(async (trx) => {
+      await sql`
+        INSERT INTO immich_fork.orphaned_records ("sourceTable", "sourceKey", payload)
+        SELECT 'asset_best_photo_score', score."assetId"::text, to_jsonb(score)
+        FROM public.asset_best_photo_score score
+        LEFT JOIN public.asset ON asset.id = score."assetId"
+        WHERE asset.id IS NULL
+        ON CONFLICT ("sourceTable", "sourceKey") DO UPDATE SET payload = EXCLUDED.payload
+      `.execute(trx);
+      if (ids.length > 0) {
+        await sql`DELETE FROM immich_fork.asset_best_photo_score WHERE "assetId" = ANY(${ids}::uuid[])`.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.asset_best_photo_score
+          SELECT score.* FROM public.asset_best_photo_score score
+          INNER JOIN public.asset ON asset.id = score."assetId"
+          WHERE score."assetId" = ANY(${ids}::uuid[])
+          ON CONFLICT ("assetId") DO UPDATE SET
+            "ownerId" = EXCLUDED."ownerId", score = EXCLUDED.score,
+            "aestheticScore" = EXCLUDED."aestheticScore", "technicalScore" = EXCLUDED."technicalScore",
+            "subjectScore" = EXCLUDED."subjectScore", "diversityScore" = EXCLUDED."diversityScore",
+            "scoreVersion" = EXCLUDED."scoreVersion", "computedAt" = EXCLUDED."computedAt",
+            metadata = EXCLUDED.metadata, "bestFrameTimestampMs" = EXCLUDED."bestFrameTimestampMs",
+            "frameScore" = EXCLUDED."frameScore", "frameMetadata" = EXCLUDED."frameMetadata",
+            "createdAt" = EXCLUDED."createdAt", "updatedAt" = EXCLUDED."updatedAt"
+        `.execute(trx);
+      }
+      await sql`
+        DELETE FROM immich_fork.asset_best_photo_score score
+        WHERE NOT EXISTS (SELECT 1 FROM public.asset WHERE asset.id = score."assetId")
+      `.execute(trx);
+      const rows = await sql<BestPhotoScore>`
+        SELECT * FROM immich_fork.asset_best_photo_score
+        WHERE "assetId" = ANY(${ids}::uuid[]) ORDER BY "assetId"::text
+      `.execute(trx);
+      return combineVerifications(ids.length, { assetBestPhotoScore: verifyRows(rows.rows) });
+    });
   }
 }
