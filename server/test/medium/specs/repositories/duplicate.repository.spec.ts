@@ -36,6 +36,7 @@ const createAsset = async (assetRepository: AssetRepository, ownerId: string) =>
 describe(DuplicateRepository.name, () => {
   beforeEach(async () => {
     defaultDatabase = await getKyselyDB();
+    await sql`UPDATE immich_fork.state SET phase = 'legacy', active = false WHERE id = 1`.execute(defaultDatabase);
   });
 
   describe('asset_video_duplicate_frame', () => {

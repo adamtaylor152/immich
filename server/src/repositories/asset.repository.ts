@@ -632,6 +632,7 @@ export class AssetRepository {
       await this.forkPrivacy.delete(ids, tx);
       await this.forkEnrichment.delete(ids, tx);
       await this.smartAlbums.deleteAssets(ids, tx);
+      await this.deleteForkDerivedResults(ids, tx);
       await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
     });
   }
@@ -758,8 +759,23 @@ export class AssetRepository {
       await this.forkPrivacy.delete([asset.id], tx);
       await this.forkEnrichment.delete([asset.id], tx);
       await this.smartAlbums.deleteAssets([asset.id], tx);
+      await this.deleteForkDerivedResults([asset.id], tx);
       await tx.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();
     });
+  }
+
+  private async deleteForkDerivedResults(ids: string[], db: Kysely<DB>): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    await sql`
+      DELETE FROM immich_fork.asset_health_candidate candidate
+      USING immich_fork.asset_health health
+      WHERE candidate."healthId" = health.id AND health."assetId" = ANY(${ids}::uuid[])
+    `.execute(db);
+    await sql`DELETE FROM immich_fork.asset_health WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`DELETE FROM immich_fork.asset_best_photo_score WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`DELETE FROM immich_fork.asset_video_duplicate_frame WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
   }
 
   @GenerateSql({ params: [{ ownerId: DummyValue.UUID, libraryId: DummyValue.UUID, checksum: DummyValue.BUFFER }] })

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, Selectable, Updateable, sql } from 'kysely';
+import { Insertable, Kysely, Selectable, sql, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { randomUUID } from 'node:crypto';
 import {
   AssetFileType,
   AssetStatus,
@@ -9,6 +10,16 @@ import {
   MediaHealthSeverity,
   MediaHealthStatus,
 } from 'src/enum';
+import {
+  combineVerifications,
+  DerivedBackfillResult,
+  getForkSchemaPhase,
+  readsForkSidecar,
+  TableVerification,
+  verifyRows,
+  writesForkSidecar,
+  writesLegacy,
+} from 'src/repositories/fork-derived-results';
 import { DB } from 'src/schema';
 import { AssetHealthCandidateTable, AssetHealthRunTable, AssetHealthTable } from 'src/schema/tables/asset-health.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
@@ -62,26 +73,72 @@ export type UpsertMediaHealthFinding = Omit<
 };
 
 export type UpsertMediaHealthCandidate = Omit<Insertable<AssetHealthCandidateTable>, 'id' | 'createdAt' | 'updatedAt'>;
+type HealthBackfillTables = {
+  assetHealthRun: TableVerification;
+  assetHealth: TableVerification;
+  assetHealthCandidate: TableVerification;
+};
 
 @Injectable()
 export class MediaHealthRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
-  createRun(category: MediaHealthCategory): Promise<MediaHealthRun> {
-    return this.db.insertInto('asset_health_run').values({ category }).returningAll().executeTakeFirstOrThrow();
+  async createRun(category: MediaHealthCategory): Promise<MediaHealthRun> {
+    const phase = await getForkSchemaPhase(this.db);
+    const run = {
+      id: randomUUID(),
+      category,
+      status: 'running',
+      startedAt: new Date(),
+      finishedAt: null,
+      totalAssets: 0,
+      checkedAssets: 0,
+      foundAssets: 0,
+      error: null,
+    };
+    await this.db.transaction().execute(async (trx) => {
+      if (writesLegacy(phase)) {
+        await trx.withSchema('public').insertInto('asset_health_run').values(run).execute();
+      }
+      if (writesForkSidecar(phase)) {
+        await trx.withSchema('immich_fork').insertInto('asset_health_run').values(run).execute();
+      }
+    });
+    return run;
   }
 
-  finishRun(id: string, update: Updateable<AssetHealthRunTable>): Promise<MediaHealthRun | undefined> {
-    return this.db
-      .updateTable('asset_health_run')
-      .set({ ...update, finishedAt: update.finishedAt ?? new Date() })
-      .where('id', '=', asUuid(id))
-      .returningAll()
-      .executeTakeFirst();
+  async finishRun(id: string, update: Updateable<AssetHealthRunTable>): Promise<MediaHealthRun | undefined> {
+    const phase = await getForkSchemaPhase(this.db);
+    const values = { ...update, finishedAt: update.finishedAt ?? new Date() };
+    let result: MediaHealthRun | undefined;
+    await this.db.transaction().execute(async (trx) => {
+      if (writesLegacy(phase)) {
+        result = await trx
+          .withSchema('public')
+          .updateTable('asset_health_run')
+          .set(values)
+          .where('id', '=', asUuid(id))
+          .returningAll()
+          .executeTakeFirst();
+      }
+      if (writesForkSidecar(phase)) {
+        const sidecar = await trx
+          .withSchema('immich_fork')
+          .updateTable('asset_health_run')
+          .set(values)
+          .where('id', '=', asUuid(id))
+          .returningAll()
+          .executeTakeFirst();
+        result ??= sidecar;
+      }
+    });
+    return result;
   }
 
-  getLatestRun(category?: MediaHealthCategory): Promise<MediaHealthRun | undefined> {
+  async getLatestRun(category?: MediaHealthCategory): Promise<MediaHealthRun | undefined> {
+    const phase = await getForkSchemaPhase(this.db);
     return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health_run')
       .selectAll()
       .$if(!!category, (qb) => qb.where('category', '=', category!))
@@ -90,12 +147,14 @@ export class MediaHealthRepository {
       .executeTakeFirst();
   }
 
-  list(options: {
+  async list(options: {
     category?: MediaHealthCategory;
     status?: MediaHealthStatus;
     size: number;
   }): Promise<MediaHealthFinding[]> {
+    const phase = await getForkSchemaPhase(this.db);
     return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health')
       .selectAll()
       .$if(!!options.category, (qb) => qb.where('category', '=', options.category!))
@@ -105,20 +164,26 @@ export class MediaHealthRepository {
       .execute();
   }
 
-  getByIds(ids: string[]): Promise<MediaHealthFinding[]> {
+  async getByIds(ids: string[]): Promise<MediaHealthFinding[]> {
     if (ids.length === 0) {
-      return Promise.resolve([]);
+      return [];
     }
-
-    return this.db.selectFrom('asset_health').selectAll().where('id', '=', anyUuid(ids)).execute();
+    const phase = await getForkSchemaPhase(this.db);
+    return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
+      .selectFrom('asset_health')
+      .selectAll()
+      .where('id', '=', anyUuid(ids))
+      .execute();
   }
 
-  getCandidatesByHealthIds(healthIds: string[]): Promise<MediaHealthCandidate[]> {
+  async getCandidatesByHealthIds(healthIds: string[]): Promise<MediaHealthCandidate[]> {
     if (healthIds.length === 0) {
-      return Promise.resolve([]);
+      return [];
     }
-
+    const phase = await getForkSchemaPhase(this.db);
     return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health_candidate')
       .selectAll()
       .where('healthId', '=', anyUuid(healthIds))
@@ -127,17 +192,40 @@ export class MediaHealthRepository {
   }
 
   async replaceCandidates(healthId: string, candidates: UpsertMediaHealthCandidate[]): Promise<void> {
+    const phase = await getForkSchemaPhase(this.db);
+    const now = new Date();
+    const rows = candidates.map((candidate) => ({ id: randomUUID(), createdAt: now, updatedAt: now, ...candidate }));
     await this.db.transaction().execute(async (trx) => {
-      await trx.deleteFrom('asset_health_candidate').where('healthId', '=', asUuid(healthId)).execute();
-
-      if (candidates.length > 0) {
-        await trx.insertInto('asset_health_candidate').values(candidates).execute();
+      for (const schema of this.writeSchemas(phase)) {
+        const target = trx.withSchema(schema);
+        await target.deleteFrom('asset_health_candidate').where('healthId', '=', asUuid(healthId)).execute();
+        if (rows.length > 0) {
+          await target.insertInto('asset_health_candidate').values(rows).execute();
+        }
       }
     });
   }
 
-  upsertFinding(finding: UpsertMediaHealthFinding): Promise<MediaHealthFinding> {
-    return this.db
+  async upsertFinding(finding: UpsertMediaHealthFinding): Promise<MediaHealthFinding> {
+    const phase = await getForkSchemaPhase(this.db);
+    let result: MediaHealthFinding | undefined;
+    await this.db.transaction().execute(async (trx) => {
+      if (writesLegacy(phase)) {
+        result = await this.upsertFindingInto(trx.withSchema('public'), finding);
+      }
+      if (writesForkSidecar(phase)) {
+        if (phase === 'dual-write') {
+          await this.copyFindingExact(trx.withSchema('immich_fork'), result!);
+        } else {
+          result = await this.upsertFindingInto(trx.withSchema('immich_fork'), finding);
+        }
+      }
+    });
+    return result!;
+  }
+
+  private upsertFindingInto(db: Kysely<DB>, finding: UpsertMediaHealthFinding): Promise<MediaHealthFinding> {
+    return db
       .insertInto('asset_health')
       .values({
         dismissedAt: null,
@@ -162,37 +250,66 @@ export class MediaHealthRepository {
       .executeTakeFirstOrThrow();
   }
 
-  async markResolved(category: MediaHealthCategory, assetId: string): Promise<void> {
-    await this.db
-      .updateTable('asset_health')
-      .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt: new Date() })
-      .where('category', '=', category)
-      .where('assetId', '=', asUuid(assetId))
+  private async copyFindingExact(db: Kysely<DB>, finding: MediaHealthFinding): Promise<void> {
+    await db
+      .insertInto('asset_health')
+      .values(finding)
+      .onConflict((oc) => oc.columns(['assetId', 'category']).doUpdateSet(finding))
       .execute();
+  }
+
+  async markResolved(category: MediaHealthCategory, assetId: string): Promise<void> {
+    const phase = await getForkSchemaPhase(this.db);
+    const resolvedAt = new Date();
+    await this.db.transaction().execute(async (trx) => {
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt })
+          .where('category', '=', category)
+          .where('assetId', '=', asUuid(assetId))
+          .execute();
+      }
+    });
   }
 
   async markResolvedMany(category: MediaHealthCategory, assetIds: string[]): Promise<void> {
     if (assetIds.length === 0) {
       return;
     }
-    await this.db
-      .updateTable('asset_health')
-      .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt: new Date() })
-      .where('category', '=', category)
-      .where('assetId', '=', anyUuid(assetIds))
-      .execute();
+    const phase = await getForkSchemaPhase(this.db);
+    const resolvedAt = new Date();
+    await this.db.transaction().execute(async (trx) => {
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt })
+          .where('category', '=', category)
+          .where('assetId', '=', anyUuid(assetIds))
+          .execute();
+      }
+    });
   }
 
   async markResolvedCategories(categories: MediaHealthCategory[], assetId: string): Promise<void> {
     if (categories.length === 0) {
       return;
     }
-    await this.db
-      .updateTable('asset_health')
-      .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt: new Date() })
-      .where('category', 'in', categories)
-      .where('assetId', '=', asUuid(assetId))
-      .execute();
+    const phase = await getForkSchemaPhase(this.db);
+    const resolvedAt = new Date();
+    await this.db.transaction().execute(async (trx) => {
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({ status: MediaHealthStatus.Resolved, severity: MediaHealthSeverity.Info, resolvedAt })
+          .where('category', 'in', categories)
+          .where('assetId', '=', asUuid(assetId))
+          .execute();
+      }
+    });
   }
 
   async markDismissed(ids: string[]): Promise<void> {
@@ -200,11 +317,18 @@ export class MediaHealthRepository {
       return;
     }
 
-    await this.db
-      .updateTable('asset_health')
-      .set({ status: MediaHealthStatus.Dismissed, dismissedAt: new Date() })
-      .where('id', '=', anyUuid(ids))
-      .execute();
+    const phase = await getForkSchemaPhase(this.db);
+    const dismissedAt = new Date();
+    await this.db.transaction().execute(async (trx) => {
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({ status: MediaHealthStatus.Dismissed, dismissedAt })
+          .where('id', '=', anyUuid(ids))
+          .execute();
+      }
+    });
   }
 
   async markStatus(ids: string[], status: MediaHealthStatus): Promise<void> {
@@ -212,7 +336,17 @@ export class MediaHealthRepository {
       return;
     }
 
-    await this.db.updateTable('asset_health').set({ status }).where('id', '=', anyUuid(ids)).execute();
+    const phase = await getForkSchemaPhase(this.db);
+    await this.db.transaction().execute(async (trx) => {
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({ status })
+          .where('id', '=', anyUuid(ids))
+          .execute();
+      }
+    });
   }
 
   async *streamAssets(options: { assetIds?: string[] } = {}): AsyncGenerator<MediaHealthAsset> {
@@ -221,6 +355,7 @@ export class MediaHealthRepository {
     }
 
     const query = this.db
+      .withSchema('public')
       .selectFrom('asset')
       .select([
         'asset.id',
@@ -285,6 +420,7 @@ export class MediaHealthRepository {
     }
 
     return this.db
+      .withSchema('public')
       .selectFrom('asset')
       .selectAll('asset')
       .select((eb) => [
@@ -317,6 +453,7 @@ export class MediaHealthRepository {
     fileModifiedAt: Date;
   }): Promise<boolean> {
     const result = await this.db
+      .withSchema('public')
       .updateTable('asset')
       .set({
         originalPath: options.originalPath,
@@ -334,5 +471,111 @@ export class MediaHealthRepository {
       .execute();
 
     return Number(result[0]?.numUpdatedRows ?? 0) > 0;
+  }
+
+  async deleteForAssets(assetIds: string[], db: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+    await sql`
+      DELETE FROM immich_fork.asset_health_candidate candidate
+      USING immich_fork.asset_health health
+      WHERE candidate."healthId" = health.id AND health."assetId" = ANY(${assetIds}::uuid[])
+    `.execute(db);
+    await sql`DELETE FROM immich_fork.asset_health WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(db);
+  }
+
+  async backfillHealth(ids: string[]): Promise<DerivedBackfillResult<HealthBackfillTables>> {
+    return this.db.transaction().execute(async (trx) => {
+      await sql`
+        INSERT INTO immich_fork.orphaned_records ("sourceTable", "sourceKey", payload)
+        SELECT 'asset_health', health.id::text, to_jsonb(health)
+        FROM public.asset_health health
+        LEFT JOIN public.asset ON asset.id = health."assetId"
+        WHERE asset.id IS NULL
+        ON CONFLICT ("sourceTable", "sourceKey") DO UPDATE SET payload = EXCLUDED.payload
+      `.execute(trx);
+      await sql`
+        INSERT INTO immich_fork.orphaned_records ("sourceTable", "sourceKey", payload)
+        SELECT 'asset_health_candidate', candidate.id::text, to_jsonb(candidate)
+        FROM public.asset_health_candidate candidate
+        LEFT JOIN public.asset_health health ON health.id = candidate."healthId"
+        LEFT JOIN public.asset ON asset.id = health."assetId"
+        WHERE asset.id IS NULL
+        ON CONFLICT ("sourceTable", "sourceKey") DO UPDATE SET payload = EXCLUDED.payload
+      `.execute(trx);
+      await sql`
+        INSERT INTO immich_fork.asset_health_run
+        SELECT * FROM public.asset_health_run
+        ON CONFLICT (id) DO UPDATE SET
+          category = EXCLUDED.category, status = EXCLUDED.status, "startedAt" = EXCLUDED."startedAt",
+          "finishedAt" = EXCLUDED."finishedAt", "totalAssets" = EXCLUDED."totalAssets",
+          "checkedAssets" = EXCLUDED."checkedAssets", "foundAssets" = EXCLUDED."foundAssets", error = EXCLUDED.error
+      `.execute(trx);
+      if (ids.length > 0) {
+        await sql`
+          DELETE FROM immich_fork.asset_health_candidate candidate
+          USING immich_fork.asset_health health
+          WHERE candidate."healthId" = health.id AND health."assetId" = ANY(${ids}::uuid[])
+        `.execute(trx);
+        await sql`DELETE FROM immich_fork.asset_health WHERE "assetId" = ANY(${ids}::uuid[])`.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.asset_health
+          SELECT health.* FROM public.asset_health health
+          INNER JOIN public.asset ON asset.id = health."assetId"
+          WHERE health."assetId" = ANY(${ids}::uuid[])
+          ON CONFLICT ("assetId", category) DO UPDATE SET
+            id = EXCLUDED.id, "runId" = EXCLUDED."runId", status = EXCLUDED.status, severity = EXCLUDED.severity,
+            "originalPath" = EXCLUDED."originalPath", "originalFileName" = EXCLUDED."originalFileName",
+            evidence = EXCLUDED.evidence, resolution = EXCLUDED.resolution, "checkedAt" = EXCLUDED."checkedAt",
+            "dismissedAt" = EXCLUDED."dismissedAt", "resolvedAt" = EXCLUDED."resolvedAt",
+            "createdAt" = EXCLUDED."createdAt", "updatedAt" = EXCLUDED."updatedAt"
+        `.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.asset_health_candidate
+          SELECT candidate.* FROM public.asset_health_candidate candidate
+          INNER JOIN public.asset_health health ON health.id = candidate."healthId"
+          INNER JOIN public.asset ON asset.id = health."assetId"
+          WHERE health."assetId" = ANY(${ids}::uuid[])
+          ON CONFLICT ("healthId", "candidatePath") DO UPDATE SET
+            id = EXCLUDED.id, status = EXCLUDED.status, "visualMatchScore" = EXCLUDED."visualMatchScore",
+            evidence = EXCLUDED.evidence, resolution = EXCLUDED.resolution, "checkedAt" = EXCLUDED."checkedAt",
+            "createdAt" = EXCLUDED."createdAt", "updatedAt" = EXCLUDED."updatedAt"
+        `.execute(trx);
+      }
+      await sql`
+        DELETE FROM immich_fork.asset_health_candidate candidate
+        WHERE NOT EXISTS (SELECT 1 FROM immich_fork.asset_health health WHERE health.id = candidate."healthId")
+      `.execute(trx);
+      await sql`
+        DELETE FROM immich_fork.asset_health health
+        WHERE NOT EXISTS (SELECT 1 FROM public.asset WHERE asset.id = health."assetId")
+      `.execute(trx);
+      const runs = await sql<Record<string, unknown>>`
+        SELECT * FROM immich_fork.asset_health_run ORDER BY id::text
+      `.execute(trx);
+      const health = await sql<Record<string, unknown>>`
+        SELECT * FROM immich_fork.asset_health WHERE "assetId" = ANY(${ids}::uuid[])
+        ORDER BY "assetId"::text, category
+      `.execute(trx);
+      const candidates = await sql<Record<string, unknown>>`
+        SELECT candidate.* FROM immich_fork.asset_health_candidate candidate
+        INNER JOIN immich_fork.asset_health health ON health.id = candidate."healthId"
+        WHERE health."assetId" = ANY(${ids}::uuid[])
+        ORDER BY candidate."healthId"::text, candidate."candidatePath"
+      `.execute(trx);
+      return combineVerifications(ids.length, {
+        assetHealthRun: verifyRows(runs.rows),
+        assetHealth: verifyRows(health.rows),
+        assetHealthCandidate: verifyRows(candidates.rows),
+      });
+    });
+  }
+
+  private writeSchemas(phase: Awaited<ReturnType<typeof getForkSchemaPhase>>): Array<'public' | 'immich_fork'> {
+    return [
+      ...(writesLegacy(phase) ? (['public'] as const) : []),
+      ...(writesForkSidecar(phase) ? (['immich_fork'] as const) : []),
+    ];
   }
 }

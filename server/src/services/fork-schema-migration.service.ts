@@ -4,8 +4,11 @@ import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
+import { BestPhotosRepository } from 'src/repositories/best-photos.repository';
+import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
 import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
+import { digestValue } from 'src/repositories/fork-derived-results';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import {
@@ -15,6 +18,7 @@ import {
   BackfillProgress,
   ForkState,
 } from 'src/repositories/fork-schema.repository';
+import { MediaHealthRepository } from 'src/repositories/media-health.repository';
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
@@ -43,6 +47,9 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     const enrichmentRepository = new ForkEnrichmentRepository(this.db);
     const automationRepository = new SmartAlbumRepository(this.db);
     const configRepository = new ForkConfigRepository(this.db);
+    const mediaHealthRepository = new MediaHealthRepository(this.db);
+    const bestPhotosRepository = new BestPhotosRepository(this.db);
+    const duplicateRepository = new DuplicateRepository(this.db);
     this.registerHandler('privacy', (ids) => privacyRepository.backfillPrivacy(ids));
     this.registerHandler('albums', (ids) => albumRepository.backfillAlbums(ids));
     this.registerHandler('enrichment', (ids) => enrichmentRepository.backfillEnrichment(ids));
@@ -57,6 +64,15 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
         .update(JSON.stringify({ automation: automation.digest, config: config.digest }))
         .digest('hex');
       return { count: automation.count, digest };
+    });
+    this.registerHandler('health', async (ids) => {
+      const health = await mediaHealthRepository.backfillHealth(ids);
+      const scores = await bestPhotosRepository.backfillScores(ids);
+      const frames = await duplicateRepository.backfillVideoDuplicateFrames(ids);
+      return {
+        count: ids.length,
+        digest: digestValue({ health: health.tables, scores: scores.tables, frames: frames.tables }),
+      };
     });
   }
 
