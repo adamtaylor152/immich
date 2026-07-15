@@ -88,10 +88,12 @@ where
   and "key" = $2
 
 -- AssetRepository.deleteMetadataByKey
+begin
 delete from "asset_metadata"
 where
   "assetId" = $1
   and "key" = $2
+commit
 
 -- AssetRepository.deleteBulkMetadata
 begin

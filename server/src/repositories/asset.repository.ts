@@ -26,6 +26,7 @@ import {
   AssetVisibility,
   TimeBucketDateType,
 } from 'src/enum';
+import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { DB } from 'src/schema';
 import { AssetAudioTable, AssetKeyframeTable, AssetVideoTable } from 'src/schema/tables/asset-av.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -193,7 +194,11 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
 
 @Injectable()
 export class AssetRepository {
-  constructor(@InjectKysely() private db: Kysely<DB>) {}
+  private readonly forkPrivacy: ForkPrivacyRepository;
+
+  constructor(@InjectKysely() private db: Kysely<DB>) {
+    this.forkPrivacy = new ForkPrivacyRepository(db);
+  }
 
   @GenerateSql({
     params: [
@@ -402,44 +407,34 @@ export class AssetRepository {
       .execute();
   }
 
-  async upsertMetadata(
-    id: string,
-    items: Array<{ key: string; value: Record<string, unknown> }>,
-    kysely: Kysely<DB> = this.db,
-  ) {
+  async upsertMetadata(id: string, items: Array<{ key: string; value: Record<string, unknown> }>, kysely?: Kysely<DB>) {
     if (items.length === 0) {
       return [];
     }
 
-    const result = await kysely
-      .insertInto('asset_metadata')
-      .values(items.map((item) => ({ assetId: id, ...item })))
-      .onConflict((oc) =>
-        oc
-          .columns(['assetId', 'key'])
-          .doUpdateSet((eb) => ({ key: eb.ref('excluded.key'), value: eb.ref('excluded.value') })),
-      )
-      .returning(['key', 'value', 'updatedAt'])
-      .execute();
+    const execute = async (tx: Kysely<DB>) => {
+      const result = await tx
+        .insertInto('asset_metadata')
+        .values(items.map((item) => ({ assetId: id, ...item })))
+        .onConflict((oc) =>
+          oc
+            .columns(['assetId', 'key'])
+            .doUpdateSet((eb) => ({ key: eb.ref('excluded.key'), value: eb.ref('excluded.value') })),
+        )
+        .returning(['key', 'value', 'updatedAt'])
+        .execute();
 
-    // Mirror any ml-enrichment writes into the denormalized asset.is_nsfw column.
-    // The privacy filter (`utils/database.ts:nsfwAssetIdExists`) reads the boolean,
-    // so any write to the JSONB key must keep the column in sync — including
-    // writes coming directly from the public API (see AssetService).
-    await this.syncIsNsfwForItems(
-      kysely,
-      items.map((item) => ({ assetId: id, ...item })),
-    );
+      await this.syncIsNsfwForItems(
+        tx,
+        items.map((item) => ({ assetId: id, ...item })),
+      );
+      return result;
+    };
 
-    return result;
+    return kysely ? execute(kysely) : this.db.transaction().execute(execute);
   }
 
-  /**
-   * Mirror the derived NSFW state into `asset.is_nsfw` so the privacy filter
-   * (utils/database.ts nsfwAssetIdExists) can do a single boolean probe instead
-   * of a correlated JSONB EXISTS. Called by ImageEnrichmentService inside the
-   * per-asset advisory lock.
-   */
+  /** Update the legacy privacy projection inside the caller's transaction. */
   async updateIsNsfw(assetId: string, isNsfw: boolean, kysely: Kysely<DB> = this.db): Promise<void> {
     await kysely
       .updateTable('asset')
@@ -450,40 +445,42 @@ export class AssetRepository {
   }
 
   async upsertBulkMetadata(items: Insertable<AssetMetadataTable>[]) {
-    const result = await this.db
-      .insertInto('asset_metadata')
-      .values(items)
-      .onConflict((oc) =>
-        oc
-          .columns(['assetId', 'key'])
-          .doUpdateSet((eb) => ({ key: eb.ref('excluded.key'), value: eb.ref('excluded.value') })),
-      )
-      .returning(['assetId', 'key', 'value', 'updatedAt'])
-      .execute();
+    return this.db.transaction().execute(async (tx) => {
+      const result = await tx
+        .insertInto('asset_metadata')
+        .values(items)
+        .onConflict((oc) =>
+          oc
+            .columns(['assetId', 'key'])
+            .doUpdateSet((eb) => ({ key: eb.ref('excluded.key'), value: eb.ref('excluded.value') })),
+        )
+        .returning(['assetId', 'key', 'value', 'updatedAt'])
+        .execute();
 
-    await this.syncIsNsfwForItems(this.db, items);
-
-    return result;
+      await this.syncIsNsfwForItems(tx, items);
+      return result;
+    });
   }
 
   /**
-   * Walk `items` for any `ml-enrichment` keys and update `asset.is_nsfw` to
-   * match what the runtime derivation would compute. Centralizes the sync at
-   * the repository layer so the boolean cannot drift from the JSONB regardless
-   * of who calls upsertMetadata (service layer, image-enrichment service, test
-   * factories, etc.).
+   * Derive privacy once for every `ml-enrichment` item, update the legacy
+   * projection, then mirror the same committed state into the fork sidecar.
+   * All three writes share the caller's transaction.
    */
   private async syncIsNsfwForItems(
     kysely: Kysely<DB>,
     items: Array<{ assetId: string; key: string; value: unknown }>,
   ): Promise<void> {
+    const privacyAssetIds: string[] = [];
     for (const item of items) {
       if (item.key !== AssetMetadataKey.MlEnrichment) {
         continue;
       }
       const isNsfw = deriveIsNsfwFromMetadata(item.value) ?? false;
       await this.updateIsNsfw(item.assetId, isNsfw, kysely);
+      privacyAssetIds.push(item.assetId);
     }
+    await this.forkPrivacy.mirrorManyFromLegacy([...new Set(privacyAssetIds)], kysely);
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
@@ -498,7 +495,13 @@ export class AssetRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
   async deleteMetadataByKey(id: string, key: string) {
-    await this.db.deleteFrom('asset_metadata').where('assetId', '=', id).where('key', '=', key).execute();
+    await this.db.transaction().execute(async (tx) => {
+      await tx.deleteFrom('asset_metadata').where('assetId', '=', id).where('key', '=', key).execute();
+      if (key === AssetMetadataKey.MlEnrichment) {
+        await this.updateIsNsfw(id, false, tx);
+        await this.forkPrivacy.mirrorFromLegacy(id, tx);
+      }
+    });
   }
 
   @GenerateSql({ params: [[{ assetId: DummyValue.UUID, key: DummyValue.STRING }]] })
@@ -508,20 +511,36 @@ export class AssetRepository {
     }
 
     await this.db.transaction().execute(async (tx) => {
+      const privacyAssetIds: string[] = [];
       for (const { assetId, key } of items) {
         await tx.deleteFrom('asset_metadata').where('assetId', '=', assetId).where('key', '=', key).execute();
+        if (key === AssetMetadataKey.MlEnrichment) {
+          await this.updateIsNsfw(assetId, false, tx);
+          privacyAssetIds.push(assetId);
+        }
       }
+      await this.forkPrivacy.mirrorManyFromLegacy([...new Set(privacyAssetIds)], tx);
     });
   }
 
-  create(asset: Insertable<AssetTable>) {
-    return this.db.insertInto('asset').values(asset).returningAll().executeTakeFirstOrThrow();
+  async create(asset: Insertable<AssetTable>) {
+    return this.db.transaction().execute(async (tx) => {
+      const result = await tx.insertInto('asset').values(asset).returningAll().executeTakeFirstOrThrow();
+      await this.forkPrivacy.mirrorFromLegacy(result.id, tx);
+      return result;
+    });
   }
 
   @ChunkedArray({ chunkSize: 4000 })
   async createAll(assets: Insertable<AssetTable>[]) {
-    const ids = await this.db.insertInto('asset').values(assets).returning('id').execute();
-    return ids.map(({ id }) => id);
+    return this.db.transaction().execute(async (tx) => {
+      const ids = await tx.insertInto('asset').values(assets).returning('id').execute();
+      await this.forkPrivacy.mirrorManyFromLegacy(
+        ids.map(({ id }) => id),
+        tx,
+      );
+      return ids.map(({ id }) => id);
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { year: 2000, day: 1, month: 1 }] })

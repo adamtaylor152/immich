@@ -40,11 +40,18 @@ export class ForkPrivacyRepository {
   }
 
   async mirrorFromLegacy(assetId: string, kysely: Kysely<DB> = this.db): Promise<void> {
+    await this.mirrorManyFromLegacy([assetId], kysely);
+  }
+
+  async mirrorManyFromLegacy(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
     const phase = await this.getPhase(kysely);
     if (phase === 'legacy') {
       return;
     }
-    await this.backfill([assetId], kysely);
+    await this.backfill(assetIds, kysely);
   }
 
   async get(assetId: string, kysely: Kysely<DB> = this.db): Promise<PrivacySidecar | undefined> {

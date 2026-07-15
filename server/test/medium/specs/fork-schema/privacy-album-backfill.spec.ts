@@ -238,26 +238,31 @@ describe('privacy and album fork sidecars', () => {
   it('deletes album metadata and every related closure pair in the legacy delete transaction', async () => {
     const root = mediumFactory.albumInsert({});
     const child = mediumFactory.albumInsert({ parentId: root.id });
-    await db.insertInto('album').values([root, child]).execute();
+    const grandchild = mediumFactory.albumInsert({ parentId: child.id });
+    await db.insertInto('album').values([root, child, grandchild]).execute();
     await db
       .insertInto('album_closure')
       .values([
         { id_ancestor: root.id!, id_descendant: root.id! },
         { id_ancestor: child.id!, id_descendant: child.id! },
+        { id_ancestor: grandchild.id!, id_descendant: grandchild.id! },
         { id_ancestor: root.id!, id_descendant: child.id! },
+        { id_ancestor: root.id!, id_descendant: grandchild.id! },
+        { id_ancestor: child.id!, id_descendant: grandchild.id! },
       ])
       .execute();
-    await new ForkAlbumMetadataRepository(db).backfillAlbums([root.id!, child.id!]);
+    const subtreeIds = [root.id!, child.id!, grandchild.id!];
+    await new ForkAlbumMetadataRepository(db).backfillAlbums(subtreeIds);
 
     await new AlbumRepository(db).delete(root.id!);
 
-    await expect(
-      db.selectFrom('album').select('id').where('id', '=', root.id!).executeTakeFirst(),
-    ).resolves.toBeUndefined();
-    const metadata = await sql`SELECT 1 FROM immich_fork.album_metadata WHERE "albumId" = ${root.id}::uuid`.execute(db);
+    await expect(db.selectFrom('album').select('id').where('id', 'in', subtreeIds).execute()).resolves.toHaveLength(0);
+    const metadata = await sql`
+      SELECT 1 FROM immich_fork.album_metadata WHERE "albumId" = ANY(${subtreeIds}::uuid[])
+    `.execute(db);
     const closure = await sql`
       SELECT 1 FROM immich_fork.album_closure
-      WHERE "ancestorId" = ${root.id}::uuid OR "descendantId" = ${root.id}::uuid
+      WHERE "ancestorId" = ANY(${subtreeIds}::uuid[]) OR "descendantId" = ANY(${subtreeIds}::uuid[])
     `.execute(db);
     expect(metadata.rows).toHaveLength(0);
     expect(closure.rows).toHaveLength(0);
