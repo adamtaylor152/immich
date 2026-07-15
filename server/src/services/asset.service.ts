@@ -392,7 +392,10 @@ export class AssetService extends BaseService {
 
     const videoDuplicateFrameFiles = await this.duplicateRepository.getVideoDuplicateFrames([id]);
 
-    await this.assetRepository.remove(asset);
+    const removedAsset = await this.assetRepository.remove(asset);
+    if (!removedAsset) {
+      return JobStatus.Failed;
+    }
     if (!asset.libraryId) {
       await this.userRepository.updateUsage(asset.ownerId, -(asset.exifInfo?.fileSizeInByte || 0));
     }
@@ -423,7 +426,7 @@ export class AssetService extends BaseService {
     ];
 
     if (deleteOnDisk && !asset.isOffline) {
-      files.push(assetFiles.sidecarFile?.path, asset.originalPath);
+      files.push(assetFiles.sidecarFile?.path, removedAsset.originalPath);
     }
 
     await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: files.filter(Boolean) } });

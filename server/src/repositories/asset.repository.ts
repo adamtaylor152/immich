@@ -625,12 +625,12 @@ export class AssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async deleteAll(ownerId: string): Promise<void> {
-    await this.db.transaction().execute(async (tx) => {
+  async deleteAll(ownerId: string): Promise<{ originalPath: string; libraryId: string | null; isOffline: boolean }[]> {
+    return this.db.transaction().execute(async (tx) => {
       const assets = await tx
         .withSchema('public')
         .selectFrom('asset')
-        .select('id')
+        .select(['id', 'originalPath', 'libraryId', 'isOffline'])
         .where('ownerId', '=', ownerId)
         .forUpdate()
         .execute();
@@ -640,6 +640,7 @@ export class AssetRepository {
       await this.smartAlbums.deleteAssets(ids, tx);
       await this.deleteForkDerivedResults(ids, tx);
       await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
+      return assets.map(({ originalPath, libraryId, isOffline }) => ({ originalPath, libraryId, isOffline }));
     });
   }
 
@@ -760,20 +761,24 @@ export class AssetRepository {
     return this.getById(asset.id, { exifInfo: true, faces: { person: true }, edits: true });
   }
 
-  async remove(asset: { id: string }): Promise<void> {
-    await this.db.transaction().execute(async (tx) => {
-      await tx
+  async remove(asset: { id: string }): Promise<{ originalPath: string } | undefined> {
+    return this.db.transaction().execute(async (tx) => {
+      const lockedAsset = await tx
         .withSchema('public')
         .selectFrom('asset')
-        .select('id')
+        .select('originalPath')
         .where('id', '=', asUuid(asset.id))
         .forUpdate()
         .executeTakeFirst();
+      if (!lockedAsset) {
+        return;
+      }
       await this.forkPrivacy.delete([asset.id], tx);
       await this.forkEnrichment.delete([asset.id], tx);
       await this.smartAlbums.deleteAssets([asset.id], tx);
       await this.deleteForkDerivedResults([asset.id], tx);
       await tx.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();
+      return { originalPath: lockedAsset.originalPath };
     });
   }
 

@@ -1,8 +1,9 @@
 import { Kysely } from 'kysely';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { copyFile, link, open, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join, parse } from 'node:path';
+import { copyFile, link, lstat, open, realpath, rm } from 'node:fs/promises';
+import { dirname, isAbsolute, join, parse, relative } from 'node:path';
+import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
 import { CryptoRepository } from 'src/repositories/crypto.repository';
 import { PhysicalFileRepository, PhysicalNormalizationAsset } from 'src/repositories/physical-file.repository';
@@ -32,70 +33,83 @@ export class ForkStorageNormalizationService {
   }
 
   async normalizeAsset(assetId: string): Promise<NormalizationResult> {
-    const asset = await this.physicalFileRepository.getNormalizationAsset(assetId);
-    if (!asset) {
-      throw new Error(`Asset ${assetId} does not exist`);
-    }
+    let createdPath: string | undefined;
+    try {
+      return await this.physicalFileRepository.withLockedNormalizationAsset(
+        assetId,
+        async ({ asset, reservePath, commit }) => {
+          const sourcePath = asset.originalPath;
+          const upstreamPath = this.getUpstreamPath(asset);
+          await this.assertSafePaths(asset, sourcePath, upstreamPath);
+          const source = await this.cryptoRepository.hashFileDigests(sourcePath);
+          this.verifyExpectedContent(asset, source);
+          const { previouslyOwned } = await reservePath(upstreamPath);
 
-    const sourcePath = asset.originalPath;
-    const source = await this.cryptoRepository.hashFileDigests(sourcePath);
-    this.verifyExpectedContent(asset, source);
+          if (upstreamPath !== sourcePath) {
+            createdPath = await this.stageVerifiedLink(sourcePath, upstreamPath, source, previouslyOwned);
+          }
 
-    const upstreamPath = this.getUpstreamPath(asset);
-    if (upstreamPath !== sourcePath) {
-      await this.stageVerifiedLink(sourcePath, upstreamPath, source);
-    }
+          await this.assertRegularFile(upstreamPath, 'normalization target');
+          const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
+          const targetStats = await lstat(upstreamPath);
+          if (
+            target.sizeInBytes !== source.sizeInBytes ||
+            !target.sha1.equals(source.sha1) ||
+            !target.sha256.equals(source.sha256)
+          ) {
+            throw new Error(`Staged storage verification mismatch for asset ${assetId}`);
+          }
 
-    const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
-    const targetStats = await stat(upstreamPath);
-    if (
-      target.sizeInBytes !== source.sizeInBytes ||
-      !target.sha1.equals(source.sha1) ||
-      !target.sha256.equals(source.sha256)
-    ) {
-      throw new Error(`Staged storage verification mismatch for asset ${assetId}`);
-    }
+          const verifiedPaths = [...new Set([asset.physicalPath ?? sourcePath, upstreamPath])];
+          for (const verifiedPath of verifiedPaths) {
+            await this.assertSafePaths(asset, verifiedPath, verifiedPath);
+            await this.assertRegularFile(verifiedPath, 'verified path');
+            if (verifiedPath === upstreamPath) {
+              continue;
+            }
+            const verified = await this.cryptoRepository.hashFileDigests(verifiedPath);
+            if (
+              verified.sizeInBytes !== target.sizeInBytes ||
+              !verified.sha1.equals(target.sha1) ||
+              !verified.sha256.equals(target.sha256)
+            ) {
+              throw new Error(`Verified path content mismatch for asset ${assetId}: ${verifiedPath}`);
+            }
+          }
+          await commit({
+            evidence: {
+              sourcePath,
+              upstreamPath,
+              sizeInBytes: target.sizeInBytes,
+              sha1: target.sha1.toString('hex'),
+              sha256: target.sha256.toString('hex'),
+              device: targetStats.dev,
+              inode: targetStats.ino,
+            },
+            linkCount: targetStats.nlink,
+            sha1: target.sha1,
+            sha256: target.sha256,
+            sizeInBytes: target.sizeInBytes,
+            upstreamPath,
+            verifiedPaths,
+          });
 
-    const verifiedPaths = [...new Set([asset.physicalPath ?? sourcePath, upstreamPath])];
-    for (const verifiedPath of verifiedPaths) {
-      if (verifiedPath === upstreamPath) {
-        continue;
+          return {
+            assetId,
+            sha1: target.sha1.toString('hex'),
+            sha256: target.sha256.toString('hex'),
+            linkCount: targetStats.nlink,
+            verifiedPaths,
+          };
+        },
+      );
+    } catch (error) {
+      if (createdPath) {
+        await rm(createdPath, { force: true });
+        await this.syncDirectory(dirname(createdPath));
       }
-      const verified = await this.cryptoRepository.hashFileDigests(verifiedPath);
-      if (
-        verified.sizeInBytes !== target.sizeInBytes ||
-        !verified.sha1.equals(target.sha1) ||
-        !verified.sha256.equals(target.sha256)
-      ) {
-        throw new Error(`Verified path content mismatch for asset ${assetId}: ${verifiedPath}`);
-      }
+      throw error;
     }
-    await this.physicalFileRepository.commitNormalization({
-      asset,
-      evidence: {
-        sourcePath,
-        upstreamPath,
-        sizeInBytes: target.sizeInBytes,
-        sha1: target.sha1.toString('hex'),
-        sha256: target.sha256.toString('hex'),
-        device: targetStats.dev,
-        inode: targetStats.ino,
-      },
-      linkCount: targetStats.nlink,
-      sha1: target.sha1,
-      sha256: target.sha256,
-      sizeInBytes: target.sizeInBytes,
-      upstreamPath,
-      verifiedPaths,
-    });
-
-    return {
-      assetId,
-      sha1: target.sha1.toString('hex'),
-      sha256: target.sha256.toString('hex'),
-      linkCount: targetStats.nlink,
-      verifiedPaths,
-    };
   }
 
   async normalizeBatch(ids: string[]): Promise<NormalizationBatchResult> {
@@ -153,8 +167,13 @@ export class ForkStorageNormalizationService {
     sourcePath: string,
     targetPath: string,
     expected: { sha1: Buffer; sha256: Buffer; sizeInBytes: number },
-  ): Promise<void> {
+    mayAdoptExisting: boolean,
+  ): Promise<string | undefined> {
     try {
+      await this.assertRegularFile(targetPath, 'existing normalization target');
+      if (!mayAdoptExisting) {
+        throw new Error(`Existing normalization target is not durably owned by this asset: ${targetPath}`);
+      }
       const existing = await this.cryptoRepository.hashFileDigests(targetPath);
       if (
         existing.sizeInBytes !== expected.sizeInBytes ||
@@ -171,6 +190,7 @@ export class ForkStorageNormalizationService {
     }
 
     const temporaryPath = join(dirname(targetPath), `.${parse(targetPath).base}.${randomUUID()}.normalize`);
+    let published = false;
     try {
       try {
         await link(sourcePath, temporaryPath);
@@ -180,6 +200,8 @@ export class ForkStorageNormalizationService {
         }
         await copyFile(sourcePath, temporaryPath, constants.COPYFILE_FICLONE_FORCE);
       }
+
+      await this.assertRegularFile(temporaryPath, 'temporary normalization target');
 
       const handle = await open(temporaryPath, 'r');
       try {
@@ -196,15 +218,58 @@ export class ForkStorageNormalizationService {
         throw new Error(`Temporary normalization target does not match source: ${targetPath}`);
       }
 
-      await rename(temporaryPath, targetPath);
-      const directory = await open(dirname(targetPath), 'r');
-      try {
-        await directory.sync();
-      } finally {
-        await directory.close();
+      await link(temporaryPath, targetPath);
+      published = true;
+      await this.assertRegularFile(targetPath, 'normalization target');
+      await this.syncDirectory(dirname(targetPath));
+      return targetPath;
+    } catch (error) {
+      if (published) {
+        await rm(targetPath, { force: true });
+        await this.syncDirectory(dirname(targetPath));
       }
+      throw error;
     } finally {
       await rm(temporaryPath, { force: true });
+    }
+  }
+
+  private async assertSafePaths(
+    asset: PhysicalNormalizationAsset,
+    sourcePath: string,
+    targetPath: string,
+  ): Promise<void> {
+    await this.assertRegularFile(sourcePath, 'normalization source');
+    const roots = [StorageCore.getMediaLocation(), ...asset.libraryImportPaths];
+    const resolvedRoots = await Promise.all(roots.map((root) => realpath(root).catch(() => {})));
+    const resolvedSource = await realpath(sourcePath);
+    const resolvedTargetParent = await realpath(dirname(targetPath));
+    if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedSource))) {
+      throw new Error(`Normalization source is outside approved storage roots: ${sourcePath}`);
+    }
+    if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedTargetParent))) {
+      throw new Error(`Normalization target is outside approved storage roots: ${targetPath}`);
+    }
+  }
+
+  private isWithin(root: string, candidate: string): boolean {
+    const path = relative(root, candidate);
+    return path === '' || (!path.startsWith('..') && !isAbsolute(path));
+  }
+
+  private async assertRegularFile(path: string, label: string): Promise<void> {
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || !stats.isFile()) {
+      throw new Error(`${label} must be a regular non-symlink file: ${path}`);
+    }
+  }
+
+  private async syncDirectory(path: string): Promise<void> {
+    const directory = await open(path, 'r');
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
     }
   }
 
