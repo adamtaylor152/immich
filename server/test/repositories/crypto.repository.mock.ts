@@ -12,6 +12,11 @@ export const newCryptoRepositoryMock = (): Mocked<RepositoryInterface<CryptoRepo
     verifySha256: vitest.fn().mockImplementation(() => true),
     hashSha1: vitest.fn().mockImplementation((input) => Buffer.from(`${input.toString()} (hashed)`)),
     hashFile: vitest.fn().mockImplementation((input) => `${input} (file-hashed)`),
+    hashFileDigests: vitest.fn().mockResolvedValue({
+      sha1: Buffer.from('sha1'),
+      sha256: Buffer.from('sha256'),
+      sizeInBytes: 0,
+    }),
     hashFileMatching: vitest.fn().mockImplementation((input) => Buffer.from(`${input} (file-hashed)`)),
     randomBytesAsText: vitest.fn().mockReturnValue(Buffer.from('random-bytes').toString('base64')),
     signJwt: vitest.fn().mockReturnValue('mock-jwt-token'),

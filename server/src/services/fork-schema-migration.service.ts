@@ -22,6 +22,7 @@ import { MediaHealthRepository } from 'src/repositories/media-health.repository'
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
+import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
 import { JobOf } from 'src/types';
 
 const DEFAULT_BATCH_SIZE = 100;
@@ -50,6 +51,7 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     const mediaHealthRepository = new MediaHealthRepository(this.db);
     const bestPhotosRepository = new BestPhotosRepository(this.db);
     const duplicateRepository = new DuplicateRepository(this.db);
+    const storageNormalization = new ForkStorageNormalizationService(this.db);
     this.registerHandler('privacy', (ids) => privacyRepository.backfillPrivacy(ids));
     this.registerHandler('albums', (ids) => albumRepository.backfillAlbums(ids));
     this.registerHandler('enrichment', (ids) => enrichmentRepository.backfillEnrichment(ids));
@@ -74,6 +76,8 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
         digest: digestValue({ health: health.tables, scores: scores.tables, frames: frames.tables }),
       };
     });
+    this.registerHandler('storage', (ids) => storageNormalization.normalizeBatch(ids));
+    this.registerHandler('checksum', (ids) => storageNormalization.normalizeBatch(ids));
   }
 
   registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
