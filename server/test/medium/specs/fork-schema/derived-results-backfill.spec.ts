@@ -347,4 +347,265 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
     `.execute(db);
     expect(Number(remaining.rows[0]?.count)).toBe(0);
   });
+
+  it('fails closed when sidecar writes reference missing public or fork parents', async () => {
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    const user = mediumFactory.userInsert();
+    await db.insertInto('user').values(user).execute();
+    const missingAssetId = randomUUID();
+    const missingHealthId = randomUUID();
+    const run = await new MediaHealthRepository(db).createRun(MediaHealthCategory.Missing);
+    const healthRepository = new MediaHealthRepository(db);
+
+    await expect(
+      new BestPhotosRepository(db).upsertScore({
+        assetId: missingAssetId,
+        ownerId: user.id,
+        score: 0.5,
+        aestheticScore: null,
+        technicalScore: null,
+        subjectScore: null,
+        diversityScore: null,
+        scoreVersion: 1,
+        computedAt: new Date(),
+        metadata: null,
+        bestFrameTimestampMs: null,
+        frameScore: null,
+        frameMetadata: null,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      new DuplicateRepository(db).replaceVideoDuplicateFrames(missingAssetId, [
+        { assetId: missingAssetId, frameIndex: 0, timestampMs: 0, path: '/missing.jpg', embedding: vector },
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      healthRepository.upsertFinding({
+        assetId: missingAssetId,
+        runId: run.id,
+        category: MediaHealthCategory.Missing,
+        status: MediaHealthStatus.Missing,
+        severity: MediaHealthSeverity.Warning,
+        originalPath: '/missing.jpg',
+        originalFileName: 'missing.jpg',
+        evidence: {},
+        resolution: {},
+        checkedAt: new Date(),
+      }),
+    ).rejects.toThrow();
+    await expect(
+      healthRepository.replaceCandidates(missingHealthId, [
+        {
+          healthId: missingHealthId,
+          candidatePath: '/missing-candidate.jpg',
+          status: MediaHealthStatus.Candidate,
+          visualMatchScore: 0.5,
+          evidence: {},
+          resolution: {},
+          checkedAt: new Date(),
+        },
+      ]),
+    ).rejects.toThrow();
+
+    const active = await sql<{ count: number }>`SELECT
+      (SELECT count(*) FROM immich_fork.asset_health WHERE "assetId" = ${missingAssetId}::uuid) +
+      (SELECT count(*) FROM immich_fork.asset_health_candidate WHERE "healthId" = ${missingHealthId}::uuid) +
+      (SELECT count(*) FROM immich_fork.asset_best_photo_score WHERE "assetId" = ${missingAssetId}::uuid) +
+      (SELECT count(*) FROM immich_fork.asset_video_duplicate_frame WHERE "assetId" = ${missingAssetId}::uuid) AS count
+    `.execute(db);
+    expect(Number(active.rows[0]?.count)).toBe(0);
+  });
+
+  it.each(['single', 'bulk'] as const)(
+    'serializes %s asset deletion against concurrent sidecar writes',
+    async (mode) => {
+      await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+      const user = mediumFactory.userInsert();
+      const asset = mediumFactory.assetInsert({ ownerId: user.id });
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values(asset).execute();
+      const advisoryKey = mode === 'single' ? 730_071 : 730_072;
+      const functionName = `task7_block_${mode}_derived_cleanup`;
+      const triggerName = `task7_block_${mode}_derived_cleanup`;
+      await sql
+        .raw(
+          `
+        CREATE FUNCTION public.${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          PERFORM pg_advisory_xact_lock(${advisoryKey});
+          RETURN NULL;
+        END $$
+      `,
+        )
+        .execute(db);
+      await sql
+        .raw(
+          `
+        CREATE TRIGGER ${triggerName}
+        BEFORE DELETE ON immich_fork.asset_health
+        FOR EACH STATEMENT EXECUTE FUNCTION public.${functionName}()
+      `,
+        )
+        .execute(db);
+      let deleting!: Promise<void>;
+      let writing!: Promise<{ status: 'fulfilled' } | { status: 'rejected'; error: unknown }>;
+      try {
+        await db.transaction().execute(async (controller) => {
+          await sql`SELECT pg_advisory_lock(${advisoryKey})`.execute(controller);
+          try {
+            const assetRepository = new AssetRepository(db);
+            deleting = mode === 'single' ? assetRepository.remove(asset) : assetRepository.deleteAll(user.id);
+            await vi.waitFor(async () => {
+              const waiting = await sql<{ count: number }>`
+                SELECT count(*)::int AS count FROM pg_locks
+                WHERE locktype = 'advisory' AND objid = ${advisoryKey} AND NOT granted
+              `.execute(db);
+              expect(waiting.rows[0]?.count).toBe(1);
+            });
+            writing = new BestPhotosRepository(db)
+              .upsertScore({
+                assetId: asset.id!,
+                ownerId: user.id,
+                score: 0.9,
+                aestheticScore: null,
+                technicalScore: null,
+                subjectScore: null,
+                diversityScore: null,
+                scoreVersion: 1,
+                computedAt: new Date(),
+                metadata: null,
+                bestFrameTimestampMs: null,
+                frameScore: null,
+                frameMetadata: null,
+              })
+              .then(
+                () => ({ status: 'fulfilled' as const }),
+                (error: unknown) => ({ status: 'rejected' as const, error }),
+              );
+          } finally {
+            await sql`SELECT pg_advisory_unlock(${advisoryKey})`.execute(controller);
+          }
+        });
+        await deleting;
+        expect(await writing).toMatchObject({ status: 'rejected' });
+        const remaining = await sql<{ count: number }>`
+          SELECT count(*)::int AS count FROM immich_fork.asset_best_photo_score
+          WHERE "assetId" = ${asset.id}::uuid
+        `.execute(db);
+        expect(remaining.rows[0]?.count).toBe(0);
+      } finally {
+        await sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON immich_fork.asset_health`).execute(db);
+        await sql.raw(`DROP FUNCTION IF EXISTS public.${functionName}()`).execute(db);
+      }
+    },
+  );
+
+  it('reconciles every derived table in both directions and removes stale health trees', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    const runId = randomUUID();
+    const healthId = randomUUID();
+    const candidateId = randomUUID();
+    await sql`INSERT INTO public.asset_health_run (id, category, status) VALUES (${runId}::uuid, 'missing', 'completed')`.execute(
+      db,
+    );
+    await sql`
+      INSERT INTO public.asset_health
+        (id, "assetId", "runId", category, status, severity, "originalPath", "originalFileName", evidence, resolution, "checkedAt")
+      VALUES (${healthId}::uuid, ${asset.id}::uuid, ${runId}::uuid, 'missing', 'missing', 'warning', '/a.jpg', 'a.jpg', '{}'::jsonb, '{}'::jsonb, now())
+    `.execute(db);
+    await sql`
+      INSERT INTO public.asset_health_candidate
+        (id, "healthId", "candidatePath", status, evidence, resolution, "checkedAt")
+      VALUES (${candidateId}::uuid, ${healthId}::uuid, '/candidate.jpg', 'candidate', '{}'::jsonb, '{}'::jsonb, now())
+    `.execute(db);
+    await sql`
+      INSERT INTO public.asset_best_photo_score
+        ("assetId", "ownerId", score, "scoreVersion", "computedAt")
+      VALUES (${asset.id}::uuid, ${user.id}::uuid, 0.8, 1, now())
+    `.execute(db);
+    await sql`
+      INSERT INTO public.asset_video_duplicate_frame
+        ("assetId", "frameIndex", "timestampMs", path, embedding)
+      VALUES (${asset.id}::uuid, 0, 0, '/frame.jpg', ${vector}::vector)
+    `.execute(db);
+    const healthRepository = new MediaHealthRepository(db);
+    const bestPhotosRepository = new BestPhotosRepository(db);
+    const duplicateRepository = new DuplicateRepository(db);
+    await healthRepository.backfillHealth([asset.id!]);
+    await bestPhotosRepository.backfillScores([asset.id!]);
+    await duplicateRepository.backfillVideoDuplicateFrames([asset.id!]);
+
+    const staleRunId = randomUUID();
+    const staleHealthId = randomUUID();
+    await sql`INSERT INTO immich_fork.asset_health_run (id, category, status) VALUES (${staleRunId}::uuid, 'corrupt', 'completed')`.execute(
+      db,
+    );
+    await sql`
+      INSERT INTO immich_fork.asset_health
+        (id, "assetId", "runId", category, status, severity, "originalPath", "originalFileName", evidence, resolution, "checkedAt")
+      VALUES (${staleHealthId}::uuid, ${asset.id}::uuid, ${staleRunId}::uuid, 'corrupt', 'corrupt_suspect', 'warning', '/stale.jpg', 'stale.jpg', '{}'::jsonb, '{}'::jsonb, now())
+    `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.asset_health_candidate
+        ("healthId", "candidatePath", status, evidence, resolution, "checkedAt")
+      VALUES (${staleHealthId}::uuid, '/stale-candidate.jpg', 'candidate', '{}'::jsonb, '{}'::jsonb, now())
+    `.execute(db);
+    const reconciled = await healthRepository.backfillHealth([asset.id!]);
+
+    const differences = await sql<{ tableName: string; count: number }>`
+      SELECT 'asset_health_run' AS "tableName", count(*)::int AS count FROM (
+        (SELECT * FROM public.asset_health_run EXCEPT SELECT * FROM immich_fork.asset_health_run)
+        UNION ALL
+        (SELECT * FROM immich_fork.asset_health_run EXCEPT SELECT * FROM public.asset_health_run)
+      ) difference
+      UNION ALL SELECT 'asset_health', count(*)::int FROM (
+        (SELECT * FROM public.asset_health EXCEPT SELECT * FROM immich_fork.asset_health)
+        UNION ALL
+        (SELECT * FROM immich_fork.asset_health EXCEPT SELECT * FROM public.asset_health)
+      ) difference
+      UNION ALL SELECT 'asset_health_candidate', count(*)::int FROM (
+        (SELECT * FROM public.asset_health_candidate EXCEPT SELECT * FROM immich_fork.asset_health_candidate)
+        UNION ALL
+        (SELECT * FROM immich_fork.asset_health_candidate EXCEPT SELECT * FROM public.asset_health_candidate)
+      ) difference
+      UNION ALL SELECT 'asset_best_photo_score', count(*)::int FROM (
+        (SELECT * FROM public.asset_best_photo_score EXCEPT SELECT * FROM immich_fork.asset_best_photo_score)
+        UNION ALL
+        (SELECT * FROM immich_fork.asset_best_photo_score EXCEPT SELECT * FROM public.asset_best_photo_score)
+      ) difference
+      UNION ALL SELECT 'asset_video_duplicate_frame', count(*)::int FROM (
+        (SELECT * FROM public.asset_video_duplicate_frame EXCEPT SELECT * FROM immich_fork.asset_video_duplicate_frame)
+        UNION ALL
+        (SELECT * FROM immich_fork.asset_video_duplicate_frame EXCEPT SELECT * FROM public.asset_video_duplicate_frame)
+      ) difference
+      ORDER BY "tableName"
+    `.execute(db);
+    expect(differences.rows).toEqual([
+      { tableName: 'asset_best_photo_score', count: 0 },
+      { tableName: 'asset_health', count: 0 },
+      { tableName: 'asset_health_candidate', count: 0 },
+      { tableName: 'asset_health_run', count: 0 },
+      { tableName: 'asset_video_duplicate_frame', count: 0 },
+    ]);
+    expectVerification(reconciled.tables.assetHealthRun, 1);
+    expectVerification(reconciled.tables.assetHealth, 1);
+    expectVerification(reconciled.tables.assetHealthCandidate, 1);
+
+    await sql`DELETE FROM public.asset_health_candidate WHERE "healthId" = ${healthId}::uuid`.execute(db);
+    await sql`DELETE FROM public.asset_health WHERE id = ${healthId}::uuid`.execute(db);
+    await sql`DELETE FROM public.asset_health_run WHERE id = ${runId}::uuid`.execute(db);
+    const empty = await healthRepository.backfillHealth([asset.id!]);
+    expectVerification(empty.tables.assetHealthRun, 0);
+    expectVerification(empty.tables.assetHealth, 0);
+    expectVerification(empty.tables.assetHealthCandidate, 0);
+    const stale = await sql<{ count: number }>`SELECT
+      (SELECT count(*) FROM immich_fork.asset_health_run WHERE id = ANY(${[runId, staleRunId]}::uuid[])) +
+      (SELECT count(*) FROM immich_fork.asset_health WHERE id = ANY(${[healthId, staleHealthId]}::uuid[])) +
+      (SELECT count(*) FROM immich_fork.asset_health_candidate WHERE "healthId" = ANY(${[healthId, staleHealthId]}::uuid[])) AS count
+    `.execute(db);
+    expect(Number(stale.rows[0]?.count)).toBe(0);
+  });
 });

@@ -11,6 +11,7 @@ import {
   combineVerifications,
   DerivedBackfillResult,
   getForkSchemaPhase,
+  lockForkAssetParent,
   readsForkSidecar,
   TableVerification,
   verifyRows,
@@ -282,6 +283,12 @@ export class DuplicateRepository {
   async replaceVideoDuplicateFrames(assetId: string, frames: VideoDuplicateFrameInsert[]): Promise<string[]> {
     const phase = await getForkSchemaPhase(this.db);
     return this.db.transaction().execute(async (trx) => {
+      if (frames.some((frame) => frame.assetId !== assetId)) {
+        throw new Error(`Cannot replace video duplicate frames for multiple assets`);
+      }
+      if (writesForkSidecar(phase)) {
+        await lockForkAssetParent(trx, assetId);
+      }
       let stalePaths: string[] = [];
       if (writesLegacy(phase)) {
         stalePaths = await this.replaceFramesIn(trx.withSchema('public'), assetId, frames);

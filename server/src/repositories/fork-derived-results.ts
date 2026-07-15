@@ -2,6 +2,7 @@ import { Kysely, sql } from 'kysely';
 import { createHash } from 'node:crypto';
 import { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
+import { asUuid } from 'src/utils/database';
 
 export type TableVerification = { count: number; digest: string };
 export type DerivedBackfillResult<Tables extends Record<string, TableVerification>> = TableVerification & {
@@ -51,3 +52,20 @@ export const getForkSchemaPhase = async (db: Kysely<DB>): Promise<ForkSchemaPhas
 export const readsForkSidecar = (phase: ForkSchemaPhase): boolean => phase !== 'legacy' && phase !== 'dual-write';
 export const writesLegacy = (phase: ForkSchemaPhase): boolean => phase === 'legacy' || phase === 'dual-write';
 export const writesForkSidecar = (phase: ForkSchemaPhase): boolean => phase !== 'legacy';
+
+export const lockForkAssetParent = async (
+  db: Kysely<DB>,
+  assetId: string,
+): Promise<{ id: string; ownerId: string }> => {
+  const asset = await db
+    .withSchema('public')
+    .selectFrom('asset')
+    .select(['id', 'ownerId'])
+    .where('id', '=', asUuid(assetId))
+    .forKeyShare()
+    .executeTakeFirst();
+  if (!asset) {
+    throw new Error(`Cannot write fork derived result for missing asset ${assetId}`);
+  }
+  return asset;
+};

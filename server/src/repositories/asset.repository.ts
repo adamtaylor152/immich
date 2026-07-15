@@ -627,7 +627,13 @@ export class AssetRepository {
   @GenerateSql({ params: [DummyValue.UUID] })
   async deleteAll(ownerId: string): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
-      const assets = await tx.selectFrom('asset').select('id').where('ownerId', '=', ownerId).execute();
+      const assets = await tx
+        .withSchema('public')
+        .selectFrom('asset')
+        .select('id')
+        .where('ownerId', '=', ownerId)
+        .forUpdate()
+        .execute();
       const ids = assets.map(({ id }) => id);
       await this.forkPrivacy.delete(ids, tx);
       await this.forkEnrichment.delete(ids, tx);
@@ -756,6 +762,13 @@ export class AssetRepository {
 
   async remove(asset: { id: string }): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
+      await tx
+        .withSchema('public')
+        .selectFrom('asset')
+        .select('id')
+        .where('id', '=', asUuid(asset.id))
+        .forUpdate()
+        .executeTakeFirst();
       await this.forkPrivacy.delete([asset.id], tx);
       await this.forkEnrichment.delete([asset.id], tx);
       await this.smartAlbums.deleteAssets([asset.id], tx);

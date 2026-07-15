@@ -7,6 +7,7 @@ import {
   combineVerifications,
   DerivedBackfillResult,
   getForkSchemaPhase,
+  lockForkAssetParent,
   readsForkSidecar,
   TableVerification,
   verifyRows,
@@ -83,6 +84,12 @@ export class BestPhotosRepository {
   async upsertScore(score: BestPhotoScoreUpsert): Promise<void> {
     const phase = await getForkSchemaPhase(this.db);
     await this.db.transaction().execute(async (trx) => {
+      if (writesForkSidecar(phase)) {
+        const asset = await lockForkAssetParent(trx, score.assetId);
+        if (asset.ownerId !== score.ownerId) {
+          throw new Error(`Cannot write fork best-photo score with mismatched owner for asset ${score.assetId}`);
+        }
+      }
       if (writesLegacy(phase)) {
         await this.upsertInto(trx.withSchema('public'), score);
       }

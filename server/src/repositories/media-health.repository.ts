@@ -14,6 +14,7 @@ import {
   combineVerifications,
   DerivedBackfillResult,
   getForkSchemaPhase,
+  lockForkAssetParent,
   readsForkSidecar,
   TableVerification,
   verifyRows,
@@ -193,9 +194,37 @@ export class MediaHealthRepository {
 
   async replaceCandidates(healthId: string, candidates: UpsertMediaHealthCandidate[]): Promise<void> {
     const phase = await getForkSchemaPhase(this.db);
+    if (candidates.some((candidate) => candidate.healthId !== healthId)) {
+      throw new Error(`Cannot replace media-health candidates for multiple findings`);
+    }
     const now = new Date();
     const rows = candidates.map((candidate) => ({ id: randomUUID(), createdAt: now, updatedAt: now, ...candidate }));
     await this.db.transaction().execute(async (trx) => {
+      if (writesForkSidecar(phase)) {
+        const observedFinding = await trx
+          .withSchema('immich_fork')
+          .selectFrom('asset_health')
+          .select(['assetId', 'runId'])
+          .where('id', '=', asUuid(healthId))
+          .executeTakeFirst();
+        if (!observedFinding) {
+          throw new Error(`Cannot write candidates for missing fork media-health finding ${healthId}`);
+        }
+        await lockForkAssetParent(trx, observedFinding.assetId);
+        const finding = await trx
+          .withSchema('immich_fork')
+          .selectFrom('asset_health')
+          .select(['assetId', 'runId'])
+          .where('id', '=', asUuid(healthId))
+          .forKeyShare()
+          .executeTakeFirst();
+        if (!finding || finding.assetId !== observedFinding.assetId) {
+          throw new Error(`Fork media-health finding ${healthId} changed while replacing candidates`);
+        }
+        if (finding.runId) {
+          await this.lockForkHealthRun(trx, finding.runId);
+        }
+      }
       for (const schema of this.writeSchemas(phase)) {
         const target = trx.withSchema(schema);
         await target.deleteFrom('asset_health_candidate').where('healthId', '=', asUuid(healthId)).execute();
@@ -210,6 +239,12 @@ export class MediaHealthRepository {
     const phase = await getForkSchemaPhase(this.db);
     let result: MediaHealthFinding | undefined;
     await this.db.transaction().execute(async (trx) => {
+      if (writesForkSidecar(phase)) {
+        await lockForkAssetParent(trx, finding.assetId);
+        if (finding.runId) {
+          await this.lockForkHealthRun(trx, finding.runId);
+        }
+      }
       if (writesLegacy(phase)) {
         result = await this.upsertFindingInto(trx.withSchema('public'), finding);
       }
@@ -222,6 +257,19 @@ export class MediaHealthRepository {
       }
     });
     return result!;
+  }
+
+  private async lockForkHealthRun(db: Kysely<DB>, runId: string): Promise<void> {
+    const run = await db
+      .withSchema('immich_fork')
+      .selectFrom('asset_health_run')
+      .select('id')
+      .where('id', '=', asUuid(runId))
+      .forKeyShare()
+      .executeTakeFirst();
+    if (!run) {
+      throw new Error(`Cannot write fork media-health result for missing run ${runId}`);
+    }
   }
 
   private upsertFindingInto(db: Kysely<DB>, finding: UpsertMediaHealthFinding): Promise<MediaHealthFinding> {
@@ -503,6 +551,20 @@ export class MediaHealthRepository {
         LEFT JOIN public.asset ON asset.id = health."assetId"
         WHERE asset.id IS NULL
         ON CONFLICT ("sourceTable", "sourceKey") DO UPDATE SET payload = EXCLUDED.payload
+      `.execute(trx);
+      await sql`
+        DELETE FROM immich_fork.asset_health_candidate candidate
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.asset_health_candidate source WHERE source.id = candidate.id
+        )
+      `.execute(trx);
+      await sql`
+        DELETE FROM immich_fork.asset_health health
+        WHERE NOT EXISTS (SELECT 1 FROM public.asset_health source WHERE source.id = health.id)
+      `.execute(trx);
+      await sql`
+        DELETE FROM immich_fork.asset_health_run run
+        WHERE NOT EXISTS (SELECT 1 FROM public.asset_health_run source WHERE source.id = run.id)
       `.execute(trx);
       await sql`
         INSERT INTO immich_fork.asset_health_run
