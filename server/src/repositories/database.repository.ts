@@ -1,9 +1,8 @@
 import { schemaDiff, schemaFromCode, schemaFromDatabase } from '@immich/sql-tools';
 import { Injectable } from '@nestjs/common';
 import AsyncLock from 'async-lock';
-import { FileMigrationProvider, Kysely, Migrator, sql } from 'kysely';
+import { Kysely, Migrator, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import semver from 'semver';
 import {
@@ -17,6 +16,12 @@ import {
 } from 'src/constants';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
+import { classifyMigration } from 'src/fork-schema/migration-manifest';
+import {
+  createForkMigrationProvider,
+  createLegacyMigrationProvider,
+  createOfficialMigrationProvider,
+} from 'src/fork-schema/migration-provider';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
@@ -418,6 +423,66 @@ export class DatabaseRepository {
     this.logger.log('Finished running migrations');
   }
 
+  async runOfficialMigrations(): Promise<void> {
+    this.logger.log('Running official migrations');
+
+    const migrator = new Migrator({
+      db: this.db,
+      migrationLockTableName: 'kysely_migrations_lock',
+      allowUnorderedMigrations: this.configRepository.isDev(),
+      migrationTableName: 'kysely_migrations',
+      // eslint-disable-next-line unicorn/prefer-module
+      provider: createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+    });
+
+    await this.runMigrationSet(migrator, 'official');
+  }
+
+  async runForkMigrations(): Promise<void> {
+    this.logger.log('Running fork migrations');
+
+    const migrator = new Migrator({
+      db: this.db,
+      migrationTableSchema: 'immich_fork',
+      migrationTableName: 'migrations',
+      migrationLockTableName: 'migrations_lock',
+      // eslint-disable-next-line unicorn/prefer-module
+      provider: createForkMigrationProvider(join(__dirname, '..', 'fork-schema/migrations')),
+    });
+
+    await this.runMigrationSet(migrator, 'fork');
+  }
+
+  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'fresh'> {
+    const {
+      rows: [ledgers],
+    } = await sql<{ forkLedger: string | null; officialLedger: string | null }>`
+      SELECT
+        to_regclass('public.kysely_migrations')::text AS "officialLedger",
+        to_regclass('immich_fork.migrations')::text AS "forkLedger"
+    `.execute(this.db);
+
+    let hasLegacyMigrations = false;
+    if (ledgers.officialLedger) {
+      const { rows } = await sql<{ name: string }>`SELECT name FROM public.kysely_migrations ORDER BY name`.execute(
+        this.db,
+      );
+      for (const { name } of rows) {
+        const owner = classifyMigration(name);
+        if (owner === 'unknown') {
+          throw new Error(`Unknown migration in kysely_migrations: ${name}`);
+        }
+        hasLegacyMigrations ||= owner === 'legacy-fork';
+      }
+    }
+
+    if (hasLegacyMigrations) {
+      return 'legacy';
+    }
+
+    return ledgers.forkLedger ? 'isolated' : 'fresh';
+  }
+
   async migrateFilePaths(sourceFolder: string, targetFolder: string): Promise<void> {
     // remove trailing slashes
     if (sourceFolder.endsWith('/')) {
@@ -582,12 +647,29 @@ export class DatabaseRepository {
       migrationLockTableName: 'kysely_migrations_lock',
       allowUnorderedMigrations: this.configRepository.isDev(),
       migrationTableName: 'kysely_migrations',
-      provider: new FileMigrationProvider({
-        fs: { readdir },
-        path: { join },
-        // eslint-disable-next-line unicorn/prefer-module
-        migrationFolder: join(__dirname, '..', 'schema/migrations'),
-      }),
+      // eslint-disable-next-line unicorn/prefer-module
+      provider: createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
     });
+  }
+
+  private async runMigrationSet(migrator: Migrator, owner: 'official' | 'fork'): Promise<void> {
+    const { error, results } = await migrator.migrateToLatest();
+
+    for (const result of results ?? []) {
+      if (result.status === 'Success') {
+        this.logger.log(`${owner} migration "${result.migrationName}" succeeded`);
+      }
+
+      if (result.status === 'Error') {
+        this.logger.warn(`${owner} migration "${result.migrationName}" failed`);
+      }
+    }
+
+    if (error) {
+      this.logger.error(`${owner} migrations failed: ${error}`);
+      throw error;
+    }
+
+    this.logger.log(`Finished running ${owner} migrations`);
   }
 }
