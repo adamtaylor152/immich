@@ -19,6 +19,8 @@ export type NormalizationResult = {
 
 export type NormalizationBatchResult = { count: number; digest: string };
 
+class ReservationInodeProofError extends Error {}
+
 export class ForkStorageNormalizationService {
   private readonly cryptoRepository: CryptoRepository;
   private readonly physicalFileRepository: PhysicalFileRepository;
@@ -48,8 +50,9 @@ export class ForkStorageNormalizationService {
       this.getUpstreamPath(asset),
     );
     let createdPath: string | undefined;
+    let metadataCommitted = false;
     try {
-      return await this.physicalFileRepository.withLockedNormalizationAsset(
+      const result = await this.physicalFileRepository.withLockedNormalizationAsset(
         assetId,
         prepared.reservation.token,
         async ({ asset, reservation, commit }) => {
@@ -61,17 +64,13 @@ export class ForkStorageNormalizationService {
           await this.assertSafePaths(asset, sourcePath, upstreamPath);
           const source = await this.cryptoRepository.hashFileDigests(sourcePath);
           this.verifyExpectedContent(asset, source);
-          await this.scavengeReservationTemp(asset, reservation.temporaryPath, upstreamPath);
-
-          if (upstreamPath !== sourcePath) {
-            createdPath = await this.stageVerifiedLink(
-              sourcePath,
-              upstreamPath,
-              reservation.temporaryPath,
-              source,
-              prepared.recovered || asset.mappedUpstreamPath === upstreamPath,
-            );
-          }
+          await this.ensureReservationTemp(asset, sourcePath, reservation.temporaryPath, upstreamPath, source);
+          createdPath = await this.publishOrAdoptReservationTemp(
+            asset,
+            reservation.temporaryPath,
+            upstreamPath,
+            source,
+          );
 
           await this.assertRegularFile(upstreamPath, 'normalization target');
           const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
@@ -127,10 +126,21 @@ export class ForkStorageNormalizationService {
           };
         },
       );
+      metadataCommitted = true;
+      await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
+      await this.physicalFileRepository.releaseNormalizationReservation(assetId, prepared.reservation.token);
+      return result;
     } catch (error) {
-      if (createdPath) {
+      if (createdPath && !metadataCommitted) {
         await rm(createdPath, { force: true });
         await this.syncDirectory(dirname(createdPath));
+      }
+      if (
+        !metadataCommitted &&
+        (!prepared.recovered || createdPath || error instanceof ReservationInodeProofError)
+      ) {
+        await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
+        await this.physicalFileRepository.releaseNormalizationReservation(assetId, prepared.reservation.token);
       }
       throw error;
     }
@@ -187,26 +197,82 @@ export class ForkStorageNormalizationService {
     return assetPath === asset.originalPath ? join(parsed.dir, `${parsed.name}.${asset.id}${parsed.ext}`) : assetPath;
   }
 
-  private async stageVerifiedLink(
+  private async ensureReservationTemp(
+    asset: PhysicalNormalizationAsset,
     sourcePath: string,
-    targetPath: string,
     temporaryPath: string,
+    targetPath: string,
     expected: { sha1: Buffer; sha256: Buffer; sizeInBytes: number },
-    mayAdoptExisting: boolean,
-  ): Promise<string | undefined> {
+  ): Promise<void> {
+    if (dirname(temporaryPath) !== dirname(targetPath) || !parse(temporaryPath).base.endsWith('.normalize')) {
+      throw new Error(`Durable normalization reservation has an unsafe temporary path: ${temporaryPath}`);
+    }
+    await this.assertSafeParent(asset, temporaryPath, 'temporary normalization target');
     try {
-      await this.assertRegularFile(targetPath, 'existing normalization target');
-      if (!mayAdoptExisting) {
-        throw new Error(`Existing normalization target is not durably owned by this asset: ${targetPath}`);
-      }
-      const existing = await this.cryptoRepository.hashFileDigests(targetPath);
+      await this.assertRegularFile(temporaryPath, 'reserved temporary normalization target');
+      const existing = await this.cryptoRepository.hashFileDigests(temporaryPath);
       if (
         existing.sizeInBytes !== expected.sizeInBytes ||
         !existing.sha1.equals(expected.sha1) ||
         !existing.sha256.equals(expected.sha256)
       ) {
-        throw new Error(`Existing normalization target does not match source: ${targetPath}`);
+        throw new Error(`Reserved temporary normalization target does not match source: ${temporaryPath}`);
       }
+      return;
+    } catch (error) {
+      if (!this.isMissingPath(error)) {
+        throw error;
+      }
+    }
+
+    try {
+      await link(sourcePath, temporaryPath);
+    } catch (error) {
+      if (!this.canFallbackToReflink(error)) {
+        throw error;
+      }
+      await copyFile(sourcePath, temporaryPath, constants.COPYFILE_FICLONE_FORCE);
+    }
+
+    await this.assertRegularFile(temporaryPath, 'temporary normalization target');
+
+    const handle = await open(temporaryPath, 'r');
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    const staged = await this.cryptoRepository.hashFileDigests(temporaryPath);
+    if (
+      staged.sizeInBytes !== expected.sizeInBytes ||
+      !staged.sha1.equals(expected.sha1) ||
+      !staged.sha256.equals(expected.sha256)
+    ) {
+      throw new Error(`Temporary normalization target does not match source: ${targetPath}`);
+    }
+  }
+
+  private async publishOrAdoptReservationTemp(
+    asset: PhysicalNormalizationAsset,
+    temporaryPath: string,
+    targetPath: string,
+    expected: { sha1: Buffer; sha256: Buffer; sizeInBytes: number },
+  ): Promise<string | undefined> {
+    await this.assertSafeParent(asset, temporaryPath, 'temporary normalization target');
+    await this.assertSafeParent(asset, targetPath, 'normalization target');
+    const temporaryStats = await lstat(temporaryPath);
+    if (temporaryStats.isSymbolicLink() || !temporaryStats.isFile()) {
+      throw new Error(`temporary normalization target must be a regular non-symlink file: ${temporaryPath}`);
+    }
+    try {
+      await this.assertRegularFile(targetPath, 'existing normalization target');
+      const targetStats = await lstat(targetPath);
+      if (temporaryStats.dev !== targetStats.dev || temporaryStats.ino !== targetStats.ino) {
+        throw new ReservationInodeProofError(
+          `Existing normalization target lacks reservation inode proof: ${targetPath}`,
+        );
+      }
+      await this.verifyDigestMatch(targetPath, expected, `Existing normalization target does not match source`);
       return;
     } catch (error) {
       if (!this.isMissingPath(error)) {
@@ -216,36 +282,17 @@ export class ForkStorageNormalizationService {
 
     let published = false;
     try {
-      try {
-        await link(sourcePath, temporaryPath);
-      } catch (error) {
-        if (!this.canFallbackToReflink(error)) {
-          throw error;
-        }
-        await copyFile(sourcePath, temporaryPath, constants.COPYFILE_FICLONE_FORCE);
-      }
-
-      await this.assertRegularFile(temporaryPath, 'temporary normalization target');
-
-      const handle = await open(temporaryPath, 'r');
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      const staged = await this.cryptoRepository.hashFileDigests(temporaryPath);
-      if (
-        staged.sizeInBytes !== expected.sizeInBytes ||
-        !staged.sha1.equals(expected.sha1) ||
-        !staged.sha256.equals(expected.sha256)
-      ) {
-        throw new Error(`Temporary normalization target does not match source: ${targetPath}`);
-      }
-
       await link(temporaryPath, targetPath);
       published = true;
       await this.assertRegularFile(targetPath, 'normalization target');
       await this.syncDirectory(dirname(targetPath));
+      const targetStats = await lstat(targetPath);
+      if (temporaryStats.dev !== targetStats.dev || temporaryStats.ino !== targetStats.ino) {
+        throw new ReservationInodeProofError(
+          `Published normalization target lacks reservation inode proof: ${targetPath}`,
+        );
+      }
+      await this.verifyDigestMatch(targetPath, expected, `Published normalization target does not match source`);
       return targetPath;
     } catch (error) {
       if (published) {
@@ -253,28 +300,38 @@ export class ForkStorageNormalizationService {
         await this.syncDirectory(dirname(targetPath));
       }
       throw error;
-    } finally {
-      await rm(temporaryPath, { force: true });
     }
   }
 
-  private async scavengeReservationTemp(
-    asset: PhysicalNormalizationAsset,
-    temporaryPath: string,
-    upstreamPath: string,
+  private async verifyDigestMatch(
+    path: string,
+    expected: { sha1: Buffer; sha256: Buffer; sizeInBytes: number },
+    message: string,
   ): Promise<void> {
-    if (dirname(temporaryPath) !== dirname(upstreamPath) || !parse(temporaryPath).base.endsWith('.normalize')) {
-      throw new Error(`Durable normalization reservation has an unsafe temporary path: ${temporaryPath}`);
+    const actual = await this.cryptoRepository.hashFileDigests(path);
+    if (
+      actual.sizeInBytes !== expected.sizeInBytes ||
+      !actual.sha1.equals(expected.sha1) ||
+      !actual.sha256.equals(expected.sha256)
+    ) {
+      throw new Error(`${message}: ${path}`);
     }
+  }
+
+  private async removeReservationTemp(asset: PhysicalNormalizationAsset, temporaryPath: string): Promise<void> {
     try {
       await this.assertRegularFile(temporaryPath, 'reserved temporary normalization target');
     } catch (error) {
       if (this.isMissingPath(error)) {
         return;
       }
-      throw error;
+      return;
     }
-    await this.assertSafeParent(asset, temporaryPath, 'temporary normalization target');
+    try {
+      await this.assertSafeParent(asset, temporaryPath, 'temporary normalization target');
+    } catch {
+      return;
+    }
     await rm(temporaryPath);
     await this.syncDirectory(dirname(temporaryPath));
   }
