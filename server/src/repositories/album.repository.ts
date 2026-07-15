@@ -423,7 +423,10 @@ export class AlbumRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await this.db.deleteFrom('album').where('id', '=', id).execute();
+    await this.db.transaction().execute(async (tx) => {
+      await tx.deleteFrom('album').where('id', '=', id).execute();
+      await this.forkMetadata.delete([id], tx);
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })

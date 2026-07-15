@@ -118,32 +118,35 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
 }
 
 /**
- * NSFW predicate. Previously a 30-line correlated EXISTS against asset_metadata
- * JSONB (no index). Replaced with a denormalized `asset.is_nsfw` boolean owned
- * by ImageEnrichmentService — see migration 2100000000010 and the
- * STRONG_DESCRIPTION_NSFW_TAGS constant which keeps the JSONB derivation
- * canonical for the column writer to read.
+ * Phase-aware NSFW predicate. Legacy and dual-write phases read the denormalized
+ * `asset.is_nsfw` value, while ready and isolated phases read the fork-owned
+ * privacy sidecar exclusively. A missing authoritative sidecar is treated as
+ * hidden so privacy enforcement fails closed.
  *
  * The `STRONG_DESCRIPTION_NSFW_TAGS` constant is kept exported because
  * ImageEnrichmentService uses the same derivation rules when computing the
  * boolean.
  */
-export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`exists (
-      select 1
-      from asset as nsfw_asset
-      where nsfw_asset.id = ${assetId}
-        and nsfw_asset.is_nsfw = true
-    )`;
+export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`case
+      when ${assetId} is null then false
+      when coalesce((select phase from immich_fork.state where id = 1), 'inactive') in ('legacy', 'dual-write') then exists (
+        select 1
+        from asset as nsfw_asset
+        where nsfw_asset.id = ${assetId}
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select 1
+        from immich_fork.asset_privacy as privacy_asset
+        where privacy_asset."assetId" = ${assetId}
+          and privacy_asset."isNsfw" = false
+      )
+    end`;
 
-// NOTE: COALESCE protects callers that LEFT JOIN `asset` and pass `not nsfwAssetExists(...)`
-// to a WHERE clause. Without it, a row whose left-joined asset is NULL (e.g. an
-// album-only activity comment) would evaluate `null = true` → NULL, `not NULL` →
-// NULL, and the WHERE filter would silently drop the row. The old correlated-EXISTS
-// implementation didn't have this hazard because `NOT EXISTS` returns TRUE for an
-// empty subquery. Treating the absent boolean as `false` (i.e., "not NSFW")
-// preserves the previous semantics.
-const nsfwAssetExists = (assetAlias = 'asset') =>
-  sql<boolean>`coalesce(${sql.ref(`${assetAlias}.is_nsfw`)}, false) = true`;
+// The shared expression explicitly treats a NULL asset ID as visible. This
+// preserves LEFT JOIN callers such as album-only activity comments while still
+// treating a real asset with a missing authoritative sidecar as hidden.
+const nsfwAssetExists = (assetAlias = 'asset') => nsfwAssetIdExists(sql.ref(`${assetAlias}.id`));
 
 export function withNsfwAssets<O>(qb: SelectQueryBuilder<DB, any, O>, assetAlias = 'asset') {
   return qb.where(nsfwAssetExists(assetAlias));

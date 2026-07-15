@@ -44,7 +44,9 @@ const globalSetup = async () => {
 
   const configRepository = new ConfigRepository();
   const logger = LoggingRepository.create();
-  await new DatabaseRepository(db, logger, configRepository).runMigrations();
+  const databaseRepository = new DatabaseRepository(db, logger, configRepository);
+  await databaseRepository.runMigrations();
+  await databaseRepository.runForkMigrations();
 
   await db.destroy();
 };

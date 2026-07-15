@@ -145,10 +145,8 @@ export class WorkflowRepository {
       .selectFrom('asset')
       .select((eb) => [
         'asset.visibility',
-        // `asset.is_nsfw` is a non-nullable boolean (DEFAULT false), so the predicate
-        // is never NULL and `coalesce(...)` is unnecessary. The predicate body
-        // lives in `nsfwAssetIdExists` (utils/database.ts) and resolves to an
-        // aliased EXISTS subquery against the `asset` table.
+        // The shared phase-aware predicate uses legacy state during legacy and
+        // dual-write, then switches exclusively to the fork privacy sidecar.
         nsfwAssetIdExists(sql.ref('asset.id')).as('isNsfw'),
         eb
           .exists(

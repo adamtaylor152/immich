@@ -301,6 +301,24 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runMigrations).not.toHaveBeenCalled();
     });
 
+    it('runs combined then isolated fork migrations in legacy mode', async () => {
+      const migrationOrder: string[] = [];
+      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
+      mocks.database.runMigrations.mockImplementation(() => {
+        migrationOrder.push('combined');
+        return Promise.resolve();
+      });
+      mocks.database.runForkMigrations.mockImplementation(() => {
+        migrationOrder.push('fork');
+        return Promise.resolve();
+      });
+
+      await expect(sut.onBootstrap()).resolves.toBeUndefined();
+
+      expect(migrationOrder).toEqual(['combined', 'fork']);
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+    });
+
     it.each(['fresh', 'isolated'] as const)('runs official then fork migrations in %s mode', async (mode) => {
       const migrationOrder: string[] = [];
       mocks.database.detectMigrationMode.mockResolvedValue(mode);

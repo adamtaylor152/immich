@@ -21,7 +21,7 @@ const canonicalize = (value: unknown): unknown => {
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         .map(([key, item]) => [key, canonicalize(item)]),
     );
   }
@@ -62,8 +62,22 @@ export class ForkAlbumMetadataRepository {
     const byId = new Map(metadata.map((item) => [item.albumId, item]));
     return rows.map((row) => {
       const sidecar = byId.get(row.id);
-      return sidecar ? { ...row, parentId: sidecar.parentId, icon: sidecar.icon, sortOrder: sidecar.sortOrder } : row;
+      if (!sidecar) {
+        throw new Error(`Missing fork album metadata sidecar for album ${row.id}`);
+      }
+      return { ...row, parentId: sidecar.parentId, icon: sidecar.icon, sortOrder: sidecar.sortOrder };
     });
+  }
+
+  async delete(ids: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    await sql`
+      DELETE FROM immich_fork.album_closure
+      WHERE "ancestorId" = ANY(${ids}::uuid[]) OR "descendantId" = ANY(${ids}::uuid[])
+    `.execute(kysely);
+    await sql`DELETE FROM immich_fork.album_metadata WHERE "albumId" = ANY(${ids}::uuid[])`.execute(kysely);
   }
 
   async shouldReadSidecar(kysely: Kysely<DB> = this.db): Promise<boolean> {
