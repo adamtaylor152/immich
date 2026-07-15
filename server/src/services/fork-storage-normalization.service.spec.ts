@@ -1,3 +1,13 @@
+import { Kysely } from 'kysely';
+import { createHash, randomUUID } from 'node:crypto';
+import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { StorageCore } from 'src/cores/storage.core';
+import { ChecksumAlgorithm } from 'src/enum';
+import { CryptoRepository } from 'src/repositories/crypto.repository';
+import { PhysicalFileRepository, PhysicalNormalizationAsset } from 'src/repositories/physical-file.repository';
+import { DB } from 'src/schema';
 import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
 
 describe(ForkStorageNormalizationService.name, () => {
@@ -17,5 +27,59 @@ describe(ForkStorageNormalizationService.name, () => {
     expect(forward).toEqual(reverse);
     expect(forward.count).toBe(2);
     expect(forward.digest).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('removes exclusively published files after a database failure and succeeds on retry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'immich-normalization-unit-'));
+    StorageCore.setMediaLocation(root);
+    const bytes = Buffer.from('database retry bytes');
+    const assetId = randomUUID();
+    const sourcePath = join(root, 'canonical.jpg');
+    const targetPath = join(root, `${assetId}.jpg`);
+    await writeFile(sourcePath, bytes);
+    const asset: PhysicalNormalizationAsset = {
+      id: assetId,
+      checksum: createHash('sha256').update(bytes).digest(),
+      checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      originalPath: sourcePath,
+      physicalFileId: null,
+      physicalCanonicalAssetId: randomUUID(),
+      physicalChecksum: null,
+      physicalCreatedAt: null,
+      physicalPath: sourcePath,
+      physicalSizeInBytes: bytes.length,
+      physicalType: null,
+      physicalUpdatedAt: null,
+      sharedPathCount: 2,
+      libraryImportPaths: [],
+      mappedUpstreamPath: null,
+    };
+    let failCommit = true;
+    const repository = {
+      withLockedNormalizationAsset: async (
+        _assetId: string,
+        callback: (context: {
+          asset: PhysicalNormalizationAsset;
+          reservePath: () => Promise<{ previouslyOwned: boolean }>;
+          commit: () => Promise<void>;
+        }) => Promise<unknown>,
+      ) =>
+        callback({
+          asset,
+          reservePath: () => Promise.resolve({ previouslyOwned: false }),
+          commit: () => (failCommit ? Promise.reject(new Error('database commit failed')) : Promise.resolve()),
+        }),
+    } as unknown as PhysicalFileRepository;
+    const service = new ForkStorageNormalizationService({} as Kysely<DB>, new CryptoRepository(), repository);
+
+    await expect(service.normalizeAsset(assetId)).rejects.toThrow('database commit failed');
+    await expect(lstat(targetPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    const remainingFiles = await readdir(root);
+    expect(remainingFiles.filter((path) => path.endsWith('.normalize'))).toEqual([]);
+
+    failCommit = false;
+    await expect(service.normalizeAsset(assetId)).resolves.toMatchObject({ assetId });
+    await expect(readFile(targetPath)).resolves.toEqual(bytes);
+    await rm(root, { recursive: true, force: true });
   });
 });

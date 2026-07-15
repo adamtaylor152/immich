@@ -1,11 +1,13 @@
 import { Kysely, sql } from 'kysely';
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdtemp, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm, JobStatus, PhysicalFileType } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { CryptoRepository } from 'src/repositories/crypto.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -28,6 +30,7 @@ describe('checksum and physical-storage normalization', () => {
 
   beforeEach(async () => {
     temporaryRoot = await mkdtemp(join(tmpdir(), 'immich-fork-normalization-'));
+    StorageCore.setMediaLocation(temporaryRoot);
     await sql`
       TRUNCATE
         immich_fork.asset_physical_file,
@@ -41,7 +44,9 @@ describe('checksum and physical-storage normalization', () => {
   });
 
   afterEach(async () => rm(temporaryRoot, { recursive: true, force: true }));
-  afterAll(async () => db.destroy());
+  afterAll(async () => {
+    await db.destroy();
+  });
 
   it('creates fork-owned checksum and physical mappings without cross-schema foreign keys', async () => {
     const expected = ['asset_checksum', 'asset_physical_file', 'physical_file'];
@@ -154,11 +159,172 @@ describe('checksum and physical-storage normalization', () => {
     const [firstPath, secondPath] = normalized.map(({ originalPath }) => originalPath);
     const [firstStats, secondStats] = await Promise.all([stat(firstPath), stat(secondPath)]);
     expect(firstStats.ino).toBe(secondStats.ino);
+    await expect(
+      Promise.all([normalization.normalizeAsset(assets[1].id!), normalization.normalizeAsset(assets[1].id!)]),
+    ).resolves.toHaveLength(2);
     await unlink(firstPath);
     await expect(readFile(secondPath)).resolves.toEqual(bytes);
     await link(secondPath, firstPath);
     await unlink(secondPath);
     await expect(readFile(firstPath)).resolves.toEqual(bytes);
+  });
+
+  it('rejects symlink sources and paths outside approved storage roots', async () => {
+    const bytes = Buffer.from('unsafe path bytes');
+    const realFile = join(temporaryRoot, 'real.jpg');
+    const symlinkPath = join(temporaryRoot, 'symlink.jpg');
+    await writeFile(realFile, bytes);
+    await symlink(realFile, symlinkPath);
+    const outsideRoot = await mkdtemp(join(tmpdir(), 'immich-fork-outside-'));
+    const outsidePath = join(outsideRoot, 'outside.jpg');
+    await writeFile(outsidePath, bytes);
+    const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const assets = [symlinkPath, outsidePath].map((originalPath, index) =>
+      mediumFactory.assetInsert({
+        ownerId: users[index].id,
+        originalPath,
+        checksum: sha('sha256', bytes),
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      }),
+    );
+    await db.insertInto('user').values(users).execute();
+    await db.insertInto('asset').values(assets).execute();
+    const normalization = new ForkStorageNormalizationService(db);
+
+    await expect(normalization.normalizeAsset(assets[0].id!)).rejects.toThrow(/non-symlink/);
+    await expect(normalization.normalizeAsset(assets[1].id!)).rejects.toThrow(/outside approved storage roots/);
+    await expect(lstat(symlinkPath)).resolves.toMatchObject({});
+    await rm(outsideRoot, { recursive: true, force: true });
+  });
+
+  it('rejects an independently owned target even when it has identical bytes', async () => {
+    const bytes = Buffer.from('ownership is not byte equality');
+    const canonicalPath = join(temporaryRoot, 'canonical.jpg');
+    await writeFile(canonicalPath, bytes);
+    const users = [mediumFactory.userInsert(), mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const duplicate = mediumFactory.assetInsert({
+      ownerId: users[1].id,
+      originalPath: canonicalPath,
+      checksum: sha('sha256', bytes),
+      checksumAlgorithm: ChecksumAlgorithm.sha256File,
+    });
+    const targetPath = join(temporaryRoot, `${duplicate.id}.jpg`);
+    await writeFile(targetPath, bytes);
+    const assets = [
+      mediumFactory.assetInsert({
+        ownerId: users[0].id,
+        originalPath: canonicalPath,
+        checksum: sha('sha256', bytes),
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      }),
+      duplicate,
+      mediumFactory.assetInsert({
+        ownerId: users[2].id,
+        originalPath: targetPath,
+        checksum: sha('sha256', bytes),
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      }),
+    ];
+    await db.insertInto('user').values(users).execute();
+    await db.insertInto('asset').values(assets).execute();
+    const physical = await db
+      .insertInto('physical_file')
+      .values({
+        canonicalAssetId: assets[0].id!,
+        checksum: sha('sha256', bytes),
+        path: canonicalPath,
+        sizeInBytes: bytes.length,
+        type: PhysicalFileType.Original,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable('asset')
+      .set({ physicalOriginalFileId: physical.id })
+      .where('id', 'in', [assets[0].id!, duplicate.id!])
+      .execute();
+
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(
+      /owned by another public asset/,
+    );
+    await expect(readFile(targetPath)).resolves.toEqual(bytes);
+
+    await db.deleteFrom('asset').where('id', '=', assets[2].id!).execute();
+    await rm(targetPath);
+    await symlink(canonicalPath, targetPath);
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(/non-symlink/);
+    await rm(targetPath);
+    await writeFile(targetPath, bytes);
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(
+      /not durably owned/,
+    );
+  });
+
+  it('serializes normalization with bulk user deletion and returns the locked normalized path', async () => {
+    const bytes = Buffer.from('normalization delete race');
+    const canonicalPath = join(temporaryRoot, 'delete-race.jpg');
+    await writeFile(canonicalPath, bytes);
+    const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const assets = users.map((user) =>
+      mediumFactory.assetInsert({
+        ownerId: user.id,
+        originalPath: canonicalPath,
+        checksum: sha('sha256', bytes),
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+      }),
+    );
+    await db.insertInto('user').values(users).execute();
+    await db.insertInto('asset').values(assets).execute();
+    const physical = await db
+      .insertInto('physical_file')
+      .values({
+        canonicalAssetId: assets[0].id!,
+        checksum: sha('sha256', bytes),
+        path: canonicalPath,
+        sizeInBytes: bytes.length,
+        type: PhysicalFileType.Original,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable('asset')
+      .set({ physicalOriginalFileId: physical.id })
+      .where(
+        'id',
+        'in',
+        assets.map(({ id }) => id!),
+      )
+      .execute();
+
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    const hashing = new Promise<void>((resolve) => (entered = resolve));
+    class GatedCryptoRepository extends CryptoRepository {
+      private first = true;
+      override async hashFileDigests(filepath: string | Buffer) {
+        if (this.first) {
+          this.first = false;
+          entered();
+          await blocked;
+        }
+        return super.hashFileDigests(filepath);
+      }
+    }
+    const normalizing = new ForkStorageNormalizationService(db, new GatedCryptoRepository()).normalizeAsset(
+      assets[1].id!,
+    );
+    await hashing;
+    const deleting = new AssetRepository(db).deleteAll(users[1].id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    await normalizing;
+    const [removed] = await deleting;
+
+    expect(removed?.originalPath).toBe(join(temporaryRoot, `${assets[1].id}.jpg`));
+    await rm(removed!.originalPath, { force: true });
+    await expect(lstat(removed!.originalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(canonicalPath)).resolves.toEqual(bytes);
   });
 
   it('fails the fenced progress row and leaves the asset unchanged when its original is unreadable', async () => {
@@ -177,6 +343,7 @@ describe('checksum and physical-storage normalization', () => {
       db,
     );
     sut.onModuleInit();
+    StorageCore.setMediaLocation(temporaryRoot);
 
     await expect(sut.runBatch('checksum', 1)).resolves.toBe(JobStatus.Failed);
 
@@ -223,6 +390,7 @@ describe('checksum and physical-storage normalization', () => {
       db,
     );
     sut.onModuleInit();
+    StorageCore.setMediaLocation(temporaryRoot);
 
     await expect(sut.runBatch('checksum', 1)).resolves.toBe(JobStatus.Failed);
 
@@ -266,9 +434,12 @@ describe('checksum and physical-storage normalization', () => {
       db,
     );
     sut.onModuleInit();
+    StorageCore.setMediaLocation(temporaryRoot);
 
-    await expect(sut.runBatch('storage', 10)).resolves.toBe(JobStatus.Success);
-    await expect(sut.runBatch('checksum', 10)).resolves.toBe(JobStatus.Success);
+    await expect(Promise.all([sut.runBatch('storage', 10), sut.runBatch('checksum', 10)])).resolves.toEqual([
+      JobStatus.Success,
+      JobStatus.Success,
+    ]);
 
     const progress = await sql<{ digest: string; kind: string; processed: number }>`
       SELECT kind, processed::int AS processed, digest

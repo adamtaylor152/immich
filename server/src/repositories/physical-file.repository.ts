@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, Selectable, sql } from 'kysely';
+import { Kysely, Selectable, Transaction, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { AssetFileType, AssetStatus, ChecksumAlgorithm, PhysicalFileType } from 'src/enum';
 import { DB } from 'src/schema';
@@ -22,6 +22,8 @@ export type PhysicalNormalizationAsset = {
   physicalType: string | null;
   physicalUpdatedAt: Date | null;
   sharedPathCount: number;
+  libraryImportPaths: string[];
+  mappedUpstreamPath: string | null;
 };
 
 export type PhysicalNormalizationCommit = {
@@ -87,7 +89,10 @@ export class PhysicalFileRepository {
       .executeTakeFirst();
   }
 
-  async getNormalizationAsset(assetId: string): Promise<PhysicalNormalizationAsset | undefined> {
+  private async getNormalizationAssetFrom(
+    db: Kysely<DB> | Transaction<DB>,
+    assetId: string,
+  ): Promise<PhysicalNormalizationAsset | undefined> {
     const result = await sql<PhysicalNormalizationAsset>`
       SELECT
         asset.id,
@@ -102,6 +107,8 @@ export class PhysicalFileRepository {
         coalesce(physical."sizeInBytes", fork_physical."sizeInBytes")::float8 AS "physicalSizeInBytes",
         coalesce(physical.type::text, fork_physical.type) AS "physicalType",
         coalesce(physical."updatedAt", fork_physical."updatedAt") AS "physicalUpdatedAt",
+        coalesce(library."importPaths", ARRAY[]::text[]) AS "libraryImportPaths",
+        mapping."upstreamPath" AS "mappedUpstreamPath",
         (
           SELECT count(*)::int FROM public.asset shared
           WHERE shared."originalPath" = asset."originalPath"
@@ -114,30 +121,80 @@ export class PhysicalFileRepository {
       LEFT JOIN public.physical_file physical ON physical.id = asset."physicalOriginalFileId"
       LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
       LEFT JOIN immich_fork.physical_file fork_physical ON fork_physical.id = mapping."physicalFileId"
+      LEFT JOIN public.library library ON library.id = asset."libraryId"
       WHERE asset.id = ${assetId}::uuid
-    `.execute(this.db);
+    `.execute(db);
     return result.rows[0];
   }
 
-  async commitNormalization(input: PhysicalNormalizationCommit): Promise<void> {
-    const { asset, evidence, linkCount, sha1, sha256, sizeInBytes, upstreamPath, verifiedPaths } = input;
-    await this.db.transaction().execute(async (trx) => {
-      const state = await sql<{ phase: string }>`
-        SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE
-      `.execute(trx);
+  async getNormalizationAsset(assetId: string): Promise<PhysicalNormalizationAsset | undefined> {
+    return this.getNormalizationAssetFrom(this.db, assetId);
+  }
+
+  async withLockedNormalizationAsset<T>(
+    assetId: string,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservePath: (upstreamPath: string) => Promise<{ previouslyOwned: boolean }>;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.db.transaction().execute(async (trx) => {
+      const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE`.execute(
+        trx,
+      );
       if (state.rows[0]?.phase !== 'dual-write') {
-        throw new Error('Storage normalization can only commit in dual-write phase');
+        throw new Error('Storage normalization can only run in dual-write phase');
       }
-
-      const lockedAsset = await sql<{ originalPath: string }>`
-        SELECT "originalPath" FROM public.asset WHERE id = ${asset.id}::uuid FOR UPDATE
-      `.execute(trx);
-      if (lockedAsset.rows[0]?.originalPath !== asset.originalPath) {
-        throw new Error(`Asset ${asset.id} path changed during storage normalization`);
+      const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
+      if (locked.rows.length === 0) {
+        throw new Error(`Asset ${assetId} does not exist`);
       }
+      const asset = await this.getNormalizationAssetFrom(trx, assetId);
+      if (!asset) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      return callback({
+        asset,
+        reservePath: async (upstreamPath) => {
+          const existing = await sql<{ assetId: string }>`
+            SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
+          `.execute(trx);
+          if (existing.rows[0] && existing.rows[0].assetId !== asset.id) {
+            throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
+          }
+          if (upstreamPath !== asset.originalPath) {
+            const publicOwner = await sql<{ id: string }>`
+              SELECT id FROM public.asset WHERE "originalPath" = ${upstreamPath} AND id <> ${asset.id}::uuid LIMIT 1
+            `.execute(trx);
+            if (publicOwner.rows[0]) {
+              throw new Error(`Normalization target is owned by another public asset: ${upstreamPath}`);
+            }
+          }
+          const previouslyOwned = asset.mappedUpstreamPath === upstreamPath;
+          await sql`
+            INSERT INTO immich_fork.asset_physical_file
+              ("assetId", "physicalFileId", "upstreamPath", "verifiedAt", "updatedAt")
+            VALUES (${asset.id}::uuid, ${asset.physicalFileId}::uuid, ${upstreamPath}, now(), now())
+            ON CONFLICT ("assetId") DO UPDATE SET
+              "physicalFileId" = excluded."physicalFileId",
+              "upstreamPath" = excluded."upstreamPath",
+              "updatedAt" = excluded."updatedAt"
+          `.execute(trx);
+          return { previouslyOwned };
+        },
+        commit: (input) => this.commitNormalization(trx, { ...input, asset }),
+      });
+    });
+  }
 
-      if (asset.physicalFileId && asset.physicalPath && asset.physicalChecksum && asset.physicalType) {
-        await sql`
+  private async commitNormalization(
+    db: Kysely<DB> | Transaction<DB>,
+    input: PhysicalNormalizationCommit,
+  ): Promise<void> {
+    const { asset, evidence, linkCount, sha1, sha256, sizeInBytes, upstreamPath, verifiedPaths } = input;
+    if (asset.physicalFileId && asset.physicalPath && asset.physicalChecksum && asset.physicalType) {
+      await sql`
           INSERT INTO immich_fork.physical_file
             (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt")
           VALUES (
@@ -157,10 +214,10 @@ export class PhysicalFileRepository {
             "sizeInBytes" = excluded."sizeInBytes",
             "canonicalPath" = excluded."canonicalPath",
             "updatedAt" = excluded."updatedAt"
-        `.execute(trx);
-      }
+        `.execute(db);
+    }
 
-      await sql`
+    await sql`
         INSERT INTO immich_fork.asset_checksum
           ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount", evidence, "verifiedAt", "updatedAt")
         VALUES (
@@ -183,8 +240,8 @@ export class PhysicalFileRepository {
           evidence = excluded.evidence,
           "verifiedAt" = excluded."verifiedAt",
           "updatedAt" = excluded."updatedAt"
-      `.execute(trx);
-      await sql`
+      `.execute(db);
+    await sql`
         INSERT INTO immich_fork.asset_physical_file
           ("assetId", "physicalFileId", "upstreamPath", "verifiedAt", "updatedAt")
         VALUES (${asset.id}::uuid, ${asset.physicalFileId}::uuid, ${upstreamPath}, now(), now())
@@ -193,8 +250,8 @@ export class PhysicalFileRepository {
           "upstreamPath" = excluded."upstreamPath",
           "verifiedAt" = excluded."verifiedAt",
           "updatedAt" = excluded."updatedAt"
-      `.execute(trx);
-      await sql`
+      `.execute(db);
+    await sql`
         UPDATE public.asset
         SET
           checksum = ${sha1},
@@ -203,8 +260,7 @@ export class PhysicalFileRepository {
           "physicalOriginalFileId" = NULL,
           "updatedAt" = now()
         WHERE id = ${asset.id}::uuid
-      `.execute(trx);
-    });
+      `.execute(db);
   }
 
   async upsertPhysicalFile(input: PhysicalFileInput): Promise<PhysicalFile> {

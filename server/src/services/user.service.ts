@@ -261,6 +261,15 @@ export class UserService extends BaseService {
 
     this.logger.log(`Deleting user: ${user.id}`);
 
+    this.logger.warn(`Removing user from database: ${user.id}`);
+    const removedAssets = (await this.assetRepository.deleteAll(user.id)) ?? [];
+    const originalFiles = removedAssets
+      .filter(({ libraryId, isOffline }) => !libraryId && !isOffline)
+      .map(({ originalPath }) => originalPath);
+    if (originalFiles.length > 0) {
+      await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: originalFiles } });
+    }
+
     const folders = [
       StorageCore.getLibraryFolder(user),
       StorageCore.getFolderLocation(StorageFolder.Upload, user.id),
@@ -274,8 +283,6 @@ export class UserService extends BaseService {
       await this.storageRepository.unlinkDir(folder, { recursive: true, force: true });
     }
 
-    this.logger.warn(`Removing user from database: ${user.id}`);
-    await this.assetRepository.deleteAll(user.id);
     await this.albumRepository.deleteAll(user.id);
     await this.userRepository.delete(user, true);
 

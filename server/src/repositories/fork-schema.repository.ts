@@ -284,7 +284,6 @@ export class ForkSchemaRepository {
         WHERE (${progress.cursor}::text IS NULL OR id::text > ${progress.cursor})
         ORDER BY id::text
         LIMIT ${size}
-        FOR UPDATE SKIP LOCKED
       `.execute(trx);
       const ids = batch.rows.map(({ id }) => id);
       if (ids.length === 0) {

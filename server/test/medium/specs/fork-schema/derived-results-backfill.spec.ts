@@ -447,7 +447,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
       `,
         )
         .execute(db);
-      let deleting!: Promise<void>;
+      let deleting!: Promise<unknown>;
       let writing!: Promise<{ status: 'fulfilled' } | { status: 'rejected'; error: unknown }>;
       try {
         await db.transaction().execute(async (controller) => {

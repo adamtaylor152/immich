@@ -47,6 +47,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   await sql`CREATE INDEX asset_physical_file_physical_idx ON immich_fork.asset_physical_file ("physicalFileId")`.execute(
     db,
   );
+  await sql`CREATE UNIQUE INDEX asset_physical_file_upstream_path_uq ON immich_fork.asset_physical_file ("upstreamPath")`.execute(
+    db,
+  );
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
