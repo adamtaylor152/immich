@@ -146,11 +146,10 @@ export class ForkSchemaMigrationService extends BaseService {
     const seedPromise = this.seedPromise;
     try {
       await seedPromise;
-    } catch (error) {
+    } finally {
       if (this.seedPromise === seedPromise) {
         this.seedPromise = undefined;
       }
-      throw error;
     }
   }
 
