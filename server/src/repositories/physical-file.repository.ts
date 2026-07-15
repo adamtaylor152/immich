@@ -170,7 +170,11 @@ export class PhysicalFileRepository {
       `.execute(trx);
       const reservation = existing.rows[0];
       if (reservation) {
-        if (reservation.sourcePath !== asset.originalPath || reservation.upstreamPath !== upstreamPath) {
+        const reservationMatchesSource =
+          reservation.sourcePath === asset.originalPath && reservation.upstreamPath === upstreamPath;
+        const reservationMatchesCommittedMapping =
+          asset.originalPath === reservation.upstreamPath && asset.mappedUpstreamPath === reservation.upstreamPath;
+        if (!reservationMatchesSource && !reservationMatchesCommittedMapping) {
           throw new Error(`Asset ${assetId} has a conflicting durable storage reservation`);
         }
         return { asset, reservation, recovered: true };
@@ -209,6 +213,13 @@ export class PhysicalFileRepository {
     });
   }
 
+  async releaseNormalizationReservation(assetId: string, token: string): Promise<void> {
+    await sql`
+      DELETE FROM immich_fork.asset_storage_reservation
+      WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
+    `.execute(this.db);
+  }
+
   async withLockedNormalizationAsset<T>(
     assetId: string,
     token: string,
@@ -240,7 +251,12 @@ export class PhysicalFileRepository {
         FOR UPDATE
       `.execute(trx);
       const reservation = reservations.rows[0];
-      if (!reservation || reservation.sourcePath !== asset.originalPath) {
+      const reservationMatchesSource = reservation?.sourcePath === asset.originalPath;
+      const reservationMatchesCommittedMapping =
+        reservation &&
+        asset.originalPath === reservation.upstreamPath &&
+        asset.mappedUpstreamPath === reservation.upstreamPath;
+      if (!reservation || (!reservationMatchesSource && !reservationMatchesCommittedMapping)) {
         throw new Error(`Asset ${assetId} durable storage reservation is missing or stale`);
       }
       return callback({
@@ -248,10 +264,6 @@ export class PhysicalFileRepository {
         reservation,
         commit: async (input) => {
           await this.commitNormalization(trx, { ...input, asset });
-          await sql`
-            DELETE FROM immich_fork.asset_storage_reservation
-            WHERE "assetId" = ${asset.id}::uuid AND token = ${token}::uuid
-          `.execute(trx);
         },
       });
     });

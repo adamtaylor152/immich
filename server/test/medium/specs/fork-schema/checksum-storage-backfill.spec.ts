@@ -294,9 +294,7 @@ describe('checksum and physical-storage normalization', () => {
     await sql`DELETE FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${duplicate.id}::uuid`.execute(db);
     await rm(targetPath);
     await writeFile(targetPath, bytes);
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(
-      /not durably owned/,
-    );
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(/inode proof/);
   });
 
   it('recovers a published final authorized by a durable same-asset reservation', async () => {
@@ -311,7 +309,8 @@ describe('checksum and physical-storage normalization', () => {
         ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
       VALUES (${assetId}::uuid, ${token}::uuid, ${canonicalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
     `.execute(db);
-    await link(canonicalPath, upstreamPath);
+    await link(canonicalPath, temporaryPath);
+    await link(temporaryPath, upstreamPath);
 
     await expect(new ForkStorageNormalizationService(db).normalizeAsset(assetId)).resolves.toMatchObject({ assetId });
     const state = await sql<{ mapping: number; reservations: number }>`
@@ -320,6 +319,52 @@ describe('checksum and physical-storage normalization', () => {
         (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
     `.execute(db);
     expect(state.rows[0]).toEqual({ mapping: 1, reservations: 0 });
+    await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
+    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('rejects a durable reservation whose matching final has a different inode', async () => {
+    const bytes = Buffer.from('different inode is not ownership');
+    const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const assetId = assets[1].id!;
+    const upstreamPath = join(temporaryRoot, `${assetId}.jpg`);
+    const token = randomUUID();
+    const temporaryPath = join(temporaryRoot, `.${assetId}.jpg.${token}.normalize`);
+    await sql`
+      INSERT INTO immich_fork.asset_storage_reservation
+        ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
+      VALUES (${assetId}::uuid, ${token}::uuid, ${canonicalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
+    `.execute(db);
+    await link(canonicalPath, temporaryPath);
+    await writeFile(upstreamPath, bytes);
+
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
+    await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
+    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    const state = await sql<{ mappings: number; reservations: number }>`
+      SELECT
+        (SELECT count(*)::int FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS mappings,
+        (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
+    `.execute(db);
+    expect(state.rows[0]).toEqual({ mappings: 0, reservations: 0 });
+  });
+
+  it('repeatedly rejects an untracked matching final without creating a mapping', async () => {
+    const bytes = Buffer.from('matching final without proof');
+    const { assets } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const assetId = assets[1].id!;
+    const upstreamPath = join(temporaryRoot, `${assetId}.jpg`);
+    await writeFile(upstreamPath, bytes);
+    const normalization = new ForkStorageNormalizationService(db);
+
+    await expect(normalization.normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
+    await expect(normalization.normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
+    const state = await sql<{ mappings: number; reservations: number }>`
+      SELECT
+        (SELECT count(*)::int FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS mappings,
+        (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
+    `.execute(db);
+    expect(state.rows[0]).toEqual({ mappings: 0, reservations: 0 });
     await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
   });
 

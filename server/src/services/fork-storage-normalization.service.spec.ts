@@ -73,6 +73,10 @@ describe(ForkStorageNormalizationService.name, () => {
         reservationCreated = true;
         return Promise.resolve({ asset, reservation, recovered });
       },
+      releaseNormalizationReservation: () => {
+        reservationCreated = false;
+        return Promise.resolve();
+      },
       withLockedNormalizationAsset: async (
         _assetId: string,
         _token: string,
