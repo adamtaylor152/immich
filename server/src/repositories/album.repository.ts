@@ -16,6 +16,7 @@ import { Chunked, ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/
 import { AlbumUserCreateDto, MapAlbumDto } from 'src/dtos/album.dto';
 import { AlbumUserRole } from 'src/enum';
 import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -89,9 +90,11 @@ const isAlbumOwned = (ownerId: string) => (eb: ExpressionBuilder<DB, 'album'>) =
 @Injectable()
 export class AlbumRepository {
   private readonly forkMetadata: ForkAlbumMetadataRepository;
+  private readonly smartAlbums: SmartAlbumRepository;
 
   constructor(@InjectKysely() private db: Kysely<DB>) {
     this.forkMetadata = new ForkAlbumMetadataRepository(db);
+    this.smartAlbums = new SmartAlbumRepository(db);
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { withAssets: true }, DummyValue.UUID] })
@@ -268,7 +271,15 @@ export class AlbumRepository {
   }
 
   async deleteAll(userId: string): Promise<void> {
-    await this.db.deleteFrom('album').where(isAlbumOwned(userId)).execute();
+    await this.db.transaction().execute(async (tx) => {
+      const albums = await tx.selectFrom('album').select('id').where(isAlbumOwned(userId)).execute();
+      await this.smartAlbums.deleteAlbums(
+        albums.map(({ id }) => id),
+        tx,
+      );
+      await this.smartAlbums.deleteOwner(userId, tx);
+      await tx.deleteFrom('album').where(isAlbumOwned(userId)).execute();
+    });
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })
@@ -430,6 +441,7 @@ export class AlbumRepository {
         .where('id_ancestor', '=', id)
         .execute();
       const subtreeIds = subtree.length > 0 ? subtree.map(({ id_descendant }) => id_descendant) : [id];
+      await this.smartAlbums.deleteAlbums(subtreeIds, tx);
       await tx.deleteFrom('album').where('id', '=', id).execute();
       await this.forkMetadata.delete(subtreeIds, tx);
     });

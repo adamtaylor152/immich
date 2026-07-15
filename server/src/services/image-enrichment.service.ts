@@ -872,6 +872,16 @@ export class ImageEnrichmentService extends BaseService {
 
   private async getEnrichmentMetadata(id: string, kysely?: Kysely<DB>): Promise<EnrichmentMetadata> {
     const database = kysely ?? this.db;
+    let authoritativePrivacy: PrivacySidecar | undefined;
+    if (this.db) {
+      const privacyRepository = new ForkPrivacyRepository(this.db);
+      if (await privacyRepository.shouldReadSidecar(database)) {
+        authoritativePrivacy = await privacyRepository.get(id, database);
+        if (!authoritativePrivacy) {
+          throw new Error(`Missing fork privacy sidecar for asset ${id}`);
+        }
+      }
+    }
     let metadata: EnrichmentMetadata;
     if (this.db && database && (await new ForkEnrichmentRepository(this.db).shouldReadSidecar(database))) {
       const sidecar = await new ForkEnrichmentRepository(this.db).get(id, database);
@@ -887,16 +897,10 @@ export class ImageEnrichmentService extends BaseService {
       return metadata;
     }
 
-    const repository = new ForkPrivacyRepository(this.db);
-    if (!(await repository.shouldReadSidecar(database))) {
+    if (!authoritativePrivacy) {
       return metadata;
     }
-
-    const privacy = await repository.get(id, database);
-    if (!privacy) {
-      throw new Error(`Missing fork privacy sidecar for asset ${id}`);
-    }
-    return this.applyPrivacySidecar(metadata, privacy);
+    return this.applyPrivacySidecar(metadata, authoritativePrivacy);
   }
 
   private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {
@@ -969,6 +973,8 @@ export class ImageEnrichmentService extends BaseService {
   }) {
     let visible = false;
     let metadataChanged = false;
+    const enrichmentRepository = this.db ? new ForkEnrichmentRepository(this.db) : undefined;
+    const sidecarOnly = !!enrichmentRepository && (await enrichmentRepository.shouldReadSidecar());
 
     const descriptionHash = hash(result.description);
     if (
@@ -982,7 +988,7 @@ export class ImageEnrichmentService extends BaseService {
         previousDescription ? [previousDescription] : [],
       );
 
-      if (block && !baseDescription.includes(block)) {
+      if (!sidecarOnly && block && !baseDescription.includes(block)) {
         const description = baseDescription ? `${baseDescription}\n\n${block}` : block;
         await this.assetRepository.upsertExif({
           exif: updateLockedColumns({ assetId: id, description }),
@@ -1004,11 +1010,15 @@ export class ImageEnrichmentService extends BaseService {
       (tags.length > 0 || hasStoredTagApplication) &&
       descriptionMetadata.appliedTagHash !== tagHash
     ) {
-      const cleared = await this.clearGeneratedTags(id, ownerId, previousTagValues);
-      visible ||= cleared.visible;
+      if (!sidecarOnly) {
+        const cleared = await this.clearGeneratedTags(id, ownerId, previousTagValues);
+        visible ||= cleared.visible;
+      }
 
       if (tags.length > 0) {
-        const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
+        const tagsChanged = sidecarOnly
+          ? { visible: false, appliedTagValues: tags }
+          : await this.upsertAssetTags(id, ownerId, tags);
         visible ||= tagsChanged.visible;
 
         descriptionMetadata.appliedTagHash = tagHash;

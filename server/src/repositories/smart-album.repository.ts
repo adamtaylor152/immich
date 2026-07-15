@@ -367,6 +367,41 @@ export class SmartAlbumRepository {
     });
   }
 
+  async deleteAssets(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+    await sql`DELETE FROM immich_fork.smart_album_match WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
+    await sql`DELETE FROM immich_fork.smart_album_exclusion WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
+  }
+
+  async deleteAlbums(albumIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (albumIds.length === 0) {
+      return;
+    }
+    const rules = await sql<{ id: string }>`
+      SELECT id::text AS id FROM immich_fork.smart_album_rule WHERE "albumId" = ANY(${albumIds}::uuid[])
+    `.execute(kysely);
+    const ids = rules.rows.map(({ id }) => id);
+    if (ids.length > 0) {
+      await sql`DELETE FROM immich_fork.smart_album_match WHERE "smartAlbumId" = ANY(${ids}::uuid[])`.execute(kysely);
+      await sql`DELETE FROM immich_fork.smart_album_exclusion WHERE "smartAlbumId" = ANY(${ids}::uuid[])`.execute(
+        kysely,
+      );
+    }
+    await sql`DELETE FROM immich_fork.smart_album_rule WHERE "albumId" = ANY(${albumIds}::uuid[])`.execute(kysely);
+  }
+
+  async deleteOwner(ownerId: string, kysely: Kysely<DB> = this.db): Promise<void> {
+    const rules = await sql<{ albumId: string }>`
+      SELECT "albumId"::text AS "albumId" FROM immich_fork.smart_album_rule WHERE "ownerId" = ${ownerId}::uuid
+    `.execute(kysely);
+    await this.deleteAlbums(
+      rules.rows.map(({ albumId }) => albumId),
+      kysely,
+    );
+  }
+
   private async shouldReadSidecar(kysely: Kysely<DB> = this.db) {
     const phase = await this.getPhase(kysely);
     return phase !== 'legacy' && phase !== 'dual-write';

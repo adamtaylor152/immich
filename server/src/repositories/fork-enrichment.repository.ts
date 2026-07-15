@@ -48,6 +48,23 @@ export class ForkEnrichmentRepository {
     await this.backfill([assetId], kysely);
   }
 
+  async initialize(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length === 0 || (await this.getPhase(kysely)) === 'legacy') {
+      return;
+    }
+    await sql`
+      INSERT INTO immich_fork.asset_enrichment ("assetId")
+      SELECT id FROM asset WHERE id = ANY(${assetIds}::uuid[])
+      ON CONFLICT ("assetId") DO NOTHING
+    `.execute(kysely);
+  }
+
+  async delete(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
+    if (assetIds.length > 0) {
+      await sql`DELETE FROM immich_fork.asset_enrichment WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
+    }
+  }
+
   async get(assetId: string, kysely: Kysely<DB> = this.db): Promise<EnrichmentSidecar | undefined> {
     const result = await sql<EnrichmentSidecar>`
       SELECT "assetId"::text AS "assetId", provenance, "userDescription", "generatedDescription",
@@ -97,10 +114,9 @@ export class ForkEnrichmentRepository {
     );
     for (const row of legacy.rows) {
       const generated = this.generatedFields(row.provenance);
-      const textGeneratedDescriptions = row.description
-        .split('\n\n')
-        .filter((part) => part.startsWith(prefix))
-        .map((part) => part.slice(prefix.length));
+      const textGeneratedDescriptions = [
+        ...row.description.matchAll(/(?:^|\n\n)AI description: ([\s\S]*?)(?=\n\n|$)/g),
+      ].map((match) => match[1] ?? '');
       const sidecarDescription =
         generated.description ?? (textGeneratedDescriptions.length > 0 ? textGeneratedDescriptions.join('\n\n') : null);
       const block = generated.description == null ? null : `${prefix}${generated.description}`;
@@ -108,24 +124,16 @@ export class ForkEnrichmentRepository {
         row.provenance.description?.status === 'success'
           ? row.provenance.description.appliedDescriptionHash
           : undefined;
-      const proven =
-        !!block &&
-        storedHash === descriptionHash(generated.description!) &&
-        row.description.split('\n\n').includes(block);
+      const exactMatches = block ? this.findExactParagraphs(row.description, block) : [];
+      const proven = !!block && storedHash === descriptionHash(generated.description!) && exactMatches.length === 1;
       const appliedTagValues =
         row.provenance.description?.status === 'success' ? row.provenance.description.appliedTagValues : undefined;
       const provenTags =
         Array.isArray(appliedTagValues) &&
         row.provenance.description.appliedTagHash === descriptionHash(appliedTagValues);
-      const userDescription = proven
-        ? row.description
-            .split('\n\n')
-            .filter((part) => part !== block)
-            .join('\n\n')
-        : row.description;
+      const userDescription = proven ? this.removeExactParagraph(row.description, exactMatches[0]!) : row.description;
       const requiresReview =
-        (textGeneratedDescriptions.length > 0 && !proven) ||
-        (!!row.provenance.description?.appliedTagHash && !provenTags);
+        (textGeneratedDescriptions.length > 0 && !proven) || (generated.tags.length > 0 && !provenTags);
       await sql`
         INSERT INTO immich_fork.asset_enrichment
           ("assetId", provenance, "userDescription", "generatedDescription", "generatedTags", "requiresReview")
@@ -159,6 +167,31 @@ export class ForkEnrichmentRepository {
     }
     const tags = task.appliedTagValues ?? task.result?.tags ?? [];
     return { description: typeof task.result?.description === 'string' ? task.result.description : null, tags };
+  }
+
+  private findExactParagraphs(value: string, block: string): Array<{ start: number; end: number }> {
+    const matches: Array<{ start: number; end: number }> = [];
+    let offset = 0;
+    while ((offset = value.indexOf(block, offset)) >= 0) {
+      const end = offset + block.length;
+      const startsAtBoundary = offset === 0 || value.slice(offset - 2, offset) === '\n\n';
+      const endsAtBoundary = end === value.length || value.slice(end, end + 2) === '\n\n';
+      if (startsAtBoundary && endsAtBoundary) {
+        matches.push({ start: offset, end });
+      }
+      offset = end;
+    }
+    return matches;
+  }
+
+  private removeExactParagraph(value: string, match: { start: number; end: number }): string {
+    if (match.start > 0) {
+      return value.slice(0, match.start - 2) + value.slice(match.end);
+    }
+    if (value.slice(match.end, match.end + 2) === '\n\n') {
+      return value.slice(match.end + 2);
+    }
+    return value.slice(match.end);
   }
 
   private async getMany(ids: string[], kysely: Kysely<DB>) {

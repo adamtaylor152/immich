@@ -274,6 +274,7 @@ export class BaseService {
       configRepo: this.configRepository,
       metadataRepo: this.systemMetadataRepository,
       logger: this.logger,
+      forkSchemaRepo: this.forkSchemaRepository,
     };
   }
 

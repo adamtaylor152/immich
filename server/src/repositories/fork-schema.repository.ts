@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { randomUUID } from 'node:crypto';
+import { SystemConfig } from 'src/config';
 import { DB } from 'src/schema';
 
 export type ForkSchemaPhase = 'legacy' | 'dual-write' | 'ready' | 'inactive' | 'active' | 'failed';
@@ -62,6 +63,44 @@ const getBackfillSource = (kind: BackfillKind) => {
 @Injectable()
 export class ForkSchemaRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  async overlayConfig(config: SystemConfig): Promise<SystemConfig> {
+    const state = await this.getState();
+    if (state.phase === 'legacy' || state.phase === 'dual-write') {
+      return config;
+    }
+    const result = await sql<{ key: string; value: unknown }>`
+      SELECT key, value FROM immich_fork.config
+      WHERE key IN ('machineLearning.runpod', 'smartAlbums')
+    `.execute(this.db);
+    const values = new Map(result.rows.map(({ key, value }) => [key, value]));
+    const runpod = values.get('machineLearning.runpod');
+    const smartAlbums = values.get('smartAlbums');
+    if (!runpod || !smartAlbums) {
+      throw new Error('Missing authoritative fork configuration sidecar');
+    }
+    return {
+      ...config,
+      machineLearning: { ...config.machineLearning, runpod: runpod as SystemConfig['machineLearning']['runpod'] },
+      smartAlbums: smartAlbums as SystemConfig['smartAlbums'],
+    };
+  }
+
+  async mirrorConfig(config: SystemConfig): Promise<void> {
+    const state = await this.getState();
+    if (state.phase === 'legacy') {
+      return;
+    }
+    await this.db.transaction().execute(async (trx) => {
+      for (const [key, value] of [
+        ['machineLearning.runpod', config.machineLearning.runpod],
+        ['smartAlbums', config.smartAlbums],
+      ] as const) {
+        await sql`INSERT INTO immich_fork.config (key, value) VALUES (${key}, ${value}::jsonb)
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()`.execute(trx);
+      }
+    });
+  }
 
   async getState(): Promise<ForkState> {
     const result = await sql<ForkState>`
