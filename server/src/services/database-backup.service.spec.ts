@@ -642,6 +642,7 @@ describe(DatabaseBackupService.name, () => {
       mocks.storage.createWriteStream.mockReturnValue(new PassThrough());
       mocks.storage.createGzip.mockReturnValue(new PassThrough());
       mocks.storage.createGunzip.mockReturnValue(new PassThrough());
+      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
 
       const configMock = {
         getEnv: () => ({
@@ -744,6 +745,40 @@ describe(DatabaseBackupService.name, () => {
         SELECT 1;"
       `);
     });
+
+    it('runs the combined migrator when restoring a legacy database', async () => {
+      mocks.user.hasAdmin.mockResolvedValue(true);
+      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
+
+      await sut.restoreDatabaseBackup('development-filename.sql');
+
+      expect(mocks.database.detectMigrationMode).toHaveBeenCalledOnce();
+      expect(mocks.database.runMigrations).toHaveBeenCalledOnce();
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();
+    });
+
+    it.each(['fresh', 'isolated'] as const)(
+      'runs official then fork migrations when restoring a %s database',
+      async (mode) => {
+        const migrationOrder: string[] = [];
+        mocks.user.hasAdmin.mockResolvedValue(true);
+        mocks.database.detectMigrationMode.mockResolvedValue(mode);
+        mocks.database.runOfficialMigrations.mockImplementation(() => {
+          migrationOrder.push('official');
+          return Promise.resolve();
+        });
+        mocks.database.runForkMigrations.mockImplementation(() => {
+          migrationOrder.push('fork');
+          return Promise.resolve();
+        });
+
+        await sut.restoreDatabaseBackup('development-filename.sql');
+
+        expect(migrationOrder).toEqual(['official', 'fork']);
+        expect(mocks.database.runMigrations).not.toHaveBeenCalled();
+      },
+    );
 
     it('should generate pg_dumpall specific SQL instructions', async () => {
       let writtenToPsql = '';
