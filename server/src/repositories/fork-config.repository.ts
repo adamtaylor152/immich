@@ -37,7 +37,9 @@ export class ForkConfigRepository {
           value: Record<string, any> | null;
         }>`SELECT value FROM system_metadata WHERE key = 'system-config' FOR UPDATE`.execute(trx);
         const snapshot = legacy.rows[0]?.value ?? {};
-        config = _.merge(config, snapshot);
+        config = _.mergeWith(config, snapshot, (_target, source) =>
+          Array.isArray(source) ? _.cloneDeep(source) : undefined,
+        );
       }
       const validated = SystemConfigSchema.safeParse(config);
       if (!validated.success) {

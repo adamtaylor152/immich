@@ -542,23 +542,39 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   });
 
   it('deep-merges a locked partial database config into complete validated fork fields', async () => {
+    const preLockEffective = structuredClone(defaults);
+    preLockEffective.machineLearning.runpod.serverless.gpuTypeIds.push('STALE_GPU');
+    preLockEffective.smartAlbums.builtIn.travel.tagTriggers.push('stale-tag');
+    preLockEffective.smartAlbums.builtIn.travel.clipQueries.push('stale query');
     await db
       .insertInto('system_metadata')
       .values({
         key: SystemMetadataKey.SystemConfig,
-        value: { machineLearning: { runpod: { enabled: true } }, smartAlbums: { enabled: true } },
+        value: {
+          machineLearning: { runpod: { enabled: true, serverless: { gpuTypeIds: ['LOCKED_GPU'] } } },
+          smartAlbums: {
+            enabled: true,
+            builtIn: { travel: { tagTriggers: ['locked-tag'], clipQueries: ['locked query'] } },
+          },
+        },
       })
       .execute();
-    await new ForkConfigRepository(db).backfillConfig(structuredClone(defaults), 'database');
+    await new ForkConfigRepository(db).backfillConfig(preLockEffective, 'database');
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
 
     const complete = await new ForkSchemaRepository(db).overlayConfig(structuredClone(defaults));
-    expect(complete.machineLearning.runpod).toEqual({ ...defaults.machineLearning.runpod, enabled: true });
-    expect(complete.smartAlbums).toEqual({ ...defaults.smartAlbums, enabled: true });
-    expect(complete.machineLearning.runpod.serverless.gpuTypeIds).toEqual(
-      defaults.machineLearning.runpod.serverless.gpuTypeIds,
-    );
-    expect(complete.smartAlbums.builtIn.travel.tagTriggers).toEqual(defaults.smartAlbums.builtIn.travel.tagTriggers);
+    const expectedRunpod = structuredClone(defaults.machineLearning.runpod);
+    expectedRunpod.enabled = true;
+    expectedRunpod.serverless.gpuTypeIds = ['LOCKED_GPU'];
+    const expectedSmartAlbums = structuredClone(defaults.smartAlbums);
+    expectedSmartAlbums.enabled = true;
+    expectedSmartAlbums.builtIn.travel.tagTriggers = ['locked-tag'];
+    expectedSmartAlbums.builtIn.travel.clipQueries = ['locked query'];
+    expect(complete.machineLearning.runpod).toEqual(expectedRunpod);
+    expect(complete.smartAlbums).toEqual(expectedSmartAlbums);
+    expect(complete.machineLearning.runpod.serverless.gpuTypeIds).toEqual(['LOCKED_GPU']);
+    expect(complete.smartAlbums.builtIn.travel.tagTriggers).toEqual(['locked-tag']);
+    expect(complete.smartAlbums.builtIn.travel.clipQueries).toEqual(['locked query']);
   });
 
   it('re-queries authority on every cache hit across independent consumers', async () => {
