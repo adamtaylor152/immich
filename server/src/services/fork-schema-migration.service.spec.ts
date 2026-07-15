@@ -106,6 +106,34 @@ describe(ForkSchemaMigrationService.name, () => {
     );
   });
 
+  it('repairs missing initial seeds after a partial queue failure', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockRejectedValueOnce(new Error('partial queue failure')).mockResolvedValueOnce();
+
+    await expect(service.start(250)).rejects.toThrow('partial queue failure');
+    await expect(service.start(250)).resolves.toMatchObject({ phase: 'dual-write' });
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+    expect(mocks.job.queueAll).toHaveBeenLastCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
+  it('repairs missing resume seeds after a partial queue failure', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockRejectedValueOnce(new Error('partial queue failure')).mockResolvedValueOnce();
+
+    await expect(service.resume(250)).rejects.toThrow('partial queue failure');
+    await expect(service.resume(250)).resolves.toMatchObject({ phase: 'dual-write' });
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+    expect(mocks.job.queueAll).toHaveBeenLastCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
   it('pauses idempotently', async () => {
     mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     mocks.forkSchema.getState.mockResolvedValue(state('legacy'));

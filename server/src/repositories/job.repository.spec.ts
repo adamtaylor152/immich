@@ -3,7 +3,7 @@ import { JobsOptions } from 'bullmq';
 import { JobName, QueueName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
-import { JobRepository } from 'src/repositories/job.repository';
+import { getForkSchemaBackfillJobOptions, JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { JobItem } from 'src/types';
 
@@ -86,10 +86,13 @@ describe(JobRepository.name, () => {
     );
 
     expect(getJobOptions({ name: JobName.ForkSchemaBackfill, data: { kind: 'privacy', batchSize: 100 } })).toEqual({
-      deduplication: { id: `${JobName.ForkSchemaBackfill}:privacy` },
+      deduplication: { id: `${JobName.ForkSchemaBackfill}:privacy`, keepLastIfActive: true },
     });
     expect(getJobOptions({ name: JobName.ForkSchemaBackfill, data: { kind: 'albums', batchSize: 100 } })).toEqual({
-      deduplication: { id: `${JobName.ForkSchemaBackfill}:albums` },
+      deduplication: { id: `${JobName.ForkSchemaBackfill}:albums`, keepLastIfActive: true },
+    });
+    expect(getForkSchemaBackfillJobOptions('privacy')).toEqual({
+      deduplication: { id: `${JobName.ForkSchemaBackfill}:privacy`, keepLastIfActive: true },
     });
   });
 

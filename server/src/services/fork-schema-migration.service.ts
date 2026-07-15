@@ -23,6 +23,7 @@ export type ForkSchemaMigrationStatus = ForkState & {
 @Injectable()
 export class ForkSchemaMigrationService extends BaseService {
   private readonly handlers = new Map<BackfillKind, BackfillBatchHandler>();
+  private seedPromise?: Promise<void>;
 
   registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
     if (this.handlers.has(kind)) {
@@ -62,15 +63,12 @@ export class ForkSchemaMigrationService extends BaseService {
 
   async start(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
     const transitioned = await this.forkSchemaRepository.transitionPhase('legacy', 'dual-write');
-    if (transitioned) {
-      await this.queueAllKinds(batchSize);
-    }
-
     const status = await this.status();
     if (!transitioned && status.phase !== 'dual-write') {
       throw new Error('Backfill can only start from legacy phase');
     }
-    return status;
+    await this.seedAllKinds(batchSize);
+    return this.status();
   }
 
   async pause(): Promise<ForkSchemaMigrationStatus> {
@@ -79,20 +77,18 @@ export class ForkSchemaMigrationService extends BaseService {
     if (!transitioned && status.phase !== 'legacy') {
       throw new Error('Backfill can only pause from dual-write phase');
     }
+    this.seedPromise = undefined;
     return status;
   }
 
   async resume(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
     const transitioned = await this.forkSchemaRepository.transitionPhase('legacy', 'dual-write');
-    if (transitioned) {
-      await this.queueAllKinds(batchSize);
-    }
-
     const status = await this.status();
     if (!transitioned && status.phase !== 'dual-write') {
       throw new Error('Backfill can only resume from legacy phase');
     }
-    return status;
+    await this.seedAllKinds(batchSize);
+    return this.status();
   }
 
   @OnJob({ name: JobName.ForkSchemaBackfill, queue: QueueName.BackgroundTask })
@@ -141,10 +137,21 @@ export class ForkSchemaMigrationService extends BaseService {
     return JobStatus.Success;
   }
 
-  private async queueAllKinds(batchSize: number): Promise<void> {
-    await this.jobRepository.queueAll(
-      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize } })),
-    );
+  private async seedAllKinds(batchSize: number): Promise<void> {
+    if (!this.seedPromise) {
+      this.seedPromise = this.jobRepository.queueAll(
+        BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize } })),
+      );
+    }
+    const seedPromise = this.seedPromise;
+    try {
+      await seedPromise;
+    } catch (error) {
+      if (this.seedPromise === seedPromise) {
+        this.seedPromise = undefined;
+      }
+      throw error;
+    }
   }
 
   private async continueOrFinish(kind: BackfillKind, batchSize: number): Promise<void> {
