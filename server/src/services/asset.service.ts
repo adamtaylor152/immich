@@ -25,7 +25,6 @@ import { AssetEditAction, AssetEditActionItem, AssetEditsCreateDto, AssetEditsRe
 import { AssetOcrResponseDto } from 'src/dtos/ocr.dto';
 import {
   AssetFileType,
-  AssetMetadataKey,
   AssetStatus,
   AssetType,
   AssetVisibility,
@@ -519,21 +518,11 @@ export class AssetService extends BaseService {
   async deleteMetadataByKey(auth: AuthDto, id: string, key: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
     await this.assetRepository.deleteMetadataByKey(id, key);
-    if (key === AssetMetadataKey.MlEnrichment) {
-      // Mirror the JSONB delete into the denormalized boolean. No metadata = no
-      // signal that this asset is NSFW, so the privacy filter should treat it as safe.
-      await this.assetRepository.updateIsNsfw(id, false);
-    }
   }
 
   async deleteBulkMetadata(auth: AuthDto, dto: AssetMetadataBulkDeleteDto) {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: dto.items.map((item) => item.assetId) });
     await this.assetRepository.deleteBulkMetadata(dto.items);
-    for (const item of dto.items) {
-      if (item.key === AssetMetadataKey.MlEnrichment) {
-        await this.assetRepository.updateIsNsfw(item.assetId, false);
-      }
-    }
   }
 
   async run(auth: AuthDto, dto: AssetJobsDto) {

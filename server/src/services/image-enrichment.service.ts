@@ -895,15 +895,6 @@ export class ImageEnrichmentService extends BaseService {
       [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
       kysely,
     );
-    // Mirror the derived NSFW state into the denormalized `asset.is_nsfw` column
-    // so the privacy filter (utils/database.ts nsfwAssetIdExists) can do a cheap
-    // boolean probe instead of a correlated JSONB EXISTS. The boolean is owned
-    // by this service — every NSFW-affecting write goes through here.
-    const effectiveIsNsfw = this.getEffectiveNsfw(value) ?? false;
-    await this.assetRepository.updateIsNsfw(id, effectiveIsNsfw, kysely);
-    if (this.db) {
-      await new ForkPrivacyRepository(this.db).mirrorFromLegacy(id, kysely ?? this.db);
-    }
   }
 
   private applyPrivacySidecar(metadata: EnrichmentMetadata, privacy: PrivacySidecar): EnrichmentMetadata {

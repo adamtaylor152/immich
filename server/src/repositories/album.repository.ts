@@ -424,8 +424,14 @@ export class AlbumRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
+      const subtree = await tx
+        .selectFrom('album_closure')
+        .select('id_descendant')
+        .where('id_ancestor', '=', id)
+        .execute();
+      const subtreeIds = subtree.length > 0 ? subtree.map(({ id_descendant }) => id_descendant) : [id];
       await tx.deleteFrom('album').where('id', '=', id).execute();
-      await this.forkMetadata.delete([id], tx);
+      await this.forkMetadata.delete(subtreeIds, tx);
     });
   }
 

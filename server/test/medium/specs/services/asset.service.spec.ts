@@ -1,4 +1,4 @@
-import { Kysely } from 'kysely';
+import { Kysely, sql } from 'kysely';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import { AssetFileType, AssetMetadataKey, AssetStatus, AssetType, JobName, SharedLinkType } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
@@ -51,6 +51,15 @@ const nsfwMetadata = (isNsfw: boolean, review?: { action: string; isNsfw: boolea
     ...(review ? { review } : {}),
   },
 });
+
+const getPrivacy = async (db: Kysely<DB>, assetId: string) => {
+  const result = await sql<{ isNsfw: boolean; suppression: unknown }>`
+    SELECT "isNsfw", suppression
+    FROM immich_fork.asset_privacy
+    WHERE "assetId" = ${assetId}::uuid
+  `.execute(db);
+  return result.rows[0];
+};
 
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
@@ -1098,6 +1107,99 @@ describe(AssetService.name, () => {
 
       const metadata = await ctx.get(AssetRepository).getMetadata(asset.id);
       expect(metadata).toEqual([expect.objectContaining({ key: 'some-other-key', value: { foo: 'bar' } })]);
+    });
+  });
+
+  describe('fork privacy metadata authority', () => {
+    it('mirrors marked-NSFW and marked-safe public metadata writes during dual-write', async () => {
+      const db = await getKyselyDB();
+      const { sut, ctx } = setup(db);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await sql`UPDATE immich_fork.state SET phase = 'dual-write' WHERE id = 1`.execute(db);
+
+      const markedNsfw = { action: 'marked-nsfw', isNsfw: true };
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [{ key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(false, markedNsfw) }],
+      });
+      await expect(getPrivacy(db, asset.id)).resolves.toEqual({ isNsfw: true, suppression: markedNsfw });
+
+      const markedSafe = { action: 'marked-safe', isNsfw: false };
+      await sut.upsertMetadata(auth, asset.id, {
+        items: [{ key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(true, markedSafe) }],
+      });
+      await expect(getPrivacy(db, asset.id)).resolves.toEqual({ isNsfw: false, suppression: markedSafe });
+    });
+
+    it('updates authoritative privacy sidecars through the public bulk metadata API', async () => {
+      const db = await getKyselyDB();
+      const { sut, ctx } = setup(db);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset: first } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: second } = await ctx.newAsset({ ownerId: user.id });
+      await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+
+      await sut.upsertBulkMetadata(auth, {
+        items: [
+          { assetId: first.id, key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(true) },
+          { assetId: second.id, key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(false) },
+        ],
+      });
+
+      await expect(getPrivacy(db, first.id)).resolves.toEqual({ isNsfw: true, suppression: null });
+      await expect(getPrivacy(db, second.id)).resolves.toEqual({ isNsfw: false, suppression: null });
+    });
+
+    it('resets privacy sidecars through single and bulk public metadata deletes', async () => {
+      const db = await getKyselyDB();
+      const { sut, ctx } = setup(db);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset: single } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: bulk } = await ctx.newAsset({ ownerId: user.id });
+      await sql`UPDATE immich_fork.state SET phase = 'dual-write' WHERE id = 1`.execute(db);
+      await sut.upsertBulkMetadata(auth, {
+        items: [single, bulk].map(({ id }) => ({
+          assetId: id,
+          key: AssetMetadataKey.MlEnrichment,
+          value: nsfwMetadata(true, { action: 'marked-nsfw', isNsfw: true }),
+        })),
+      });
+
+      await sut.deleteMetadataByKey(auth, single.id, AssetMetadataKey.MlEnrichment);
+      await sut.deleteBulkMetadata(auth, { items: [{ assetId: bulk.id, key: AssetMetadataKey.MlEnrichment }] });
+
+      await expect(getPrivacy(db, single.id)).resolves.toEqual({ isNsfw: false, suppression: null });
+      await expect(getPrivacy(db, bulk.id)).resolves.toEqual({ isNsfw: false, suppression: null });
+    });
+
+    it('rolls back the public legacy metadata write when sidecar mirroring fails', async () => {
+      const db = await getKyselyDB();
+      const { sut, ctx } = setup(db);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await sql`UPDATE immich_fork.state SET phase = 'dual-write' WHERE id = 1`.execute(db);
+      await sql`
+        ALTER TABLE immich_fork.asset_privacy
+        ADD CONSTRAINT "asset_privacy_reject_nsfw" CHECK ("isNsfw" = false)
+      `.execute(db);
+
+      await expect(
+        sut.upsertMetadata(auth, asset.id, {
+          items: [{ key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(true) }],
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        ctx.get(AssetRepository).getMetadataByKey(asset.id, AssetMetadataKey.MlEnrichment),
+      ).resolves.toBeUndefined();
+      await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toEqual(
+        expect.objectContaining({ is_nsfw: false }),
+      );
+      await expect(getPrivacy(db, asset.id)).resolves.toEqual({ isNsfw: false, suppression: null });
     });
   });
 
