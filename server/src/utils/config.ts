@@ -5,6 +5,7 @@ import { SystemConfig, defaults } from 'src/config';
 import { SystemConfigSchema } from 'src/dtos/system-config.dto';
 import { DatabaseLock, SystemMetadataKey } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DeepPartial } from 'src/types';
@@ -14,6 +15,7 @@ type RepoDeps = {
   configRepo: ConfigRepository;
   metadataRepo: SystemMetadataRepository;
   logger: LoggingRepository;
+  forkSchemaRepo?: ForkSchemaRepository;
 };
 
 const asyncLock = new AsyncLock();
@@ -57,6 +59,7 @@ export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Pr
   }
 
   await metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig);
+  await repos.forkSchemaRepo?.mirrorConfig(newConfig);
 
   return getConfig(repos, { withCache: false });
 };
@@ -133,5 +136,5 @@ const buildConfig = async (repos: RepoDeps) => {
     config.ffmpeg.acceptedAudioCodecs.push(config.ffmpeg.targetAudioCodec);
   }
 
-  return config;
+  return repos.forkSchemaRepo ? repos.forkSchemaRepo.overlayConfig(config) : config;
 };

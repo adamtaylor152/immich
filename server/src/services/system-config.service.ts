@@ -1,7 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Kysely } from 'kysely';
 import _ from 'lodash';
-import { InjectKysely } from 'nestjs-kysely';
 import { defaults, SystemConfig } from 'src/config';
 import { OnEvent } from 'src/decorators';
 import {
@@ -15,9 +13,7 @@ import {
 } from 'src/dtos/system-config.dto';
 import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
-import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
 import { MachineLearningHardwareResponse } from 'src/repositories/machine-learning.repository';
-import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { clearConfigCache } from 'src/utils/config';
 import { isImageDescriptionEnabled } from 'src/utils/misc';
@@ -38,12 +34,9 @@ const effectiveRunPodMode = (rp: { mode?: string; enabled: boolean }): 'disabled
 
 @Injectable()
 export class SystemConfigService extends BaseService {
-  @InjectKysely()
-  private db?: Kysely<DB>;
-
   @OnEvent({ name: 'AppBootstrap', priority: BootstrapEventPriority.SystemConfig })
   async onBootstrap() {
-    const config = await this.getForkAwareConfig();
+    const config = await this.getConfig({ withCache: false });
     await this.eventRepository.emit('ConfigInit', { newConfig: config });
   }
 
@@ -53,7 +46,7 @@ export class SystemConfigService extends BaseService {
   }
 
   async getSystemConfig(): Promise<SystemConfigDto> {
-    const config = await this.getForkAwareConfig();
+    const config = await this.getConfig({ withCache: false });
     return mapConfig(config);
   }
 
@@ -139,7 +132,7 @@ export class SystemConfigService extends BaseService {
       throw new BadRequestException('Cannot update configuration while IMMICH_CONFIG_FILE is in use');
     }
 
-    const oldConfig = await this.getForkAwareConfig();
+    const oldConfig = await this.getConfig({ withCache: false });
 
     // mapConfig redacts machineLearning.runpod.apiKey to '' on read. Mirror
     // the convention on write: an empty incoming apiKey means "preserve the
@@ -199,43 +192,11 @@ export class SystemConfigService extends BaseService {
       throw new BadRequestException(error instanceof Error ? error.message : error);
     }
 
-    let newConfig: SystemConfig;
-    if (this.db) {
-      const repository = new ForkConfigRepository(this.db);
-      newConfig = (await repository.shouldReadSidecar())
-        ? (toPlainObject(dto) as SystemConfig)
-        : await this.updateConfig(dto);
-      await repository.mirrorConfig(newConfig as unknown as Record<string, unknown>);
-    } else {
-      newConfig = await this.updateConfig(dto);
-    }
+    const newConfig: SystemConfig = await this.updateConfig(dto);
 
     await this.eventRepository.emit('ConfigUpdate', { newConfig, oldConfig });
 
     return mapConfig(newConfig);
-  }
-
-  private async getForkAwareConfig(): Promise<SystemConfig> {
-    const config = await this.getConfig({ withCache: false });
-    if (!this.db) {
-      return config;
-    }
-    const repository = new ForkConfigRepository(this.db);
-    if (!(await repository.shouldReadSidecar())) {
-      return config;
-    }
-    const [runpod, smartAlbums] = await Promise.all([
-      repository.get('machineLearning.runpod'),
-      repository.get('smartAlbums'),
-    ]);
-    if (!runpod || !smartAlbums) {
-      throw new Error('Missing authoritative fork configuration sidecar');
-    }
-    return {
-      ...config,
-      machineLearning: { ...config.machineLearning, runpod: runpod as SystemConfig['machineLearning']['runpod'] },
-      smartAlbums: smartAlbums as SystemConfig['smartAlbums'],
-    };
   }
 
   async getCustomCss(): Promise<string> {

@@ -27,7 +27,7 @@ export class ForkConfigRepository {
     return this.db.transaction().execute(async (trx) => {
       const legacy = await sql<{
         value: Record<string, any> | null;
-      }>`SELECT value FROM system_metadata WHERE key = 'system-config'`.execute(trx);
+      }>`SELECT value FROM system_metadata WHERE key = 'system-config' FOR UPDATE`.execute(trx);
       const config = legacy.rows[0]?.value ?? {};
       const values = [
         { key: 'machineLearning.runpod', value: config.machineLearning?.runpod ?? {} },

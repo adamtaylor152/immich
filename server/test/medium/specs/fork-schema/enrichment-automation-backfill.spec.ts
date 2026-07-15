@@ -1,15 +1,22 @@
 import { Kysely, sql } from 'kysely';
-import { createHash } from 'node:crypto';
-import { AlbumUserRole, SystemMetadataKey } from 'src/enum';
+import { createHash, randomUUID } from 'node:crypto';
+import { defaults } from 'src/config';
+import { AlbumUserRole, LogLevel, SystemMetadataKey } from 'src/enum';
+import { AlbumRepository } from 'src/repositories/album.repository';
+import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
+import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
+import { clearConfigCache, getConfig, updateConfig } from 'src/utils/config';
 import { mediumFactory } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
+import { getKyselyDB, newTestService } from 'test/utils';
 
 describe('enrichment, configuration, and automation fork sidecars', () => {
   let db: Kysely<DB>;
@@ -33,6 +40,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     await db.deleteFrom('album').execute();
     await db.deleteFrom('asset').execute();
     await db.deleteFrom('user').execute();
+    await db.deleteFrom('system_metadata').where('key', '=', SystemMetadataKey.SystemConfig).execute();
   });
 
   afterAll(async () => db.destroy());
@@ -147,7 +155,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
           assetId: exact.id,
           userDescription: '  User text exactly.  ',
           generatedDescription: 'A generated scene',
-          requiresReview: false,
+          requiresReview: true,
         },
         {
           assetId: mismatch.id,
@@ -177,6 +185,171 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
         { assetId: absent.id, description: 'No provenance\n\nAI description: Recovered from text' },
       ].sort((a, b) => a.assetId!.localeCompare(b.assetId!)),
     );
+  });
+
+  it('preserves ambiguous descriptions byte-for-byte and reviews generated tags without an applied hash', async () => {
+    const user = mediumFactory.userInsert();
+    const duplicate = mediumFactory.assetInsert({ ownerId: user.id });
+    const blanks = mediumFactory.assetInsert({ ownerId: user.id });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values([duplicate, blanks]).execute();
+    const generated = 'Exact generated text';
+    const appliedDescriptionHash = createHash('sha256').update(JSON.stringify(generated)).digest('hex');
+    const duplicateText = `before\n\nAI description: ${generated}\n\nmiddle\n\nAI description: ${generated}\n\nafter`;
+    const blankText = `user paragraph\n\nAI description: ${generated}\n\n\n\ntrailing`;
+    await db
+      .insertInto('asset_exif')
+      .values([
+        { assetId: duplicate.id!, description: duplicateText },
+        { assetId: blanks.id!, description: blankText },
+      ])
+      .execute();
+    await db
+      .insertInto('asset_metadata')
+      .values(
+        [duplicate, blanks].map((asset) => ({
+          assetId: asset.id!,
+          key: 'ml-enrichment' as const,
+          value: {
+            description: {
+              status: 'success',
+              result: { description: generated, tags: ['generated-tag'] },
+              appliedDescriptionHash,
+            },
+          },
+        })),
+      )
+      .execute();
+
+    await new ForkEnrichmentRepository(db).backfillEnrichment([duplicate.id!, blanks.id!]);
+    const rows = await sql<{ assetId: string; userDescription: string; requiresReview: boolean }>`
+      SELECT "assetId"::text AS "assetId", "userDescription", "requiresReview"
+      FROM immich_fork.asset_enrichment ORDER BY "assetId"::text
+    `.execute(db);
+
+    expect(rows.rows).toEqual(
+      [
+        { assetId: duplicate.id, userDescription: duplicateText, requiresReview: true },
+        { assetId: blanks.id, userDescription: 'user paragraph\n\n\n\ntrailing', requiresReview: true },
+      ].sort((a, b) => a.assetId!.localeCompare(b.assetId!)),
+    );
+  });
+
+  it.each(['dual-write', 'ready', 'active', 'inactive'] as const)(
+    'initializes enrichment on asset creation in %s and cleans asset references on deletion',
+    async (phase) => {
+      await sql`UPDATE immich_fork.state SET phase = ${phase} WHERE id = 1`.execute(db);
+      const user = mediumFactory.userInsert();
+      await db.insertInto('user').values(user).execute();
+      const asset = await new AssetRepository(db).create(mediumFactory.assetInsert({ ownerId: user.id }));
+      const sidecar = await new ForkEnrichmentRepository(db).get(asset.id);
+      expect(sidecar).toMatchObject({ assetId: asset.id, provenance: {}, generatedTags: [] });
+
+      const album = mediumFactory.albumInsert({});
+      await db.insertInto('album').values(album).execute();
+      const ruleId = randomUUID();
+      await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
+        VALUES (${ruleId}::uuid, ${album.id}::uuid, ${user.id}::uuid, 'test')`.execute(db);
+      await sql`INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason")
+        VALUES (${ruleId}::uuid, ${asset.id}::uuid, 'tag')`.execute(db);
+      await sql`INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId")
+        VALUES (${ruleId}::uuid, ${asset.id}::uuid)`.execute(db);
+
+      await new AssetRepository(db).remove(asset);
+      await expect(new ForkEnrichmentRepository(db).get(asset.id)).resolves.toBeUndefined();
+      const references = await sql<{ count: number }>`SELECT
+        (SELECT count(*) FROM immich_fork.smart_album_match WHERE "assetId" = ${asset.id}::uuid) +
+        (SELECT count(*) FROM immich_fork.smart_album_exclusion WHERE "assetId" = ${asset.id}::uuid) AS count`.execute(
+        db,
+      );
+      expect(Number(references.rows[0]?.count)).toBe(0);
+    },
+  );
+
+  it('cleans rules for an album subtree and all albums owned by a deleted user', async () => {
+    const user = mediumFactory.userInsert();
+    const root = mediumFactory.albumInsert({});
+    const child = mediumFactory.albumInsert({ parentId: root.id });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('album').values([root, child]).execute();
+    await db
+      .insertInto('album_user')
+      .values([
+        { albumId: root.id!, userId: user.id, role: AlbumUserRole.Owner },
+        { albumId: child.id!, userId: user.id, role: AlbumUserRole.Owner },
+      ])
+      .execute();
+    await db
+      .insertInto('album_closure')
+      .values([
+        { id_ancestor: root.id!, id_descendant: root.id! },
+        { id_ancestor: root.id!, id_descendant: child.id! },
+        { id_ancestor: child.id!, id_descendant: child.id! },
+      ])
+      .execute();
+    for (const album of [root, child]) {
+      await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
+        VALUES (${randomUUID()}::uuid, ${album.id}::uuid, ${user.id}::uuid, ${album.id})`.execute(db);
+    }
+
+    await new AlbumRepository(db).delete(root.id!);
+    const unrelated = mediumFactory.albumInsert({});
+    await db.insertInto('album').values(unrelated).execute();
+    await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
+      VALUES (${randomUUID()}::uuid, ${unrelated.id}::uuid, ${user.id}::uuid, 'owner-orphan')`.execute(db);
+    await new AlbumRepository(db).deleteAll(user.id);
+    const remaining = await sql<{ count: number }>`SELECT count(*)::int AS count FROM immich_fork.smart_album_rule
+      WHERE "ownerId" = ${user.id}::uuid`.execute(db);
+    expect(remaining.rows[0]?.count).toBe(0);
+  });
+
+  it('keeps generated descriptions and tags sidecar-only after cutover', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db
+      .insertInto('asset_exif')
+      .values({ assetId: asset.id!, description: 'User text\n\nkept exactly' })
+      .execute();
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await new ForkEnrichmentRepository(db).initialize([asset.id!]);
+
+    const { sut, mocks } = newTestService(ImageEnrichmentService);
+    (sut as unknown as { db: Kysely<DB> }).db = db;
+    const metadata = {
+      description: {
+        status: 'success' as const,
+        modelName: 'vlm',
+        updatedAt: '2026-07-15T00:00:00.000Z',
+        result: { description: 'Generated text', tags: ['generated-tag'] },
+      },
+    };
+    const service = sut as unknown as {
+      applyVisibleMetadata(input: Record<string, unknown>): Promise<{ metadata: boolean; visible: boolean }>;
+      saveEnrichmentMetadata(id: string, value: Record<string, unknown>): Promise<void>;
+    };
+    await expect(
+      service.applyVisibleMetadata({
+        id: asset.id,
+        ownerId: user.id,
+        existingDescription: 'User text\n\nkept exactly',
+        result: metadata.description.result,
+        metadata,
+        previousTagValues: [],
+      }),
+    ).resolves.toEqual({ metadata: true, visible: false });
+    await service.saveEnrichmentMetadata(asset.id!, metadata);
+
+    expect(mocks.asset.upsertExif).not.toHaveBeenCalled();
+    expect(mocks.tag.upsertValue).not.toHaveBeenCalled();
+    await expect(
+      db.selectFrom('asset_exif').select('description').where('assetId', '=', asset.id!).executeTakeFirst(),
+    ).resolves.toEqual({
+      description: 'User text\n\nkept exactly',
+    });
+    const sidecar = await new ForkEnrichmentRepository(db).get(asset.id!);
+    expect(sidecar).toMatchObject({ generatedDescription: 'Generated text', generatedTags: ['generated-tag'] });
   });
 
   it('backfills RunPod configuration and automation without changing official album membership', async () => {
@@ -237,5 +410,42 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       new Map([['fork-travel', smart.id]]),
     );
     await expect(db.selectFrom('album_asset').selectAll().execute()).resolves.toHaveLength(1);
+  });
+
+  it('overlays authoritative fork config for shared consumers while persisting official updates upstream', async () => {
+    const metadataRepo = new SystemMetadataRepository(db);
+    const forkSchemaRepo = new ForkSchemaRepository(db);
+    const repos = {
+      configRepo: new ConfigRepository(),
+      metadataRepo,
+      logger: LoggingRepository.create(),
+      forkSchemaRepo,
+    };
+    const upstream = structuredClone(defaults);
+    upstream.logging.level = LogLevel.Warn;
+    await metadataRepo.set(SystemMetadataKey.SystemConfig, upstream);
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await new ForkConfigRepository(db).mirrorConfig({
+      ...upstream,
+      machineLearning: { ...upstream.machineLearning, runpod: { ...upstream.machineLearning.runpod, enabled: true } },
+      smartAlbums: { ...upstream.smartAlbums, enabled: true },
+    });
+    clearConfigCache();
+
+    const first = await getConfig(repos, { withCache: false });
+    expect(first.logging.level).toBe('warn');
+    expect(first.machineLearning.runpod.enabled).toBe(true);
+    expect(first.smartAlbums.enabled).toBe(true);
+
+    const next = structuredClone(first);
+    next.logging.level = LogLevel.Error;
+    next.machineLearning.runpod.enabled = false;
+    next.smartAlbums.enabled = false;
+    const updated = await updateConfig(repos, next);
+    const official = await metadataRepo.get(SystemMetadataKey.SystemConfig);
+    expect(official?.logging?.level).toBe('error');
+    expect(updated.logging.level).toBe('error');
+    expect(updated.machineLearning.runpod.enabled).toBe(false);
+    expect(updated.smartAlbums.enabled).toBe(false);
   });
 });

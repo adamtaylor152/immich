@@ -26,7 +26,9 @@ import {
   AssetVisibility,
   TimeBucketDateType,
 } from 'src/enum';
+import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { AssetAudioTable, AssetKeyframeTable, AssetVideoTable } from 'src/schema/tables/asset-av.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -195,9 +197,13 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
 @Injectable()
 export class AssetRepository {
   private readonly forkPrivacy: ForkPrivacyRepository;
+  private readonly forkEnrichment: ForkEnrichmentRepository;
+  private readonly smartAlbums: SmartAlbumRepository;
 
   constructor(@InjectKysely() private db: Kysely<DB>) {
     this.forkPrivacy = new ForkPrivacyRepository(db);
+    this.forkEnrichment = new ForkEnrichmentRepository(db);
+    this.smartAlbums = new SmartAlbumRepository(db);
   }
 
   @GenerateSql({
@@ -527,6 +533,7 @@ export class AssetRepository {
     return this.db.transaction().execute(async (tx) => {
       const result = await tx.insertInto('asset').values(asset).returningAll().executeTakeFirstOrThrow();
       await this.forkPrivacy.mirrorFromLegacy(result.id, tx);
+      await this.forkEnrichment.initialize([result.id], tx);
       return result;
     });
   }
@@ -536,6 +543,10 @@ export class AssetRepository {
     return this.db.transaction().execute(async (tx) => {
       const ids = await tx.insertInto('asset').values(assets).returning('id').execute();
       await this.forkPrivacy.mirrorManyFromLegacy(
+        ids.map(({ id }) => id),
+        tx,
+      );
+      await this.forkEnrichment.initialize(
         ids.map(({ id }) => id),
         tx,
       );
@@ -615,7 +626,13 @@ export class AssetRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   async deleteAll(ownerId: string): Promise<void> {
-    await this.db.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
+    await this.db.transaction().execute(async (tx) => {
+      const assets = await tx.selectFrom('asset').select('id').where('ownerId', '=', ownerId).execute();
+      const ids = assets.map(({ id }) => id);
+      await this.forkEnrichment.delete(ids, tx);
+      await this.smartAlbums.deleteAssets(ids, tx);
+      await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
@@ -736,7 +753,11 @@ export class AssetRepository {
   }
 
   async remove(asset: { id: string }): Promise<void> {
-    await this.db.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();
+    await this.db.transaction().execute(async (tx) => {
+      await this.forkEnrichment.delete([asset.id], tx);
+      await this.smartAlbums.deleteAssets([asset.id], tx);
+      await tx.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();
+    });
   }
 
   @GenerateSql({ params: [{ ownerId: DummyValue.UUID, libraryId: DummyValue.UUID, checksum: DummyValue.BUFFER }] })
