@@ -749,7 +749,8 @@ export class ImageEnrichmentService extends BaseService {
       metadata.description.result.description,
     ]);
 
-    const visible = description !== existingDescription.trim();
+    const sidecarOnly = await this.isEnrichmentSidecarAuthoritative();
+    const visible = !sidecarOnly && description !== existingDescription.trim();
     if (visible) {
       await this.assetRepository.upsertExif({
         exif: updateLockedColumns({ assetId: id, description }),
@@ -780,6 +781,9 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async clearGeneratedTags(id: string, ownerId: string, tags: string[]) {
+    if (await this.isEnrichmentSidecarAuthoritative()) {
+      return { visible: false, metadata: false };
+    }
     let visible = false;
     for (const tag of tags) {
       const existing = await this.tagRepository.getByValue(ownerId, tag);
@@ -1048,6 +1052,12 @@ export class ImageEnrichmentService extends BaseService {
       return { visible: false, metadata: false };
     }
 
+    if (await this.isEnrichmentSidecarAuthoritative()) {
+      metadata.nsfwDetection.appliedTagHash = tagHash;
+      metadata.nsfwDetection.appliedTagValues = tags;
+      return { visible: false, metadata: true };
+    }
+
     const cleared = await this.clearGeneratedTags(id, ownerId, metadata.nsfwDetection.appliedTagValues ?? []);
     const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
     metadata.nsfwDetection.appliedTagHash = tagHash;
@@ -1069,6 +1079,10 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     return changed;
+  }
+
+  private async isEnrichmentSidecarAuthoritative(kysely?: Kysely<DB>): Promise<boolean> {
+    return !!this.db && new ForkEnrichmentRepository(this.db).shouldReadSidecar(kysely ?? this.db);
   }
 
   private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult, metadata?: EnrichmentMetadata) {

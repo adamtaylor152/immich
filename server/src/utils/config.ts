@@ -9,6 +9,7 @@ import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DeepPartial } from 'src/types';
+import { registerConfigCacheClear } from 'src/utils/config-cache';
 import { getKeysDeep, unsetDeep } from 'src/utils/misc';
 
 type RepoDeps = {
@@ -26,6 +27,8 @@ export const clearConfigCache = () => {
   config = null;
   lastUpdated = null;
 };
+
+registerConfigCacheClear(clearConfigCache);
 
 export const getConfig = async (repos: RepoDeps, { withCache }: { withCache: boolean }): Promise<SystemConfig> => {
   if (!withCache || !config) {
@@ -58,8 +61,9 @@ export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Pr
     _.set(partialConfig, property, newValue);
   }
 
-  await metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig);
-  await repos.forkSchemaRepo?.mirrorConfig(newConfig);
+  await (repos.forkSchemaRepo
+    ? repos.forkSchemaRepo.persistConfig(partialConfig, newConfig)
+    : metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig));
 
   return getConfig(repos, { withCache: false });
 };

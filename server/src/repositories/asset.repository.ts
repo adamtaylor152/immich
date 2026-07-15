@@ -629,6 +629,7 @@ export class AssetRepository {
     await this.db.transaction().execute(async (tx) => {
       const assets = await tx.selectFrom('asset').select('id').where('ownerId', '=', ownerId).execute();
       const ids = assets.map(({ id }) => id);
+      await this.forkPrivacy.delete(ids, tx);
       await this.forkEnrichment.delete(ids, tx);
       await this.smartAlbums.deleteAssets(ids, tx);
       await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
@@ -754,6 +755,7 @@ export class AssetRepository {
 
   async remove(asset: { id: string }): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
+      await this.forkPrivacy.delete([asset.id], tx);
       await this.forkEnrichment.delete([asset.id], tx);
       await this.smartAlbums.deleteAssets([asset.id], tx);
       await tx.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();

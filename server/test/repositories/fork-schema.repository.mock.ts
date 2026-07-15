@@ -5,6 +5,7 @@ import { Mocked, vitest } from 'vitest';
 export const newForkSchemaRepositoryMock = (): Mocked<RepositoryInterface<ForkSchemaRepository>> => ({
   overlayConfig: vitest.fn((config) => Promise.resolve(config)),
   mirrorConfig: vitest.fn(),
+  persistConfig: vitest.fn(),
   getState: vitest.fn(),
   getProgress: vitest.fn(),
   setPhase: vitest.fn(),

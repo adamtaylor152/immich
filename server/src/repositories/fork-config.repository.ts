@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
+import { SystemConfig } from 'src/config';
 import { DB } from 'src/schema';
 
 const canonicalize = (value: unknown): unknown =>
@@ -23,12 +24,26 @@ const digest = (rows: unknown) =>
 export class ForkConfigRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
-  async backfillConfig(): Promise<{ count: number; digest: string }> {
+  async backfillConfig(
+    effectiveConfig: SystemConfig,
+    source: 'database' | 'file',
+  ): Promise<{ count: number; digest: string }> {
     return this.db.transaction().execute(async (trx) => {
-      const legacy = await sql<{
-        value: Record<string, any> | null;
-      }>`SELECT value FROM system_metadata WHERE key = 'system-config' FOR UPDATE`.execute(trx);
-      const config = legacy.rows[0]?.value ?? {};
+      let config = effectiveConfig as Record<string, any>;
+      if (source === 'database') {
+        const legacy = await sql<{
+          value: Record<string, any> | null;
+        }>`SELECT value FROM system_metadata WHERE key = 'system-config' FOR UPDATE`.execute(trx);
+        const snapshot = legacy.rows[0]?.value ?? {};
+        config = {
+          ...config,
+          machineLearning: {
+            ...config.machineLearning,
+            runpod: snapshot.machineLearning?.runpod ?? config.machineLearning?.runpod,
+          },
+          smartAlbums: snapshot.smartAlbums ?? config.smartAlbums,
+        };
+      }
       const values = [
         { key: 'machineLearning.runpod', value: config.machineLearning?.runpod ?? {} },
         { key: 'smartAlbums', value: config.smartAlbums ?? {} },

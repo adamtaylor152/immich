@@ -48,7 +48,11 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     this.registerHandler('enrichment', (ids) => enrichmentRepository.backfillEnrichment(ids));
     this.registerHandler('automation', async (ids) => {
       const automation = await automationRepository.backfillAutomation(ids);
-      const config = await configRepository.backfillConfig();
+      const effectiveConfig = await this.getConfig({ withCache: false });
+      const config = await configRepository.backfillConfig(
+        effectiveConfig,
+        this.configRepository.getEnv().configFile ? 'file' : 'database',
+      );
       const digest = createHash('sha256')
         .update(JSON.stringify({ automation: automation.digest, config: config.digest }))
         .digest('hex');

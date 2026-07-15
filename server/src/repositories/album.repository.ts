@@ -278,6 +278,10 @@ export class AlbumRepository {
         tx,
       );
       await this.smartAlbums.deleteOwner(userId, tx);
+      await this.forkMetadata.delete(
+        albums.map(({ id }) => id),
+        tx,
+      );
       await tx.deleteFrom('album').where(isAlbumOwned(userId)).execute();
     });
   }
