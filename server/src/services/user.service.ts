@@ -265,7 +265,9 @@ export class UserService extends BaseService {
     const removedAssets = (await this.assetRepository.deleteAll(user.id)) ?? [];
     const originalFiles = removedAssets
       .filter(({ libraryId, isOffline }) => !libraryId && !isOffline)
-      .map(({ originalPath }) => originalPath);
+      .flatMap(({ originalPath, reservationTemporaryPath }) =>
+        reservationTemporaryPath ? [originalPath, reservationTemporaryPath] : [originalPath],
+      );
     if (originalFiles.length > 0) {
       await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: originalFiles } });
     }

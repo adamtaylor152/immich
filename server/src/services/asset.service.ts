@@ -426,7 +426,11 @@ export class AssetService extends BaseService {
     ];
 
     if (deleteOnDisk && !asset.isOffline) {
-      files.push(assetFiles.sidecarFile?.path, removedAsset.originalPath);
+      files.push(
+        assetFiles.sidecarFile?.path,
+        removedAsset.originalPath,
+        removedAsset.reservationTemporaryPath ?? undefined,
+      );
     }
 
     await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: files.filter(Boolean) } });

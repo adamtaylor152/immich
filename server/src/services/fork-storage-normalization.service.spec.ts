@@ -6,7 +6,11 @@ import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
 import { CryptoRepository } from 'src/repositories/crypto.repository';
-import { PhysicalFileRepository, PhysicalNormalizationAsset } from 'src/repositories/physical-file.repository';
+import {
+  PhysicalFileRepository,
+  PhysicalNormalizationAsset,
+  PhysicalNormalizationReservation,
+} from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
 import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
 
@@ -55,18 +59,32 @@ describe(ForkStorageNormalizationService.name, () => {
       mappedUpstreamPath: null,
     };
     let failCommit = true;
+    let reservationCreated = false;
+    const reservation: PhysicalNormalizationReservation = {
+      assetId,
+      token: randomUUID(),
+      sourcePath,
+      upstreamPath: targetPath,
+      temporaryPath: join(root, `.${assetId}.jpg.normalize`),
+    };
     const repository = {
+      createNormalizationReservation: () => {
+        const recovered = reservationCreated;
+        reservationCreated = true;
+        return Promise.resolve({ asset, reservation, recovered });
+      },
       withLockedNormalizationAsset: async (
         _assetId: string,
+        _token: string,
         callback: (context: {
           asset: PhysicalNormalizationAsset;
-          reservePath: () => Promise<{ previouslyOwned: boolean }>;
+          reservation: PhysicalNormalizationReservation;
           commit: () => Promise<void>;
         }) => Promise<unknown>,
       ) =>
         callback({
           asset,
-          reservePath: () => Promise.resolve({ previouslyOwned: false }),
+          reservation,
           commit: () => (failCommit ? Promise.reject(new Error('database commit failed')) : Promise.resolve()),
         }),
     } as unknown as PhysicalFileRepository;

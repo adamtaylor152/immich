@@ -50,9 +50,23 @@ export async function up(db: Kysely<any>): Promise<void> {
   await sql`CREATE UNIQUE INDEX asset_physical_file_upstream_path_uq ON immich_fork.asset_physical_file ("upstreamPath")`.execute(
     db,
   );
+
+  await sql`
+    CREATE TABLE immich_fork.asset_storage_reservation (
+      "assetId" uuid PRIMARY KEY,
+      token uuid NOT NULL UNIQUE,
+      "sourcePath" text NOT NULL,
+      "upstreamPath" text NOT NULL UNIQUE,
+      "temporaryPath" text NOT NULL UNIQUE,
+      status text NOT NULL CHECK (status IN ('reserved')),
+      "createdAt" timestamptz NOT NULL DEFAULT now(),
+      "updatedAt" timestamptz NOT NULL DEFAULT now()
+    )
+  `.execute(db);
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
+  await sql`DROP TABLE IF EXISTS immich_fork.asset_storage_reservation`.execute(db);
   await sql`DROP TABLE IF EXISTS immich_fork.asset_physical_file`.execute(db);
   await sql`DROP TABLE IF EXISTS immich_fork.physical_file`.execute(db);
   await sql`DROP TABLE IF EXISTS immich_fork.asset_checksum`.execute(db);
