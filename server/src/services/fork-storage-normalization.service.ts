@@ -6,7 +6,12 @@ import { dirname, isAbsolute, join, parse, relative } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
 import { CryptoRepository } from 'src/repositories/crypto.repository';
-import { PhysicalFileRepository, PhysicalNormalizationAsset } from 'src/repositories/physical-file.repository';
+import {
+  PhysicalFileRepository,
+  PhysicalNormalizationAsset,
+  PhysicalNormalizationCompleted,
+  PhysicalNormalizationReservation,
+} from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
 
 export type NormalizationResult = {
@@ -49,6 +54,9 @@ export class ForkStorageNormalizationService {
     const prepared = await this.physicalFileRepository.createNormalizationReservation(assetId, (asset) =>
       this.getUpstreamPath(asset),
     );
+    if (prepared.status === 'completed') {
+      return this.verifyCompletedNormalization(prepared.asset, prepared.completed, prepared.reservation);
+    }
     let createdPath: string | undefined;
     let metadataCommitted = false;
     try {
@@ -135,10 +143,7 @@ export class ForkStorageNormalizationService {
         await rm(createdPath, { force: true });
         await this.syncDirectory(dirname(createdPath));
       }
-      if (
-        !metadataCommitted &&
-        (!prepared.recovered || createdPath || error instanceof ReservationInodeProofError)
-      ) {
+      if (!metadataCommitted && (!prepared.recovered || createdPath || error instanceof ReservationInodeProofError)) {
         await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
         await this.physicalFileRepository.releaseNormalizationReservation(assetId, prepared.reservation.token);
       }
@@ -154,6 +159,51 @@ export class ForkStorageNormalizationService {
     results.sort((left, right) => left.assetId.localeCompare(right.assetId));
     const digest = createHash('sha256').update(JSON.stringify(results)).digest('hex');
     return { count: results.length, digest };
+  }
+
+  private async verifyCompletedNormalization(
+    asset: PhysicalNormalizationAsset,
+    completed: PhysicalNormalizationCompleted,
+    reservation: PhysicalNormalizationReservation | null,
+  ): Promise<NormalizationResult> {
+    await this.assertSafePaths(asset, completed.upstreamPath, completed.upstreamPath);
+    const actual = await this.cryptoRepository.hashFileDigests(completed.upstreamPath);
+    if (
+      actual.sizeInBytes !== completed.sizeInBytes ||
+      !actual.sha1.equals(completed.sha1) ||
+      !actual.sha256.equals(completed.sha256)
+    ) {
+      throw new Error(`Committed normalization evidence mismatch for asset ${asset.id}`);
+    }
+    const stats = await lstat(completed.upstreamPath);
+
+    if (reservation) {
+      await this.cleanupCompletedReservation(asset, reservation);
+    }
+
+    return {
+      assetId: asset.id,
+      sha1: actual.sha1.toString('hex'),
+      sha256: actual.sha256.toString('hex'),
+      linkCount: stats.nlink,
+      verifiedPaths: completed.verifiedPaths,
+    };
+  }
+
+  private async cleanupCompletedReservation(
+    asset: PhysicalNormalizationAsset,
+    reservation: PhysicalNormalizationReservation,
+  ): Promise<void> {
+    if (
+      dirname(reservation.temporaryPath) !== dirname(reservation.upstreamPath) ||
+      !parse(reservation.temporaryPath).base.endsWith('.normalize')
+    ) {
+      throw new Error(`Durable normalization reservation has an unsafe temporary path: ${reservation.temporaryPath}`);
+    }
+    await this.assertSafeParent(asset, reservation.temporaryPath, 'temporary normalization target');
+    await rm(reservation.temporaryPath, { force: true });
+    await this.syncDirectory(dirname(reservation.temporaryPath));
+    await this.physicalFileRepository.releaseNormalizationReservation(asset.id, reservation.token);
   }
 
   private verifyExpectedContent(
@@ -332,7 +382,7 @@ export class ForkStorageNormalizationService {
     } catch {
       return;
     }
-    await rm(temporaryPath);
+    await rm(temporaryPath, { force: true });
     await this.syncDirectory(dirname(temporaryPath));
   }
 

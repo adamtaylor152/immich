@@ -47,6 +47,29 @@ export type PhysicalNormalizationReservation = {
   temporaryPath: string;
 };
 
+export type PhysicalNormalizationCompleted = {
+  upstreamPath: string;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+  linkCount: number;
+  verifiedPaths: string[];
+};
+
+export type PhysicalNormalizationPreparation =
+  | {
+      status: 'completed';
+      asset: PhysicalNormalizationAsset;
+      completed: PhysicalNormalizationCompleted;
+      reservation: PhysicalNormalizationReservation | null;
+    }
+  | {
+      status: 'reserved';
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      recovered: boolean;
+    };
+
 export interface PhysicalFileInput {
   canonicalAssetId: string | null;
   checksum: Buffer;
@@ -144,7 +167,7 @@ export class PhysicalFileRepository {
   async createNormalizationReservation(
     assetId: string,
     selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
-  ): Promise<{ asset: PhysicalNormalizationAsset; reservation: PhysicalNormalizationReservation; recovered: boolean }> {
+  ): Promise<PhysicalNormalizationPreparation> {
     return this.db.transaction().execute(async (trx) => {
       const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE`.execute(
         trx,
@@ -159,6 +182,67 @@ export class PhysicalFileRepository {
       const asset = await this.getNormalizationAssetFrom(trx, assetId);
       if (!asset) {
         throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const completed = await sql<
+        PhysicalNormalizationCompleted & {
+          reservationAssetId: string | null;
+          reservationToken: string | null;
+          reservationSourcePath: string | null;
+          reservationUpstreamPath: string | null;
+          reservationTemporaryPath: string | null;
+        }
+      >`
+        SELECT
+          mapping."upstreamPath",
+          checksum.sha1,
+          checksum.sha256,
+          checksum."sizeInBytes"::float8 AS "sizeInBytes",
+          checksum."linkCount"::int AS "linkCount",
+          checksum."verifiedPaths",
+          reservation."assetId" AS "reservationAssetId",
+          reservation.token AS "reservationToken",
+          reservation."sourcePath" AS "reservationSourcePath",
+          reservation."upstreamPath" AS "reservationUpstreamPath",
+          reservation."temporaryPath" AS "reservationTemporaryPath"
+        FROM public.asset asset
+        INNER JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = asset.id
+        INNER JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+        LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
+        WHERE asset.id = ${assetId}::uuid
+          AND asset."originalPath" = mapping."upstreamPath"
+          AND asset.checksum = checksum.sha1
+          AND asset."checksumAlgorithm" = ${ChecksumAlgorithm.sha1File}::asset_checksum_algorithm_enum
+          AND asset."physicalOriginalFileId" IS NULL
+      `.execute(trx);
+      const committed = completed.rows[0];
+      if (committed) {
+        const reservation =
+          committed.reservationAssetId &&
+          committed.reservationToken &&
+          committed.reservationSourcePath &&
+          committed.reservationUpstreamPath &&
+          committed.reservationTemporaryPath
+            ? {
+                assetId: committed.reservationAssetId,
+                token: committed.reservationToken,
+                sourcePath: committed.reservationSourcePath,
+                upstreamPath: committed.reservationUpstreamPath,
+                temporaryPath: committed.reservationTemporaryPath,
+              }
+            : null;
+        return {
+          status: 'completed',
+          asset,
+          completed: {
+            upstreamPath: committed.upstreamPath,
+            sha1: committed.sha1,
+            sha256: committed.sha256,
+            sizeInBytes: committed.sizeInBytes,
+            linkCount: committed.linkCount,
+            verifiedPaths: committed.verifiedPaths,
+          },
+          reservation,
+        };
       }
       const upstreamPath = selectUpstreamPath(asset);
       const existing = await sql<PhysicalNormalizationReservation>`
@@ -177,7 +261,7 @@ export class PhysicalFileRepository {
         if (!reservationMatchesSource && !reservationMatchesCommittedMapping) {
           throw new Error(`Asset ${assetId} has a conflicting durable storage reservation`);
         }
-        return { asset, reservation, recovered: true };
+        return { status: 'reserved', asset, reservation, recovered: true };
       }
 
       const conflictingReservation = await sql<{ assetId: string }>`
@@ -209,7 +293,7 @@ export class PhysicalFileRepository {
         VALUES (${asset.id}::uuid, ${token}::uuid, ${asset.originalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
         RETURNING "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
       `.execute(trx);
-      return { asset, reservation: inserted.rows[0]!, recovered: false };
+      return { status: 'reserved', asset, reservation: inserted.rows[0]!, recovered: false };
     });
   }
 

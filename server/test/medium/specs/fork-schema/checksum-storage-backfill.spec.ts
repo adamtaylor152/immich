@@ -11,6 +11,7 @@ import { CryptoRepository } from 'src/repositories/crypto.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
 import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
@@ -580,6 +581,113 @@ describe('checksum and physical-storage normalization', () => {
       .executeTakeFirstOrThrow();
     expect(duplicate.originalPath).toBe(join(temporaryRoot, `${assets[1].id}.jpg`));
     expect(duplicate.physicalOriginalFileId).toBeNull();
+  });
+
+  it('lets a waiting handler use committed evidence while the first handler still owns temp cleanup', async () => {
+    const bytes = Buffer.from('post-commit cleanup race');
+    const { assets } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const assetId = assets[1].id!;
+
+    let releaseFirst!: () => void;
+    let firstCommitted!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const committed = new Promise<void>((resolve) => (firstCommitted = resolve));
+    const firstRepository = new PhysicalFileRepository(db);
+    const firstLocked = firstRepository.withLockedNormalizationAsset.bind(firstRepository);
+    vi.spyOn(firstRepository, 'withLockedNormalizationAsset').mockImplementation(async (...args) => {
+      const result = await firstLocked(...args);
+      firstCommitted();
+      await firstBlocked;
+      return result;
+    });
+
+    const secondRepository = new PhysicalFileRepository(db);
+    vi.spyOn(secondRepository, 'withLockedNormalizationAsset').mockRejectedValue(
+      new Error('completed normalization must not recover the reservation temp'),
+    );
+
+    const firstNormalization = new ForkStorageNormalizationService(db, new CryptoRepository(), firstRepository);
+    const secondNormalization = new ForkStorageNormalizationService(db, new CryptoRepository(), secondRepository);
+    const { sut } = newTestService(ForkSchemaMigrationService);
+    (sut as unknown as { db: Kysely<DB> }).db = db;
+    (sut as unknown as { forkSchemaRepository: ForkSchemaRepository }).forkSchemaRepository = new ForkSchemaRepository(
+      db,
+    );
+    StorageCore.setMediaLocation(temporaryRoot);
+    sut.registerHandler('storage', () => firstNormalization.normalizeBatch([assetId]));
+    sut.registerHandler('checksum', () => secondNormalization.normalizeBatch([assetId]));
+
+    const storage = sut.runBatch('storage', 1);
+    const firstState = await Promise.race([
+      committed.then(() => 'committed'),
+      storage.then((status) => `storage:${status}`),
+    ]);
+    if (firstState !== 'committed') {
+      const failed = await sql<{ lastError: string | null }>`
+        SELECT "lastError" FROM immich_fork.backfill_progress WHERE kind = 'storage'
+      `.execute(db);
+      throw new Error(`Storage failed before commit: ${failed.rows[0]?.lastError}`);
+    }
+    const residue = await sql<{ temporaryPath: string }>`
+      SELECT "temporaryPath" FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
+    `.execute(db);
+    const temporaryPath = residue.rows[0]!.temporaryPath;
+    const checksum = sut.runBatch('checksum', 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await rm(temporaryPath, { force: true });
+    releaseFirst();
+
+    await expect(Promise.all([storage, checksum])).resolves.toEqual([JobStatus.Success, JobStatus.Success]);
+    const progress = await sql<{ kind: string; lastError: string | null }>`
+      SELECT kind, "lastError" FROM immich_fork.backfill_progress
+      WHERE kind IN ('storage', 'checksum') ORDER BY kind
+    `.execute(db);
+    expect(progress.rows).toEqual([
+      { kind: 'checksum', lastError: null },
+      { kind: 'storage', lastError: null },
+    ]);
+  });
+
+  it('uses committed evidence to clean crash-after-commit reservation residue without recovering its temp', async () => {
+    const bytes = Buffer.from('crash after metadata commit');
+    const { assets } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const assetId = assets[1].id!;
+    let releaseFirst!: () => void;
+    let firstCommitted!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const committed = new Promise<void>((resolve) => (firstCommitted = resolve));
+    const firstRepository = new PhysicalFileRepository(db);
+    const firstLocked = firstRepository.withLockedNormalizationAsset.bind(firstRepository);
+    vi.spyOn(firstRepository, 'withLockedNormalizationAsset').mockImplementation(async (...args) => {
+      const result = await firstLocked(...args);
+      firstCommitted();
+      await firstBlocked;
+      return result;
+    });
+    const interrupted = new ForkStorageNormalizationService(db, new CryptoRepository(), firstRepository).normalizeAsset(
+      assetId,
+    );
+    await committed;
+    const residue = await sql<{ temporaryPath: string }>`
+      SELECT "temporaryPath" FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
+    `.execute(db);
+    await expect(lstat(residue.rows[0]!.temporaryPath)).resolves.toMatchObject({ nlink: expect.any(Number) });
+
+    const retryRepository = new PhysicalFileRepository(db);
+    vi.spyOn(retryRepository, 'withLockedNormalizationAsset').mockRejectedValue(
+      new Error('completed normalization must not recover the reservation temp'),
+    );
+    await expect(
+      new ForkStorageNormalizationService(db, new CryptoRepository(), retryRepository).normalizeAsset(assetId),
+    ).resolves.toMatchObject({ assetId });
+    await expect(lstat(residue.rows[0]!.temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    const reservations = await sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
+    `.execute(db);
+    expect(reservations.rows[0]?.count).toBe(0);
+
+    releaseFirst();
+    await expect(interrupted).resolves.toMatchObject({ assetId });
   });
 
   it('fails closed without asset or sidecar changes when the readable original checksum mismatches', async () => {
