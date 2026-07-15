@@ -22,6 +22,7 @@ import {
   QueueName,
   StorageFolder,
 } from 'src/enum';
+import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository, PrivacySidecar } from 'src/repositories/fork-privacy.repository';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
 import { DB } from 'src/schema';
@@ -870,14 +871,23 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async getEnrichmentMetadata(id: string, kysely?: Kysely<DB>): Promise<EnrichmentMetadata> {
-    const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
-    const metadata = isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    const database = kysely ?? this.db;
+    let metadata: EnrichmentMetadata;
+    if (this.db && database && (await new ForkEnrichmentRepository(this.db).shouldReadSidecar(database))) {
+      const sidecar = await new ForkEnrichmentRepository(this.db).get(id, database);
+      if (!sidecar) {
+        throw new Error(`Missing fork enrichment sidecar for asset ${id}`);
+      }
+      metadata = sidecar.provenance as EnrichmentMetadata;
+    } else {
+      const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
+      metadata = isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    }
     if (!this.db) {
       return metadata;
     }
 
     const repository = new ForkPrivacyRepository(this.db);
-    const database = kysely ?? this.db;
     if (!(await repository.shouldReadSidecar(database))) {
       return metadata;
     }
@@ -890,11 +900,24 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {
-    await this.assetRepository.upsertMetadata(
-      id,
-      [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
-      kysely,
-    );
+    const database = kysely ?? this.db;
+    if (!this.db || !database) {
+      await this.assetRepository.upsertMetadata(
+        id,
+        [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
+        kysely,
+      );
+      return;
+    }
+    const repository = new ForkEnrichmentRepository(this.db);
+    if (!(await repository.shouldReadSidecar(database))) {
+      await this.assetRepository.upsertMetadata(
+        id,
+        [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
+        kysely,
+      );
+    }
+    await repository.save(id, value as Record<string, unknown>, database);
   }
 
   private applyPrivacySidecar(metadata: EnrichmentMetadata, privacy: PrivacySidecar): EnrichmentMetadata {
