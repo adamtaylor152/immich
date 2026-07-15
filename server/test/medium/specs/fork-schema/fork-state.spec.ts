@@ -1,13 +1,19 @@
 import { Kysely, sql } from 'kysely';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
-import { BACKFILL_KINDS, ForkSchemaRepository, type BackfillKind } from 'src/repositories/fork-schema.repository';
+import {
+  BACKFILL_KINDS,
+  ForkSchemaRepository,
+  type BackfillKind,
+  type ForkSchemaPhase,
+} from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
 describe(ForkSchemaRepository.name, () => {
+  const digest = 'a'.repeat(64);
   let db: Kysely<DB>;
   let repository: ForkSchemaRepository;
 
@@ -22,9 +28,10 @@ describe(ForkSchemaRepository.name, () => {
     await db.deleteFrom('asset').execute();
     await db.deleteFrom('user').execute();
     await sql`
-      UPDATE immich_fork.state
+      INSERT INTO immich_fork.state (id, active, "schemaVersion", "upstreamVersion", phase)
+      VALUES (1, false, '1', '3.0.3', 'inactive')
+      ON CONFLICT (id) DO UPDATE
       SET active = false, phase = 'inactive', "updatedAt" = now()
-      WHERE id = 1
     `.execute(db);
     repository = new ForkSchemaRepository(db);
   });
@@ -59,45 +66,56 @@ describe(ForkSchemaRepository.name, () => {
     });
   });
 
+  it('rejects phase changes when singleton state is missing', async () => {
+    await sql`DELETE FROM immich_fork.state WHERE id = 1`.execute(db);
+
+    await expect(repository.setPhase('legacy')).rejects.toThrow('Fork schema state is not initialized');
+  });
+
   it('durably reserves one batch per kind and reclaims an expired reservation after reconstruction', async () => {
     const assetIds = await seedAssets(3);
+    await repository.setPhase('dual-write');
 
     const claims = await Promise.all([repository.claimBatch('privacy', 2), repository.claimBatch('privacy', 2)]);
-    const claimed = claims.find((ids) => ids.length > 0) ?? [];
-    const skipped = claims.find((ids) => ids.length === 0) ?? [];
+    const claimed = claims.find((claim) => claim !== null)!;
+    const skipped = claims.find((claim) => claim === null);
 
-    expect(claimed).toEqual(assetIds.slice(0, 2));
-    expect(skipped).toEqual([]);
-    expect(new Set(claims.flat()).size).toBe(claims.flat().length);
+    expect(claimed.ids).toEqual(assetIds.slice(0, 2));
+    expect(claimed.cursor).toMatch(/^[0-9a-f-]{36}$/);
+    expect(skipped).toBeNull();
 
     const reservedProgress = await sql<{
       claimedCursor: string | null;
+      claimToken: string | null;
       cursor: string | null;
       processed: number;
       remaining: number;
     }>`
-      SELECT cursor, processed, remaining, "claimedCursor"
+      SELECT cursor, processed, remaining, "claimedCursor", "claimToken"
       FROM immich_fork.backfill_progress
       WHERE kind = 'privacy'
     `.execute(db);
     expect(reservedProgress.rows[0]).toEqual({
-      claimedCursor: claimed.at(-1),
+      claimedCursor: claimed.ids.at(-1),
+      claimToken: claimed.cursor,
       cursor: null,
       processed: 0,
       remaining: 3,
     });
 
     const reconstructed = new ForkSchemaRepository(db);
-    await expect(reconstructed.claimBatch('privacy', 2)).resolves.toEqual([]);
+    await expect(reconstructed.claimBatch('privacy', 2)).resolves.toBeNull();
 
     await sql`
       UPDATE immich_fork.backfill_progress
       SET "claimExpiresAt" = now() - interval '1 second'
       WHERE kind = 'privacy'
     `.execute(db);
-    await expect(reconstructed.claimBatch('privacy', 2)).resolves.toEqual(claimed);
+    const reclaimed = await reconstructed.claimBatch('privacy', 2);
+    expect(reclaimed?.ids).toEqual(claimed.ids);
+    expect(reclaimed?.cursor).not.toBe(claimed.cursor);
 
-    await reconstructed.completeBatch('privacy', claimed.at(-1)!, claimed.length, 'digest-1');
+    await reconstructed.completeBatch('privacy', reclaimed!.cursor, reclaimed!.ids.length, digest);
 
     const completedProgress = await sql<{
       claimedCursor: string | null;
@@ -112,15 +130,130 @@ describe(ForkSchemaRepository.name, () => {
     `.execute(db);
     expect(completedProgress.rows[0]).toEqual({
       claimedCursor: null,
-      cursor: claimed.at(-1),
-      digest: 'digest-1',
+      cursor: claimed.ids.at(-1),
+      digest,
       processed: 2,
       remaining: 1,
     });
 
     const resumed = new ForkSchemaRepository(db);
-    await expect(resumed.claimBatch('privacy', 2)).resolves.toEqual(assetIds.slice(2));
+    await expect(resumed.claimBatch('privacy', 2)).resolves.toEqual(
+      expect.objectContaining({ ids: assetIds.slice(2), cursor: expect.any(String) }),
+    );
   });
+
+  it('fences a stale worker after an expired reservation is reclaimed', async () => {
+    await seedAssets(1);
+    await repository.setPhase('dual-write');
+    const staleClaim = await repository.claimBatch('privacy', 1);
+    await sql`
+      UPDATE immich_fork.backfill_progress
+      SET "claimExpiresAt" = now() - interval '1 second'
+      WHERE kind = 'privacy'
+    `.execute(db);
+    const currentClaim = await repository.claimBatch('privacy', 1);
+
+    expect(currentClaim?.ids).toEqual(staleClaim?.ids);
+    expect(currentClaim?.cursor).not.toBe(staleClaim?.cursor);
+    await expect(repository.completeBatch('privacy', staleClaim!.cursor, 1, digest)).rejects.toThrow(
+      'Backfill reservation does not match completion cursor',
+    );
+    await expect(repository.completeBatch('privacy', currentClaim!.cursor, 1, digest)).resolves.toBeUndefined();
+  });
+
+  it.each([0, 1, 3])('rejects a non-exact processed count of %s without advancing progress', async (count) => {
+    await seedAssets(2);
+    await repository.setPhase('dual-write');
+    const claim = await repository.claimBatch('privacy', 2);
+
+    await expect(repository.completeBatch('privacy', claim!.cursor, count, digest)).rejects.toThrow(
+      'Backfill processed count must equal the reserved batch size',
+    );
+    const progress = await sql<{
+      claimedIds: string[];
+      cursor: string | null;
+      digest: string | null;
+      processed: number;
+    }>`
+      SELECT "claimedIds", cursor, digest, processed
+      FROM immich_fork.backfill_progress
+      WHERE kind = 'privacy'
+    `.execute(db);
+    expect(progress.rows[0]).toEqual({ claimedIds: claim!.ids, cursor: null, digest: null, processed: 0 });
+  });
+
+  it.each(['', 'abc', 'A'.repeat(64), `${'a'.repeat(63)}g`])(
+    'rejects a non-canonical digest without advancing progress: %s',
+    async (invalidDigest) => {
+      await seedAssets(1);
+      await repository.setPhase('dual-write');
+      const claim = await repository.claimBatch('privacy', 1);
+
+      await expect(repository.completeBatch('privacy', claim!.cursor, 1, invalidDigest)).rejects.toThrow(
+        'Backfill digest must be a canonical SHA-256 hex string',
+      );
+      const progress = await sql<{ cursor: string | null; digest: string | null; processed: number }>`
+        SELECT cursor, digest, processed
+        FROM immich_fork.backfill_progress
+        WHERE kind = 'privacy'
+      `.execute(db);
+      expect(progress.rows[0]).toEqual({ cursor: null, digest: null, processed: 0 });
+    },
+  );
+
+  it('records a batch failure, releases its lease, and preserves the completed cursor', async () => {
+    await seedAssets(1);
+    await repository.setPhase('dual-write');
+    const failedClaim = await repository.claimBatch('privacy', 1);
+
+    await repository.failBatch('privacy', failedClaim!.cursor, 'sidecar write failed');
+
+    const progress = await sql<{
+      claimToken: string | null;
+      claimedIds: string[];
+      cursor: string | null;
+      lastError: string | null;
+    }>`
+      SELECT cursor, "lastError", "claimToken", "claimedIds"
+      FROM immich_fork.backfill_progress
+      WHERE kind = 'privacy'
+    `.execute(db);
+    expect(progress.rows[0]).toEqual({
+      claimToken: null,
+      claimedIds: [],
+      cursor: null,
+      lastError: 'sidecar write failed',
+    });
+
+    await sql`UPDATE immich_fork.backfill_progress SET remaining = 0 WHERE kind = 'privacy'`.execute(db);
+    await sql`
+      INSERT INTO immich_fork.backfill_progress (kind, remaining)
+      SELECT kind, 0
+      FROM unnest(${BACKFILL_KINDS.filter((kind) => kind !== 'privacy')}::text[]) AS kind
+    `.execute(db);
+    await expect(repository.setPhase('active')).rejects.toThrow(
+      'Cannot activate fork schema with incomplete backfills',
+    );
+
+    const retryClaim = await repository.claimBatch('privacy', 1);
+    expect(retryClaim?.ids).toEqual(failedClaim?.ids);
+    expect(retryClaim?.cursor).not.toBe(failedClaim?.cursor);
+  });
+
+  it.each<ForkSchemaPhase>(['legacy', 'ready', 'inactive', 'active', 'failed'])(
+    'rejects batch claims in the %s phase',
+    async (phase) => {
+      await sql`
+        UPDATE immich_fork.state
+        SET phase = ${phase}, active = ${phase === 'active'}
+        WHERE id = 1
+      `.execute(db);
+
+      await expect(repository.claimBatch('privacy', 1)).rejects.toThrow(
+        'Fork schema backfills can only run in dual-write phase',
+      );
+    },
+  );
 
   it('rejects activation until every backfill kind reports no remaining work', async () => {
     await sql`
@@ -142,14 +275,16 @@ describe(ForkSchemaRepository.name, () => {
 
   it('rejects completion for a cursor that does not own the active reservation', async () => {
     await seedAssets(1);
+    await repository.setPhase('dual-write');
     await repository.claimBatch('privacy', 1);
 
     await expect(
-      repository.completeBatch('privacy', '00000000-0000-0000-0000-000000000000', 1, 'digest'),
+      repository.completeBatch('privacy', '00000000-0000-0000-0000-000000000000', 1, digest),
     ).rejects.toThrow('Backfill reservation does not match completion cursor');
   });
 
   it.each(BACKFILL_KINDS)('accepts the %s backfill kind', async (kind: BackfillKind) => {
-    await expect(repository.claimBatch(kind, 1)).resolves.toEqual([]);
+    await repository.setPhase('dual-write');
+    await expect(repository.claimBatch(kind, 1)).resolves.toBeNull();
   });
 });

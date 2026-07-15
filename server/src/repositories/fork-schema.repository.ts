@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { randomUUID } from 'node:crypto';
 import { DB } from 'src/schema';
 
 export type ForkSchemaPhase = 'legacy' | 'dual-write' | 'ready' | 'inactive' | 'active' | 'failed';
@@ -11,6 +12,7 @@ export type ForkState = {
   schemaVersion: string;
   upstreamVersion: string;
 };
+export type BackfillClaim = { ids: string[]; cursor: string };
 
 export const BACKFILL_KINDS = [
   'privacy',
@@ -24,6 +26,7 @@ export const BACKFILL_KINDS = [
 
 type BackfillProgress = {
   claimExpired: boolean;
+  claimToken: string | null;
   claimedCursor: string | null;
   claimedIds: string[];
   cursor: string | null;
@@ -66,14 +69,22 @@ export class ForkSchemaRepository {
 
   async setPhase(phase: ForkSchemaPhase): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
+      const lockedState = await sql<{ id: number }>`
+        SELECT id FROM immich_fork.state WHERE id = 1 FOR UPDATE
+      `.execute(trx);
+      if (!lockedState.rows[0]) {
+        throw new Error('Fork schema state is not initialized');
+      }
+
       if (phase === 'active') {
         const readiness = await sql<{
+          claimToken: string | null;
           claimedCursor: string | null;
           kind: BackfillKind;
           lastError: string | null;
           remaining: number;
         }>`
-          SELECT kind, remaining, "claimedCursor", "lastError"
+          SELECT kind, remaining, "claimToken", "claimedCursor", "lastError"
           FROM immich_fork.backfill_progress
           WHERE kind = ANY(${[...BACKFILL_KINDS]})
           FOR UPDATE
@@ -82,8 +93,8 @@ export class ForkSchemaRepository {
           readiness.rows.length === BACKFILL_KINDS.length &&
           new Set(readiness.rows.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
           readiness.rows.every(
-            ({ claimedCursor, lastError, remaining }) =>
-              remaining === 0 && claimedCursor === null && lastError === null,
+            ({ claimToken, claimedCursor, lastError, remaining }) =>
+              remaining === 0 && claimToken === null && claimedCursor === null && lastError === null,
           );
         if (!allBackfillsComplete) {
           throw new Error('Cannot activate fork schema with incomplete backfills');
@@ -98,12 +109,23 @@ export class ForkSchemaRepository {
     });
   }
 
-  async claimBatch(kind: BackfillKind, size: number): Promise<string[]> {
+  async claimBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {
     if (!Number.isSafeInteger(size) || size <= 0) {
       throw new Error('Backfill batch size must be a positive integer');
     }
 
     return this.db.transaction().execute(async (trx) => {
+      const lockedState = await sql<{ phase: ForkSchemaPhase }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE
+      `.execute(trx);
+      const state = lockedState.rows[0];
+      if (!state) {
+        throw new Error('Fork schema state is not initialized');
+      }
+      if (state.phase !== 'dual-write') {
+        throw new Error('Fork schema backfills can only run in dual-write phase');
+      }
+
       const source = getBackfillSource(kind);
       const initialRemaining = await sql<{ count: number }>`SELECT count(*)::int AS count FROM ${source}`.execute(trx);
       await sql`
@@ -115,6 +137,7 @@ export class ForkSchemaRepository {
       const locked = await sql<BackfillProgress>`
         SELECT
           cursor,
+          "claimToken",
           "claimedCursor",
           "claimedIds",
           coalesce("claimExpiresAt" <= now(), false) AS "claimExpired"
@@ -124,20 +147,24 @@ export class ForkSchemaRepository {
       `.execute(trx);
       const progress = locked.rows[0];
       if (!progress) {
-        return [];
+        return null;
       }
 
-      if (progress.claimedCursor && !progress.claimExpired) {
-        return [];
+      if (progress.claimToken && !progress.claimExpired) {
+        return null;
       }
 
-      if (progress.claimedCursor && progress.claimExpired) {
+      if (progress.claimToken && progress.claimedCursor && progress.claimExpired) {
+        const claimToken = randomUUID();
         await sql`
           UPDATE immich_fork.backfill_progress
-          SET "claimExpiresAt" = now() + ${CLAIM_LEASE}, "updatedAt" = now()
+          SET
+            "claimToken" = ${claimToken},
+            "claimExpiresAt" = now() + ${CLAIM_LEASE},
+            "updatedAt" = now()
           WHERE kind = ${kind}
         `.execute(trx);
-        return progress.claimedIds;
+        return { ids: progress.claimedIds, cursor: claimToken };
       }
 
       const batch = await sql<{ id: string }>`
@@ -155,58 +182,91 @@ export class ForkSchemaRepository {
           SET remaining = 0, "updatedAt" = now()
           WHERE kind = ${kind}
         `.execute(trx);
-        return [];
+        return null;
       }
 
       const claimedCursor = ids.at(-1)!;
+      const claimToken = randomUUID();
       await sql`
         UPDATE immich_fork.backfill_progress
         SET
           "claimedCursor" = ${claimedCursor},
           "claimedIds" = ${ids},
+          "claimToken" = ${claimToken},
           "claimExpiresAt" = now() + ${CLAIM_LEASE},
           remaining = (SELECT count(*) FROM ${source} WHERE id::text > coalesce(${progress.cursor}, '')),
           "updatedAt" = now()
         WHERE kind = ${kind}
       `.execute(trx);
-      return ids;
+      return { ids, cursor: claimToken };
     });
   }
 
   async completeBatch(kind: BackfillKind, cursor: string, count: number, digest: string): Promise<void> {
-    if (!Number.isSafeInteger(count) || count < 0) {
-      throw new Error('Backfill processed count must be a non-negative integer');
+    if (!/^[0-9a-f]{64}$/.test(digest)) {
+      throw new Error('Backfill digest must be a canonical SHA-256 hex string');
     }
 
     await this.db.transaction().execute(async (trx) => {
-      const locked = await sql<Pick<BackfillProgress, 'claimedCursor' | 'claimedIds'>>`
-        SELECT "claimedCursor", "claimedIds"
+      const locked = await sql<Pick<BackfillProgress, 'claimToken' | 'claimedCursor' | 'claimedIds'>>`
+        SELECT "claimToken", "claimedCursor", "claimedIds"
         FROM immich_fork.backfill_progress
         WHERE kind = ${kind}
         FOR UPDATE
       `.execute(trx);
       const progress = locked.rows[0];
-      if (!progress || progress.claimedCursor !== cursor || progress.claimedIds.at(-1) !== cursor) {
+      if (!progress || progress.claimToken !== cursor || !progress.claimedCursor) {
         throw new Error('Backfill reservation does not match completion cursor');
       }
-      if (count > progress.claimedIds.length) {
-        throw new Error('Backfill processed count exceeds the reserved batch size');
+      if (!Number.isSafeInteger(count) || count !== progress.claimedIds.length) {
+        throw new Error('Backfill processed count must equal the reserved batch size');
       }
 
       const source = getBackfillSource(kind);
       const remaining = await sql<{ count: number }>`
-        SELECT count(*)::int AS count FROM ${source} WHERE id::text > ${cursor}
+        SELECT count(*)::int AS count FROM ${source} WHERE id::text > ${progress.claimedCursor}
       `.execute(trx);
       await sql`
         UPDATE immich_fork.backfill_progress
         SET
-          cursor = ${cursor},
+          cursor = ${progress.claimedCursor},
           processed = processed + ${count},
           remaining = ${remaining.rows[0]?.count ?? 0},
           digest = ${digest},
           "lastError" = NULL,
           "claimedCursor" = NULL,
           "claimedIds" = '{}',
+          "claimToken" = NULL,
+          "claimExpiresAt" = NULL,
+          "updatedAt" = now()
+        WHERE kind = ${kind}
+      `.execute(trx);
+    });
+  }
+
+  async failBatch(kind: BackfillKind, cursor: string, error: string): Promise<void> {
+    if (!error.trim()) {
+      throw new Error('Backfill failure must include an error message');
+    }
+
+    await this.db.transaction().execute(async (trx) => {
+      const locked = await sql<{ claimToken: string | null }>`
+        SELECT "claimToken"
+        FROM immich_fork.backfill_progress
+        WHERE kind = ${kind}
+        FOR UPDATE
+      `.execute(trx);
+      if (locked.rows[0]?.claimToken !== cursor) {
+        throw new Error('Backfill reservation does not match failure cursor');
+      }
+
+      await sql`
+        UPDATE immich_fork.backfill_progress
+        SET
+          "lastError" = ${error},
+          "claimedCursor" = NULL,
+          "claimedIds" = '{}',
+          "claimToken" = NULL,
           "claimExpiresAt" = NULL,
           "updatedAt" = now()
         WHERE kind = ${kind}

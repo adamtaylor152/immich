@@ -7,4 +7,5 @@ export const newForkSchemaRepositoryMock = (): Mocked<RepositoryInterface<ForkSc
   setPhase: vitest.fn(),
   claimBatch: vitest.fn(),
   completeBatch: vitest.fn(),
+  failBatch: vitest.fn(),
 });
