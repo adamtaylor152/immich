@@ -32,6 +32,7 @@ import {
   WorkflowTrigger,
   WorkflowType,
 } from 'src/enum';
+import type { BackfillKind } from 'src/repositories/fork-schema.repository';
 import type { SuppressionPreferences } from 'src/utils/hidden-content';
 
 export type DeepPartial<T> = T extends Date
@@ -212,6 +213,11 @@ export interface IBaseJob {
   force?: boolean;
 }
 
+export interface IForkSchemaBackfillJob {
+  kind: BackfillKind;
+  batchSize: number;
+}
+
 export interface IDelayedJob extends IBaseJob {
   /** The minimum time to wait to execute this job, in milliseconds. */
   delay?: number;
@@ -324,6 +330,9 @@ export interface JobCounts {
 }
 
 export type JobItem =
+  // Fork schema migration
+  | { name: JobName.ForkSchemaBackfill; data: IForkSchemaBackfillJob }
+
   // Audit
   | { name: JobName.AuditTableCleanup; data?: IBaseJob }
 

@@ -24,12 +24,21 @@ export const BACKFILL_KINDS = [
   'checksum',
 ] as const satisfies readonly BackfillKind[];
 
-type BackfillProgress = {
+type BackfillReservation = {
   claimExpired: boolean;
   claimToken: string | null;
   claimedCursor: string | null;
   claimedIds: string[];
   cursor: string | null;
+};
+
+export type BackfillProgress = {
+  kind: BackfillKind;
+  cursor: string | null;
+  processed: number;
+  remaining: number;
+  digest: string | null;
+  lastError: string | null;
 };
 
 const CLAIM_LEASE = sql.raw("interval '15 minutes'");
@@ -65,6 +74,21 @@ export class ForkSchemaRepository {
       throw new Error('Fork schema state is not initialized');
     }
     return state;
+  }
+
+  async getProgress(): Promise<BackfillProgress[]> {
+    const result = await sql<BackfillProgress>`
+      SELECT
+        kind,
+        cursor,
+        processed::float8 AS processed,
+        remaining::float8 AS remaining,
+        digest,
+        "lastError"
+      FROM immich_fork.backfill_progress
+      WHERE kind = ANY(${[...BACKFILL_KINDS]})
+    `.execute(this.db);
+    return result.rows;
   }
 
   async setPhase(phase: ForkSchemaPhase): Promise<void> {
@@ -134,7 +158,7 @@ export class ForkSchemaRepository {
         ON CONFLICT (kind) DO NOTHING
       `.execute(trx);
 
-      const locked = await sql<BackfillProgress>`
+      const locked = await sql<BackfillReservation>`
         SELECT
           cursor,
           "claimToken",
@@ -208,7 +232,7 @@ export class ForkSchemaRepository {
     }
 
     await this.db.transaction().execute(async (trx) => {
-      const locked = await sql<Pick<BackfillProgress, 'claimToken' | 'claimedCursor' | 'claimedIds'>>`
+      const locked = await sql<Pick<BackfillReservation, 'claimToken' | 'claimedCursor' | 'claimedIds'>>`
         SELECT "claimToken", "claimedCursor", "claimedIds"
         FROM immich_fork.backfill_progress
         WHERE kind = ${kind}

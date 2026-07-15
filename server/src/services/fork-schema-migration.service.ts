@@ -1,0 +1,143 @@
+import { Injectable } from '@nestjs/common';
+import { OnJob } from 'src/decorators';
+import { JobName, JobStatus, QueueName } from 'src/enum';
+import { BACKFILL_KINDS, BackfillKind, BackfillProgress, ForkState } from 'src/repositories/fork-schema.repository';
+import { BaseService } from 'src/services/base.service';
+import { JobOf } from 'src/types';
+
+const DEFAULT_BATCH_SIZE = 100;
+
+export type BackfillBatchResult = { count: number; digest: string };
+export type BackfillBatchHandler = (ids: string[]) => Promise<BackfillBatchResult>;
+export type ForkSchemaMigrationStatus = ForkState & {
+  progress: BackfillProgress[];
+  verified: boolean;
+};
+
+@Injectable()
+export class ForkSchemaMigrationService extends BaseService {
+  private readonly handlers = new Map<BackfillKind, BackfillBatchHandler>();
+
+  registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
+    if (this.handlers.has(kind)) {
+      throw new Error(`Backfill handler already registered for ${kind}`);
+    }
+    this.handlers.set(kind, handler);
+  }
+
+  async status(): Promise<ForkSchemaMigrationStatus> {
+    const [state, storedProgress] = await Promise.all([
+      this.forkSchemaRepository.getState(),
+      this.forkSchemaRepository.getProgress(),
+    ]);
+    const byKind = new Map(storedProgress.map((item) => [item.kind, item]));
+    const progress = BACKFILL_KINDS.map(
+      (kind): BackfillProgress =>
+        byKind.get(kind) ?? {
+          kind,
+          cursor: null,
+          processed: 0,
+          remaining: 0,
+          digest: null,
+          lastError: null,
+        },
+    );
+    const verified =
+      storedProgress.length === BACKFILL_KINDS.length &&
+      new Set(storedProgress.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
+      storedProgress.every(({ lastError, remaining }) => remaining === 0 && lastError === null);
+
+    return { ...state, progress, verified };
+  }
+
+  verify(): Promise<ForkSchemaMigrationStatus> {
+    return this.status();
+  }
+
+  async start(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase !== 'legacy') {
+      throw new Error('Backfill can only start from legacy phase');
+    }
+
+    await this.forkSchemaRepository.setPhase('dual-write');
+    await this.queueAllKinds(batchSize);
+    return this.status();
+  }
+
+  async pause(): Promise<ForkSchemaMigrationStatus> {
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase === 'dual-write') {
+      await this.forkSchemaRepository.setPhase('legacy');
+    } else if (state.phase !== 'legacy') {
+      throw new Error('Backfill can only pause from dual-write phase');
+    }
+    return this.status();
+  }
+
+  async resume(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase === 'legacy') {
+      await this.forkSchemaRepository.setPhase('dual-write');
+      await this.queueAllKinds(batchSize);
+    } else if (state.phase !== 'dual-write') {
+      throw new Error('Backfill can only resume from legacy phase');
+    }
+    return this.status();
+  }
+
+  @OnJob({ name: JobName.ForkSchemaBackfill, queue: QueueName.BackgroundTask })
+  async handleBackfill({ kind, batchSize }: JobOf<JobName.ForkSchemaBackfill>): Promise<JobStatus> {
+    return this.runBatch(kind, batchSize);
+  }
+
+  async runBatch(kind: BackfillKind, batchSize: number): Promise<JobStatus> {
+    const claim = await this.forkSchemaRepository.claimBatch(kind, batchSize);
+    if (!claim) {
+      const status = await this.status();
+      if (status.phase === 'dual-write' && status.verified) {
+        await this.forkSchemaRepository.setPhase('ready');
+      }
+      return JobStatus.Skipped;
+    }
+
+    try {
+      const handler = this.handlers.get(kind);
+      if (!handler) {
+        throw new Error(`No backfill handler registered for ${kind}`);
+      }
+
+      const result = await handler(claim.ids);
+      await this.forkSchemaRepository.completeBatch(kind, claim.cursor, result.count, result.digest);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.forkSchemaRepository.failBatch(kind, claim.cursor, message);
+      return JobStatus.Failed;
+    }
+
+    await this.continueOrFinish(kind, batchSize);
+    return JobStatus.Success;
+  }
+
+  private async queueAllKinds(batchSize: number): Promise<void> {
+    await this.jobRepository.queueAll(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize } })),
+    );
+  }
+
+  private async continueOrFinish(kind: BackfillKind, batchSize: number): Promise<void> {
+    const status = await this.status();
+    if (status.phase !== 'dual-write') {
+      return;
+    }
+    if (status.verified) {
+      await this.forkSchemaRepository.setPhase('ready');
+      return;
+    }
+
+    const progress = status.progress.find((item) => item.kind === kind);
+    if (progress && progress.remaining > 0 && progress.lastError === null) {
+      await this.jobRepository.queue({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize } });
+    }
+  }
+}

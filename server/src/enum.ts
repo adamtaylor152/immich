@@ -893,6 +893,8 @@ export enum QueueJobStatus {
 export const QueueJobStatusSchema = z.enum(QueueJobStatus).describe('Queue job status').meta({ id: 'QueueJobStatus' });
 
 export enum JobName {
+  ForkSchemaBackfill = 'ForkSchemaBackfill',
+
   AssetDelete = 'AssetDelete',
   AssetDeleteCheck = 'AssetDeleteCheck',
   AssetDetectFacesQueueAll = 'AssetDetectFacesQueueAll',

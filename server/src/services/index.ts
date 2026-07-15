@@ -12,6 +12,7 @@ import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { DatabaseService } from 'src/services/database.service';
 import { DownloadService } from 'src/services/download.service';
 import { DuplicateService } from 'src/services/duplicate.service';
+import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
 import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
 import { JobService } from 'src/services/job.service';
 import { LibraryService } from 'src/services/library.service';
@@ -70,6 +71,7 @@ export const services = [
   DatabaseService,
   DownloadService,
   DuplicateService,
+  ForkSchemaMigrationService,
   ImageEnrichmentService,
   JobService,
   LibraryService,
