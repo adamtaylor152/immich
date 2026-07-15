@@ -72,6 +72,26 @@ describe(ForkSchemaRepository.name, () => {
     await expect(repository.setPhase('legacy')).rejects.toThrow('Fork schema state is not initialized');
   });
 
+  it('atomically allows only one matching phase transition', async () => {
+    await repository.setPhase('legacy');
+
+    const transitions = await Promise.all([
+      repository.transitionPhase('legacy', 'dual-write'),
+      repository.transitionPhase('legacy', 'dual-write'),
+    ]);
+
+    expect(transitions.sort()).toEqual([false, true]);
+    await expect(repository.getState()).resolves.toMatchObject({ phase: 'dual-write' });
+  });
+
+  it('rejects atomic phase transitions when singleton state is missing', async () => {
+    await sql`DELETE FROM immich_fork.state WHERE id = 1`.execute(db);
+
+    await expect(repository.transitionPhase('legacy', 'dual-write')).rejects.toThrow(
+      'Fork schema state is not initialized',
+    );
+  });
+
   it('durably reserves one batch per kind and reclaims an expired reservation after reconstruction', async () => {
     const assetIds = await seedAssets(3);
     await repository.setPhase('dual-write');

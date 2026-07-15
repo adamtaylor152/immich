@@ -353,6 +353,9 @@ export class JobRepository {
       case JobName.ImageDescriptionQueueAll: {
         return { deduplication: { id: JobName.ImageDescriptionQueueAll } };
       }
+      case JobName.ForkSchemaBackfill: {
+        return { deduplication: { id: `${JobName.ForkSchemaBackfill}:${item.data.kind}` } };
+      }
       case JobName.SmartAlbumReevaluateAll: {
         // Kind-scoped dispatches get their own dedup namespace so they don't
         // collide with each other OR with the all-kinds dispatch. This lets

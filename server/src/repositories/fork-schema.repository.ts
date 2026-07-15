@@ -91,6 +91,28 @@ export class ForkSchemaRepository {
     return result.rows;
   }
 
+  async transitionPhase(expected: ForkSchemaPhase, next: ForkSchemaPhase): Promise<boolean> {
+    return this.db.transaction().execute(async (trx) => {
+      const lockedState = await sql<{ phase: ForkSchemaPhase }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
+      `.execute(trx);
+      const state = lockedState.rows[0];
+      if (!state) {
+        throw new Error('Fork schema state is not initialized');
+      }
+      if (state.phase !== expected) {
+        return false;
+      }
+
+      await sql`
+        UPDATE immich_fork.state
+        SET active = ${next === 'active'}, phase = ${next}, "updatedAt" = now()
+        WHERE id = 1
+      `.execute(trx);
+      return true;
+    });
+  }
+
   async setPhase(phase: ForkSchemaPhase): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const lockedState = await sql<{ id: number }>`

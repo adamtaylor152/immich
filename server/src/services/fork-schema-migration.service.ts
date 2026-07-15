@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
-import { BACKFILL_KINDS, BackfillKind, BackfillProgress, ForkState } from 'src/repositories/fork-schema.repository';
+import {
+  BACKFILL_KINDS,
+  BackfillClaim,
+  BackfillKind,
+  BackfillProgress,
+  ForkState,
+} from 'src/repositories/fork-schema.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
 
@@ -55,35 +61,38 @@ export class ForkSchemaMigrationService extends BaseService {
   }
 
   async start(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
-    const state = await this.forkSchemaRepository.getState();
-    if (state.phase !== 'legacy') {
-      throw new Error('Backfill can only start from legacy phase');
+    const transitioned = await this.forkSchemaRepository.transitionPhase('legacy', 'dual-write');
+    if (transitioned) {
+      await this.queueAllKinds(batchSize);
     }
 
-    await this.forkSchemaRepository.setPhase('dual-write');
-    await this.queueAllKinds(batchSize);
-    return this.status();
+    const status = await this.status();
+    if (!transitioned && status.phase !== 'dual-write') {
+      throw new Error('Backfill can only start from legacy phase');
+    }
+    return status;
   }
 
   async pause(): Promise<ForkSchemaMigrationStatus> {
-    const state = await this.forkSchemaRepository.getState();
-    if (state.phase === 'dual-write') {
-      await this.forkSchemaRepository.setPhase('legacy');
-    } else if (state.phase !== 'legacy') {
+    const transitioned = await this.forkSchemaRepository.transitionPhase('dual-write', 'legacy');
+    const status = await this.status();
+    if (!transitioned && status.phase !== 'legacy') {
       throw new Error('Backfill can only pause from dual-write phase');
     }
-    return this.status();
+    return status;
   }
 
   async resume(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
-    const state = await this.forkSchemaRepository.getState();
-    if (state.phase === 'legacy') {
-      await this.forkSchemaRepository.setPhase('dual-write');
+    const transitioned = await this.forkSchemaRepository.transitionPhase('legacy', 'dual-write');
+    if (transitioned) {
       await this.queueAllKinds(batchSize);
-    } else if (state.phase !== 'dual-write') {
+    }
+
+    const status = await this.status();
+    if (!transitioned && status.phase !== 'dual-write') {
       throw new Error('Backfill can only resume from legacy phase');
     }
-    return this.status();
+    return status;
   }
 
   @OnJob({ name: JobName.ForkSchemaBackfill, queue: QueueName.BackgroundTask })
@@ -92,11 +101,24 @@ export class ForkSchemaMigrationService extends BaseService {
   }
 
   async runBatch(kind: BackfillKind, batchSize: number): Promise<JobStatus> {
-    const claim = await this.forkSchemaRepository.claimBatch(kind, batchSize);
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase !== 'dual-write') {
+      return JobStatus.Skipped;
+    }
+
+    let claim: BackfillClaim | null;
+    try {
+      claim = await this.forkSchemaRepository.claimBatch(kind, batchSize);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Fork schema backfills can only run in dual-write phase') {
+        return JobStatus.Skipped;
+      }
+      throw error;
+    }
     if (!claim) {
       const status = await this.status();
       if (status.phase === 'dual-write' && status.verified) {
-        await this.forkSchemaRepository.setPhase('ready');
+        await this.forkSchemaRepository.transitionPhase('dual-write', 'ready');
       }
       return JobStatus.Skipped;
     }
@@ -131,7 +153,7 @@ export class ForkSchemaMigrationService extends BaseService {
       return;
     }
     if (status.verified) {
-      await this.forkSchemaRepository.setPhase('ready');
+      await this.forkSchemaRepository.transitionPhase('dual-write', 'ready');
       return;
     }
 
