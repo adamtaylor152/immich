@@ -71,7 +71,7 @@ describe(ForkStorageNormalizationService.name, () => {
       createNormalizationReservation: () => {
         const recovered = reservationCreated;
         reservationCreated = true;
-        return Promise.resolve({ asset, reservation, recovered });
+        return Promise.resolve({ status: 'reserved' as const, asset, reservation, recovered });
       },
       releaseNormalizationReservation: () => {
         reservationCreated = false;
