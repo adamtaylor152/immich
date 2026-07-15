@@ -1,9 +1,11 @@
 import { ModuleRef } from '@nestjs/core';
+import { JobsOptions } from 'bullmq';
 import { JobName, QueueName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { JobItem } from 'src/types';
 
 const mocks = vi.hoisted(() => ({
   worker: vi.fn(() => ({ on: vi.fn() })),
@@ -76,6 +78,19 @@ describe(JobRepository.name, () => {
     });
     expect(backgroundWorkerCall?.[2]).not.toHaveProperty('lockDuration');
     expect(mocks.worker).toHaveBeenCalled();
+  });
+
+  it('deduplicates fork schema batches per kind', () => {
+    const getJobOptions = (sut as unknown as { getJobOptions(item: JobItem): JobsOptions | null }).getJobOptions.bind(
+      sut,
+    );
+
+    expect(getJobOptions({ name: JobName.ForkSchemaBackfill, data: { kind: 'privacy', batchSize: 100 } })).toEqual({
+      deduplication: { id: `${JobName.ForkSchemaBackfill}:privacy` },
+    });
+    expect(getJobOptions({ name: JobName.ForkSchemaBackfill, data: { kind: 'albums', batchSize: 100 } })).toEqual({
+      deduplication: { id: `${JobName.ForkSchemaBackfill}:albums` },
+    });
   });
 
   describe('getRollingAvgMs (job completion telemetry)', () => {
