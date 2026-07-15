@@ -37,6 +37,9 @@ export async function up(db: Kysely<any>): Promise<void> {
       remaining bigint NOT NULL DEFAULT 0,
       digest text,
       "lastError" text,
+      "claimedCursor" text,
+      "claimedIds" text[] NOT NULL DEFAULT '{}',
+      "claimExpiresAt" timestamptz,
       "createdAt" timestamptz NOT NULL DEFAULT now(),
       "updatedAt" timestamptz NOT NULL DEFAULT now()
     )

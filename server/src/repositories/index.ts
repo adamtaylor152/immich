@@ -16,6 +16,7 @@ import { DownloadRepository } from 'src/repositories/download.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LivePhotoRepository } from 'src/repositories/live-photo.repository';
@@ -76,6 +77,7 @@ export const repositories = [
   DuplicateRepository,
   EmailRepository,
   EventRepository,
+  ForkSchemaRepository,
   JobRepository,
   LibraryRepository,
   LoggingRepository,
