@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { copyFile, link, lstat, open, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, relative } from 'node:path';
@@ -33,20 +33,44 @@ export class ForkStorageNormalizationService {
   }
 
   async normalizeAsset(assetId: string): Promise<NormalizationResult> {
+    try {
+      return await this.normalizeAssetWithReservation(assetId);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('durable storage reservation is missing or stale')) {
+        return this.normalizeAssetWithReservation(assetId);
+      }
+      throw error;
+    }
+  }
+
+  private async normalizeAssetWithReservation(assetId: string): Promise<NormalizationResult> {
+    const prepared = await this.physicalFileRepository.createNormalizationReservation(assetId, (asset) =>
+      this.getUpstreamPath(asset),
+    );
     let createdPath: string | undefined;
     try {
       return await this.physicalFileRepository.withLockedNormalizationAsset(
         assetId,
-        async ({ asset, reservePath, commit }) => {
+        prepared.reservation.token,
+        async ({ asset, reservation, commit }) => {
           const sourcePath = asset.originalPath;
-          const upstreamPath = this.getUpstreamPath(asset);
+          const upstreamPath = reservation.upstreamPath;
+          if (upstreamPath !== this.getUpstreamPath(asset)) {
+            throw new Error(`Asset ${assetId} durable storage reservation target is stale`);
+          }
           await this.assertSafePaths(asset, sourcePath, upstreamPath);
           const source = await this.cryptoRepository.hashFileDigests(sourcePath);
           this.verifyExpectedContent(asset, source);
-          const { previouslyOwned } = await reservePath(upstreamPath);
+          await this.scavengeReservationTemp(asset, reservation.temporaryPath, upstreamPath);
 
           if (upstreamPath !== sourcePath) {
-            createdPath = await this.stageVerifiedLink(sourcePath, upstreamPath, source, previouslyOwned);
+            createdPath = await this.stageVerifiedLink(
+              sourcePath,
+              upstreamPath,
+              reservation.temporaryPath,
+              source,
+              prepared.recovered || asset.mappedUpstreamPath === upstreamPath,
+            );
           }
 
           await this.assertRegularFile(upstreamPath, 'normalization target');
@@ -166,6 +190,7 @@ export class ForkStorageNormalizationService {
   private async stageVerifiedLink(
     sourcePath: string,
     targetPath: string,
+    temporaryPath: string,
     expected: { sha1: Buffer; sha256: Buffer; sizeInBytes: number },
     mayAdoptExisting: boolean,
   ): Promise<string | undefined> {
@@ -189,7 +214,6 @@ export class ForkStorageNormalizationService {
       }
     }
 
-    const temporaryPath = join(dirname(targetPath), `.${parse(targetPath).base}.${randomUUID()}.normalize`);
     let published = false;
     try {
       try {
@@ -234,6 +258,27 @@ export class ForkStorageNormalizationService {
     }
   }
 
+  private async scavengeReservationTemp(
+    asset: PhysicalNormalizationAsset,
+    temporaryPath: string,
+    upstreamPath: string,
+  ): Promise<void> {
+    if (dirname(temporaryPath) !== dirname(upstreamPath) || !parse(temporaryPath).base.endsWith('.normalize')) {
+      throw new Error(`Durable normalization reservation has an unsafe temporary path: ${temporaryPath}`);
+    }
+    try {
+      await this.assertRegularFile(temporaryPath, 'reserved temporary normalization target');
+    } catch (error) {
+      if (this.isMissingPath(error)) {
+        return;
+      }
+      throw error;
+    }
+    await this.assertSafeParent(asset, temporaryPath, 'temporary normalization target');
+    await rm(temporaryPath);
+    await this.syncDirectory(dirname(temporaryPath));
+  }
+
   private async assertSafePaths(
     asset: PhysicalNormalizationAsset,
     sourcePath: string,
@@ -243,12 +288,18 @@ export class ForkStorageNormalizationService {
     const roots = [StorageCore.getMediaLocation(), ...asset.libraryImportPaths];
     const resolvedRoots = await Promise.all(roots.map((root) => realpath(root).catch(() => {})));
     const resolvedSource = await realpath(sourcePath);
-    const resolvedTargetParent = await realpath(dirname(targetPath));
     if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedSource))) {
       throw new Error(`Normalization source is outside approved storage roots: ${sourcePath}`);
     }
+    await this.assertSafeParent(asset, targetPath, 'normalization target');
+  }
+
+  private async assertSafeParent(asset: PhysicalNormalizationAsset, path: string, label: string): Promise<void> {
+    const roots = [StorageCore.getMediaLocation(), ...asset.libraryImportPaths];
+    const resolvedRoots = await Promise.all(roots.map((root) => realpath(root).catch(() => {})));
+    const resolvedTargetParent = await realpath(dirname(path));
     if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedTargetParent))) {
-      throw new Error(`Normalization target is outside approved storage roots: ${targetPath}`);
+      throw new Error(`${label} is outside approved storage roots: ${path}`);
     }
   }
 

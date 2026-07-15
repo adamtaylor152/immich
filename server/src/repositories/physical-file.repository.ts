@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, Selectable, Transaction, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { randomUUID } from 'node:crypto';
+import { dirname, join, parse } from 'node:path';
 import { AssetFileType, AssetStatus, ChecksumAlgorithm, PhysicalFileType } from 'src/enum';
 import { DB } from 'src/schema';
 import { PhysicalFileTable } from 'src/schema/tables/physical-file.table';
@@ -35,6 +37,14 @@ export type PhysicalNormalizationCommit = {
   sizeInBytes: number;
   upstreamPath: string;
   verifiedPaths: string[];
+};
+
+export type PhysicalNormalizationReservation = {
+  assetId: string;
+  token: string;
+  sourcePath: string;
+  upstreamPath: string;
+  temporaryPath: string;
 };
 
 export interface PhysicalFileInput {
@@ -131,11 +141,80 @@ export class PhysicalFileRepository {
     return this.getNormalizationAssetFrom(this.db, assetId);
   }
 
+  async createNormalizationReservation(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+  ): Promise<{ asset: PhysicalNormalizationAsset; reservation: PhysicalNormalizationReservation; recovered: boolean }> {
+    return this.db.transaction().execute(async (trx) => {
+      const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE`.execute(
+        trx,
+      );
+      if (state.rows[0]?.phase !== 'dual-write') {
+        throw new Error('Storage normalization can only reserve in dual-write phase');
+      }
+      const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
+      if (locked.rows.length === 0) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const asset = await this.getNormalizationAssetFrom(trx, assetId);
+      if (!asset) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const upstreamPath = selectUpstreamPath(asset);
+      const existing = await sql<PhysicalNormalizationReservation>`
+        SELECT
+          "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+        FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid
+        FOR UPDATE
+      `.execute(trx);
+      const reservation = existing.rows[0];
+      if (reservation) {
+        if (reservation.sourcePath !== asset.originalPath || reservation.upstreamPath !== upstreamPath) {
+          throw new Error(`Asset ${assetId} has a conflicting durable storage reservation`);
+        }
+        return { asset, reservation, recovered: true };
+      }
+
+      const conflictingReservation = await sql<{ assetId: string }>`
+        SELECT "assetId" FROM immich_fork.asset_storage_reservation WHERE "upstreamPath" = ${upstreamPath}
+      `.execute(trx);
+      if (conflictingReservation.rows[0]) {
+        throw new Error(`Normalization target is reserved by another asset: ${upstreamPath}`);
+      }
+      const existingMapping = await sql<{ assetId: string }>`
+        SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
+      `.execute(trx);
+      if (existingMapping.rows[0] && existingMapping.rows[0].assetId !== asset.id) {
+        throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
+      }
+      if (upstreamPath !== asset.originalPath) {
+        const publicOwner = await sql<{ id: string }>`
+          SELECT id FROM public.asset WHERE "originalPath" = ${upstreamPath} AND id <> ${asset.id}::uuid LIMIT 1
+        `.execute(trx);
+        if (publicOwner.rows[0]) {
+          throw new Error(`Normalization target is owned by another public asset: ${upstreamPath}`);
+        }
+      }
+
+      const token = randomUUID();
+      const temporaryPath = join(dirname(upstreamPath), `.${parse(upstreamPath).base}.${token}.normalize`);
+      const inserted = await sql<PhysicalNormalizationReservation>`
+        INSERT INTO immich_fork.asset_storage_reservation
+          ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
+        VALUES (${asset.id}::uuid, ${token}::uuid, ${asset.originalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
+        RETURNING "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+      `.execute(trx);
+      return { asset, reservation: inserted.rows[0]!, recovered: false };
+    });
+  }
+
   async withLockedNormalizationAsset<T>(
     assetId: string,
+    token: string,
     callback: (context: {
       asset: PhysicalNormalizationAsset;
-      reservePath: (upstreamPath: string) => Promise<{ previouslyOwned: boolean }>;
+      reservation: PhysicalNormalizationReservation;
       commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
     }) => Promise<T>,
   ): Promise<T> {
@@ -154,36 +233,26 @@ export class PhysicalFileRepository {
       if (!asset) {
         throw new Error(`Asset ${assetId} does not exist`);
       }
+      const reservations = await sql<PhysicalNormalizationReservation>`
+        SELECT "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+        FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
+        FOR UPDATE
+      `.execute(trx);
+      const reservation = reservations.rows[0];
+      if (!reservation || reservation.sourcePath !== asset.originalPath) {
+        throw new Error(`Asset ${assetId} durable storage reservation is missing or stale`);
+      }
       return callback({
         asset,
-        reservePath: async (upstreamPath) => {
-          const existing = await sql<{ assetId: string }>`
-            SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
-          `.execute(trx);
-          if (existing.rows[0] && existing.rows[0].assetId !== asset.id) {
-            throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
-          }
-          if (upstreamPath !== asset.originalPath) {
-            const publicOwner = await sql<{ id: string }>`
-              SELECT id FROM public.asset WHERE "originalPath" = ${upstreamPath} AND id <> ${asset.id}::uuid LIMIT 1
-            `.execute(trx);
-            if (publicOwner.rows[0]) {
-              throw new Error(`Normalization target is owned by another public asset: ${upstreamPath}`);
-            }
-          }
-          const previouslyOwned = asset.mappedUpstreamPath === upstreamPath;
+        reservation,
+        commit: async (input) => {
+          await this.commitNormalization(trx, { ...input, asset });
           await sql`
-            INSERT INTO immich_fork.asset_physical_file
-              ("assetId", "physicalFileId", "upstreamPath", "verifiedAt", "updatedAt")
-            VALUES (${asset.id}::uuid, ${asset.physicalFileId}::uuid, ${upstreamPath}, now(), now())
-            ON CONFLICT ("assetId") DO UPDATE SET
-              "physicalFileId" = excluded."physicalFileId",
-              "upstreamPath" = excluded."upstreamPath",
-              "updatedAt" = excluded."updatedAt"
+            DELETE FROM immich_fork.asset_storage_reservation
+            WHERE "assetId" = ${asset.id}::uuid AND token = ${token}::uuid
           `.execute(trx);
-          return { previouslyOwned };
         },
-        commit: (input) => this.commitNormalization(trx, { ...input, asset }),
       });
     });
   }

@@ -625,22 +625,47 @@ export class AssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async deleteAll(ownerId: string): Promise<{ originalPath: string; libraryId: string | null; isOffline: boolean }[]> {
+  async deleteAll(ownerId: string): Promise<
+    {
+      originalPath: string;
+      reservationTemporaryPath: string | null;
+      libraryId: string | null;
+      isOffline: boolean;
+    }[]
+  > {
     return this.db.transaction().execute(async (tx) => {
-      const assets = await tx
-        .withSchema('public')
-        .selectFrom('asset')
-        .select(['id', 'originalPath', 'libraryId', 'isOffline'])
-        .where('ownerId', '=', ownerId)
-        .forUpdate()
-        .execute();
+      const locked = await sql<{
+        id: string;
+        originalPath: string;
+        reservationTemporaryPath: string | null;
+        libraryId: string | null;
+        isOffline: boolean;
+      }>`
+        SELECT
+          asset.id,
+          coalesce(mapping."upstreamPath", reservation."upstreamPath", asset."originalPath") AS "originalPath",
+          reservation."temporaryPath" AS "reservationTemporaryPath",
+          asset."libraryId",
+          asset."isOffline"
+        FROM public.asset asset
+        LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+        LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
+        WHERE asset."ownerId" = ${ownerId}::uuid
+        FOR UPDATE OF asset
+      `.execute(tx);
+      const assets = locked.rows;
       const ids = assets.map(({ id }) => id);
       await this.forkPrivacy.delete(ids, tx);
       await this.forkEnrichment.delete(ids, tx);
       await this.smartAlbums.deleteAssets(ids, tx);
       await this.deleteForkDerivedResults(ids, tx);
       await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
-      return assets.map(({ originalPath, libraryId, isOffline }) => ({ originalPath, libraryId, isOffline }));
+      return assets.map(({ originalPath, reservationTemporaryPath, libraryId, isOffline }) => ({
+        originalPath,
+        reservationTemporaryPath,
+        libraryId,
+        isOffline,
+      }));
     });
   }
 
@@ -761,15 +786,21 @@ export class AssetRepository {
     return this.getById(asset.id, { exifInfo: true, faces: { person: true }, edits: true });
   }
 
-  async remove(asset: { id: string }): Promise<{ originalPath: string } | undefined> {
+  async remove(asset: {
+    id: string;
+  }): Promise<{ originalPath: string; reservationTemporaryPath: string | null } | undefined> {
     return this.db.transaction().execute(async (tx) => {
-      const lockedAsset = await tx
-        .withSchema('public')
-        .selectFrom('asset')
-        .select('originalPath')
-        .where('id', '=', asUuid(asset.id))
-        .forUpdate()
-        .executeTakeFirst();
+      const locked = await sql<{ originalPath: string; reservationTemporaryPath: string | null }>`
+        SELECT
+          coalesce(mapping."upstreamPath", reservation."upstreamPath", asset."originalPath") AS "originalPath",
+          reservation."temporaryPath" AS "reservationTemporaryPath"
+        FROM public.asset asset
+        LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+        LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
+        WHERE asset.id = ${asset.id}::uuid
+        FOR UPDATE OF asset
+      `.execute(tx);
+      const lockedAsset = locked.rows[0];
       if (!lockedAsset) {
         return;
       }
@@ -778,7 +809,7 @@ export class AssetRepository {
       await this.smartAlbums.deleteAssets([asset.id], tx);
       await this.deleteForkDerivedResults([asset.id], tx);
       await tx.deleteFrom('asset').where('id', '=', asUuid(asset.id)).execute();
-      return { originalPath: lockedAsset.originalPath };
+      return lockedAsset;
     });
   }
 
@@ -794,6 +825,7 @@ export class AssetRepository {
     await sql`DELETE FROM immich_fork.asset_health WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_best_photo_score WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_video_duplicate_frame WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`DELETE FROM immich_fork.asset_storage_reservation WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_checksum WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_physical_file WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`
