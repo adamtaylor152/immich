@@ -1,9 +1,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { createHash } from 'node:crypto';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
+import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import {
   BACKFILL_KINDS,
@@ -12,6 +15,7 @@ import {
   BackfillProgress,
   ForkState,
 } from 'src/repositories/fork-schema.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
@@ -36,8 +40,22 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
   onModuleInit(): void {
     const privacyRepository = new ForkPrivacyRepository(this.db);
     const albumRepository = new ForkAlbumMetadataRepository(this.db);
+    const enrichmentRepository = new ForkEnrichmentRepository(this.db);
+    const automationRepository = new SmartAlbumRepository(this.db);
+    const configRepository = new ForkConfigRepository(this.db);
     this.registerHandler('privacy', (ids) => privacyRepository.backfillPrivacy(ids));
     this.registerHandler('albums', (ids) => albumRepository.backfillAlbums(ids));
+    this.registerHandler('enrichment', (ids) => enrichmentRepository.backfillEnrichment(ids));
+    this.registerHandler('automation', async (ids) => {
+      const [automation, config] = await Promise.all([
+        automationRepository.backfillAutomation(ids),
+        configRepository.backfillConfig(),
+      ]);
+      const digest = createHash('sha256')
+        .update(JSON.stringify({ automation: automation.digest, config: config.digest }))
+        .digest('hex');
+      return { count: automation.count, digest };
+    });
   }
 
   registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
