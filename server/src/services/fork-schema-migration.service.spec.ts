@@ -65,6 +65,16 @@ const progress = (kind: BackfillKind, overrides: Partial<BackfillProgress> = {})
   ...overrides,
 });
 
+const deferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+};
+
 describe(ForkSchemaMigrationService.name, () => {
   let service: ForkSchemaMigrationService;
   let mocks: ServiceMocks;
@@ -106,6 +116,25 @@ describe(ForkSchemaMigrationService.name, () => {
     );
   });
 
+  it('reseeds after pause overtakes start before its seed is created', async () => {
+    const startStatus = deferred<ReturnType<typeof state>>();
+    mocks.forkSchema.transitionPhase.mockResolvedValue(true);
+    mocks.forkSchema.getState
+      .mockImplementationOnce(() => startStatus.promise)
+      .mockResolvedValueOnce(state('legacy'))
+      .mockResolvedValue(state('dual-write'));
+
+    const starting = service.start(250);
+    await vi.waitFor(() => expect(mocks.forkSchema.getState).toHaveBeenCalledOnce());
+    await service.pause();
+
+    startStatus.resolve(state('legacy'));
+    await starting;
+    await service.resume(250);
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+  });
+
   it('repairs missing initial seeds after a partial queue failure', async () => {
     mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
@@ -145,7 +174,7 @@ describe(ForkSchemaMigrationService.name, () => {
     expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('dual-write', 'legacy');
   });
 
-  it('resumes idempotently', async () => {
+  it('re-enters per-kind deduplication for repeated resume repair', async () => {
     mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
 
@@ -154,7 +183,7 @@ describe(ForkSchemaMigrationService.name, () => {
 
     expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledTimes(2);
     expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('legacy', 'dual-write');
-    expect(mocks.job.queueAll).toHaveBeenCalledOnce();
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
   });
 
   it('allows only one concurrent resume call to seed jobs', async () => {
@@ -164,6 +193,38 @@ describe(ForkSchemaMigrationService.name, () => {
     await Promise.all([service.resume(50), service.resume(50)]);
 
     expect(mocks.job.queueAll).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a replacement resume seed when the pre-pause seed finishes later', async () => {
+    const staleSeed = deferred<void>();
+    const replacementSeed = deferred<void>();
+    mocks.forkSchema.transitionPhase
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    mocks.forkSchema.getState
+      .mockResolvedValueOnce(state('dual-write'))
+      .mockResolvedValueOnce(state('legacy'))
+      .mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockReturnValueOnce(staleSeed.promise).mockReturnValueOnce(replacementSeed.promise);
+
+    const staleResume = service.resume(50);
+    await vi.waitFor(() => expect(mocks.job.queueAll).toHaveBeenCalledOnce());
+    await service.pause();
+
+    const replacementResume = service.resume(50);
+    await vi.waitFor(() => expect(mocks.job.queueAll).toHaveBeenCalledTimes(2));
+    staleSeed.resolve();
+    await staleResume;
+
+    const coalescedResume = service.resume(50);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+
+    replacementSeed.resolve();
+    await Promise.all([replacementResume, coalescedResume]);
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
   });
 
   it('projects structured status for every backfill kind', async () => {
