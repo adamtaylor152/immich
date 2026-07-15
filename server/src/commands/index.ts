@@ -1,3 +1,4 @@
+import { ConfirmForkSchemaStartQuestion, forkSchemaCommands } from 'src/commands/fork-schema.command';
 import { GrantAdminCommand, PromptEmailQuestion, RevokeAdminCommand } from 'src/commands/grant-admin';
 import { ListUsersCommand } from 'src/commands/list-users.command';
 import { DisableMaintenanceModeCommand, EnableMaintenanceModeCommand } from 'src/commands/maintenance-mode';
@@ -19,6 +20,8 @@ import { VersionCommand } from 'src/commands/version.command';
 // restore from a `pg_dump` backup taken before installing the fork.
 
 export const commandsAndQuestions = [
+  ...forkSchemaCommands,
+  ConfirmForkSchemaStartQuestion,
   ResetAdminPasswordCommand,
   PromptPasswordQuestions,
   PromptEmailQuestion,
