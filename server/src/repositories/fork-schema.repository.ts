@@ -5,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { SystemConfig } from 'src/config';
 import { DB } from 'src/schema';
 import { DeepPartial } from 'src/types';
-import { clearRegisteredConfigCache } from 'src/utils/config-cache';
 
 export type ForkSchemaPhase = 'legacy' | 'dual-write' | 'ready' | 'inactive' | 'active' | 'failed';
 export type BackfillKind = 'privacy' | 'albums' | 'enrichment' | 'automation' | 'health' | 'storage' | 'checksum';
@@ -176,9 +175,6 @@ export class ForkSchemaRepository {
       `.execute(trx);
       return true;
     });
-    if (transitioned) {
-      clearRegisteredConfigCache();
-    }
     return transitioned;
   }
 
@@ -222,7 +218,6 @@ export class ForkSchemaRepository {
         WHERE id = 1
       `.execute(trx);
     });
-    clearRegisteredConfigCache();
   }
 
   async claimBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {

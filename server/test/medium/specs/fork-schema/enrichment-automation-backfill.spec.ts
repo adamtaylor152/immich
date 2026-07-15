@@ -541,7 +541,27 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     ]);
   });
 
-  it('clears cached legacy configuration immediately when authority changes to ready', async () => {
+  it('deep-merges a locked partial database config into complete validated fork fields', async () => {
+    await db
+      .insertInto('system_metadata')
+      .values({
+        key: SystemMetadataKey.SystemConfig,
+        value: { machineLearning: { runpod: { enabled: true } }, smartAlbums: { enabled: true } },
+      })
+      .execute();
+    await new ForkConfigRepository(db).backfillConfig(structuredClone(defaults), 'database');
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+
+    const complete = await new ForkSchemaRepository(db).overlayConfig(structuredClone(defaults));
+    expect(complete.machineLearning.runpod).toEqual({ ...defaults.machineLearning.runpod, enabled: true });
+    expect(complete.smartAlbums).toEqual({ ...defaults.smartAlbums, enabled: true });
+    expect(complete.machineLearning.runpod.serverless.gpuTypeIds).toEqual(
+      defaults.machineLearning.runpod.serverless.gpuTypeIds,
+    );
+    expect(complete.smartAlbums.builtIn.travel.tagTriggers).toEqual(defaults.smartAlbums.builtIn.travel.tagTriggers);
+  });
+
+  it('re-queries authority on every cache hit across independent consumers', async () => {
     const metadataRepo = new SystemMetadataRepository(db);
     const forkSchemaRepo = new ForkSchemaRepository(db);
     const repos = {
@@ -563,8 +583,39 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       machineLearning: { runpod: { enabled: false } },
     });
 
-    await expect(forkSchemaRepo.transitionPhase('dual-write', 'ready')).resolves.toBe(true);
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
     await expect(getConfig(repos, { withCache: true })).resolves.toMatchObject({
+      machineLearning: { runpod: { enabled: true } },
+    });
+
+    await sql`UPDATE immich_fork.config SET value = jsonb_set(value, '{enabled}', 'false')
+      WHERE key = 'machineLearning.runpod'`.execute(db);
+    const independentRepos = { ...repos, forkSchemaRepo: new ForkSchemaRepository(db) };
+    await expect(getConfig(independentRepos, { withCache: true })).resolves.toMatchObject({
+      machineLearning: { runpod: { enabled: false } },
+    });
+
+    await forkSchemaRepo.setPhase('dual-write');
+    await sql`UPDATE immich_fork.config SET value = jsonb_set(value, '{enabled}', 'true')
+      WHERE key = 'machineLearning.runpod'`.execute(db);
+    clearConfigCache();
+    let resumeBaseBuild!: () => void;
+    let markBaseBuildPaused!: () => void;
+    const baseBuildPaused = new Promise<void>((resolve) => (markBaseBuildPaused = resolve));
+    const baseBuildResume = new Promise<void>((resolve) => (resumeBaseBuild = resolve));
+    const delayedMetadataRepo = {
+      get: async (...args: Parameters<SystemMetadataRepository['get']>) => {
+        markBaseBuildPaused();
+        await baseBuildResume;
+        return metadataRepo.get(...args);
+      },
+      readFile: metadataRepo.readFile.bind(metadataRepo),
+    } as SystemMetadataRepository;
+    const spanningBuild = getConfig({ ...repos, metadataRepo: delayedMetadataRepo }, { withCache: false });
+    await baseBuildPaused;
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    resumeBaseBuild();
+    await expect(spanningBuild).resolves.toMatchObject({
       machineLearning: { runpod: { enabled: true } },
     });
   });

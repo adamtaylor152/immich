@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
+import _ from 'lodash';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { SystemConfig } from 'src/config';
+import { SystemConfigSchema } from 'src/dtos/system-config.dto';
 import { DB } from 'src/schema';
 
 const canonicalize = (value: unknown): unknown =>
@@ -29,21 +31,19 @@ export class ForkConfigRepository {
     source: 'database' | 'file',
   ): Promise<{ count: number; digest: string }> {
     return this.db.transaction().execute(async (trx) => {
-      let config = effectiveConfig as Record<string, any>;
+      let config: SystemConfig = _.cloneDeep(effectiveConfig);
       if (source === 'database') {
         const legacy = await sql<{
           value: Record<string, any> | null;
         }>`SELECT value FROM system_metadata WHERE key = 'system-config' FOR UPDATE`.execute(trx);
         const snapshot = legacy.rows[0]?.value ?? {};
-        config = {
-          ...config,
-          machineLearning: {
-            ...config.machineLearning,
-            runpod: snapshot.machineLearning?.runpod ?? config.machineLearning?.runpod,
-          },
-          smartAlbums: snapshot.smartAlbums ?? config.smartAlbums,
-        };
+        config = _.merge(config, snapshot);
       }
+      const validated = SystemConfigSchema.safeParse(config);
+      if (!validated.success) {
+        throw new Error(`Invalid effective configuration during fork backfill: ${validated.error.message}`);
+      }
+      config = validated.data;
       const values = [
         { key: 'machineLearning.runpod', value: config.machineLearning?.runpod ?? {} },
         { key: 'smartAlbums', value: config.smartAlbums ?? {} },

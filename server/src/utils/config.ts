@@ -9,7 +9,6 @@ import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DeepPartial } from 'src/types';
-import { registerConfigCacheClear } from 'src/utils/config-cache';
 import { getKeysDeep, unsetDeep } from 'src/utils/misc';
 
 type RepoDeps = {
@@ -28,8 +27,6 @@ export const clearConfigCache = () => {
   lastUpdated = null;
 };
 
-registerConfigCacheClear(clearConfigCache);
-
 export const getConfig = async (repos: RepoDeps, { withCache }: { withCache: boolean }): Promise<SystemConfig> => {
   if (!withCache || !config) {
     const timestamp = lastUpdated;
@@ -41,7 +38,7 @@ export const getConfig = async (repos: RepoDeps, { withCache }: { withCache: boo
     });
   }
 
-  return config!;
+  return repos.forkSchemaRepo ? repos.forkSchemaRepo.overlayConfig(config!) : config!;
 };
 
 export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Promise<SystemConfig> => {
@@ -65,6 +62,7 @@ export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Pr
     ? repos.forkSchemaRepo.persistConfig(partialConfig, newConfig)
     : metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig));
 
+  clearConfigCache();
   return getConfig(repos, { withCache: false });
 };
 
@@ -140,5 +138,5 @@ const buildConfig = async (repos: RepoDeps) => {
     config.ffmpeg.acceptedAudioCodecs.push(config.ffmpeg.targetAudioCodec);
   }
 
-  return repos.forkSchemaRepo ? repos.forkSchemaRepo.overlayConfig(config) : config;
+  return config;
 };
