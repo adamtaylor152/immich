@@ -28,6 +28,11 @@ const generatedFileTypes = new Set([
 export class PhysicalDeduplicationService extends BaseService {
   @OnJob({ name: JobName.PhysicalDeduplicationMigrationDryRun, queue: QueueName.StorageTemplateMigration })
   async handleDryRun(_: JobOf<JobName.PhysicalDeduplicationMigrationDryRun>): Promise<JobStatus> {
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase !== 'legacy' && state.phase !== 'dual-write') {
+      this.logger.debug(`Physical deduplication skipped in fork-schema ${state.phase} phase`);
+      return JobStatus.Skipped;
+    }
     const { physicalDeduplication } = await this.getConfig({ withCache: true });
     if (!physicalDeduplication.enabled || !physicalDeduplication.masterUserId) {
       this.logger.debug('Physical deduplication dry run skipped: feature is disabled or no master user is configured');
@@ -44,6 +49,11 @@ export class PhysicalDeduplicationService extends BaseService {
 
   @OnJob({ name: JobName.PhysicalDeduplicationMigrationApply, queue: QueueName.StorageTemplateMigration })
   async handleApply(_: JobOf<JobName.PhysicalDeduplicationMigrationApply>): Promise<JobStatus> {
+    const state = await this.forkSchemaRepository.getState();
+    if (state.phase !== 'legacy' && state.phase !== 'dual-write') {
+      this.logger.debug(`Physical deduplication skipped in fork-schema ${state.phase} phase`);
+      return JobStatus.Skipped;
+    }
     const { physicalDeduplication } = await this.getConfig({ withCache: true });
     if (!physicalDeduplication.enabled || !physicalDeduplication.masterUserId) {
       this.logger.debug('Physical deduplication apply skipped: feature is disabled or no master user is configured');

@@ -64,6 +64,23 @@ export class CryptoRepository {
     });
   }
 
+  hashFileDigests(filepath: string | Buffer): Promise<{ sha1: Buffer; sha256: Buffer; sizeInBytes: number }> {
+    return new Promise((resolve, reject) => {
+      const sha1 = createHash('sha1');
+      const sha256 = createHash('sha256');
+      let sizeInBytes = 0;
+      const stream = createReadStream(filepath);
+      stream.on('error', reject);
+      stream.on('data', (chunk) => {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        sizeInBytes += bytes.length;
+        sha1.update(bytes);
+        sha256.update(bytes);
+      });
+      stream.on('end', () => resolve({ sha1: sha1.digest(), sha256: sha256.digest(), sizeInBytes }));
+    });
+  }
+
   /**
    * Hashes a file with the algorithm that produces the same digest length as
    * the supplied reference. Used when comparing a freshly-computed digest of a

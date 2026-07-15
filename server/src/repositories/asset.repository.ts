@@ -789,6 +789,15 @@ export class AssetRepository {
     await sql`DELETE FROM immich_fork.asset_health WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_best_photo_score WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
     await sql`DELETE FROM immich_fork.asset_video_duplicate_frame WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`DELETE FROM immich_fork.asset_checksum WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`DELETE FROM immich_fork.asset_physical_file WHERE "assetId" = ANY(${ids}::uuid[])`.execute(db);
+    await sql`
+      DELETE FROM immich_fork.physical_file physical
+      WHERE NOT EXISTS (
+        SELECT 1 FROM immich_fork.asset_physical_file mapping
+        WHERE mapping."physicalFileId" = physical.id
+      )
+    `.execute(db);
   }
 
   @GenerateSql({ params: [{ ownerId: DummyValue.UUID, libraryId: DummyValue.UUID, checksum: DummyValue.BUFFER }] })

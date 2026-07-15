@@ -1,12 +1,39 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, Selectable } from 'kysely';
+import { Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { AssetFileType, AssetStatus, PhysicalFileType } from 'src/enum';
+import { AssetFileType, AssetStatus, ChecksumAlgorithm, PhysicalFileType } from 'src/enum';
 import { DB } from 'src/schema';
 import { PhysicalFileTable } from 'src/schema/tables/physical-file.table';
 import { asUuid } from 'src/utils/database';
 
 type PhysicalFile = Selectable<PhysicalFileTable>;
+
+export type PhysicalNormalizationAsset = {
+  id: string;
+  checksum: Buffer;
+  checksumAlgorithm: ChecksumAlgorithm;
+  originalPath: string;
+  physicalFileId: string | null;
+  physicalCanonicalAssetId: string | null;
+  physicalChecksum: Buffer | null;
+  physicalCreatedAt: Date | null;
+  physicalPath: string | null;
+  physicalSizeInBytes: number | null;
+  physicalType: string | null;
+  physicalUpdatedAt: Date | null;
+  sharedPathCount: number;
+};
+
+export type PhysicalNormalizationCommit = {
+  asset: PhysicalNormalizationAsset;
+  evidence: Record<string, unknown>;
+  linkCount: number;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+  upstreamPath: string;
+  verifiedPaths: string[];
+};
 
 export interface PhysicalFileInput {
   canonicalAssetId: string | null;
@@ -58,6 +85,126 @@ export class PhysicalFileRepository {
       .selectAll('physical_file')
       .where('asset.id', '=', asUuid(assetId))
       .executeTakeFirst();
+  }
+
+  async getNormalizationAsset(assetId: string): Promise<PhysicalNormalizationAsset | undefined> {
+    const result = await sql<PhysicalNormalizationAsset>`
+      SELECT
+        asset.id,
+        asset.checksum,
+        asset."checksumAlgorithm",
+        asset."originalPath",
+        coalesce(asset."physicalOriginalFileId", mapping."physicalFileId") AS "physicalFileId",
+        coalesce(physical."canonicalAssetId", fork_physical."canonicalAssetId") AS "physicalCanonicalAssetId",
+        coalesce(physical.checksum, fork_physical.checksum) AS "physicalChecksum",
+        coalesce(physical."createdAt", fork_physical."createdAt") AS "physicalCreatedAt",
+        coalesce(physical.path, fork_physical."canonicalPath") AS "physicalPath",
+        coalesce(physical."sizeInBytes", fork_physical."sizeInBytes")::float8 AS "physicalSizeInBytes",
+        coalesce(physical.type::text, fork_physical.type) AS "physicalType",
+        coalesce(physical."updatedAt", fork_physical."updatedAt") AS "physicalUpdatedAt",
+        (
+          SELECT count(*)::int FROM public.asset shared
+          WHERE shared."originalPath" = asset."originalPath"
+             OR (
+               asset."physicalOriginalFileId" IS NOT NULL
+               AND shared."physicalOriginalFileId" = asset."physicalOriginalFileId"
+             )
+        ) AS "sharedPathCount"
+      FROM public.asset asset
+      LEFT JOIN public.physical_file physical ON physical.id = asset."physicalOriginalFileId"
+      LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+      LEFT JOIN immich_fork.physical_file fork_physical ON fork_physical.id = mapping."physicalFileId"
+      WHERE asset.id = ${assetId}::uuid
+    `.execute(this.db);
+    return result.rows[0];
+  }
+
+  async commitNormalization(input: PhysicalNormalizationCommit): Promise<void> {
+    const { asset, evidence, linkCount, sha1, sha256, sizeInBytes, upstreamPath, verifiedPaths } = input;
+    await this.db.transaction().execute(async (trx) => {
+      const state = await sql<{ phase: string }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE
+      `.execute(trx);
+      if (state.rows[0]?.phase !== 'dual-write') {
+        throw new Error('Storage normalization can only commit in dual-write phase');
+      }
+
+      const lockedAsset = await sql<{ originalPath: string }>`
+        SELECT "originalPath" FROM public.asset WHERE id = ${asset.id}::uuid FOR UPDATE
+      `.execute(trx);
+      if (lockedAsset.rows[0]?.originalPath !== asset.originalPath) {
+        throw new Error(`Asset ${asset.id} path changed during storage normalization`);
+      }
+
+      if (asset.physicalFileId && asset.physicalPath && asset.physicalChecksum && asset.physicalType) {
+        await sql`
+          INSERT INTO immich_fork.physical_file
+            (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt")
+          VALUES (
+            ${asset.physicalFileId}::uuid,
+            ${asset.physicalCanonicalAssetId}::uuid,
+            ${asset.physicalType},
+            ${asset.physicalChecksum},
+            ${asset.physicalSizeInBytes ?? sizeInBytes},
+            ${asset.physicalPath},
+            ${asset.physicalCreatedAt ?? new Date()},
+            ${asset.physicalUpdatedAt ?? new Date()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            "canonicalAssetId" = excluded."canonicalAssetId",
+            type = excluded.type,
+            checksum = excluded.checksum,
+            "sizeInBytes" = excluded."sizeInBytes",
+            "canonicalPath" = excluded."canonicalPath",
+            "updatedAt" = excluded."updatedAt"
+        `.execute(trx);
+      }
+
+      await sql`
+        INSERT INTO immich_fork.asset_checksum
+          ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount", evidence, "verifiedAt", "updatedAt")
+        VALUES (
+          ${asset.id}::uuid,
+          ${sha1},
+          ${sha256},
+          ${sizeInBytes},
+          ${verifiedPaths},
+          ${linkCount},
+          ${JSON.stringify(evidence)}::jsonb,
+          now(),
+          now()
+        )
+        ON CONFLICT ("assetId") DO UPDATE SET
+          sha1 = excluded.sha1,
+          sha256 = excluded.sha256,
+          "sizeInBytes" = excluded."sizeInBytes",
+          "verifiedPaths" = excluded."verifiedPaths",
+          "linkCount" = excluded."linkCount",
+          evidence = excluded.evidence,
+          "verifiedAt" = excluded."verifiedAt",
+          "updatedAt" = excluded."updatedAt"
+      `.execute(trx);
+      await sql`
+        INSERT INTO immich_fork.asset_physical_file
+          ("assetId", "physicalFileId", "upstreamPath", "verifiedAt", "updatedAt")
+        VALUES (${asset.id}::uuid, ${asset.physicalFileId}::uuid, ${upstreamPath}, now(), now())
+        ON CONFLICT ("assetId") DO UPDATE SET
+          "physicalFileId" = excluded."physicalFileId",
+          "upstreamPath" = excluded."upstreamPath",
+          "verifiedAt" = excluded."verifiedAt",
+          "updatedAt" = excluded."updatedAt"
+      `.execute(trx);
+      await sql`
+        UPDATE public.asset
+        SET
+          checksum = ${sha1},
+          "checksumAlgorithm" = ${ChecksumAlgorithm.sha1File}::asset_checksum_algorithm_enum,
+          "originalPath" = ${upstreamPath},
+          "physicalOriginalFileId" = NULL,
+          "updatedAt" = now()
+        WHERE id = ${asset.id}::uuid
+      `.execute(trx);
+    });
   }
 
   async upsertPhysicalFile(input: PhysicalFileInput): Promise<PhysicalFile> {

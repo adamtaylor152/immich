@@ -74,4 +74,14 @@ describe(CryptoRepository.name, () => {
       expect(digest.equals(SHA256_ABC)).toBe(true);
     });
   });
+
+  describe('hashFileDigests', () => {
+    it('computes both content hashes and the byte count from one readable stream', async () => {
+      await expect(sut.hashFileDigests(filePath)).resolves.toEqual({
+        sha1: SHA1_ABC,
+        sha256: SHA256_ABC,
+        sizeInBytes: 3,
+      });
+    });
+  });
 });
