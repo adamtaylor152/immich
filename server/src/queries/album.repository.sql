@@ -133,7 +133,39 @@ from
   inner join "album_asset" on "album_asset"."albumId" = "album"."id"
   inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
-  not (coalesce("asset"."is_nsfw", false) = true)
+  not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
   and exists (
     select
     from
@@ -469,7 +501,39 @@ from
 where
   "asset"."deletedAt" is null
   and "album_asset"."albumId" = $1
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 group by
   "asset"."ownerId"
 order by

@@ -27,7 +27,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 
@@ -66,7 +98,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 
@@ -86,7 +150,39 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (coalesce("asset"."is_nsfw", false) = true)
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              else not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+            end
+          )
           and not exists (
             select
               $1 as "one"
@@ -126,7 +222,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 order by
@@ -148,7 +276,39 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (coalesce("asset"."is_nsfw", false) = true)
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              else not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+            end
+          )
           and not exists (
             select
               $1 as "one"
@@ -196,7 +356,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 order by
@@ -219,7 +411,39 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (coalesce("asset"."is_nsfw", false) = true)
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              else not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+            end
+          )
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -248,7 +472,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 
@@ -275,7 +531,39 @@ select
           "memory_asset"."memoriesId" = "memory"."id"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (coalesce("asset"."is_nsfw", false) = true)
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              else not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+            end
+          )
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -304,7 +592,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 

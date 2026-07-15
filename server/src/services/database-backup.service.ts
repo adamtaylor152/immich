@@ -412,6 +412,7 @@ export class DatabaseBackupService {
         const migrationMode = await this.databaseRepository.detectMigrationMode();
         if (migrationMode === 'legacy') {
           await this.databaseRepository.runMigrations();
+          await this.databaseRepository.runForkMigrations();
         } else {
           await this.databaseRepository.runOfficialMigrations();
           await this.databaseRepository.runForkMigrations();

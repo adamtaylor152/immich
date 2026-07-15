@@ -883,7 +883,10 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     const privacy = await repository.get(id, database);
-    return privacy ? this.applyPrivacySidecar(metadata, privacy) : metadata;
+    if (!privacy) {
+      throw new Error(`Missing fork privacy sidecar for asset ${id}`);
+    }
+    return this.applyPrivacySidecar(metadata, privacy);
   }
 
   private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {

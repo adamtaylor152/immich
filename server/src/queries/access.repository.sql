@@ -10,7 +10,39 @@ from
 where
   "activity"."id" in ($1)
   and "activity"."userId" = $2
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 
 -- AccessRepository.activity.checkAlbumOwnerAccess
 select
@@ -26,7 +58,39 @@ from
   and "album_user"."userId" = $1::uuid
 where
   "activity"."id" in ($2)
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 
 -- AccessRepository.activity.checkCreateAccess
 select
@@ -175,7 +239,39 @@ where
   and "asset"."deletedAt" is null
   and "asset"."visibility" in ('archive', 'timeline')
   and "asset"."stackId" is null
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 group by
   "asset"."duplicateId"
 having
@@ -209,7 +305,39 @@ where
         "memory_asset"."memoriesId" = "memory"."id"
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 
@@ -254,7 +382,39 @@ where
         "asset_face"."personId" = "person"."id"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            else not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+          end
+        )
     )
   )
 
@@ -268,7 +428,39 @@ from
 where
   "asset_face"."id" in ($1)
   and "asset"."ownerId" = $2
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 
 -- AccessRepository.partner.checkUpdateAccess
 select
@@ -298,7 +490,39 @@ where
   "stack"."id" in ($1)
   and "stack"."ownerId" = $2
   and "primaryAsset"."deletedAt" is null
-  and not (coalesce("primaryAsset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "primaryAsset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "primaryAsset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      else not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "primaryAsset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+    end
+  )
 
 -- AccessRepository.tag.checkOwnerAccess
 select
@@ -334,7 +558,37 @@ where
           where
             hidden_content_asset.id = "tag_asset"."assetId"
             and (
-              coalesce("hidden_content_asset"."is_nsfw", false) = true
+              case
+                when "hidden_content_asset"."id" is null then false
+                when coalesce(
+                  (
+                    select
+                      phase
+                    from
+                      immich_fork.state
+                    where
+                      id = 1
+                  ),
+                  'inactive'
+                ) in ('legacy', 'dual-write') then exists (
+                  select
+                    1
+                  from
+                    asset as nsfw_asset
+                  where
+                    nsfw_asset.id = "hidden_content_asset"."id"
+                    and nsfw_asset.is_nsfw = true
+                )
+                else not exists (
+                  select
+                    1
+                  from
+                    immich_fork.asset_privacy as privacy_asset
+                  where
+                    privacy_asset."assetId" = "hidden_content_asset"."id"
+                    and privacy_asset."isNsfw" = false
+                )
+              end
             )
         )
     )

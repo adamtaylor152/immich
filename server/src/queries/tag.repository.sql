@@ -83,7 +83,37 @@ where
           where
             hidden_content_asset.id = "tag_asset"."assetId"
             and (
-              coalesce("hidden_content_asset"."is_nsfw", false) = true
+              case
+                when "hidden_content_asset"."id" is null then false
+                when coalesce(
+                  (
+                    select
+                      phase
+                    from
+                      immich_fork.state
+                    where
+                      id = 1
+                  ),
+                  'inactive'
+                ) in ('legacy', 'dual-write') then exists (
+                  select
+                    1
+                  from
+                    asset as nsfw_asset
+                  where
+                    nsfw_asset.id = "hidden_content_asset"."id"
+                    and nsfw_asset.is_nsfw = true
+                )
+                else not exists (
+                  select
+                    1
+                  from
+                    immich_fork.asset_privacy as privacy_asset
+                  where
+                    privacy_asset."assetId" = "hidden_content_asset"."id"
+                    and privacy_asset."isNsfw" = false
+                )
+              end
             )
         )
     )

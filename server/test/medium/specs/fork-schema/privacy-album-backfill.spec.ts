@@ -1,12 +1,18 @@
 import { Kysely, sql } from 'kysely';
+import { createHash } from 'node:crypto';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
+import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
+import { withNsfwAssets, withoutNsfwAssets } from 'src/utils/database';
+import { authStub } from 'test/fixtures/auth.stub';
 import { mediumFactory } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
+import { newUuid } from 'test/small.factory';
+import { getKyselyDB, newTestService } from 'test/utils';
 
 describe('privacy and album fork sidecars', () => {
   let db: Kysely<DB>;
@@ -164,5 +170,118 @@ describe('privacy and album fork sidecars', () => {
     await expect(albums.applyReadMetadata([legacyRow])).resolves.toEqual([
       { ...legacyRow, icon: 'legacy', sortOrder: 1 },
     ]);
+  });
+
+  it('uses the phase authority for production NSFW predicates and fails closed without a sidecar', async () => {
+    const user = mediumFactory.userInsert();
+    const legacyHidden = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: true });
+    const sidecarHidden = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
+    const missingSidecar = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values([legacyHidden, sidecarHidden, missingSidecar]).execute();
+
+    const visibleIds = () =>
+      db
+        .selectFrom('asset')
+        .select('asset.id')
+        .$call((qb) => withoutNsfwAssets(qb))
+        .orderBy('asset.id')
+        .execute()
+        .then((rows) => rows.map(({ id }) => id));
+    const hiddenIds = () =>
+      db
+        .selectFrom('asset')
+        .select('asset.id')
+        .$call((qb) => withNsfwAssets(qb))
+        .orderBy('asset.id')
+        .execute()
+        .then((rows) => rows.map(({ id }) => id));
+
+    await sql`UPDATE immich_fork.state SET phase = 'dual-write' WHERE id = 1`.execute(db);
+    await expect(hiddenIds()).resolves.toEqual([legacyHidden.id]);
+
+    await sql`
+      INSERT INTO immich_fork.asset_privacy ("assetId", "isNsfw")
+      VALUES (${legacyHidden.id}::uuid, false), (${sidecarHidden.id}::uuid, true)
+    `.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await expect(visibleIds()).resolves.toEqual([legacyHidden.id]);
+    await expect(hiddenIds()).resolves.toEqual(expect.arrayContaining([sidecarHidden.id, missingSidecar.id]));
+
+    await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
+    await expect(visibleIds()).resolves.toEqual([legacyHidden.id]);
+  });
+
+  it('rejects authoritative album reads when the required sidecar is missing', async () => {
+    const album = mediumFactory.albumInsert({ icon: 'legacy', sortOrder: 7 });
+    await db.insertInto('album').values(album).execute();
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+
+    await expect(new ForkAlbumMetadataRepository(db).applyReadMetadata([album as never])).rejects.toThrow(
+      `Missing fork album metadata sidecar for album ${album.id}`,
+    );
+  });
+
+  it('rejects authoritative enrichment reads when the required privacy sidecar is missing', async () => {
+    const assetId = newUuid();
+    const { sut, mocks } = newTestService(ImageEnrichmentService);
+    (sut as unknown as { db: Kysely<DB> }).db = db;
+    mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    mocks.asset.getMetadataByKey.mockResolvedValue({ value: {} } as never);
+    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+
+    await expect(sut.getAssetEnrichment(authStub.user1, assetId)).rejects.toThrow(
+      `Missing fork privacy sidecar for asset ${assetId}`,
+    );
+  });
+
+  it('deletes album metadata and every related closure pair in the legacy delete transaction', async () => {
+    const root = mediumFactory.albumInsert({});
+    const child = mediumFactory.albumInsert({ parentId: root.id });
+    await db.insertInto('album').values([root, child]).execute();
+    await db
+      .insertInto('album_closure')
+      .values([
+        { id_ancestor: root.id!, id_descendant: root.id! },
+        { id_ancestor: child.id!, id_descendant: child.id! },
+        { id_ancestor: root.id!, id_descendant: child.id! },
+      ])
+      .execute();
+    await new ForkAlbumMetadataRepository(db).backfillAlbums([root.id!, child.id!]);
+
+    await new AlbumRepository(db).delete(root.id!);
+
+    await expect(
+      db.selectFrom('album').select('id').where('id', '=', root.id!).executeTakeFirst(),
+    ).resolves.toBeUndefined();
+    const metadata = await sql`SELECT 1 FROM immich_fork.album_metadata WHERE "albumId" = ${root.id}::uuid`.execute(db);
+    const closure = await sql`
+      SELECT 1 FROM immich_fork.album_closure
+      WHERE "ancestorId" = ${root.id}::uuid OR "descendantId" = ${root.id}::uuid
+    `.execute(db);
+    expect(metadata.rows).toHaveLength(0);
+    expect(closure.rows).toHaveLength(0);
+  });
+
+  it('uses ordinal key ordering for canonical privacy digests', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: true });
+    const suppression = { ä: 3, a: 2, Z: 1 };
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db
+      .insertInto('asset_metadata')
+      .values({
+        assetId: asset.id!,
+        key: 'ml-enrichment',
+        value: { nsfwDetection: { review: suppression } },
+      })
+      .execute();
+
+    const result = await new ForkPrivacyRepository(db).backfillPrivacy([asset.id!]);
+    const expected = createHash('sha256')
+      .update(JSON.stringify([{ assetId: asset.id, isNsfw: true, suppression: { Z: 1, a: 2, ä: 3 } }]))
+      .digest('hex');
+    expect(result.digest).toBe(expected);
   });
 });
