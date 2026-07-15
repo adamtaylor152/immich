@@ -409,7 +409,13 @@ export class DatabaseBackupService {
       try {
         progressCb?.('migrations', 0.9);
 
-        await this.databaseRepository.runMigrations();
+        const migrationMode = await this.databaseRepository.detectMigrationMode();
+        if (migrationMode === 'legacy') {
+          await this.databaseRepository.runMigrations();
+        } else {
+          await this.databaseRepository.runOfficialMigrations();
+          await this.databaseRepository.runForkMigrations();
+        }
 
         const hasAdmin = await this.userRepository.hasAdmin();
         if (!hasAdmin) {
