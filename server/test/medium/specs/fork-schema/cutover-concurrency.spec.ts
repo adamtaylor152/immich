@@ -12,6 +12,7 @@ import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { getKyselyConfig } from 'src/utils/database';
+import { alignCertifiedGeodataCatalog } from 'test/medium/specs/fork-schema/certified-geodata-fixture';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -118,6 +119,7 @@ describe('fork schema cutover concurrency', () => {
     db = await getKyselyDB('cutover_concurrency');
     const repository = new NoOfficialMigrationRepository(db, LoggingRepository.create(), new ConfigRepository());
     await repository.runForkMigrations();
+    await alignCertifiedGeodataCatalog(db);
   });
 
   afterAll(async () => db.destroy());

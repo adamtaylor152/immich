@@ -25,6 +25,7 @@ import { ForkCutoverVerificationService } from 'src/services/fork-cutover-verifi
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { getKyselyConfig } from 'src/utils/database';
 import { mediumFactory } from 'test/medium.factory';
+import { alignCertifiedGeodataCatalog } from 'test/medium/specs/fork-schema/certified-geodata-fixture';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const NON_WORKFLOW_PROVIDER_GAPS = [
@@ -207,6 +208,7 @@ describe('fork schema ledger cutover', () => {
     db = await getKyselyDB('ledger_cutover');
     repository = new TaskOneCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
     await repository.runForkMigrations();
+    await alignCertifiedGeodataCatalog(db);
     const overrides = await sql<{ name: string; value: unknown }>`
       SELECT name, value FROM public.migration_overrides WHERE name = ANY(${[...LEGACY_OVERRIDE_NAMES]}) ORDER BY name
     `.execute(db);
@@ -304,8 +306,8 @@ describe('fork schema ledger cutover', () => {
       await sql`
         INSERT INTO public.kysely_migrations (name, timestamp)
         VALUES
-          (${LEGACY_WORKFLOW_MIGRATION}, '2026-07-15T00:00:00.000Z'),
-          (${genericLegacy}, '2026-07-15T00:00:01.000Z')
+          (${genericLegacy}, '2099-07-15T00:00:00.000Z'),
+          (${LEGACY_WORKFLOW_MIGRATION}, '2099-07-15T00:00:01.000Z')
       `.execute(db);
       const failingRepository = new StageFailingCutoverRepository(
         db,
@@ -316,7 +318,7 @@ describe('fork schema ledger cutover', () => {
       const { sut } = newTestService(ForkSchemaCutoverService, { database: failingRepository });
       const options = { databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' };
       const report = await sut.preflight(options);
-      expect(report.ready).toBe(true);
+      expect(report.ready, report.blockers.join('\n')).toBe(true);
       const before = await captureCutoverSnapshot(db);
 
       await expect(sut.apply({ ...options, reportDigest: report.digest })).rejects.toThrow(

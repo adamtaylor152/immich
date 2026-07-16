@@ -17,6 +17,7 @@ import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { mediumFactory } from 'test/medium.factory';
+import { alignCertifiedGeodataCatalog } from 'test/medium/specs/fork-schema/certified-geodata-fixture';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const SHA256 = 'a'.repeat(64);
@@ -61,6 +62,7 @@ const restoreOfficialPublicSchema = async (db: Kysely<DB>) => {
       CREATE EXTENSION vchord WITH SCHEMA public;
       ${fixture}
     `);
+    await alignCertifiedGeodataCatalog(db);
   } finally {
     await postgres.end();
   }
