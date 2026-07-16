@@ -2,8 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
+import { StorageCore } from 'src/cores/storage.core';
+import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
-import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
+import { getWorkflowCompatibilityEvidence, WorkflowRowDigest } from 'src/fork-schema/workflow-compatibility';
+import {
+  canonicalStorageVerificationDigest,
+  StorageVerificationEvidence,
+} from 'src/repositories/fork-cutover-verification.repository';
+import { BACKFILL_KINDS, BackfillProgress, ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
 export type ForkReturnEvidence = {
@@ -22,22 +29,37 @@ export type OfficialHandoffCheckpoint = {
   databaseBackupId: string | null;
   id: string;
   mediaSnapshotId: string | null;
+  officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3';
   reportDigest: string;
+  storageVerificationAssetCount: number | null;
   storageVerificationDigest: string | null;
   storageVerificationRunId: string | null;
 };
 
 export type OrphanArchiveSummary = { archived: number; deleted: number };
 
+export type ReturnWorkflowSnapshot = { rowDigests: WorkflowRowDigest[]; schemaDigest: string };
+
+export type ReconciliationReport = Omit<ForkReturnEvidence, 'active' | 'phase' | 'reconciliationStatus'> & {
+  active: true;
+  orphanArchive: OrphanArchiveSummary;
+  phase: 'active';
+  progress: BackfillProgress[];
+  reconciliationStatus: 'complete';
+  verified: true;
+};
+
 type CheckpointDetails = {
   databaseBackupId?: string | null;
   mediaSnapshotId?: string | null;
   reportDigest?: string;
   storageVerificationDigest?: string | null;
+  storageVerificationAssetCount?: number | null;
   storageVerificationRunId?: string | null;
 };
 
 const CERTIFIED_TAG = 'v3.0.3' as const;
+const OFFICIAL_IMAGE = 'ghcr.io/immich-app/immich-server:v3.0.3' as const;
 
 export const assertExactCertifiedReturnLedger = (actual: readonly string[], expected: readonly string[]): 'v3.0.3' => {
   if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
@@ -155,6 +177,14 @@ const ORPHAN_RELATIONS = [
   ...ORPHAN_FAMILIES.map(([, table]) => table),
 ].sort();
 
+const FINAL_ACTIVATION_RELATIONS = [...new Set(forkCatalogManifest.tables.map(({ identity }) => identity))].sort();
+
+const quoteRelation = (relation: string): string =>
+  relation
+    .split('.')
+    .map((part) => `"${part.replaceAll('"', '""')}"`)
+    .join('.');
+
 @Injectable()
 export class ForkHandoffRepository {
   constructor(@InjectKysely() protected readonly db: Kysely<DB>) {}
@@ -258,10 +288,258 @@ export class ForkHandoffRepository {
       databaseBackupId: row.details.databaseBackupId ?? null,
       id: row.id,
       mediaSnapshotId: row.details.mediaSnapshotId ?? null,
+      officialImage: OFFICIAL_IMAGE,
       reportDigest: row.details.reportDigest,
+      storageVerificationAssetCount: row.details.storageVerificationAssetCount ?? null,
       storageVerificationDigest: row.details.storageVerificationDigest ?? null,
       storageVerificationRunId: row.details.storageVerificationRunId ?? null,
     };
+  }
+
+  async getPreparedOfficialHandoffCheckpoint(): Promise<OfficialHandoffCheckpoint> {
+    const checkpoint = await this.getOfficialHandoffCheckpoint();
+    if (
+      !checkpoint.databaseBackupId ||
+      !checkpoint.mediaSnapshotId ||
+      !checkpoint.storageVerificationRunId ||
+      !checkpoint.storageVerificationDigest ||
+      checkpoint.storageVerificationAssetCount === null
+    ) {
+      throw new Error('Official handoff requires a bound storage verification checkpoint');
+    }
+    const result = await sql<{
+      aggregateDigest: string | null;
+      applicableAssetCount: number;
+      completedAt: Date | null;
+      databaseBackupId: string;
+      failureCount: number;
+      snapshotId: string;
+      status: string;
+      verifiedCount: number;
+    }>`
+      SELECT
+        "aggregateDigest",
+        "applicableAssetCount"::int AS "applicableAssetCount",
+        "completedAt",
+        "databaseBackupId",
+        "failureCount"::int AS "failureCount",
+        "snapshotId",
+        status,
+        "verifiedCount"::int AS "verifiedCount"
+      FROM immich_fork.cutover_verification_run
+      WHERE id = ${checkpoint.storageVerificationRunId}::uuid
+    `.execute(this.db);
+    const run = result.rows[0];
+    const storageEvidence = run
+      ? await sql<StorageVerificationEvidence>`
+          SELECT "assetId", path, size::float8 AS size, sha1, sha256, device::text, inode::text, links
+          FROM immich_fork.cutover_verification_asset
+          WHERE "runId" = ${checkpoint.storageVerificationRunId}::uuid AND status = 'verified'
+          ORDER BY "assetId"
+        `.execute(this.db)
+      : { rows: [] };
+    const rootDrift = run
+      ? await sql<{ count: number }>`
+          SELECT count(*)::int AS count
+          FROM immich_fork.cutover_verification_asset verification
+          LEFT JOIN public.asset asset ON asset.id = verification."assetId"
+          LEFT JOIN public.library library ON library.id = asset."libraryId"
+          WHERE verification."runId" = ${checkpoint.storageVerificationRunId}::uuid
+            AND (
+              asset.id IS NULL
+              OR verification.path IS DISTINCT FROM asset."originalPath"
+              OR verification."approvedRoots" IS DISTINCT FROM
+                ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[])
+            )
+        `.execute(this.db)
+      : { rows: [{ count: 0 }] };
+    const completedAt = run?.completedAt?.getTime() ?? Number.NaN;
+    const age = Date.now() - completedAt;
+    if (
+      !run ||
+      run.status !== 'completed' ||
+      run.databaseBackupId !== checkpoint.databaseBackupId ||
+      run.snapshotId !== checkpoint.mediaSnapshotId ||
+      run.aggregateDigest !== checkpoint.storageVerificationDigest ||
+      run.applicableAssetCount !== checkpoint.storageVerificationAssetCount ||
+      run.failureCount !== 0 ||
+      run.verifiedCount !== run.applicableAssetCount ||
+      storageEvidence.rows.length !== run.applicableAssetCount ||
+      canonicalStorageVerificationDigest(storageEvidence.rows) !== run.aggregateDigest ||
+      (rootDrift.rows[0]?.count ?? 0) !== 0 ||
+      !Number.isFinite(completedAt) ||
+      age < 0 ||
+      age > 60 * 60 * 1000
+    ) {
+      throw new Error('Official handoff storage verification checkpoint is stale or drifted');
+    }
+    return { ...checkpoint, officialImage: OFFICIAL_IMAGE };
+  }
+
+  async getReturnWorkflowSnapshot(kysely: Kysely<DB> = this.db): Promise<ReturnWorkflowSnapshot> {
+    const evidence = await getWorkflowCompatibilityEvidence(kysely);
+    return { rowDigests: evidence.rowDigests, schemaDigest: evidence.schemaDigest };
+  }
+
+  async sealEmptyReturnBackfillDigests(): Promise<void> {
+    const emptyDigest = createHash('sha256').update('').digest('hex');
+    await sql`
+      UPDATE immich_fork.backfill_progress
+      SET digest = ${emptyDigest}, "updatedAt" = now()
+      WHERE processed = 0
+        AND remaining = 0
+        AND digest IS NULL
+        AND "lastError" IS NULL
+        AND "claimedCursor" IS NULL
+        AND "claimToken" IS NULL
+        AND cardinality("claimedIds") = 0
+    `.execute(this.db);
+  }
+
+  async activateAfterReturnReconciliation(
+    expectedWorkflow: ReturnWorkflowSnapshot,
+    orphanArchive: OrphanArchiveSummary,
+    beforeActivate?: (transaction: Kysely<DB>) => Promise<void> | void,
+  ): Promise<ReconciliationReport> {
+    return this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (transaction) => {
+        for (const relation of FINAL_ACTIVATION_RELATIONS) {
+          await sql.raw(`LOCK TABLE ${quoteRelation(relation)} IN SHARE ROW EXCLUSIVE MODE`).execute(transaction);
+        }
+        await beforeActivate?.(transaction);
+
+        const evidence = await this.getReturnEvidence(transaction);
+        const currentWorkflow = await this.getReturnWorkflowSnapshot(transaction);
+        if (
+          currentWorkflow.schemaDigest !== expectedWorkflow.schemaDigest ||
+          JSON.stringify(currentWorkflow.rowDigests) !== JSON.stringify(expectedWorkflow.rowDigests)
+        ) {
+          throw new Error('Fork return workflow rows or catalog drifted during reconciliation');
+        }
+
+        const progressResult = await sql<
+          BackfillProgress & {
+            claimedCursor: string | null;
+            claimToken: string | null;
+            claimedIds: string[];
+          }
+        >`
+          SELECT
+            kind,
+            cursor,
+            processed::float8 AS processed,
+            remaining::float8 AS remaining,
+            digest,
+            "lastError",
+            "claimedCursor",
+            "claimToken",
+            "claimedIds"
+          FROM immich_fork.backfill_progress
+          ORDER BY kind
+          FOR UPDATE
+        `.execute(transaction);
+        const progress = progressResult.rows;
+        const complete =
+          progress.length === BACKFILL_KINDS.length &&
+          new Set(progress.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
+          BACKFILL_KINDS.every((kind) => progress.some((row) => row.kind === kind)) &&
+          progress.every(
+            ({ claimedCursor, claimToken, claimedIds, digest, lastError, remaining }) =>
+              remaining === 0 &&
+              claimedCursor === null &&
+              claimToken === null &&
+              claimedIds.length === 0 &&
+              lastError === null &&
+              /^[0-9a-f]{64}$/.test(digest ?? ''),
+          );
+        if (!complete) {
+          throw new Error('Cannot activate fork schema with incomplete backfills');
+        }
+
+        for (const [sourceTable, table, , where] of ORPHAN_FAMILIES) {
+          const remaining = await sql
+            .raw<{ count: number }>(`SELECT count(*)::int AS count FROM ${table} candidate WHERE ${where}`)
+            .execute(transaction);
+          if ((remaining.rows[0]?.count ?? 0) !== 0) {
+            throw new Error(`Fork return activation found orphan references in ${sourceTable}`);
+          }
+        }
+
+        const auditResult = await sql<{ details: Record<string, unknown>; id: string }>`
+          SELECT id::text AS id, details
+          FROM immich_fork.migration_audit
+          WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          ORDER BY id DESC LIMIT 1 FOR UPDATE
+        `.execute(transaction);
+        const audit = auditResult.rows[0];
+        if (!audit) {
+          throw new Error('Fork schema activation requires a running return reconciliation audit');
+        }
+        const config = audit.details.configReconciliation as
+          | { count?: number; digest?: string; source?: string }
+          | undefined;
+        const automation = audit.details.automationReconciliation as
+          | { configDigest?: string; digest?: string; rawDigest?: string | null }
+          | undefined;
+        const backfillKinds = audit.details.backfillKinds;
+        const automationProgress = progress.find(({ kind }) => kind === 'automation');
+        const expectedAutomationDigest = automation
+          ? createHash('sha256')
+              .update(JSON.stringify({ automation: automation.rawDigest, config: automation.configDigest }))
+              .digest('hex')
+          : null;
+        if (
+          !Array.isArray(backfillKinds) ||
+          backfillKinds.length !== BACKFILL_KINDS.length ||
+          !BACKFILL_KINDS.every((kind) => backfillKinds.includes(kind)) ||
+          config?.count !== 2 ||
+          !/^[0-9a-f]{64}$/.test(config.digest ?? '') ||
+          (config.source !== 'database' && config.source !== 'file') ||
+          automation?.configDigest !== config.digest ||
+          automation?.digest !== expectedAutomationDigest ||
+          automationProgress?.digest !== automation.digest ||
+          !(
+            automation.rawDigest === null ||
+            (typeof automation.rawDigest === 'string' && /^[0-9a-f]{64}$/.test(automation.rawDigest))
+          )
+        ) {
+          throw new Error('Fork return activation evidence is incomplete or drifted');
+        }
+
+        await sql`
+          UPDATE immich_fork.migration_audit
+          SET
+            status = 'applied',
+            details = coalesce(details, '{}'::jsonb) || jsonb_build_object(
+              'officialLedgerDigest', ${evidence.officialLedgerDigest}::text,
+              'orphanArchive', ${orphanArchive}::jsonb,
+              'supportedTag', ${CERTIFIED_TAG}::text,
+              'workflowSnapshot', ${expectedWorkflow}::jsonb
+            ),
+            "completedAt" = now()
+          WHERE id = ${audit.id}::bigint
+        `.execute(transaction);
+        const activated = await sql`
+          UPDATE immich_fork.state
+          SET active = true, phase = 'active', "updatedAt" = now()
+          WHERE id = 1 AND active = false AND phase = 'inactive' AND "schemaVersion" = '2'
+        `.execute(transaction);
+        if (Number(activated.numAffectedRows) !== 1) {
+          throw new Error('Fork schema activation requires inactive schema version 2 state');
+        }
+
+        return {
+          ...evidence,
+          active: true,
+          orphanArchive,
+          phase: 'active',
+          progress: progress.map(({ claimedCursor: _, claimedIds: __, claimToken: ___, ...row }) => row),
+          reconciliationStatus: 'complete',
+          verified: true,
+        };
+      });
   }
 
   async archiveAndDeleteOrphans(kysely: Kysely<DB> = this.db): Promise<OrphanArchiveSummary> {

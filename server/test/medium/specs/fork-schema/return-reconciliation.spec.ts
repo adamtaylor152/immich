@@ -12,6 +12,7 @@ import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository'
 import { BACKFILL_KINDS, ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
+import { ForkHandoffService } from 'src/services/fork-handoff.service';
 import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
 import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
 import { getKyselyConfig } from 'src/utils/database';
@@ -229,6 +230,45 @@ describe('certified fork return evidence', () => {
       mediaSnapshotId: 'snapshot-1',
       reportDigest: 'a'.repeat(64),
     });
+  });
+
+  it('prepares the exact official image only from a fresh bound storage checkpoint without mutation', async () => {
+    const runId = randomUUID();
+    const emptyDigest = createHash('sha256').update('').digest('hex');
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run (
+        id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "verifiedCount",
+        "failureCount", "aggregateDigest", "completedAt"
+      ) VALUES (${runId}::uuid, 'backup-1', 'snapshot-1', 'completed', 0, 0, 0, ${emptyDigest}, now())
+    `.execute(db);
+    await sql`
+      UPDATE immich_fork.migration_audit
+      SET details = details || jsonb_build_object(
+        'storageVerificationRunId', ${runId}::text,
+        'storageVerificationDigest', ${emptyDigest}::text,
+        'storageVerificationAssetCount', 0
+      )
+      WHERE name = 'fork-schema-cutover'
+    `.execute(db);
+    StorageCore.setMediaLocation('/usr/src/app/upload');
+    const stateBefore = await forkSchemaRepository.getState();
+    const service = new ForkHandoffService(repository as never, {} as ForkSchemaMigrationService);
+
+    await expect(service.prepareOfficial()).resolves.toMatchObject({
+      databaseBackupId: 'backup-1',
+      mediaSnapshotId: 'snapshot-1',
+      officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3',
+      storageVerificationDigest: emptyDigest,
+      storageVerificationAssetCount: 0,
+      storageVerificationRunId: runId,
+    });
+    await expect(forkSchemaRepository.getState()).resolves.toEqual(stateBefore);
+  });
+
+  it('rejects official preparation without a fresh bound storage checkpoint', async () => {
+    const service = new ForkHandoffService(repository as never, {} as ForkSchemaMigrationService);
+
+    await expect(service.prepareOfficial()).rejects.toThrow('bound storage verification checkpoint');
   });
 
   it('starts a fresh inactive reconciliation once and resumes exact progress after interruption', async () => {
@@ -927,4 +967,49 @@ describe('certified fork return evidence', () => {
       await expect(sut.reconcileAfterOfficialReturn(1)).rejects.toThrow('automation reconciliation evidence drifted');
     },
   );
+
+  it('activates only in the final verified transaction', async () => {
+    const { sut: migration, mocks } = newTestService(ForkSchemaMigrationService, {
+      forkSchema: forkSchemaRepository,
+    });
+    (migration as unknown as { db: Kysely<DB> }).db = db;
+    mocks.systemMetadata.get.mockResolvedValue({});
+    migration.onModuleInit();
+    const database = repository as unknown as ConstructorParameters<typeof ForkHandoffService>[0];
+    (database as unknown as { withLock: <T>(_lock: unknown, callback: () => Promise<T>) => Promise<T> }).withLock =
+      async (_lock, callback) => callback();
+    const service = new ForkHandoffService(database, migration);
+
+    const report = await service.prepareFork({ batchSize: 1 });
+
+    expect(report).toMatchObject({ active: true, phase: 'active', supportedTag: 'v3.0.3' });
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: true, phase: 'active' });
+  });
+
+  it('rolls back activation when final verification drifts', async () => {
+    const { sut: migration, mocks } = newTestService(ForkSchemaMigrationService, {
+      forkSchema: forkSchemaRepository,
+    });
+    (migration as unknown as { db: Kysely<DB> }).db = db;
+    mocks.systemMetadata.get.mockResolvedValue({});
+    migration.onModuleInit();
+    const database = repository as unknown as ConstructorParameters<typeof ForkHandoffService>[0];
+    (database as unknown as { withLock: <T>(_lock: unknown, callback: () => Promise<T>) => Promise<T> }).withLock =
+      async (_lock, callback) => callback();
+    const service = new ForkHandoffService(database, migration);
+
+    await expect(
+      service.prepareFork(
+        { batchSize: 1 },
+        {
+          beforeActivate: async (transaction) => {
+            await sql`
+              UPDATE immich_fork.backfill_progress SET remaining = 1 WHERE kind = 'privacy'
+            `.execute(transaction);
+          },
+        },
+      ),
+    ).rejects.toThrow('incomplete backfills');
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+  });
 });
