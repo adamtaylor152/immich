@@ -246,7 +246,89 @@ export class ForkSchemaRepository {
     });
   }
 
+  async beginOrResumeReturnReconciliation(): Promise<void> {
+    await this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (trx) => {
+        const lockedState = await sql<{ active: boolean; phase: ForkSchemaPhase; schemaVersion: string }>`
+          SELECT active, phase, "schemaVersion"
+          FROM immich_fork.state
+          WHERE id = 1
+          FOR UPDATE
+        `.execute(trx);
+        const state = lockedState.rows[0];
+        if (!state || state.active || state.phase !== 'inactive' || state.schemaVersion !== '2') {
+          throw new Error('Fork return reconciliation requires inactive schema version 2 state');
+        }
+
+        const auditResult = await sql<{ id: string; status: string }>`
+          SELECT id::text AS id, status
+          FROM immich_fork.migration_audit
+          WHERE name = 'fork-return-reconciliation'
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE
+        `.execute(trx);
+        const audit = auditResult.rows[0];
+        if (audit?.status === 'applied') {
+          return;
+        }
+        if (audit) {
+          if (audit.status !== 'running' && audit.status !== 'failed') {
+            throw new Error(`Unsupported fork return reconciliation audit status: ${audit.status}`);
+          }
+          const progress = await sql<{ kind: string }>`
+            SELECT kind FROM immich_fork.backfill_progress ORDER BY kind FOR UPDATE
+          `.execute(trx);
+          const exactProgress =
+            progress.rows.length === BACKFILL_KINDS.length &&
+            new Set(progress.rows.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
+            BACKFILL_KINDS.every((kind) => progress.rows.some((row) => row.kind === kind));
+          if (!exactProgress) {
+            throw new Error('Fork return reconciliation requires the exact fork return progress set');
+          }
+          await sql`
+            UPDATE immich_fork.migration_audit
+            SET status = 'running', "completedAt" = NULL
+            WHERE id = ${audit.id}::bigint
+          `.execute(trx);
+          return;
+        }
+
+        await sql`DELETE FROM immich_fork.backfill_progress`.execute(trx);
+        for (const kind of BACKFILL_KINDS) {
+          const source = getBackfillSource(kind);
+          await sql`
+            INSERT INTO immich_fork.backfill_progress (kind, remaining)
+            SELECT ${kind}, count(*) FROM ${source}
+          `.execute(trx);
+        }
+        await sql`
+          INSERT INTO immich_fork.migration_audit (name, phase, status, details)
+          VALUES (
+            'fork-return-reconciliation',
+            'inactive',
+            'running',
+            jsonb_build_object('backfillKinds', ${[...BACKFILL_KINDS]}::text[])
+          )
+        `.execute(trx);
+      });
+  }
+
   async claimBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {
+    return this.claimBatchForMode(kind, size, 'dual-write');
+  }
+
+  async claimReturnBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {
+    return this.claimBatchForMode(kind, size, 'inactive');
+  }
+
+  private async claimBatchForMode(
+    kind: BackfillKind,
+    size: number,
+    mode: 'dual-write' | 'inactive',
+  ): Promise<BackfillClaim | null> {
     if (!Number.isSafeInteger(size) || size <= 0) {
       throw new Error('Backfill batch size must be a positive integer');
     }
@@ -259,8 +341,24 @@ export class ForkSchemaRepository {
       if (!state) {
         throw new Error('Fork schema state is not initialized');
       }
-      if (state.phase !== 'dual-write') {
-        throw new Error('Fork schema backfills can only run in dual-write phase');
+      if (state.phase !== mode) {
+        throw new Error(
+          mode === 'inactive'
+            ? 'Fork return reconciliation claims require inactive phase'
+            : 'Fork schema backfills can only run in dual-write phase',
+        );
+      }
+      if (mode === 'inactive') {
+        const audit = await sql<{ running: boolean }>`
+          SELECT EXISTS (
+            SELECT 1
+            FROM immich_fork.migration_audit
+            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          ) AS running
+        `.execute(trx);
+        if (!audit.rows[0]?.running) {
+          throw new Error('Fork return batch claims require a running return reconciliation audit');
+        }
       }
 
       const source = getBackfillSource(kind);
