@@ -50,6 +50,20 @@ The three review findings were reproduced before the corrective production edits
 - Added canonical ordering validation against `supported-versions.json`. Applied upstream ledger names must be an exact timestamp-ordered prefix; unbundled applied names are permitted only at the three audited gap positions; bundled provider names must preserve the canonical prefix/order and may omit only those gaps.
 - Ordered workflow compatibility evidence by ledger timestamp and name.
 
+### Re-review concurrency-proof hardening
+
+The first lock regression paused in `finishForkSchemaCutover` and inferred blocking from a 100 ms race. The re-review correctly identified that this could false-pass before the writer reached PostgreSQL and did not prove lock ordering relative to reclassification.
+
+The corrected regression now:
+
+- pins the writer to one Kysely connection and captures its exact `pg_backend_pid()`;
+- pauses in the `commitForkSchemaCutover` verify callback, which is the first callback after `CUTOVER_LOCK_TABLES` is acquired and runs before workflow reclassification;
+- polls `pg_stat_activity` and `pg_locks` from the cutover transaction with a bounded five-second failure deadline;
+- requires that exact writer PID to have an ungranted `RowExclusiveLock` on `public.migration_overrides` with PostgreSQL reporting `wait_event_type = 'Lock'` and `wait_event = 'relation'`;
+- releases the verify callback only after that evidence is asserted, then proves the cutover and writer finish and the writer row becomes visible.
+
+No elapsed-time race is used as the blocking assertion, and no production code changed for this re-review correction.
+
 ## Verification
 
 - Focused classifier/cutover/startup/backup unit regressions: 122 passed across 5 files.
@@ -58,6 +72,7 @@ The three review findings were reproduced before the corrective production edits
 - Current-fork alias, original-Immich no-op, audit contents, exact timestamp preservation, schema/row digest preservation, and transaction rollback all passed.
 - Both real full-cutover workflow paths preserved final catalog and row digests plus `workflow_updatedAt` enablement.
 - The two-connection override writer remained blocked until the cutover transaction committed.
+- Re-review verification passed 14 relevant workflow units and 12 tests across the focused ledger-cutover/workflow PostgreSQL suites.
 - Exact valid prefixes through all three audited gaps passed; missing predecessors and reversed special-marker timestamp order were rejected.
 - `pnpm --filter immich check`: passed (plugin SDK build and TypeScript).
 - `pnpm --filter immich format`: passed.
@@ -78,6 +93,8 @@ Pre-commit `detect_changes(scope: compare, base_ref: fork/main)` reported HIGH f
 After staging the exact Task 1 scope, `detect_changes(scope: staged)` reported LOW: 6 indexed changed symbols across 8 staged files and zero affected processes.
 
 For the review-correction commit, `detect_changes(scope: compare, base_ref: fork/main)` reported HIGH for the accumulated branch delta: 248 indexed changed symbols across 123 files and 8 affected processes. The exact six-file corrective staged scope reported LOW: 2 indexed changed symbols, zero affected processes. GitNexus associated both indexed symbols with `DatabaseRepository`; the compatibility module and test additions were not yet represented as indexed symbols, so the executable regressions remain the primary evidence for those additions.
+
+For the re-review test-only correction, the exact two-file staged scope reported LOW with zero indexed changed symbols and zero affected processes. The medium regression file remains outside GitNexus symbol mapping, so the direct PostgreSQL lock evidence and focused executable suites are authoritative for this commit.
 
 ## Scope Notes
 

@@ -24,26 +24,52 @@ class TaskOneCutoverRepository extends DatabaseRepository {
   }
 }
 
-class PausingCutoverRepository extends DatabaseRepository {
-  private continueResolve!: () => void;
-  private reachedResolve!: () => void;
-  readonly reached = new Promise<void>((resolve) => (this.reachedResolve = resolve));
-  private readonly continuePromise = new Promise<void>((resolve) => (this.continueResolve = resolve));
-
-  continue() {
-    this.continueResolve();
-  }
-
-  protected override async finishForkSchemaCutover(): Promise<void> {
-    this.reachedResolve();
-    await this.continuePromise;
-  }
-}
-
 const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
   const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
+};
+
+const deferred = <T = void>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => (resolve = resolvePromise));
+  return { promise, resolve };
+};
+
+type OverrideWriterLockEvidence = {
+  granted: boolean;
+  mode: string;
+  pid: number;
+  relationName: string;
+  waitEvent: string | null;
+  waitEventType: string | null;
+};
+
+const waitForOverrideWriterLock = async (
+  transaction: Kysely<DB>,
+  writerPid: number,
+): Promise<OverrideWriterLockEvidence> => {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const waiting = await sql<OverrideWriterLockEvidence>`
+      SELECT activity.pid, activity.wait_event_type AS "waitEventType", activity.wait_event AS "waitEvent",
+        lock.mode, lock.granted, namespace.nspname || '.' || relation.relname AS "relationName"
+      FROM pg_catalog.pg_stat_activity activity
+      JOIN pg_catalog.pg_locks lock ON lock.pid = activity.pid
+      JOIN pg_catalog.pg_class relation ON relation.oid = lock.relation
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+      WHERE activity.pid = ${writerPid}
+        AND lock.locktype = 'relation'
+        AND namespace.nspname = 'public'
+        AND relation.relname = 'migration_overrides'
+        AND NOT lock.granted
+    `.execute(transaction);
+    if (waiting.rows[0]) {
+      return waiting.rows[0];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Writer backend ${writerPid} did not wait on public.migration_overrides before the deadline`);
 };
 
 describe('fork schema ledger cutover', () => {
@@ -204,26 +230,62 @@ describe('fork schema ledger cutover', () => {
 
   it('locks migration overrides before reclassification so a concurrent writer cannot enter the alias window', async () => {
     const concurrentDb = await connectToSameDatabase(db);
-    const pausingRepository = new PausingCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
-    const cutover = pausingRepository.commitForkSchemaCutover('b'.repeat(64), async () => {});
-    await pausingRepository.reached;
+    const writerMayStart = deferred();
+    const writerPid = deferred<number>();
+    const releaseVerification = deferred();
+    const observedWaiting = deferred<OverrideWriterLockEvidence>();
+    let writerCompleted = false;
+    const writer = concurrentDb.connection().execute(async (connection) => {
+      const backend = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(connection);
+      writerPid.resolve(backend.rows[0]!.pid);
+      await writerMayStart.promise;
+      await sql`
+          INSERT INTO public.migration_overrides (name, value)
+          VALUES ('cutover_concurrency_probe', '{"type":"trigger","name":"probe","sql":"SELECT 1"}'::jsonb)
+        `.execute(connection);
+      writerCompleted = true;
+    });
+    const exactWriterPid = await writerPid.promise;
+    const cutover = repository.commitForkSchemaCutover('b'.repeat(64), async (transaction) => {
+      writerMayStart.resolve();
+      observedWaiting.resolve(await waitForOverrideWriterLock(transaction, exactWriterPid));
+      await releaseVerification.promise;
+    });
 
-    const writer = sql`
-      INSERT INTO public.migration_overrides (name, value)
-      VALUES ('cutover_concurrency_probe', '{"type":"trigger","name":"probe","sql":"SELECT 1"}'::jsonb)
-    `.execute(concurrentDb);
     try {
-      const outcome = await Promise.race([
-        writer.then(() => 'wrote' as const),
-        new Promise<'blocked'>((resolve) => setTimeout(() => resolve('blocked'), 100)),
+      const evidence = await Promise.race([
+        observedWaiting.promise,
+        cutover.then(() => {
+          throw new Error('Cutover completed before the writer lock was observed');
+        }),
       ]);
-      expect(outcome).toBe('blocked');
+      expect(evidence).toEqual({
+        granted: false,
+        mode: 'RowExclusiveLock',
+        pid: exactWriterPid,
+        relationName: 'public.migration_overrides',
+        waitEvent: 'relation',
+        waitEventType: 'Lock',
+      });
+      expect(writerCompleted).toBe(false);
+
+      releaseVerification.resolve();
+      await cutover;
+      await writer;
+      expect(writerCompleted).toBe(true);
+      const inserted = await sql<{ count: number }>`
+          SELECT count(*)::int AS count
+          FROM public.migration_overrides
+          WHERE name = 'cutover_concurrency_probe'
+        `.execute(db);
+      expect(inserted.rows).toEqual([{ count: 1 }]);
     } finally {
-      pausingRepository.continue();
-      await Promise.all([cutover, writer]);
+      writerMayStart.resolve();
+      releaseVerification.resolve();
+      await Promise.allSettled([cutover, writer]);
       await concurrentDb.destroy();
     }
-  });
+  }, 10_000);
 
   it('classifies unknown fork residue and refuses cutover', async () => {
     await sql`CREATE TABLE physical_file_unexpected (id integer PRIMARY KEY)`.execute(db);
