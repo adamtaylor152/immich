@@ -5,7 +5,7 @@ import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.s
 import { StorageService } from 'src/services/storage.service';
 
 describe(ImmichAdminModule.name, () => {
-  it('registers job routing for admin commands without starting workers', async () => {
+  it('registers job routing for admin commands without starting workers', () => {
     const cli = { cleanup: vi.fn() } as unknown as CliService;
     const job = {
       setup: vi.fn(),
@@ -14,7 +14,7 @@ describe(ImmichAdminModule.name, () => {
     const storage = { initializeMediaLocation: vi.fn(), onBootstrap: vi.fn() } as unknown as StorageService;
     const sut = new ImmichAdminModule(cli, job, storage);
 
-    await sut.onModuleInit();
+    sut.onModuleInit();
 
     const registeredServices = vi.mocked(job.setup).mock.calls[0]?.[0];
     expect(registeredServices).toContain(ForkSchemaMigrationService);

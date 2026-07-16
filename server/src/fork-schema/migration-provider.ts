@@ -51,9 +51,7 @@ export function createCertifiedLedgerMigrationProvider(
         if (migrations[name]) {
           continue;
         }
-        const failClosed = async () => {
-          throw new Error(`Certified migration sentinel ${name} must never execute`);
-        };
+        const failClosed = () => Promise.reject(new Error(`Certified migration sentinel ${name} must never execute`));
         migrations[name] = { down: failClosed, up: failClosed };
       }
       return Object.fromEntries(Object.entries(migrations).toSorted(([left], [right]) => left.localeCompare(right)));

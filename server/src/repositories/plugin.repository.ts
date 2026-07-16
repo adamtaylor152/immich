@@ -72,7 +72,8 @@ export class PluginRepository {
       .execute();
   }
 
-  private queryBuilder() {
+  private async queryBuilder() {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
     return this.db.selectFrom('plugin').select((eb) => [
       'plugin.id',
       'plugin.name',
@@ -85,15 +86,22 @@ export class PluginRepository {
       jsonArrayFrom(
         eb
           .selectFrom('plugin_method')
-          .select([...columns.pluginMethod, 'plugin.name as pluginName'])
+          .select((methodBuilder) => [
+            ...columns.pluginMethod,
+            hasAllowedHosts
+              ? methodBuilder.ref('plugin_method.allowedHosts').as('allowedHosts')
+              : sql<string[]>`ARRAY[]::character varying[]`.as('allowedHosts'),
+            'plugin.name as pluginName',
+          ])
           .whereRef('plugin_method.pluginId', '=', 'plugin.id'),
       ).as('methods'),
     ]);
   }
 
   @GenerateSql()
-  search(dto: PluginSearchDto = {}) {
-    return this.queryBuilder()
+  async search(dto: PluginSearchDto = {}) {
+    const query = await this.queryBuilder();
+    return query
       .$if(!!dto.id, (qb) => qb.where('plugin.id', '=', dto.id!))
       .$if(!!dto.name, (qb) => qb.where('plugin.name', '=', dto.name!))
       .$if(!!dto.title, (qb) => qb.where('plugin.title', '=', dto.title!))
@@ -104,13 +112,15 @@ export class PluginRepository {
   }
 
   @GenerateSql({ params: [DummyValue.STRING] })
-  getByName(name: string) {
-    return this.queryBuilder().where('plugin.name', '=', name).executeTakeFirst();
+  async getByName(name: string) {
+    const query = await this.queryBuilder();
+    return query.where('plugin.name', '=', name).executeTakeFirst();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  get(id: string) {
-    return this.queryBuilder().where('plugin.id', '=', id).executeTakeFirst();
+  async get(id: string) {
+    const query = await this.queryBuilder();
+    return query.where('plugin.id', '=', id).executeTakeFirst();
   }
 
   @GenerateSql()
@@ -123,11 +133,20 @@ export class PluginRepository {
   }
 
   @GenerateSql()
-  searchMethods(dto: PluginMethodSearchDto = {}) {
+  async searchMethods(dto: PluginMethodSearchDto = {}) {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
     return this.db
       .selectFrom('plugin_method')
       .innerJoin('plugin', 'plugin.id', 'plugin_method.pluginId')
-      .select(['plugin.name as pluginName', 'plugin_method.pluginId', 'plugin_method.id', ...columns.pluginMethod])
+      .select((eb) => [
+        'plugin.name as pluginName',
+        'plugin_method.pluginId',
+        'plugin_method.id',
+        ...columns.pluginMethod,
+        hasAllowedHosts
+          ? eb.ref('plugin_method.allowedHosts').as('allowedHosts')
+          : sql<string[]>`ARRAY[]::character varying[]`.as('allowedHosts'),
+      ])
       .$if(!!dto.id, (qb) => qb.where('plugin_method.id', '=', dto.id!))
       .$if(!!dto.name, (qb) => qb.where('plugin_method.name', '=', dto.name!))
       .$if(!!dto.title, (qb) => qb.where('plugin_method.title', '=', dto.title!))

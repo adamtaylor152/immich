@@ -145,7 +145,9 @@ describe('workflow migration ledger alias', () => {
       expect(after.ledger).toContainEqual({ name: OFFICIAL_WORKFLOW_MIGRATION, timestamp: markerTimestamp });
     } finally {
       await sql`ALTER TABLE public.plugin_method DROP COLUMN IF EXISTS "allowedHosts"`.execute(db);
-      await sql`ALTER TABLE public.plugin DROP COLUMN IF EXISTS templates, DROP COLUMN IF EXISTS "sha256hash"`.execute(db);
+      await sql`ALTER TABLE public.plugin DROP COLUMN IF EXISTS templates, DROP COLUMN IF EXISTS "sha256hash"`.execute(
+        db,
+      );
     }
   });
 
