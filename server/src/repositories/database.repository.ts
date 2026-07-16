@@ -1,7 +1,7 @@
 import { schemaDiff, schemaFromCode, schemaFromDatabase } from '@immich/sql-tools';
 import { Injectable } from '@nestjs/common';
 import AsyncLock from 'async-lock';
-import { Kysely, Migrator, sql } from 'kysely';
+import { Kysely, Migration, Migrator, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { join } from 'node:path';
 import semver from 'semver';
@@ -16,7 +16,7 @@ import {
 } from 'src/constants';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
-import { classifyMigration } from 'src/fork-schema/migration-manifest';
+import { classifyMigration, LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   createForkMigrationProvider,
   createLegacyMigrationProvider,
@@ -34,6 +34,131 @@ import { isValidInteger } from 'src/validation';
 export let cachedVectorExtension: VectorExtension | undefined;
 
 const CLIP_TABLES = ['smart_search', 'smart_search_description', 'asset_video_duplicate_frame'] as const;
+
+const CUTOVER_EVIDENCE_TABLES = [
+  'public.user',
+  'public.asset',
+  'public.album',
+  'public.asset_face',
+  'public.tag',
+  'public.shared_link',
+  'immich_fork.asset_privacy',
+  'immich_fork.album_metadata',
+  'immich_fork.album_closure',
+  'immich_fork.asset_enrichment',
+  'immich_fork.config',
+  'immich_fork.smart_album_rule',
+  'immich_fork.smart_album_match',
+  'immich_fork.smart_album_exclusion',
+  'immich_fork.asset_health',
+  'immich_fork.asset_best_photo_score',
+  'immich_fork.asset_video_duplicate_frame',
+  'immich_fork.asset_checksum',
+  'immich_fork.physical_file',
+  'immich_fork.asset_physical_file',
+] as const;
+
+const CUTOVER_LOCK_TABLES = [
+  'public.kysely_migrations',
+  'public.system_metadata',
+  'public.asset_file',
+  'immich_fork.state',
+  'immich_fork.migrations',
+  'immich_fork.migration_audit',
+  'immich_fork.backfill_progress',
+  'immich_fork.asset_storage_reservation',
+  ...CUTOVER_EVIDENCE_TABLES,
+] as const;
+
+const LEGACY_TRIGGER_NAMES = new Set([
+  'physical_file_updatedAt',
+  'asset_video_duplicate_frame_updatedAt',
+  'asset_health_updatedAt',
+  'asset_health_candidate_updatedAt',
+  'album_parent_cycle_check_trigger',
+  'workflow_updatedAt',
+]);
+
+const LEGACY_RESIDUE_TABLES = new Set([
+  'physical_file',
+  'asset_video_duplicate_frame',
+  'asset_health_run',
+  'asset_health',
+  'asset_health_candidate',
+  'asset_best_photo_score',
+  'smart_album',
+  'smart_album_asset',
+  'smart_album_exclusion',
+  'album_closure',
+]);
+
+const LEGACY_RESIDUE_COLUMNS = new Set([
+  'asset.physicalOriginalFileId',
+  'asset.is_nsfw',
+  'asset_file.physicalFileId',
+  'album.parentId',
+  'album.icon',
+  'album.sortOrder',
+]);
+
+const LEGACY_RESIDUE_OVERRIDES = new Set([
+  'trigger_physical_file_updatedAt',
+  'trigger_asset_video_duplicate_frame_updatedAt',
+  'trigger_asset_health_updatedAt',
+  'trigger_asset_health_candidate_updatedAt',
+  'trigger_workflow_updatedAt',
+  'index_idx_asset_exif_description_trigram',
+  'index_album_parentId_idx',
+  'index_album_parent_sort_idx',
+  'index_album_root_sort_idx',
+  'function_album_parent_cycle_check',
+  'trigger_album_parent_cycle_check_trigger',
+  'index_idx_asset_is_nsfw',
+]);
+
+export type ForkSchemaCutoverEvidence = {
+  activeWrites: number;
+  backfills: Array<{
+    digest: string | null;
+    kind: string;
+    lastError: string | null;
+    processed: number;
+    remaining: number;
+  }>;
+  checksumFailures: number;
+  forkMigrations: string[];
+  ledger: Array<{
+    classification: 'legacy-fork' | 'unknown' | 'upstream';
+    name: string;
+    timestamp: string;
+  }>;
+  maintenanceMode: boolean;
+  migrationOrderValid: boolean;
+  officialPendingMigrations: string[];
+  schemaResidue: Array<{
+    allowed: boolean;
+    kind: 'column' | 'enum-value' | 'function' | 'migration-override' | 'table' | 'trigger';
+    name: string;
+  }>;
+  state: {
+    active: boolean;
+    phase: 'active' | 'dual-write' | 'failed' | 'inactive' | 'legacy' | 'ready';
+    schemaVersion: string;
+    upstreamVersion: string;
+  };
+  storageReservations: number;
+  tableEvidence: Array<{ count: number; digest: string; table: string }>;
+  unsafePhysicalMappings: number;
+};
+
+export type ForkSchemaCutoverCheckpoint = {
+  committedAt: string;
+  phase: 'ready';
+  reportDigest: string;
+  schemaVersion: '2';
+};
+
+const quoteIdentifier = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 export async function getVectorExtension(runner: Kysely<DB>): Promise<VectorExtension> {
   if (cachedVectorExtension) {
@@ -436,6 +561,303 @@ export class DatabaseRepository {
     });
 
     await this.runMigrationSet(migrator, 'official');
+  }
+
+  protected async loadOfficialMigrations(): Promise<Record<string, Migration>> {
+    // Keep cutover on the same filtered provider used by normal startup. This
+    // provider refuses unknown files and cannot expose fork migrations.
+    // eslint-disable-next-line unicorn/prefer-module
+    return createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')).getMigrations();
+  }
+
+  async getForkSchemaCutoverEvidence(runner: Kysely<DB> = this.db): Promise<ForkSchemaCutoverEvidence> {
+    const [officialMigrations, ledgerResult, forkLedgerResult, stateResult, backfillResult, maintenanceResult] =
+      await Promise.all([
+        this.loadOfficialMigrations(),
+        sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp FROM public.kysely_migrations ORDER BY timestamp, name
+        `.execute(runner),
+        sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(runner),
+        sql<ForkSchemaCutoverEvidence['state']>`
+          SELECT active, phase, "schemaVersion", "upstreamVersion" FROM immich_fork.state WHERE id = 1
+        `.execute(runner),
+        sql<{
+          digest: string | null;
+          kind: string;
+          lastError: string | null;
+          processed: string;
+          remaining: string;
+        }>`
+          SELECT kind, processed, remaining, digest, "lastError"
+          FROM immich_fork.backfill_progress
+          ORDER BY kind
+        `.execute(runner),
+        sql<{ maintenanceMode: boolean }>`
+          SELECT coalesce((value->>'isMaintenanceMode')::boolean, false) AS "maintenanceMode"
+          FROM public.system_metadata
+          WHERE key = 'maintenance-mode'
+        `.execute(runner),
+      ]);
+
+    const state = stateResult.rows[0];
+    if (!state) {
+      throw new Error('Fork schema state is not initialized');
+    }
+    const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
+    const officialNames = Object.keys(officialMigrations).toSorted();
+    if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
+      throw new Error('Official migration provider exposed a non-upstream migration');
+    }
+    const appliedOfficial = ledger
+      .filter(({ classification }) => classification === 'upstream')
+      .map(({ name }) => name);
+    const migrationOrderValid = appliedOfficial.every((name, index) => officialNames[index] === name);
+
+    const activeWritesResult = await sql<{ count: number }>`
+      SELECT count(*)::int AS count
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND pid <> pg_backend_pid()
+        AND backend_xid IS NOT NULL
+    `.execute(runner);
+    const checksumResult = await sql<{ count: number }>`
+      SELECT count(*)::int AS count
+      FROM public.asset a
+      LEFT JOIN immich_fork.asset_checksum c ON c."assetId" = a.id
+      WHERE a."checksumAlgorithm" = 'sha256'
+         OR (c."assetId" IS NOT NULL AND (a.checksum <> c.sha1 OR a."checksumAlgorithm" <> 'sha1'))
+    `.execute(runner);
+    const unsafeMappingResult = await sql<{ count: number }>`
+      SELECT (
+        (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
+        + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
+        + (
+          SELECT count(*)
+          FROM immich_fork.asset_physical_file mapping
+          LEFT JOIN public.asset asset ON asset.id = mapping."assetId"
+          LEFT JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = mapping."assetId"
+          WHERE asset.id IS NULL OR checksum."assetId" IS NULL OR asset."originalPath" <> mapping."upstreamPath"
+        )
+      )::int AS count
+    `.execute(runner);
+    const reservationResult = await sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
+    `.execute(runner);
+
+    const tableEvidence: ForkSchemaCutoverEvidence['tableEvidence'] = [];
+    for (const table of CUTOVER_EVIDENCE_TABLES) {
+      const [schema, name] = table.split('.');
+      const identifier = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
+      const result = await sql
+        .raw<{ count: number; digest: string }>(
+          String.raw`
+        SELECT count(*)::int AS count,
+          md5(coalesce(string_agg(row_data, E'\n' ORDER BY row_data), '')) AS digest
+        FROM (SELECT row_to_json(t)::text AS row_data FROM ${identifier} t) rows
+      `,
+        )
+        .execute(runner);
+      tableEvidence.push({ table, count: result.rows[0]?.count ?? 0, digest: result.rows[0]?.digest ?? '' });
+    }
+
+    const schemaResidue: ForkSchemaCutoverEvidence['schemaResidue'] = [];
+    const residueTables = await sql<{ name: string }>`
+      SELECT table_name AS name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND (
+          table_name LIKE 'physical_file%'
+          OR table_name LIKE 'asset_video_duplicate_frame%'
+          OR table_name LIKE 'asset_health%'
+          OR table_name LIKE 'asset_best_photo%'
+          OR table_name LIKE 'smart_album%'
+          OR table_name LIKE 'album_closure%'
+        )
+      ORDER BY table_name
+    `.execute(runner);
+    for (const { name } of residueTables.rows) {
+      schemaResidue.push({ allowed: LEGACY_RESIDUE_TABLES.has(name), kind: 'table', name: `public.${name}` });
+    }
+    const residueColumns = await sql<{ columnName: string; tableName: string }>`
+      SELECT table_name AS "tableName", column_name AS "columnName"
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND (
+          (table_name = 'asset' AND (column_name LIKE 'physical%' OR column_name LIKE 'is_nsfw%'))
+          OR (table_name = 'asset_file' AND column_name LIKE 'physical%')
+          OR (table_name = 'album' AND (column_name LIKE 'parent%' OR column_name LIKE 'icon%' OR column_name LIKE 'sortOrder%'))
+        )
+      ORDER BY table_name, column_name
+    `.execute(runner);
+    for (const { columnName, tableName } of residueColumns.rows) {
+      const key = `${tableName}.${columnName}`;
+      schemaResidue.push({ allowed: LEGACY_RESIDUE_COLUMNS.has(key), kind: 'column', name: `public.${key}` });
+    }
+    const triggers = await sql<{ name: string; tableName: string }>`
+      SELECT trigger_name AS name, event_object_table AS "tableName"
+      FROM information_schema.triggers
+      WHERE trigger_schema = 'public'
+        AND (
+          trigger_name LIKE 'physical_file%'
+          OR trigger_name LIKE 'asset_video_duplicate_frame%'
+          OR trigger_name LIKE 'asset_health%'
+          OR trigger_name LIKE 'album_parent_cycle%'
+          OR trigger_name LIKE 'workflow%'
+          OR event_object_table LIKE 'physical_file%'
+          OR event_object_table LIKE 'asset_video_duplicate_frame%'
+          OR event_object_table LIKE 'asset_health%'
+        )
+      ORDER BY event_object_table, trigger_name
+    `.execute(runner);
+    for (const trigger of triggers.rows) {
+      schemaResidue.push({
+        allowed: LEGACY_TRIGGER_NAMES.has(trigger.name),
+        kind: 'trigger',
+        name: `public.${trigger.tableName}.${trigger.name}`,
+      });
+    }
+    const functions = await sql<{ name: string }>`
+      SELECT routine_name AS name
+      FROM information_schema.routines
+      WHERE routine_schema = 'public' AND routine_name LIKE 'album_parent_cycle%'
+      ORDER BY routine_name
+    `.execute(runner);
+    for (const { name } of functions.rows) {
+      schemaResidue.push({ allowed: name === 'album_parent_cycle_check', kind: 'function', name: `public.${name}` });
+    }
+    const enumValues = await sql<{ name: string }>`
+      SELECT value.enumlabel AS name
+      FROM pg_enum value
+      JOIN pg_type type ON type.oid = value.enumtypid
+      WHERE type.typname = 'asset_checksum_algorithm_enum' AND value.enumlabel NOT IN ('sha1', 'sha1-path')
+      ORDER BY value.enumsortorder
+    `.execute(runner);
+    for (const { name } of enumValues.rows) {
+      schemaResidue.push({
+        allowed: name === 'sha256',
+        kind: 'enum-value',
+        name: `asset_checksum_algorithm_enum.${name}`,
+      });
+    }
+    const overrides = await sql<{ name: string }>`
+      SELECT name
+      FROM public.migration_overrides
+      WHERE name LIKE '%physical_file%'
+         OR name LIKE '%asset_video_duplicate_frame%'
+         OR name LIKE '%asset_health%'
+         OR name LIKE '%asset_best_photo%'
+         OR name LIKE '%smart_album%'
+         OR name LIKE '%album_parent%'
+         OR name LIKE '%asset_is_nsfw%'
+         OR name LIKE '%asset_exif_description%'
+         OR name LIKE '%workflow%'
+      ORDER BY name
+    `.execute(runner);
+    for (const { name } of overrides.rows) {
+      schemaResidue.push({ allowed: LEGACY_RESIDUE_OVERRIDES.has(name), kind: 'migration-override', name });
+    }
+
+    return {
+      activeWrites: activeWritesResult.rows[0]?.count ?? 0,
+      backfills: backfillResult.rows.map((row) => ({
+        ...row,
+        processed: Number(row.processed),
+        remaining: Number(row.remaining),
+      })),
+      checksumFailures: checksumResult.rows[0]?.count ?? 0,
+      forkMigrations: forkLedgerResult.rows.map(({ name }) => name),
+      ledger,
+      maintenanceMode: maintenanceResult.rows[0]?.maintenanceMode ?? false,
+      migrationOrderValid,
+      officialPendingMigrations: migrationOrderValid ? officialNames.slice(appliedOfficial.length) : [],
+      schemaResidue,
+      state,
+      storageReservations: reservationResult.rows[0]?.count ?? 0,
+      tableEvidence,
+      unsafePhysicalMappings: unsafeMappingResult.rows[0]?.count ?? 0,
+    };
+  }
+
+  async commitForkSchemaCutover(
+    reportDigest: string,
+    verify: (transaction: Kysely<DB>) => Promise<void>,
+  ): Promise<ForkSchemaCutoverCheckpoint> {
+    return this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (transaction) => {
+        const lockTables = [...new Set(CUTOVER_LOCK_TABLES)]
+          .map((table) =>
+            table
+              .split('.')
+              .map((segment) => quoteIdentifier(segment))
+              .join('.'),
+          )
+          .join(', ');
+        await sql.raw(`LOCK TABLE ${lockTables} IN SHARE ROW EXCLUSIVE MODE`).execute(transaction);
+        await verify(transaction);
+
+        const legacy = await sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp
+          FROM public.kysely_migrations
+          WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})
+          ORDER BY name
+        `.execute(transaction);
+        for (const row of legacy.rows) {
+          await sql`
+            INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+            VALUES (
+              ${row.name},
+              'ledger-cutover',
+              'applied',
+              jsonb_build_object(
+                'classification', 'legacy-fork',
+                'originalTimestamp', ${row.timestamp}::text,
+                'reportDigest', ${reportDigest}::text
+              ),
+              now()
+            )
+          `.execute(transaction);
+        }
+        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(
+          transaction,
+        );
+        const legacyTriggers = await sql<{ name: string; schemaName: string; tableName: string }>`
+          SELECT trigger.tgname AS name, namespace.nspname AS "schemaName", relation.relname AS "tableName"
+          FROM pg_trigger trigger
+          JOIN pg_class relation ON relation.oid = trigger.tgrelid
+          JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+          WHERE NOT trigger.tgisinternal AND namespace.nspname = 'public'
+        `.execute(transaction);
+        for (const trigger of legacyTriggers.rows) {
+          if (!LEGACY_TRIGGER_NAMES.has(trigger.name)) {
+            continue;
+          }
+          await sql
+            .raw(
+              `ALTER TABLE ${quoteIdentifier(trigger.schemaName)}.${quoteIdentifier(trigger.tableName)} DISABLE TRIGGER ${quoteIdentifier(trigger.name)}`,
+            )
+            .execute(transaction);
+        }
+
+        const committedAt = new Date().toISOString();
+        await sql`
+          UPDATE immich_fork.state
+          SET active = false,
+              phase = 'ready',
+              "schemaVersion" = '2',
+              "checkpointStartedAt" = coalesce("checkpointStartedAt", now()),
+              "checkpointCompletedAt" = now(),
+              "updatedAt" = now()
+          WHERE id = 1
+        `.execute(transaction);
+        await this.finishForkSchemaCutover(transaction);
+        return { committedAt, phase: 'ready', reportDigest, schemaVersion: '2' };
+      });
+  }
+
+  protected finishForkSchemaCutover(_transaction: Kysely<DB>): Promise<void> {
+    return Promise.resolve();
   }
 
   async runForkMigrations(): Promise<void> {
