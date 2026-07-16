@@ -1,0 +1,100 @@
+name: immich-fork-roundtrip
+
+x-server-environment: &server-environment
+  DB_HOSTNAME: database
+  DB_USERNAME: postgres
+  DB_PASSWORD: postgres
+  DB_DATABASE_NAME: immich
+  REDIS_HOSTNAME: redis
+  IMMICH_MACHINE_LEARNING_ENABLED: 'false'
+  IMMICH_IGNORE_MOUNT_CHECK_ERRORS: 'true'
+  IMMICH_PORT: '2283'
+
+services:
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    command: -c fsync=off -c shared_preload_libraries=vchord.so -c config_file=/var/lib/postgresql/data/postgresql.conf
+    environment:
+      POSTGRES_DB: immich
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d immich']
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    ports:
+      - '5437:5432'
+    shm_size: 128mb
+    volumes:
+      - database-data:/var/lib/postgresql/data
+
+  redis:
+    image: docker.io/valkey/valkey:9@sha256:8436e10bc65c94886a91d4415b6a6dfa9cb5a306fb3b996e5bb67cd2b4854193
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 1s
+      timeout: 5s
+      retries: 30
+
+  official-server:
+    image: ghcr.io/immich-app/immich-server:${OFFICIAL_IMMICH_TAG:?OFFICIAL_IMMICH_TAG must be an exact certified tag}
+    environment: *server-environment
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'immich-healthcheck']
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 15s
+    ports:
+      - '2287:2283'
+    volumes:
+      - upload-data:/data
+
+  fork-server:
+    image: immich-fork-roundtrip:local
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+      args:
+        BUILD_ID: fork-roundtrip
+        BUILD_IMAGE: fork-roundtrip
+        BUILD_SOURCE_COMMIT: local
+        BUILD_SOURCE_REF: fork-roundtrip
+      secrets:
+        - GITHUB_TOKEN
+    environment:
+      <<: *server-environment
+      DB_SKIP_MIGRATIONS: ${FORK_DB_SKIP_MIGRATIONS:-false}
+      IMMICH_ENV: ${FORK_IMMICH_ENV:-production}
+      IMMICH_WORKERS_INCLUDE: ${FORK_WORKERS_INCLUDE:-api,microservices}
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'immich-healthcheck']
+      interval: 2s
+      timeout: 5s
+      retries: 90
+      start_period: 15s
+    ports:
+      - '2287:2283'
+    tmpfs:
+      - /usr/src/open-api
+    volumes:
+      - upload-data:/data
+
+volumes:
+  database-data:
+  upload-data:
+
+secrets:
+  GITHUB_TOKEN:
+    environment: GITHUB_TOKEN

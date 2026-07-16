@@ -5693,11 +5693,11 @@
       "identity": "public.face_search.face_search_pkey"
     },
     {
-      "definition": "CREATE UNIQUE INDEX geodata_places_pkey ON public.geodata_places USING btree (id)",
+      "definition": "CREATE UNIQUE INDEX geodata_places_pkey ON public.geodata_places USING btree (id) WITH (fillfactor='100')",
       "identity": "public.geodata_places.geodata_places_pkey"
     },
     {
-      "definition": "CREATE INDEX \"IDX_geodata_gist_earthcoord\" ON public.geodata_places USING btree (ll_to_earth_public(latitude, longitude))",
+      "definition": "CREATE INDEX \"IDX_geodata_gist_earthcoord\" ON public.geodata_places USING gist (ll_to_earth_public(latitude, longitude))",
       "identity": "public.geodata_places.IDX_geodata_gist_earthcoord"
     },
     {

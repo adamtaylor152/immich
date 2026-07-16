@@ -48,7 +48,22 @@ export async function up(db: Kysely<any>): Promise<void> {
 
   await sql`
     INSERT INTO immich_fork.state (id, active, "schemaVersion", "upstreamVersion", phase)
-    VALUES (1, false, '1', '3.0.3', 'inactive')
+    VALUES (
+      1,
+      false,
+      '1',
+      '3.0.3',
+      CASE
+        WHEN to_regclass('public.physical_file') IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.kysely_migrations
+            WHERE name = '1779400000000-UpdateWorkflowTables'
+          )
+        THEN 'legacy'
+        ELSE 'inactive'
+      END
+    )
   `.execute(db);
 }
 

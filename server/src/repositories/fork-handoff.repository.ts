@@ -68,10 +68,27 @@ type CheckpointDetails = {
 
 const CERTIFIED_TAG = 'v3.0.3' as const;
 const OFFICIAL_IMAGE = 'ghcr.io/immich-app/immich-server:v3.0.3' as const;
+const OFFICIAL_WORKFLOW_MIGRATION = '1778614946174-UpdateWorkflowTables';
 
 export const assertExactCertifiedReturnLedger = (actual: readonly string[], expected: readonly string[]): 'v3.0.3' => {
   if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
     throw new Error('Fork return requires the exact certified v3.0.3 ledger');
+  }
+  return CERTIFIED_TAG;
+};
+
+export const assertCertifiedOfficialHandoffLedger = (
+  actual: readonly string[],
+  expected: readonly string[],
+): 'v3.0.3' => {
+  const workflowIndex = expected.indexOf(OFFICIAL_WORKFLOW_MIGRATION);
+  if (
+    workflowIndex === -1 ||
+    actual.length < workflowIndex + 1 ||
+    actual.length > expected.length ||
+    actual.some((name, index) => name !== expected[index])
+  ) {
+    throw new Error('Official handoff requires an exact certified v3.0.3 prefix through 177861');
   }
   return CERTIFIED_TAG;
 };
@@ -333,9 +350,42 @@ export class ForkHandoffRepository {
       .setIsolationLevel('repeatable read')
       .setAccessMode('read only')
       .execute(async (transaction) => {
-        await this.getReturnEvidence(transaction);
+        await this.assertOfficialHandoffReady(transaction);
         return this.getPreparedOfficialHandoffCheckpoint(transaction);
       });
+  }
+
+  async assertOfficialHandoffReady(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+    const stateResult = await sql<{
+      active: boolean;
+      maintenanceMode: boolean;
+      phase: ForkSchemaPhase;
+      schemaVersion: string;
+    }>`
+      SELECT
+        state.active,
+        state.phase,
+        state."schemaVersion",
+        coalesce((metadata.value->>'isMaintenanceMode')::boolean, false) AS "maintenanceMode"
+      FROM immich_fork.state state
+      LEFT JOIN public.system_metadata metadata ON metadata.key = 'maintenance-mode'
+      WHERE state.id = 1
+    `.execute(kysely);
+    const state = stateResult.rows[0];
+    if (!state || state.active || state.phase !== 'inactive' || state.schemaVersion !== '2') {
+      throw new Error('Official handoff requires inactive schema version 2 state');
+    }
+    if (!state.maintenanceMode) {
+      throw new Error('Official handoff requires maintenance mode');
+    }
+    await this.getOfficialHandoffCheckpoint(kysely);
+    const ledger = await sql<{ name: string }>`
+      SELECT name FROM public.kysely_migrations ORDER BY timestamp, name
+    `.execute(kysely);
+    return assertCertifiedOfficialHandoffLedger(
+      ledger.rows.map(({ name }) => name),
+      supportedVersions.upstreamMigrations,
+    );
   }
 
   async getPreparedOfficialHandoffCheckpoint(kysely: Kysely<DB> = this.db): Promise<OfficialHandoffCheckpoint> {

@@ -82,12 +82,12 @@ const getReturnBytes = async (db: Kysely<DB>) => {
 
 class PausingForkHandoffRepository extends ForkHandoffRepository {
   onLocks?: (transaction: Kysely<DB>) => Promise<void>;
-  onReturnEvidence?: (transaction: Kysely<DB>) => Promise<void>;
+  onOfficialHandoffReady?: (transaction: Kysely<DB>) => Promise<void>;
 
-  override async getReturnEvidence(transaction: Kysely<DB> = this.db) {
-    const evidence = await super.getReturnEvidence(transaction);
-    await this.onReturnEvidence?.(transaction);
-    return evidence;
+  override async assertOfficialHandoffReady(transaction: Kysely<DB> = this.db) {
+    const tag = await super.assertOfficialHandoffReady(transaction);
+    await this.onOfficialHandoffReady?.(transaction);
+    return tag;
   }
 
   protected override afterOrphanRelationLocks(transaction: Kysely<DB>): Promise<void> {
@@ -116,6 +116,14 @@ describe('certified fork return evidence', () => {
         VALUES (${name}, ${String(index).padStart(6, '0')})
       `.execute(db);
     }
+  };
+
+  const seedOfficialHandoffPrefix = async () => {
+    const markerIndex = supportedVersions.upstreamMigrations.indexOf('1778614946174-UpdateWorkflowTables');
+    await sql`
+      DELETE FROM public.kysely_migrations
+      WHERE name = ANY(${supportedVersions.upstreamMigrations.slice(markerIndex + 1)}::varchar[])
+    `.execute(db);
   };
 
   const setupActivationService = () => {
@@ -252,7 +260,59 @@ describe('certified fork return evidence', () => {
     });
   });
 
+  it.each(['missing-marker', 'fork-marker', 'gap', 'out-of-order', 'unknown'] as const)(
+    'rejects a %s official handoff ledger before starting the official image',
+    async (mutation) => {
+      await seedOfficialHandoffPrefix();
+      const marker = '1778614946174-UpdateWorkflowTables';
+      switch (mutation) {
+        case 'missing-marker': {
+          await sql`DELETE FROM public.kysely_migrations WHERE name = ${marker}`.execute(db);
+          break;
+        }
+        case 'fork-marker': {
+          await sql`
+            UPDATE public.kysely_migrations
+            SET name = '1779400000000-UpdateWorkflowTables'
+            WHERE name = ${marker}
+          `.execute(db);
+          break;
+        }
+        case 'gap': {
+          await sql`
+            DELETE FROM public.kysely_migrations
+            WHERE name = ${supportedVersions.upstreamMigrations[10]}
+          `.execute(db);
+          break;
+        }
+        case 'out-of-order': {
+          await sql`
+            UPDATE public.kysely_migrations
+            SET timestamp = CASE name
+              WHEN ${supportedVersions.upstreamMigrations[0]} THEN '000001'
+              WHEN ${supportedVersions.upstreamMigrations[1]} THEN '000000'
+              ELSE timestamp
+            END
+            WHERE name IN (${supportedVersions.upstreamMigrations[0]}, ${supportedVersions.upstreamMigrations[1]})
+          `.execute(db);
+          break;
+        }
+        case 'unknown': {
+          await sql`
+            INSERT INTO public.kysely_migrations (name, timestamp)
+            VALUES ('1779000000001-UnknownPatch', '999999')
+          `.execute(db);
+          break;
+        }
+      }
+
+      const service = new ForkHandoffService(repository as never, {} as ForkSchemaMigrationService);
+      await expect(service.prepareOfficial()).rejects.toThrow('exact certified v3.0.3 prefix through 177861');
+    },
+  );
+
   it('prepares the exact official image only from a fresh bound storage checkpoint without mutation', async () => {
+    await seedOfficialHandoffPrefix();
     const runId = randomUUID();
     const emptyDigest = createHash('sha256').update('').digest('hex');
     await sql`
@@ -286,6 +346,7 @@ describe('certified fork return evidence', () => {
   });
 
   it('prepares official evidence and checkpoint from one repeatable read snapshot', async () => {
+    await seedOfficialHandoffPrefix();
     const firstRunId = randomUUID();
     const secondRunId = randomUUID();
     const emptyDigest = createHash('sha256').update('').digest('hex');
@@ -311,7 +372,7 @@ describe('certified fork return evidence', () => {
     const writerDb = await connectToSameDatabase(db);
     const evidenceReached = deferred();
     const releaseEvidence = deferred();
-    pausing.onReturnEvidence = async () => {
+    pausing.onOfficialHandoffReady = async () => {
       evidenceReached.resolve();
       await releaseEvidence.promise;
     };

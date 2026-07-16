@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest --run",
+    "test:fork-roundtrip": "../scripts/test-fork-roundtrip.sh",
     "test:watch": "vitest",
     "test:maintenance": "vitest --run --config vitest.maintenance.config.ts",
     "test:web": "pnpm exec playwright test --project=web",

@@ -114,6 +114,41 @@ describe('workflow migration ledger alias', () => {
     });
   });
 
+  it('aliases a legacy marker with matching later official schema without touching rows', async () => {
+    await sql`ALTER TABLE public.plugin ADD COLUMN templates jsonb, ADD COLUMN "sha256hash" bytea`.execute(db);
+    await sql`UPDATE public.plugin SET templates = '{}'::jsonb, "sha256hash" = decode('00', 'hex')`.execute(db);
+    await sql`
+      ALTER TABLE public.plugin ALTER COLUMN templates SET NOT NULL, ALTER COLUMN "sha256hash" SET NOT NULL
+    `.execute(db);
+    await sql`
+      ALTER TABLE public.plugin_method
+      ADD COLUMN "allowedHosts" varchar[] NOT NULL DEFAULT '{}'::varchar[]
+    `.execute(db);
+    try {
+      await useMarker(LEGACY_WORKFLOW_MIGRATION);
+      await sql`
+        INSERT INTO public.kysely_migrations (name, timestamp) VALUES
+          (${ADD_PLUGIN_TEMPLATES_MIGRATION}, '2026-07-15T00:00:01.000Z'),
+          (${ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION}, '2026-07-15T00:00:02.000Z')
+      `.execute(db);
+      const before = await getWorkflowCompatibilityEvidence(db);
+      const compatibility = classifyWorkflowCompatibility(before);
+
+      await db
+        .transaction()
+        .execute((transaction) => aliasLegacyWorkflowMigration(transaction, compatibility, reportDigest));
+
+      const after = await getWorkflowCompatibilityEvidence(db);
+      expect(after.schemaStage).toBe('post-allowed-hosts');
+      expect(after.schemaDigest).toBe(before.schemaDigest);
+      expect(after.rowDigests).toEqual(before.rowDigests);
+      expect(after.ledger).toContainEqual({ name: OFFICIAL_WORKFLOW_MIGRATION, timestamp: markerTimestamp });
+    } finally {
+      await sql`ALTER TABLE public.plugin_method DROP COLUMN IF EXISTS "allowedHosts"`.execute(db);
+      await sql`ALTER TABLE public.plugin DROP COLUMN IF EXISTS templates, DROP COLUMN IF EXISTS "sha256hash"`.execute(db);
+    }
+  });
+
   it('leaves an original-Immich workflow ledger and rows byte-equivalent', async () => {
     await useMarker(OFFICIAL_WORKFLOW_MIGRATION);
     const before = await getWorkflowCompatibilityEvidence(db);

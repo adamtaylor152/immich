@@ -523,9 +523,11 @@ export class ForkSchemaRepository {
         ON CONFLICT (kind) DO NOTHING
       `.execute(trx);
 
-      const locked = await sql<BackfillReservation>`
+      const locked = await sql<BackfillReservation & Pick<BackfillProgress, 'digest' | 'remaining'>>`
         SELECT
           cursor,
+          digest,
+          remaining::float8 AS remaining,
           "claimToken",
           "claimedCursor",
           "claimedIds",
@@ -536,6 +538,10 @@ export class ForkSchemaRepository {
       `.execute(trx);
       const progress = locked.rows[0];
       if (!progress) {
+        return null;
+      }
+
+      if (progress.remaining === 0 && progress.cursor === null && progress.digest !== null) {
         return null;
       }
 
@@ -652,12 +658,13 @@ export class ForkSchemaRepository {
           WHERE id = ${audit.id}::bigint
         `.execute(trx);
       }
+      const remainingCount = remaining.rows[0]?.count ?? 0;
       await sql`
         UPDATE immich_fork.backfill_progress
         SET
-          cursor = ${progress.claimedCursor},
+          cursor = ${remainingCount === 0 ? null : progress.claimedCursor},
           processed = processed + ${count},
-          remaining = ${remaining.rows[0]?.count ?? 0},
+          remaining = ${remainingCount},
           digest = ${storedDigest},
           "lastError" = NULL,
           "claimedCursor" = NULL,

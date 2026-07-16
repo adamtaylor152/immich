@@ -1,9 +1,11 @@
 import {
+  ForkCutoverVerificationCommand,
   ForkCutoverVerificationResumeCommand,
   ForkCutoverVerificationStartCommand,
   ForkCutoverVerificationStatusCommand,
 } from 'src/commands/fork-cutover-verification.command';
 import {
+  forkSchemaCutoverCommands,
   ForkSchemaCutoverApplyCommand,
   ForkSchemaCutoverPreflightCommand,
 } from 'src/commands/fork-schema-cutover.command';
@@ -15,6 +17,17 @@ const response = { id: 'run-1', ...options, status: 'running' };
 
 describe('fork cutover verification CLI', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('registers verify-storage and every nested action with the parent command', () => {
+    expect(forkSchemaCutoverCommands).toEqual(
+      expect.arrayContaining([
+        ForkCutoverVerificationCommand,
+        ForkCutoverVerificationStartCommand,
+        ForkCutoverVerificationResumeCommand,
+        ForkCutoverVerificationStatusCommand,
+      ]),
+    );
+  });
 
   it('rejects missing start IDs before mutation', async () => {
     const service = { start: vi.fn() } as unknown as ForkCutoverVerificationService;

@@ -3,6 +3,7 @@ import {
   ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION,
   ADD_PLUGIN_TEMPLATES_MIGRATION,
   classifyWorkflowCompatibility,
+  normalizeWorkflowMigrationForOfficialOrder,
   LEGACY_WORKFLOW_MIGRATION,
   OFFICIAL_WORKFLOW_MIGRATION,
   validateOfficialMigrationLedgerOrder,
@@ -93,10 +94,14 @@ describe(classifyWorkflowCompatibility, () => {
     });
   });
 
-  it('refuses a legacy marker after later official stages', () => {
-    expect(() => classifyWorkflowCompatibility(fixture({ legacy: true, later: ['templates'] }))).toThrow(
-      'workflow ledger/schema disagreement',
-    );
+  it.each([
+    ['post-plugin-templates', ['templates'] as const],
+    ['post-allowed-hosts', ['allowed-hosts'] as const],
+  ])('accepts a legacy alias with matching later official ledger and schema at %s', (schemaStage, later) => {
+    expect(classifyWorkflowCompatibility(fixture({ legacy: true, later: [...later] }))).toMatchObject({
+      mode: 'legacy-alias',
+      schemaDigest: WORKFLOW_SCHEMA_DIGESTS[schemaStage as keyof typeof WORKFLOW_SCHEMA_DIGESTS],
+    });
   });
 });
 
@@ -131,5 +136,14 @@ describe(validateOfficialMigrationLedgerOrder, () => {
     expect(validateOfficialMigrationLedgerOrder(ledger, providerWithoutAuditedGaps(ledger))).toMatchObject({
       valid: false,
     });
+  });
+});
+
+describe(normalizeWorkflowMigrationForOfficialOrder, () => {
+  it('substitutes only the certified SQL-equivalent legacy marker', () => {
+    expect(normalizeWorkflowMigrationForOfficialOrder(LEGACY_WORKFLOW_MIGRATION)).toBe(OFFICIAL_WORKFLOW_MIGRATION);
+    expect(normalizeWorkflowMigrationForOfficialOrder(ADD_PLUGIN_TEMPLATES_MIGRATION)).toBe(
+      ADD_PLUGIN_TEMPLATES_MIGRATION,
+    );
   });
 });

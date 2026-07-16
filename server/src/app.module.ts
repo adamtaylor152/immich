@@ -26,6 +26,7 @@ import { AppRepository } from 'src/repositories/app.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
@@ -38,6 +39,7 @@ import { AuthService } from 'src/services/auth.service';
 import { CliService } from 'src/services/cli.service';
 import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { QueueService } from 'src/services/queue.service';
+import { StorageService } from 'src/services/storage.service';
 import { getKyselyConfig } from 'src/utils/database';
 import { configureUserAgent } from 'src/utils/fetch';
 
@@ -157,8 +159,17 @@ export class MicroservicesModule extends BaseModule {}
   imports: [...bullImports, ...commonImports],
   providers: [...common, ...commandsAndQuestions, SchedulerRegistry],
 })
-export class ImmichAdminModule implements OnModuleDestroy {
-  constructor(private service: CliService) {}
+export class ImmichAdminModule implements OnModuleInit, OnModuleDestroy {
+  constructor(
+    private service: CliService,
+    private jobRepository: JobRepository,
+    private storageService: StorageService,
+  ) {}
+
+  onModuleInit() {
+    this.jobRepository.setup(services);
+    this.storageService.initializeMediaLocation();
+  }
 
   async onModuleDestroy() {
     await this.service.cleanup();
