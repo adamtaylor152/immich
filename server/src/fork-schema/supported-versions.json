@@ -9,6 +9,10 @@
   "certification": {
     "officialImage": "ghcr.io/immich-app/immich-server:v3.0.3",
     "officialDigest": "sha256:c716dc20f957aafd89fa9d284a2ec63e25c9e2d8d8e87c6197d540a3dce237db",
+    "officialCorePluginDigests": {
+      "amd64": "7498177fc72f9a9cfa17ab99141c6ccaea6d1720988bfc2ee0fe85a9b2db92c0",
+      "arm64": "ce2156934a9ce62010b93f551a6963f46668fdcda1aecb14a0b19cc1bdd8afed"
+    },
     "result": "local-synthetic-passed",
     "externalProductionGate": "required"
   },
