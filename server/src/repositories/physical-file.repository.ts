@@ -88,6 +88,13 @@ export interface PhysicalFileInput {
 export class PhysicalFileRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
+  protected afterNormalizationAuthority(
+    _transaction: Kysely<DB>,
+    _action: 'reserve' | 'run' | 'release',
+  ): Promise<void> {
+    return Promise.resolve();
+  }
+
   async getMasterOriginalCandidate(masterUserId: string, checksum: Buffer, sizeInBytes: number) {
     return this.db
       .selectFrom('asset')
@@ -425,24 +432,33 @@ export class PhysicalFileRepository {
       }
       return;
     }
-    const authority = await sql<{ allowed: boolean }>`
-      SELECT EXISTS (
-        SELECT 1
-        FROM immich_fork.state state
-        JOIN immich_fork.backfill_progress progress ON progress.kind = ${claim.kind}
-        WHERE state.id = 1 AND state.phase = 'inactive' AND state.active = false
-          AND progress."claimToken" = ${claim.claimToken}
-          AND progress."claimedIds" = ${claim.claimedIds}
-          AND ${assetId} = ANY(progress."claimedIds")
-          AND EXISTS (
-            SELECT 1 FROM immich_fork.migration_audit
-            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
-          )
-      ) AS allowed
+    const state = await sql<{ active: boolean; phase: string }>`
+      SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR SHARE
     `.execute(trx);
-    if (!authority.rows[0]?.allowed) {
+    const audit = await sql<{ id: string }>`
+      SELECT id::text AS id FROM immich_fork.migration_audit
+      WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+      ORDER BY id DESC LIMIT 1 FOR SHARE
+    `.execute(trx);
+    const progress = await sql<{ claimToken: string | null; claimedIds: string[] }>`
+      SELECT "claimToken", "claimedIds" FROM immich_fork.backfill_progress
+      WHERE kind = ${claim.kind} FOR SHARE
+    `.execute(trx);
+    const progressRow = progress.rows[0];
+    const exactIds =
+      progressRow?.claimedIds.length === claim.claimedIds.length &&
+      progressRow.claimedIds.every((id, index) => id === claim.claimedIds[index]);
+    if (
+      state.rows[0]?.phase !== 'inactive' ||
+      state.rows[0]?.active !== false ||
+      !audit.rows[0] ||
+      progressRow?.claimToken !== claim.claimToken ||
+      !exactIds ||
+      !progressRow.claimedIds.includes(assetId)
+    ) {
       throw new Error('Storage normalization requires the durable return storage claim');
     }
+    await this.afterNormalizationAuthority(trx, action);
   }
 
   private async commitNormalization(

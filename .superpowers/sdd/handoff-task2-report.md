@@ -58,3 +58,13 @@ GREEN:
 - Pre-report exact worktree and baseline detection: LOW, 15 mapped symbols in 7 files, zero affected execution flows. New handoff/reconciliation methods and medium symbols are not yet represented in the stale index, so executable regressions are the controlling evidence for them.
 - Post-review `detect_changes(scope=all)` reported LOW risk, 5 mapped changed symbols across 8 files, and zero affected flows; the stale index again mapped only established physical-file symbols.
 - Final targeted Prettier, ESLint, TypeScript `--noEmit`, and `git diff --check` gates passed after all production and test edits.
+
+## Repeat-Safety Re-review Corrections
+
+- RED: successful zero-album database and file reconciliation reruns changed the automation digest and progress timestamp; the exact-PID storage race completed without entering a durable authority fence.
+- Automation finalization now atomically stores raw automation digest, config digest, and their bound digest in the running audit. Exact bindings compare-and-no-op without touching progress bytes; malformed, mismatched, or tampered binding/progress evidence fails closed.
+- Empty completed claim polling no longer rewrites `updatedAt`, so successful reruns preserve byte-identical audit, config, and automation progress evidence.
+- Explicit return reserve, run, and release transactions hold locks on state, the running audit, and the exact progress-kind claim through commit. Validation still requires exact kind, token, ordered claimed IDs, and asset membership; the ordinary six-phase policy is unchanged.
+- PostgreSQL evidence observes the completion writer's exact backend PID blocked behind the in-flight worker, then proves the old capability fails and the replacement capability succeeds after release.
+- Focused migration unit: 27/27 passed. Full return reconciliation medium: 46/46 passed. Final fork-reference unit superset: 16 files, 279/279 passed. Final complete fork-schema medium suite: 13 files, 230/230 passed.
+- Final targeted Prettier, ESLint, TypeScript `--noEmit`, cached/working-tree diff checks passed. GitNexus compare against `47d5a20d2` and exact staged detection both reported LOW mapped risk, 2 stale-index symbols across 4 files, and zero affected flows.
