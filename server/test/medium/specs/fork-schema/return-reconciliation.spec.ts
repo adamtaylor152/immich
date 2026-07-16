@@ -31,6 +31,17 @@ const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
 };
 
+const waitForCondition = async (predicate: () => boolean, timeout = 2000): Promise<boolean> => {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return predicate();
+};
+
 const waitForWriter = async (db: Kysely<DB>, writerPid: number, tableName: string) => {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -726,8 +737,7 @@ describe('certified fork return evidence', () => {
     };
     const reconciliation = pausing.archiveAndDeleteOrphans();
     try {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      expect(locksReached).toBe(true);
+      expect(await waitForCondition(() => locksReached)).toBe(true);
       expect(writerCompleted).toBe(false);
       release.resolve();
       await reconciliation;

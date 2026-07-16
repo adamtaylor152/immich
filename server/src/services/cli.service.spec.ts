@@ -71,14 +71,20 @@ describe(CliService.name, () => {
   describe('disablePasswordLogin', () => {
     it('should disable password login', async () => {
       await sut.disablePasswordLogin();
-      expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', { passwordLogin: { enabled: false } });
+      expect(mocks.forkSchema.persistConfig).toHaveBeenCalledWith(
+        { passwordLogin: { enabled: false } },
+        expect.objectContaining({ passwordLogin: expect.objectContaining({ enabled: false }) }),
+      );
     });
   });
 
   describe('enablePasswordLogin', () => {
     it('should enable password login', async () => {
       await sut.enablePasswordLogin();
-      expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', {});
+      expect(mocks.forkSchema.persistConfig).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ passwordLogin: expect.objectContaining({ enabled: true }) }),
+      );
     });
   });
 
@@ -188,14 +194,20 @@ describe(CliService.name, () => {
   describe('disableOAuthLogin', () => {
     it('should disable oauth login', async () => {
       await sut.disableOAuthLogin();
-      expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', {});
+      expect(mocks.forkSchema.persistConfig).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ oauth: expect.objectContaining({ enabled: false }) }),
+      );
     });
   });
 
   describe('enableOAuthLogin', () => {
     it('should enable oauth login', async () => {
       await sut.enableOAuthLogin();
-      expect(mocks.systemMetadata.set).toHaveBeenCalledWith('system-config', { oauth: { enabled: true } });
+      expect(mocks.forkSchema.persistConfig).toHaveBeenCalledWith(
+        { oauth: { enabled: true } },
+        expect.objectContaining({ oauth: expect.objectContaining({ enabled: true }) }),
+      );
     });
   });
 
