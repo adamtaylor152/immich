@@ -464,27 +464,27 @@ Commit: `fix(server): make legacy ledger cutover fail closed`
 - Produces CI lanes `origin-v3.0.3-to-fork`, `current-fork-to-official-v3.0.3`, and `official-v3.0.3-to-fork-return`.
 - Consumes exact image tag `v3.0.3` from `supported-versions.json`.
 
-- [ ] **Step 1: Add an original-Immich non-empty workflow fixture**
+- [x] **Step 1: Add an original-Immich non-empty workflow fixture**
 
 Boot exact official `v3.0.3`, create users/assets/albums plus non-empty plugins, methods, workflows, and steps, record schema and row digests, then boot the compatible fork. Assert the workflow ledger and rows remain unchanged before any newer official migration.
 
-- [ ] **Step 2: Add a current-fork alias fixture**
+- [x] **Step 2: Add a current-fork alias fixture**
 
 Seed the same rows with the legacy `177940...` marker, run backfills and storage verification with interruptions, apply cutover, and assert only the marker changes to `177861...` before the official migrator. Then assert later upstream workflow migrations preserve rows while adding their columns.
 
-- [ ] **Step 3: Exercise the supported official image**
+- [x] **Step 3: Exercise the supported official image**
 
 Boot official `v3.0.3` against the cutover database, log in, read existing workflows, execute one, create another, upload/download/delete assets, and verify database/media invariants.
 
-- [ ] **Step 4: Exercise fork return**
+- [x] **Step 4: Exercise fork return**
 
 Boot the compatible fork, inspect the official ledger before startup, run official then fork providers, reconcile non-workflow sidecars, activate in the final transaction, and prove both old and official-created workflows remain ordinary upstream data.
 
-- [ ] **Step 5: Document exact operator sequence and destructive boundaries**
+- [x] **Step 5: Document exact operator sequence and destructive boundaries**
 
 Documentation states that workflow data is preserved through an SQL-equivalent ledger alias, no workflow sidecar exists, both/missing markers block, media verification requires the snapshot ID, and any post-commit migration failure requires database/media restore.
 
-- [ ] **Step 6: Run certification and commit**
+- [x] **Step 6: Run certification and commit**
 
 Run: `OFFICIAL_IMMICH_TAG=v3.0.3 pnpm --filter immich-e2e test:fork-roundtrip`
 

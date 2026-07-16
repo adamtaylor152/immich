@@ -107,6 +107,10 @@ official provider and then the isolated fork provider.
 
 ```bash
 immich-admin fork-handoff prepare-fork --batch-size 100
+# Stop the maintenance-only fork process. From a one-shot admin process using
+# the same compatible fork image, leave maintenance mode:
+immich-admin disable-maintenance-mode
+# Start the compatible fork normally with API and microservices workers, then:
 immich-admin fork-schema status
 ```
 
@@ -115,7 +119,10 @@ sidecars, seeds defaults for new upstream IDs, rebuilds derived fork indexes,
 and activates fork reads in the final transaction. It must not mutate
 `plugin`, `plugin_method`, `workflow`, or `workflow_step`. Verify that workflows
 which existed before handoff and workflows created by official Immich are both
-still readable and executable as upstream data.
+still readable and executable as upstream data. A successful return is not
+established by the maintenance worker's ping: maintenance must be false, the
+normal authenticated API and microservices workers must be healthy, and both
+workflows must execute on a new asset after the normal fork restart.
 
 If exact ledger validation, sidecar reconciliation, workflow digest comparison,
 or final activation fails, leave maintenance mode enabled and restore the

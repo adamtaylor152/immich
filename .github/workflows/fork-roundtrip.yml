@@ -7,8 +7,12 @@ on:
       - 'e2e/docker-compose.fork-roundtrip.yml'
       - 'e2e/src/specs/server/fork-schema-*.ts'
       - 'scripts/test-fork-roundtrip.sh'
+      - 'server/src/app.module.ts'
+      - 'server/src/commands/**'
       - 'server/src/fork-schema/**'
+      - 'server/src/repositories/**'
       - 'server/src/schema/migrations/**'
+      - 'server/src/services/storage.service.ts'
   workflow_dispatch:
 
 permissions:

@@ -459,6 +459,37 @@ describe('certified fork return evidence', () => {
     );
   });
 
+  it('preserves smart-album matches and exclusions whose parent fork rule and upstream records exist', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    const album = mediumFactory.albumInsert({});
+    const ruleId = randomUUID();
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db.insertInto('album').values(album).execute();
+    await sql`
+      INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
+      VALUES (${ruleId}::uuid, ${album.id}::uuid, ${user.id}::uuid, 'certified')
+    `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason")
+      VALUES (${ruleId}::uuid, ${asset.id}::uuid, 'both')
+    `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId")
+      VALUES (${ruleId}::uuid, ${asset.id}::uuid)
+    `.execute(db);
+
+    await expect(repository.archiveAndDeleteOrphans()).resolves.toEqual({ archived: 0, deleted: 0 });
+    const rows = await sql<{ exclusions: number; matches: number; rules: number }>`
+      SELECT
+        (SELECT count(*)::int FROM immich_fork.smart_album_rule) AS rules,
+        (SELECT count(*)::int FROM immich_fork.smart_album_match) AS matches,
+        (SELECT count(*)::int FROM immich_fork.smart_album_exclusion) AS exclusions
+    `.execute(db);
+    expect(rows.rows[0]).toEqual({ exclusions: 1, matches: 1, rules: 1 });
+  });
+
   it.each([
     ['asset_privacy missing asset', 'asset_privacy'],
     ['album_metadata missing album', 'album_metadata'],
@@ -467,9 +498,9 @@ describe('certified fork return evidence', () => {
     ['album_closure missing descendant', 'album_closure'],
     ['asset_enrichment missing asset', 'asset_enrichment'],
     ['smart_album_rule missing album', 'smart_album_rule'],
-    ['smart_album_match missing album', 'smart_album_match'],
+    ['smart_album_match missing rule', 'smart_album_match'],
     ['smart_album_match missing asset', 'smart_album_match'],
-    ['smart_album_exclusion missing album', 'smart_album_exclusion'],
+    ['smart_album_exclusion missing rule', 'smart_album_exclusion'],
     ['smart_album_exclusion missing asset', 'smart_album_exclusion'],
     ['asset_health missing asset', 'asset_health'],
     ['asset_health_candidate missing health', 'asset_health_candidate'],
@@ -533,7 +564,7 @@ describe('certified fork return evidence', () => {
         );
         break;
       }
-      case 'smart_album_match missing album': {
+      case 'smart_album_match missing rule': {
         await sql`INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason") VALUES (${orphanAlbumId}::uuid, ${asset.id}::uuid, 'tag')`.execute(
           db,
         );
@@ -545,7 +576,7 @@ describe('certified fork return evidence', () => {
         );
         break;
       }
-      case 'smart_album_exclusion missing album': {
+      case 'smart_album_exclusion missing rule': {
         await sql`INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId") VALUES (${orphanAlbumId}::uuid, ${asset.id}::uuid)`.execute(
           db,
         );
