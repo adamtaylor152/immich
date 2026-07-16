@@ -169,10 +169,18 @@ export class PhysicalFileRepository {
     selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
   ): Promise<PhysicalNormalizationPreparation> {
     return this.db.transaction().execute(async (trx) => {
-      const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE`.execute(
-        trx,
-      );
-      if (state.rows[0]?.phase !== 'dual-write') {
+      const state = await sql<{ allowed: boolean }>`
+        SELECT state.phase = 'dual-write' OR (
+          state.phase = 'inactive' AND EXISTS (
+            SELECT 1 FROM immich_fork.migration_audit
+            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          )
+        ) AS allowed
+        FROM immich_fork.state state
+        WHERE state.id = 1
+        FOR SHARE
+      `.execute(trx);
+      if (!state.rows[0]?.allowed) {
         throw new Error('Storage normalization can only reserve in dual-write phase');
       }
       const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
@@ -314,10 +322,18 @@ export class PhysicalFileRepository {
     }) => Promise<T>,
   ): Promise<T> {
     return this.db.transaction().execute(async (trx) => {
-      const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE`.execute(
-        trx,
-      );
-      if (state.rows[0]?.phase !== 'dual-write') {
+      const state = await sql<{ allowed: boolean }>`
+        SELECT state.phase = 'dual-write' OR (
+          state.phase = 'inactive' AND EXISTS (
+            SELECT 1 FROM immich_fork.migration_audit
+            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          )
+        ) AS allowed
+        FROM immich_fork.state state
+        WHERE state.id = 1
+        FOR SHARE
+      `.execute(trx);
+      if (!state.rows[0]?.allowed) {
         throw new Error('Storage normalization can only run in dual-write phase');
       }
       const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);

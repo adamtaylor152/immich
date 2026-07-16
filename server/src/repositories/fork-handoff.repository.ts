@@ -27,6 +27,8 @@ export type OfficialHandoffCheckpoint = {
   storageVerificationRunId: string | null;
 };
 
+export type OrphanArchiveSummary = { archived: number; deleted: number };
+
 type CheckpointDetails = {
   databaseBackupId?: string | null;
   mediaSnapshotId?: string | null;
@@ -150,5 +152,169 @@ export class ForkHandoffRepository {
       storageVerificationDigest: row.details.storageVerificationDigest ?? null,
       storageVerificationRunId: row.details.storageVerificationRunId ?? null,
     };
+  }
+
+  async archiveAndDeleteOrphans(kysely: Kysely<DB> = this.db): Promise<OrphanArchiveSummary> {
+    return kysely
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (transaction) => {
+        const state = await sql<{ active: boolean; phase: ForkSchemaPhase }>`
+          SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
+        `.execute(transaction);
+        if (!state.rows[0] || state.rows[0].active || state.rows[0].phase !== 'inactive') {
+          throw new Error('Fork orphan reconciliation requires inactive phase');
+        }
+
+        const families = [
+          {
+            key: `candidate."smartAlbumId"::text || ':' || candidate."assetId"::text`,
+            sourceTable: 'smart_album_match',
+            table: 'immich_fork.smart_album_match',
+            where:
+              'NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: `candidate."smartAlbumId"::text || ':' || candidate."assetId"::text`,
+            sourceTable: 'smart_album_exclusion',
+            table: 'immich_fork.smart_album_exclusion',
+            where:
+              'NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate.id::text',
+            sourceTable: 'smart_album_rule',
+            table: 'immich_fork.smart_album_rule',
+            where: 'NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."albumId")',
+          },
+          {
+            key: `candidate."ancestorId"::text || ':' || candidate."descendantId"::text`,
+            sourceTable: 'album_closure',
+            table: 'immich_fork.album_closure',
+            where:
+              'NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."ancestorId") OR NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."descendantId")',
+          },
+          {
+            key: 'candidate."albumId"::text',
+            sourceTable: 'album_metadata',
+            table: 'immich_fork.album_metadata',
+            where:
+              'NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."albumId") OR (candidate."parentId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.album album WHERE album.id = candidate."parentId"))',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_health',
+            table: 'immich_fork.asset_health',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate.id::text',
+            sourceTable: 'asset_health_candidate',
+            table: 'immich_fork.asset_health_candidate',
+            where: 'NOT EXISTS (SELECT 1 FROM immich_fork.asset_health health WHERE health.id = candidate."healthId")',
+          },
+          {
+            key: 'candidate.id::text',
+            sourceTable: 'asset_health_run',
+            table: 'immich_fork.asset_health_run',
+            where: 'NOT EXISTS (SELECT 1 FROM immich_fork.asset_health health WHERE health."runId" = candidate.id)',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_privacy',
+            table: 'immich_fork.asset_privacy',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_enrichment',
+            table: 'immich_fork.asset_enrichment',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_best_photo_score',
+            table: 'immich_fork.asset_best_photo_score',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: `candidate."assetId"::text || ':' || candidate."frameIndex"::text`,
+            sourceTable: 'asset_video_duplicate_frame',
+            table: 'immich_fork.asset_video_duplicate_frame',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_checksum',
+            table: 'immich_fork.asset_checksum',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_physical_file',
+            table: 'immich_fork.asset_physical_file',
+            where:
+              'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId") OR (candidate."physicalFileId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM immich_fork.physical_file physical WHERE physical.id = candidate."physicalFileId"))',
+          },
+          {
+            key: 'candidate."assetId"::text',
+            sourceTable: 'asset_storage_reservation',
+            table: 'immich_fork.asset_storage_reservation',
+            where: 'NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+          },
+          {
+            key: 'candidate.id::text',
+            sourceTable: 'physical_file',
+            table: 'immich_fork.physical_file',
+            where:
+              '(candidate."canonicalAssetId" IS NULL OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."canonicalAssetId")) AND NOT EXISTS (SELECT 1 FROM immich_fork.asset_physical_file mapping JOIN public.asset asset ON asset.id = mapping."assetId" WHERE mapping."physicalFileId" = candidate.id)',
+          },
+        ] as const;
+        let deleted = 0;
+        for (const family of families) {
+          await sql
+            .raw(
+              `INSERT INTO immich_fork.orphaned_records ("sourceTable", "sourceKey", payload)
+               SELECT '${family.sourceTable}', ${family.key}, row_to_json(candidate)::jsonb
+               FROM ${family.table} candidate
+               WHERE ${family.where}
+               ON CONFLICT ("sourceTable", "sourceKey") DO NOTHING`,
+            )
+            .execute(transaction);
+          const removed = await sql
+            .raw<{ count: number }>(
+              `WITH removed AS (
+                 DELETE FROM ${family.table} candidate
+                 WHERE (${family.where})
+                   AND EXISTS (
+                     SELECT 1 FROM immich_fork.orphaned_records archive
+                     WHERE archive."sourceTable" = '${family.sourceTable}'
+                       AND archive."sourceKey" = ${family.key}
+                   )
+                 RETURNING 1
+               ) SELECT count(*)::int AS count FROM removed`,
+            )
+            .execute(transaction);
+          deleted += removed.rows[0]?.count ?? 0;
+        }
+
+        const remaining = await sql<{ count: number }>`SELECT
+          (SELECT count(*) FROM immich_fork.asset_privacy sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_enrichment sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.album_metadata sidecar LEFT JOIN public.album album ON album.id = sidecar."albumId" WHERE album.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.album_closure sidecar LEFT JOIN public.album ancestor ON ancestor.id = sidecar."ancestorId" LEFT JOIN public.album descendant ON descendant.id = sidecar."descendantId" WHERE ancestor.id IS NULL OR descendant.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_health sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_best_photo_score sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_video_duplicate_frame sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_checksum sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_physical_file sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL) +
+          (SELECT count(*) FROM immich_fork.asset_storage_reservation sidecar LEFT JOIN public.asset asset ON asset.id = sidecar."assetId" WHERE asset.id IS NULL)
+          AS count
+        `.execute(transaction);
+        if ((remaining.rows[0]?.count ?? 0) !== 0) {
+          throw new Error('Fork orphan reconciliation left references to missing upstream records');
+        }
+        return { archived: deleted, deleted };
+      });
   }
 }

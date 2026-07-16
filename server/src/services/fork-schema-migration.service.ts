@@ -33,6 +33,9 @@ export type ForkSchemaMigrationStatus = ForkState & {
   progress: BackfillProgress[];
   verified: boolean;
 };
+export type ReturnReconciliationHooks = {
+  afterBatch?: (kind: BackfillKind, claim: BackfillClaim) => Promise<void> | void;
+};
 
 @Injectable()
 export class ForkSchemaMigrationService extends BaseService implements OnModuleInit {
@@ -148,6 +151,39 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
       throw new Error('Backfill can only resume from legacy phase');
     }
     await this.seedAllKinds(batchSize);
+    return this.status();
+  }
+
+  async reconcileAfterOfficialReturn(
+    batchSize = DEFAULT_BATCH_SIZE,
+    hooks: ReturnReconciliationHooks = {},
+  ): Promise<ForkSchemaMigrationStatus> {
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+      throw new Error('Backfill batch size must be a positive integer');
+    }
+    await this.forkSchemaRepository.beginOrResumeReturnReconciliation();
+    for (const kind of BACKFILL_KINDS) {
+      while (true) {
+        const claim = await this.forkSchemaRepository.claimReturnBatch(kind, batchSize);
+        if (!claim) {
+          break;
+        }
+        const handler = this.handlers.get(kind);
+        if (!handler) {
+          await this.forkSchemaRepository.failBatch(kind, claim.cursor, `No backfill handler registered for ${kind}`);
+          throw new Error(`No backfill handler registered for ${kind}`);
+        }
+        try {
+          const result = await handler(claim.ids);
+          await this.forkSchemaRepository.completeBatch(kind, claim.cursor, result.count, result.digest);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this.forkSchemaRepository.failBatch(kind, claim.cursor, message);
+          throw error;
+        }
+        await hooks.afterBatch?.(kind, claim);
+      }
+    }
     return this.status();
   }
 
