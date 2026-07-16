@@ -16,6 +16,15 @@ import {
 } from 'src/constants';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
+import {
+  CatalogDiff,
+  CatalogManifest,
+  compareCatalogs,
+  getCatalogEvidence,
+  getForkTableLocks,
+} from 'src/fork-schema/catalog';
+import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
 import { classifyMigration, GENERIC_LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   createForkMigrationProvider,
@@ -30,6 +39,7 @@ import {
   WorkflowCompatibility,
 } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
 import { DB } from 'src/schema';
@@ -42,45 +52,44 @@ export let cachedVectorExtension: VectorExtension | undefined;
 
 const CLIP_TABLES = ['smart_search', 'smart_search_description', 'asset_video_duplicate_frame'] as const;
 
-const CUTOVER_EVIDENCE_TABLES = [
-  'public.user',
-  'public.asset',
-  'public.album',
-  'public.asset_face',
-  'public.tag',
-  'public.shared_link',
-  'immich_fork.asset_privacy',
-  'immich_fork.album_metadata',
-  'immich_fork.album_closure',
-  'immich_fork.asset_enrichment',
-  'immich_fork.config',
-  'immich_fork.smart_album_rule',
-  'immich_fork.smart_album_match',
-  'immich_fork.smart_album_exclusion',
-  'immich_fork.asset_health',
-  'immich_fork.asset_best_photo_score',
-  'immich_fork.asset_video_duplicate_frame',
-  'immich_fork.asset_checksum',
-  'immich_fork.physical_file',
-  'immich_fork.asset_physical_file',
-] as const;
-
-const CUTOVER_LOCK_TABLES = [
+const CUTOVER_PUBLIC_LOCK_TABLES = [
   'public.kysely_migrations',
   'public.migration_overrides',
   'public.system_metadata',
   'public.asset_file',
-  'immich_fork.state',
-  'immich_fork.migrations',
-  'immich_fork.migration_audit',
-  'immich_fork.backfill_progress',
-  'immich_fork.asset_storage_reservation',
   'public.plugin',
   'public.plugin_method',
   'public.workflow',
   'public.workflow_step',
-  ...CUTOVER_EVIDENCE_TABLES,
+  'public.asset',
 ] as const;
+
+const FORK_CATALOG_MANIFEST = forkCatalogManifest as CatalogManifest;
+const OFFICIAL_CATALOG_MANIFEST = officialCatalogManifest as CatalogManifest;
+
+const INERT_LEGACY_CATALOG_ALLOWLIST = new Set<string>();
+
+const forkEntries = <T extends { identity: string }>(entries: T[]) =>
+  entries.filter(({ identity }) => identity === 'immich_fork' || identity.startsWith('immich_fork.'));
+
+const expectedCatalogFor = (installationClass: ForkSchemaCutoverEvidence['installationClass']): CatalogManifest => {
+  if (installationClass === 'current-fork') {
+    return FORK_CATALOG_MANIFEST;
+  }
+  return {
+    ...OFFICIAL_CATALOG_MANIFEST,
+    columns: [...OFFICIAL_CATALOG_MANIFEST.columns, ...forkEntries(FORK_CATALOG_MANIFEST.columns)],
+    constraints: [...OFFICIAL_CATALOG_MANIFEST.constraints, ...forkEntries(FORK_CATALOG_MANIFEST.constraints)],
+    enums: [...OFFICIAL_CATALOG_MANIFEST.enums, ...forkEntries(FORK_CATALOG_MANIFEST.enums)],
+    forkMigrations: FORK_CATALOG_MANIFEST.forkMigrations,
+    functions: [...OFFICIAL_CATALOG_MANIFEST.functions, ...forkEntries(FORK_CATALOG_MANIFEST.functions)],
+    indexes: [...OFFICIAL_CATALOG_MANIFEST.indexes, ...forkEntries(FORK_CATALOG_MANIFEST.indexes)],
+    schemas: [...OFFICIAL_CATALOG_MANIFEST.schemas, ...forkEntries(FORK_CATALOG_MANIFEST.schemas)],
+    source: 'v3.0.3+fork-v2',
+    tables: [...OFFICIAL_CATALOG_MANIFEST.tables, ...forkEntries(FORK_CATALOG_MANIFEST.tables)],
+    triggers: [...OFFICIAL_CATALOG_MANIFEST.triggers, ...forkEntries(FORK_CATALOG_MANIFEST.triggers)],
+  };
+};
 
 const LEGACY_TRIGGER_NAMES = new Set([
   'physical_file_updatedAt',
@@ -90,53 +99,33 @@ const LEGACY_TRIGGER_NAMES = new Set([
   'album_parent_cycle_check_trigger',
 ]);
 
-const LEGACY_RESIDUE_TABLES = new Set([
-  'physical_file',
-  'asset_video_duplicate_frame',
-  'asset_health_run',
-  'asset_health',
-  'asset_health_candidate',
-  'asset_best_photo_score',
-  'smart_album',
-  'smart_album_asset',
-  'smart_album_exclusion',
-  'album_closure',
-]);
-
-const LEGACY_RESIDUE_COLUMNS = new Set([
-  'asset.physicalOriginalFileId',
-  'asset.is_nsfw',
-  'asset_file.physicalFileId',
-  'album.parentId',
-  'album.icon',
-  'album.sortOrder',
-]);
-
-const LEGACY_RESIDUE_OVERRIDES = new Set([
-  'trigger_physical_file_updatedAt',
-  'trigger_asset_video_duplicate_frame_updatedAt',
-  'trigger_asset_health_updatedAt',
-  'trigger_asset_health_candidate_updatedAt',
-  'index_idx_asset_exif_description_trigram',
-  'index_album_parentId_idx',
-  'index_album_parent_sort_idx',
-  'index_album_root_sort_idx',
-  'function_album_parent_cycle_check',
-  'trigger_album_parent_cycle_check_trigger',
-  'index_idx_asset_is_nsfw',
-]);
-
 export type ForkSchemaCutoverEvidence = {
   activeWrites: number;
   backfills: Array<{
+    claimToken: string | null;
+    claimedCursor: string | null;
+    claimedIds: string[];
+    cursor: string | null;
     digest: string | null;
     kind: string;
     lastError: string | null;
     processed: number;
     remaining: number;
   }>;
+  backfillKindsValid: boolean;
+  catalogDiff: CatalogDiff;
+  checksumCoverage: {
+    applicableCount: number;
+    applicableDigest: string;
+    invalidCount: number;
+    sidecarCount: number;
+    sidecarDigest: string;
+    valid: boolean;
+  };
   checksumFailures: number;
+  forkLedgerValid: boolean;
   forkMigrations: string[];
+  installationClass: 'current-fork' | 'original-official';
   ledger: Array<{
     classification: 'legacy-fork' | 'unknown' | 'upstream';
     name: string;
@@ -145,11 +134,14 @@ export type ForkSchemaCutoverEvidence = {
   maintenanceMode: boolean;
   migrationOrderValid: boolean;
   officialPendingMigrations: string[];
-  schemaResidue: Array<{
-    allowed: boolean;
-    kind: 'column' | 'enum-value' | 'function' | 'migration-override' | 'table' | 'trigger';
-    name: string;
-  }>;
+  mappingCoverage: {
+    mappingCount: number;
+    mappingDigest: string;
+    normalizedCount: number;
+    normalizedDigest: string;
+    unsafeCount: number;
+    valid: boolean;
+  };
   state: {
     active: boolean;
     phase: 'active' | 'dual-write' | 'failed' | 'inactive' | 'legacy' | 'ready';
@@ -582,33 +574,47 @@ export class DatabaseRepository {
   }
 
   async getForkSchemaCutoverEvidence(runner: Kysely<DB> = this.db): Promise<ForkSchemaCutoverEvidence> {
-    const [officialMigrations, ledgerResult, forkLedgerResult, stateResult, backfillResult, maintenanceResult] =
-      await Promise.all([
-        this.loadOfficialMigrations(),
-        sql<{ name: string; timestamp: string }>`
+    const [
+      officialMigrations,
+      ledgerResult,
+      forkLedgerResult,
+      stateResult,
+      backfillResult,
+      maintenanceResult,
+      classificationResult,
+    ] = await Promise.all([
+      this.loadOfficialMigrations(),
+      sql<{ name: string; timestamp: string }>`
           SELECT name, timestamp FROM public.kysely_migrations ORDER BY timestamp, name
         `.execute(runner),
-        sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(runner),
-        sql<ForkSchemaCutoverEvidence['state']>`
+      sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY timestamp, name`.execute(runner),
+      sql<ForkSchemaCutoverEvidence['state']>`
           SELECT active, phase, "schemaVersion", "upstreamVersion" FROM immich_fork.state WHERE id = 1
         `.execute(runner),
-        sql<{
-          digest: string | null;
-          kind: string;
-          lastError: string | null;
-          processed: string;
-          remaining: string;
-        }>`
-          SELECT kind, processed, remaining, digest, "lastError"
+      sql<{
+        digest: string | null;
+        claimToken: string | null;
+        claimedCursor: string | null;
+        claimedIds: string[];
+        cursor: string | null;
+        kind: string;
+        lastError: string | null;
+        processed: string;
+        remaining: string;
+      }>`
+          SELECT kind, cursor, processed, remaining, digest, "claimedCursor", "claimedIds", "claimToken", "lastError"
           FROM immich_fork.backfill_progress
           ORDER BY kind
         `.execute(runner),
-        sql<{ maintenanceMode: boolean }>`
+      sql<{ maintenanceMode: boolean }>`
           SELECT coalesce((value->>'isMaintenanceMode')::boolean, false) AS "maintenanceMode"
           FROM public.system_metadata
           WHERE key = 'maintenance-mode'
         `.execute(runner),
-      ]);
+      sql<{ currentFork: boolean }>`
+          SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
+        `.execute(runner),
+    ]);
 
     const state = stateResult.rows[0];
     if (!state) {
@@ -616,6 +622,7 @@ export class DatabaseRepository {
     }
     const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
     const workflowCompatibility = classifyWorkflowCompatibility(await getWorkflowCompatibilityEvidence(runner));
+    const installationClass = classificationResult.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
     const officialNames = Object.keys(officialMigrations).toSorted();
     if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
       throw new Error('Official migration provider exposed a non-upstream migration');
@@ -633,32 +640,69 @@ export class DatabaseRepository {
         AND pid <> pg_backend_pid()
         AND backend_xid IS NOT NULL
     `.execute(runner);
-    const checksumResult = await sql<{ count: number }>`
-      SELECT count(*)::int AS count
-      FROM public.asset a
-      LEFT JOIN immich_fork.asset_checksum c ON c."assetId" = a.id
-      WHERE a."checksumAlgorithm" = 'sha256'
-         OR (c."assetId" IS NOT NULL AND (a.checksum <> c.sha1 OR a."checksumAlgorithm" <> 'sha1'))
+    const checksumResult = await sql<{
+      applicableCount: number;
+      applicableDigest: string;
+      invalidCount: number;
+      sidecarCount: number;
+      sidecarDigest: string;
+    }>`
+      SELECT
+        count(asset.id)::int AS "applicableCount",
+        encode(sha256(convert_to(coalesce(string_agg(asset.id::text, E'\n' ORDER BY asset.id::text), ''), 'UTF8')), 'hex') AS "applicableDigest",
+        count(checksum."assetId")::int AS "sidecarCount",
+        encode(sha256(convert_to(coalesce(string_agg(checksum."assetId"::text, E'\n' ORDER BY checksum."assetId"::text), ''), 'UTF8')), 'hex') AS "sidecarDigest",
+        count(*) FILTER (WHERE
+          checksum."assetId" IS NULL
+          OR checksum.sha1 IS NULL OR octet_length(checksum.sha1) <> 20
+          OR checksum.sha256 IS NULL OR octet_length(checksum.sha256) <> 32
+          OR asset.checksum IS NULL
+          OR asset."checksumAlgorithm" <> 'sha1'
+          OR asset.checksum <> checksum.sha1
+        )::int AS "invalidCount"
+      FROM public.asset asset
+      LEFT JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = asset.id
     `.execute(runner);
-    const unsafeMappingResult = await sql<{ count: number }>`
-      SELECT (
-        (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
-        + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
-        + (
-          SELECT count(*)
-          FROM immich_fork.asset_physical_file mapping
-          LEFT JOIN public.asset asset ON asset.id = mapping."assetId"
-          LEFT JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = mapping."assetId"
-          WHERE asset.id IS NULL OR checksum."assetId" IS NULL OR asset."originalPath" <> mapping."upstreamPath"
-        )
-      )::int AS count
+    const mappingResult = await sql<{
+      mappingCount: number;
+      mappingDigest: string;
+      normalizedCount: number;
+      normalizedDigest: string;
+      unsafeCount: number;
+    }>`
+      SELECT
+        count(asset.id)::int AS "normalizedCount",
+        encode(sha256(convert_to(coalesce(string_agg(asset.id::text || ':' || asset."originalPath", E'\n' ORDER BY asset.id::text), ''), 'UTF8')), 'hex') AS "normalizedDigest",
+        count(mapping."assetId")::int AS "mappingCount",
+        encode(sha256(convert_to(coalesce(string_agg(mapping."assetId"::text || ':' || mapping."upstreamPath", E'\n' ORDER BY mapping."assetId"::text), ''), 'UTF8')), 'hex') AS "mappingDigest",
+        (
+          count(*) FILTER (WHERE mapping."assetId" IS NULL OR mapping."upstreamPath" IS NULL OR mapping."upstreamPath" <> asset."originalPath")
+          + (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
+          + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
+        )::int AS "unsafeCount"
+      FROM public.asset asset
+      LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
     `.execute(runner);
     const reservationResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
     `.execute(runner);
 
+    const actualCatalog = await getCatalogEvidence(runner);
+    const expectedCatalog = expectedCatalogFor(installationClass);
+    const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
+    const forkMigrations = forkLedgerResult.rows.map(({ name }) => name);
+    const cutoverAuditResult = await sql<{ present: boolean }>`
+      SELECT EXISTS (
+        SELECT 1 FROM immich_fork.migration_audit
+        WHERE name = 'fork-schema-cutover' AND phase = 'official-cutover' AND status = 'applied'
+      ) AS present
+    `.execute(runner);
+    const forkLedgerValid =
+      forkMigrations.length === expectedCatalog.forkMigrations.length &&
+      forkMigrations.every((name, index) => expectedCatalog.forkMigrations[index] === name) &&
+      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present === true);
     const tableEvidence: ForkSchemaCutoverEvidence['tableEvidence'] = [];
-    for (const table of CUTOVER_EVIDENCE_TABLES) {
+    for (const table of expectedCatalog.tables.map(({ identity }) => identity)) {
       const [schema, name] = table.split('.');
       const identifier = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
       const result = await sql
@@ -673,119 +717,62 @@ export class DatabaseRepository {
       tableEvidence.push({ table, count: result.rows[0]?.count ?? 0, digest: result.rows[0]?.digest ?? '' });
     }
 
-    const schemaResidue: ForkSchemaCutoverEvidence['schemaResidue'] = [];
-    const residueTables = await sql<{ name: string }>`
-      SELECT table_name AS name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-        AND (
-          table_name LIKE 'physical_file%'
-          OR table_name LIKE 'asset_video_duplicate_frame%'
-          OR table_name LIKE 'asset_health%'
-          OR table_name LIKE 'asset_best_photo%'
-          OR table_name LIKE 'smart_album%'
-          OR table_name LIKE 'album_closure%'
-        )
-      ORDER BY table_name
-    `.execute(runner);
-    for (const { name } of residueTables.rows) {
-      schemaResidue.push({ allowed: LEGACY_RESIDUE_TABLES.has(name), kind: 'table', name: `public.${name}` });
-    }
-    const residueColumns = await sql<{ columnName: string; tableName: string }>`
-      SELECT table_name AS "tableName", column_name AS "columnName"
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND (
-          (table_name = 'asset' AND (column_name LIKE 'physical%' OR column_name LIKE 'is_nsfw%'))
-          OR (table_name = 'asset_file' AND column_name LIKE 'physical%')
-          OR (table_name = 'album' AND (column_name LIKE 'parent%' OR column_name LIKE 'icon%' OR column_name LIKE 'sortOrder%'))
-        )
-      ORDER BY table_name, column_name
-    `.execute(runner);
-    for (const { columnName, tableName } of residueColumns.rows) {
-      const key = `${tableName}.${columnName}`;
-      schemaResidue.push({ allowed: LEGACY_RESIDUE_COLUMNS.has(key), kind: 'column', name: `public.${key}` });
-    }
-    const triggers = await sql<{ name: string; tableName: string }>`
-      SELECT trigger_name AS name, event_object_table AS "tableName"
-      FROM information_schema.triggers
-      WHERE trigger_schema = 'public'
-        AND (
-          trigger_name LIKE 'physical_file%'
-          OR trigger_name LIKE 'asset_video_duplicate_frame%'
-          OR trigger_name LIKE 'asset_health%'
-          OR trigger_name LIKE 'album_parent_cycle%'
-          OR event_object_table LIKE 'physical_file%'
-          OR event_object_table LIKE 'asset_video_duplicate_frame%'
-          OR event_object_table LIKE 'asset_health%'
-        )
-      ORDER BY event_object_table, trigger_name
-    `.execute(runner);
-    for (const trigger of triggers.rows) {
-      schemaResidue.push({
-        allowed: LEGACY_TRIGGER_NAMES.has(trigger.name),
-        kind: 'trigger',
-        name: `public.${trigger.tableName}.${trigger.name}`,
-      });
-    }
-    const functions = await sql<{ name: string }>`
-      SELECT routine_name AS name
-      FROM information_schema.routines
-      WHERE routine_schema = 'public' AND routine_name LIKE 'album_parent_cycle%'
-      ORDER BY routine_name
-    `.execute(runner);
-    for (const { name } of functions.rows) {
-      schemaResidue.push({ allowed: name === 'album_parent_cycle_check', kind: 'function', name: `public.${name}` });
-    }
-    const enumValues = await sql<{ name: string }>`
-      SELECT value.enumlabel AS name
-      FROM pg_enum value
-      JOIN pg_type type ON type.oid = value.enumtypid
-      WHERE type.typname = 'asset_checksum_algorithm_enum' AND value.enumlabel NOT IN ('sha1', 'sha1-path')
-      ORDER BY value.enumsortorder
-    `.execute(runner);
-    for (const { name } of enumValues.rows) {
-      schemaResidue.push({
-        allowed: name === 'sha256',
-        kind: 'enum-value',
-        name: `asset_checksum_algorithm_enum.${name}`,
-      });
-    }
-    const overrides = await sql<{ name: string }>`
-      SELECT name
-      FROM public.migration_overrides
-      WHERE name LIKE '%physical_file%'
-         OR name LIKE '%asset_video_duplicate_frame%'
-         OR name LIKE '%asset_health%'
-         OR name LIKE '%asset_best_photo%'
-         OR name LIKE '%smart_album%'
-         OR name LIKE '%album_parent%'
-         OR name LIKE '%asset_is_nsfw%'
-         OR name LIKE '%asset_exif_description%'
-      ORDER BY name
-    `.execute(runner);
-    for (const { name } of overrides.rows) {
-      schemaResidue.push({ allowed: LEGACY_RESIDUE_OVERRIDES.has(name), kind: 'migration-override', name });
-    }
-
+    const backfills = backfillResult.rows.map((row) => ({
+      ...row,
+      processed: Number(row.processed),
+      remaining: Number(row.remaining),
+    }));
+    const requiredKinds = new Set<string>(BACKFILL_KINDS);
+    const actualKinds = new Set(backfills.map(({ kind }) => kind));
+    const backfillKindsValid =
+      actualKinds.size === requiredKinds.size && [...requiredKinds].every((kind) => actualKinds.has(kind));
+    const checksum = checksumResult.rows[0] ?? {
+      applicableCount: 0,
+      applicableDigest: '',
+      invalidCount: 1,
+      sidecarCount: 0,
+      sidecarDigest: '',
+    };
+    const checksumCoverage = {
+      ...checksum,
+      valid:
+        checksum.invalidCount === 0 &&
+        checksum.applicableCount === checksum.sidecarCount &&
+        checksum.applicableDigest === checksum.sidecarDigest,
+    };
+    const mapping = mappingResult.rows[0] ?? {
+      mappingCount: 0,
+      mappingDigest: '',
+      normalizedCount: 0,
+      normalizedDigest: '',
+      unsafeCount: 1,
+    };
+    const mappingCoverage = {
+      ...mapping,
+      valid:
+        mapping.unsafeCount === 0 &&
+        mapping.normalizedCount === mapping.mappingCount &&
+        mapping.normalizedDigest === mapping.mappingDigest,
+    };
     return {
       activeWrites: activeWritesResult.rows[0]?.count ?? 0,
-      backfills: backfillResult.rows.map((row) => ({
-        ...row,
-        processed: Number(row.processed),
-        remaining: Number(row.remaining),
-      })),
-      checksumFailures: checksumResult.rows[0]?.count ?? 0,
-      forkMigrations: forkLedgerResult.rows.map(({ name }) => name),
+      backfills,
+      backfillKindsValid,
+      catalogDiff,
+      checksumCoverage,
+      checksumFailures: checksum.invalidCount,
+      forkLedgerValid,
+      forkMigrations,
+      installationClass,
       ledger,
       maintenanceMode: maintenanceResult.rows[0]?.maintenanceMode ?? false,
+      mappingCoverage,
       migrationOrderValid,
       officialPendingMigrations: officialLedgerOrder.pending,
-      schemaResidue,
       state,
       storageReservations: reservationResult.rows[0]?.count ?? 0,
       tableEvidence,
-      unsafePhysicalMappings: unsafeMappingResult.rows[0]?.count ?? 0,
+      unsafePhysicalMappings: mapping.unsafeCount,
       workflowCompatibility,
     };
   }
@@ -798,7 +785,7 @@ export class DatabaseRepository {
       .transaction()
       .setIsolationLevel('serializable')
       .execute(async (transaction) => {
-        const lockTables = [...new Set(CUTOVER_LOCK_TABLES)]
+        const lockTables = [...new Set([...CUTOVER_PUBLIC_LOCK_TABLES, ...getForkTableLocks(FORK_CATALOG_MANIFEST)])]
           .map((table) =>
             table
               .split('.')

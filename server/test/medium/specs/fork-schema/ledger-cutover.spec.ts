@@ -3,6 +3,7 @@ import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import { OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
@@ -100,6 +101,12 @@ describe('fork schema ledger cutover', () => {
       db,
     );
     await sql`TRUNCATE immich_fork.migration_audit`.execute(db);
+    await sql`TRUNCATE immich_fork.backfill_progress`.execute(db);
+    await sql`
+      INSERT INTO immich_fork.backfill_progress (kind, remaining, digest)
+      SELECT kind, 0, ${'a'.repeat(64)}
+      FROM unnest(${[...BACKFILL_KINDS]}::text[]) AS kind
+    `.execute(db);
     await sql`
       INSERT INTO system_metadata (key, value)
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
@@ -287,20 +294,20 @@ describe('fork schema ledger cutover', () => {
     }
   }, 10_000);
 
-  it('classifies unknown fork residue and refuses cutover', async () => {
+  it('classifies an unknown public catalog object and refuses cutover', async () => {
     await sql`CREATE TABLE physical_file_unexpected (id integer PRIMARY KEY)`.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
     const report = await sut.preflight();
 
     expect(report.ready).toBe(false);
-    expect(report.schemaResidue).toContainEqual({
-      allowed: false,
-      kind: 'table',
-      name: 'public.physical_file_unexpected',
+    expect(report.catalogDiff.unexpected).toContainEqual({
+      actual: 'table',
+      identity: 'public.physical_file_unexpected',
+      kind: 'tables',
     });
     await expect(sut.apply(report.digest)).rejects.toThrow(
-      'Unknown fork schema residue: table public.physical_file_unexpected',
+      'Unknown catalog object: tables public.physical_file_unexpected',
     );
   });
 });
