@@ -96,6 +96,19 @@ Certification also exposed and corrected two boundary defects:
   `addAssetsToAlbums`, and `httpRequest` for both in-process and worker loads,
   while retaining `hideNsfwAssets: true` in synthesized plugin auth. Workflow,
   plugin, method, and step rows are not migrated or sidecarred.
+- The follow-up review found that host registration alone did not carry each
+  official method's `allowedHosts` into Extism. The official public column is
+  now represented in the model, selected with workflow steps, preserved by
+  plugin upsert, and passed as call context through both in-process and worker
+  execution. Before handoff, repository capability checks keep the legacy
+  no-column schema operational and expose an empty allow-list; after the
+  unchanged official `1782414436633` migration, repositories use and update
+  the upstream column. No workflow migration, workflow sidecar, or workflow
+  table rewrite was introduced.
+- Smart-album child reconciliation now treats a rule whose public album is
+  missing as orphaned even before the parent rule is deleted. A medium
+  regression deletes only the public album and proves its rule, match, and
+  exclusion are all archived and deleted in the same reconciliation.
 - PostgreSQL non-finite numeric evidence is recursively canonicalized to
   explicit string sentinels before both live comparison and JSON persistence,
   preventing `NaN` from collapsing to `null`.
@@ -110,20 +123,24 @@ official workflows execute after normal return.
 
 - Clean combined official-container certification: all 3 lanes, exit 0,
   `Local synthetic certification completed for: all`.
-- Workflow/controller/compatibility unit selection: 33/33 passed.
-- Workflow host-ABI/privacy regression: 2/2 passed.
-- Return reconciliation medium suite: 61/61 passed.
+- Broad workflow/fork-schema unit selection: 126/126 passed.
+- Workflow host-ABI/privacy/context regression: 3/3 passed.
+- Plugin in-process/worker context boundary regression: 2/2 passed.
+- Legacy/official workflow repository schema-stage regressions: 3/3 passed.
+- Deleted smart-album parent reconciliation regression: 1/1 passed.
+- Broad return/workflow medium selection: 75 passed, 9 expected skips because
+  the local optional core-WASM artifact was absent.
 - Related workflow medium selection: 16 passed, 9 expected skips because the
   local optional core-WASM artifact was absent; the container run exercised the
   real official WASM in both execution modes.
 - Non-finite evidence regression: 1/1 passed.
 - Server and E2E TypeScript checks, E2E full lint, focused server lint/Prettier,
   shell syntax, Compose validation, and `git diff --check`: passed.
-- GitNexus compare against correction base `f0ff4ab40` reported MEDIUM
-  cumulative risk (23 mapped symbols, 38 files, 5 plugin-load processes). The
-  exact staged correction reported MEDIUM risk (13 mapped symbols, 15 files,
-  the same 5 plugin-load processes); focused ABI tests and the real official
-  WASM container run cover those affected flows.
+- GitNexus compare against `fork/main` reported HIGH cumulative risk across the
+  complete migration wave (202 files, 905 mapped symbols, 14 processes). The
+  exact staged second correction reported LOW risk (11 files, 20 mapped
+  symbols, no affected process); focused ABI/schema-stage tests and the real
+  official WASM container run cover the changed boundaries.
 
 The external release gate is unchanged: repeat on a sanitized,
 production-shaped current-fork clone with interruption/resume evidence for all

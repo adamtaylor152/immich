@@ -1,6 +1,8 @@
-import { Kysely } from 'kysely';
-import { AssetMetadataKey, AssetVisibility } from 'src/enum';
+import { Kysely, sql } from 'kysely';
+import { randomUUID } from 'node:crypto';
+import { AssetMetadataKey, AssetVisibility, WorkflowType } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PluginRepository } from 'src/repositories/plugin.repository';
 import { WorkflowRepository } from 'src/repositories/workflow.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
@@ -18,11 +20,101 @@ const setup = (db?: Kysely<DB>) => {
   return { ctx, sut: ctx.get(WorkflowRepository) };
 };
 
+const pluginDto = (id: string) => ({
+  enabled: true,
+  name: `schema-stage-${id}`,
+  title: 'Schema stage plugin',
+  description: 'Schema stage fixture',
+  author: 'Immich',
+  version: '1.0.0',
+  wasmBytes: Buffer.from('fixture'),
+});
+const methodDto = (allowedHosts: string[]) => ({
+  name: 'webhook',
+  title: 'Webhook',
+  description: 'Webhook fixture',
+  types: [WorkflowType.AssetV1],
+  allowedHosts,
+});
+
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
 describe(WorkflowRepository.name, () => {
+  it('upserts plugin methods on the legacy no-column schema before handoff', async () => {
+    const database = await getKyselyDB();
+    const sut = new PluginRepository(database, { setContext: vi.fn() } as never);
+
+    await expect(sut.upsert(pluginDto(randomUUID()), [methodDto(['hooks.example.test'])])).resolves.toEqual(
+      expect.objectContaining({ methods: [expect.objectContaining({ name: 'webhook' })] }),
+    );
+  });
+
+  it('updates allowedHosts after the official upstream migration owns the column', async () => {
+    const database = await getKyselyDB();
+    await sql`
+      ALTER TABLE public.plugin_method
+      ADD COLUMN "allowedHosts" varchar[] NOT NULL DEFAULT '{}'
+    `.execute(database);
+    const sut = new PluginRepository(database, { setContext: vi.fn() } as never);
+    const dto = pluginDto(randomUUID());
+    await sut.upsert(dto, [methodDto(['first.example.test'])]);
+
+    await sut.upsert(dto, [methodDto(['second.example.test'])]);
+
+    const method = await database.selectFrom('plugin_method').select('allowedHosts').executeTakeFirstOrThrow();
+    expect(method.allowedHosts).toEqual(['second.example.test']);
+  });
+
+  it('returns legacy defaults before handoff and official allowedHosts after the upstream migration', async () => {
+    const database = await getKyselyDB();
+    const { ctx, sut } = setup(database);
+    const { user } = await ctx.newUser();
+    const pluginId = randomUUID();
+    const methodId = randomUUID();
+    const workflowId = randomUUID();
+    await sql`
+      INSERT INTO public.plugin
+        (id, enabled, name, version, title, description, author, "wasmBytes")
+      VALUES (${pluginId}::uuid, true, ${`allowed-hosts-${pluginId}`}, '1.0.0', 'Allowed hosts',
+        'Allowed hosts fixture', 'Immich', decode('00', 'hex'))
+    `.execute(database);
+    await sql`
+      INSERT INTO public.plugin_method
+        (id, "pluginId", name, title, description, types, "hostFunctions", "uiHints", schema)
+      VALUES (${methodId}::uuid, ${pluginId}::uuid, 'webhook', 'Webhook', 'Webhook fixture',
+        ARRAY['asset']::varchar[], true, ARRAY[]::varchar[], NULL)
+    `.execute(database);
+    await sql`
+      INSERT INTO public.workflow (id, "ownerId", trigger, name, description, "updateId", enabled)
+      VALUES (${workflowId}::uuid, ${user.id}::uuid, 'asset.uploaded', 'Allowed hosts workflow', NULL,
+        ${randomUUID()}::uuid, true)
+    `.execute(database);
+    await sql`
+      INSERT INTO public.workflow_step (id, enabled, "workflowId", "pluginMethodId", config, "order")
+      VALUES (${randomUUID()}::uuid, true, ${workflowId}::uuid, ${methodId}::uuid, '{}'::jsonb, 0)
+    `.execute(database);
+
+    const legacyWorkflow = await sut.getForWorkflowRun(workflowId);
+    expect(legacyWorkflow?.steps[0]).toEqual(expect.objectContaining({ allowedHosts: [] }));
+
+    await sql`
+      ALTER TABLE public.plugin_method
+      ADD COLUMN "allowedHosts" varchar[] NOT NULL DEFAULT '{}'
+    `.execute(database);
+    await sql`
+      UPDATE public.plugin_method
+      SET "allowedHosts" = ARRAY['hooks.example.test', '*.trusted.example']::varchar[]
+      WHERE id = ${methodId}::uuid
+    `.execute(database);
+    const officialWorkflow = await setup(database).sut.getForWorkflowRun(workflowId);
+
+    expect(officialWorkflow?.steps[0]).toEqual(
+      expect.objectContaining({ allowedHosts: ['hooks.example.test', '*.trusted.example'] }),
+    );
+  });
+
   describe('isWorkflowEligible', () => {
     /**
      * Regression test for R1: the NSFW EXISTS subquery in `utils/database.ts`
