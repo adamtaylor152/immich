@@ -143,7 +143,7 @@ describe('workflow migration ledger alias', () => {
 
       await sql`UPDATE immich_fork.state SET active = false, phase = 'ready' WHERE id = 1`.execute(db);
 
-      await repository.commitForkSchemaCutover(reportDigest, 'current-fork', async () => {});
+      await repository.commitForkSchemaCutover(reportDigest, async () => {});
 
       const after = await getWorkflowCompatibilityEvidence(db);
       const triggerAfter = await sql<{ enabled: string }>`

@@ -234,7 +234,7 @@ describe('complete fork schema cutover evidence', () => {
   ])('refuses %s independently', async (_name, mutation) => {
     await mutation.execute(db);
 
-    const preflight = await service.preflight('backup-1', 'snapshot-1');
+    const preflight = await service.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
     expect(preflight.ready).toBe(false);
   });
 
@@ -252,7 +252,7 @@ describe('complete fork schema cutover evidence', () => {
     ['schema', sql`CREATE SCHEMA task3_unexpected`],
   ])('refuses an unknown public %s object', async (_kind, mutation) => {
     await mutation.execute(db);
-    const preflight = await service.preflight('backup-1', 'snapshot-1');
+    const preflight = await service.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
     expect(preflight.ready).toBe(false);
   });
 
@@ -269,7 +269,7 @@ describe('complete fork schema cutover evidence', () => {
     });
     expect(evidence.checksumCoverage.applicableDigest).not.toBe(evidence.checksumCoverage.sidecarDigest);
     expect(evidence.mappingCoverage.valid).toBe(true);
-    const preflight = await service.preflight('backup-1', 'snapshot-1');
+    const preflight = await service.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
     expect(preflight.ready).toBe(false);
   });
 
@@ -286,7 +286,7 @@ describe('complete fork schema cutover evidence', () => {
       valid: false,
     });
     expect(evidence.mappingCoverage.normalizedDigest).not.toBe(evidence.mappingCoverage.mappingDigest);
-    const preflight = await service.preflight('backup-1', 'snapshot-1');
+    const preflight = await service.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
     expect(preflight.ready).toBe(false);
   });
 });
@@ -342,7 +342,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
 
     expect(report.installationClass).toBe('original-official');
     expect(report.catalogDiff).toEqual({ clean: true, mismatched: [], missing: [], unexpected: [] });
@@ -353,11 +353,11 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
   it('acquires the exact sorted original-official manifest lock set before verification', async () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
     let observedLocks: string[] = [];
 
     await expect(
-      repository.commitForkSchemaCutover(report.digest, 'original-official', async (transaction) => {
+      repository.commitForkSchemaCutover(report.digest, async (transaction) => {
         const lockResult = await sql<{ tableName: string }>`
           SELECT namespace.nspname || '.' || relation.relname AS "tableName"
           FROM pg_catalog.pg_locks lock
@@ -393,7 +393,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
 
     expect(report.installationClass).toBe('original-official');
     expect(report.catalogDiff.clean).toBe(true);
@@ -411,7 +411,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    await expect(sut.preflight('backup-1', 'snapshot-1')).rejects.toThrow(
+    await expect(sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' })).rejects.toThrow(
       'Found workflow tables with no workflow migration marker',
     );
   });

@@ -46,16 +46,38 @@ describe('fork cutover verification CLI', () => {
     expect(output).toHaveBeenCalledWith(JSON.stringify(response, null, 2));
   });
 
-  it('binds preflight to both operator checkpoint IDs', async () => {
+  it('prints canonical JSON and binds preflight to both operator checkpoint IDs', async () => {
     const report = { ready: true, digest: 'a'.repeat(64) };
     const service = { preflight: vi.fn().mockResolvedValue(report) } as unknown as ForkSchemaCutoverService;
     const command = new ForkSchemaCutoverPreflightCommand(service);
-    const output = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
-    await command.run([], options);
+    await command.run([], { ...options, format: 'json' });
 
-    expect(service.preflight).toHaveBeenCalledWith('backup-1', 'snapshot-1');
-    expect(output).toHaveBeenCalledWith(JSON.stringify(report, null, 2));
+    expect(service.preflight).toHaveBeenCalledWith(options);
+    expect(output).toHaveBeenCalledWith(`${JSON.stringify({ digest: report.digest, ready: true })}\n`);
+  });
+
+  it('prints exactly the digest and one newline in digest format', async () => {
+    const report = { ready: true, digest: 'a'.repeat(64) };
+    const service = { preflight: vi.fn().mockResolvedValue(report) } as unknown as ForkSchemaCutoverService;
+    const command = new ForkSchemaCutoverPreflightCommand(service);
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await command.run([], { ...options, format: 'digest' });
+
+    expect(output).toHaveBeenCalledTimes(1);
+    expect(output).toHaveBeenCalledWith(`${report.digest}\n`);
+  });
+
+  it('rejects an invalid preflight format before reading evidence', async () => {
+    const service = { preflight: vi.fn() } as unknown as ForkSchemaCutoverService;
+    const command = new ForkSchemaCutoverPreflightCommand(service);
+
+    await expect(command.run([], { ...options, format: 'yaml' as never })).rejects.toThrow(
+      'Format must be json or digest',
+    );
+    expect(service.preflight).not.toHaveBeenCalled();
   });
 
   it('rejects an apply without an exact report digest before mutation', async () => {
@@ -66,16 +88,26 @@ describe('fork cutover verification CLI', () => {
     expect(service.apply).not.toHaveBeenCalled();
   });
 
+  it('rejects a malformed apply report digest before mutation', async () => {
+    const service = { apply: vi.fn() } as unknown as ForkSchemaCutoverService;
+    const command = new ForkSchemaCutoverApplyCommand(service);
+
+    await expect(command.run([], { ...options, reportDigest: 'not-sha256' })).rejects.toThrow(
+      'Preflight report digest must be a lowercase SHA-256 digest',
+    );
+    expect(service.apply).not.toHaveBeenCalled();
+  });
+
   it('binds apply to the report digest and both operator checkpoint IDs', async () => {
     const checkpoint = { phase: 'inactive', schemaVersion: '2' };
     const service = { apply: vi.fn().mockResolvedValue(checkpoint) } as unknown as ForkSchemaCutoverService;
     const command = new ForkSchemaCutoverApplyCommand(service);
-    const output = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const reportDigest = 'a'.repeat(64);
 
     await command.run([], { ...options, reportDigest });
 
-    expect(service.apply).toHaveBeenCalledWith(reportDigest, 'backup-1', 'snapshot-1');
-    expect(output).toHaveBeenCalledWith(JSON.stringify(checkpoint, null, 2));
+    expect(service.apply).toHaveBeenCalledWith({ ...options, reportDigest });
+    expect(output).toHaveBeenCalledWith(`${JSON.stringify(checkpoint)}\n`);
   });
 });

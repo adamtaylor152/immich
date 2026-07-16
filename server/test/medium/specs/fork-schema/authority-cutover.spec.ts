@@ -82,7 +82,7 @@ describe('fork schema authority cutover', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const reportDigest = 'a'.repeat(64);
 
-    const checkpoint = await repository.commitForkSchemaCutover(reportDigest, 'current-fork', async (transaction) => {
+    const checkpoint = await repository.commitForkSchemaCutover(reportDigest, async (transaction) => {
       const locked = await sql<{ active: boolean; phase: string }>`
         SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
       `.execute(transaction);
@@ -102,7 +102,21 @@ describe('fork schema authority cutover', () => {
       SELECT tgenabled AS enabled FROM pg_trigger
       WHERE tgname = 'album_parent_cycle_check_trigger'
     `.execute(db);
-    const audit = await sql<{ details: { reportDigest: string }; phase: string; status: string }>`
+    const audit = await sql<{
+      details: {
+        databaseBackupId: null;
+        installationClass: string;
+        mediaSnapshotId: null;
+        reportDigest: string;
+        storageVerificationAssetCount: null;
+        storageVerificationDigest: null;
+        storageVerificationRunId: null;
+        workflowMode: string;
+        workflowSchemaDigest: string;
+      };
+      phase: string;
+      status: string;
+    }>`
       SELECT phase, status, details FROM immich_fork.migration_audit
       WHERE name = 'fork-schema-cutover'
     `.execute(db);
@@ -117,7 +131,23 @@ describe('fork schema authority cutover', () => {
       },
     ]);
     expect(trigger.rows).toEqual([{ enabled: 'D' }]);
-    expect(audit.rows).toEqual([{ details: { reportDigest }, phase: 'official-cutover', status: 'applied' }]);
+    expect(audit.rows).toEqual([
+      {
+        details: {
+          databaseBackupId: null,
+          installationClass: 'current-fork',
+          mediaSnapshotId: null,
+          reportDigest,
+          storageVerificationAssetCount: null,
+          storageVerificationDigest: null,
+          storageVerificationRunId: null,
+          workflowMode: 'legacy-alias',
+          workflowSchemaDigest: expect.stringMatching(/^[\da-f]{64}$/),
+        },
+        phase: 'official-cutover',
+        status: 'applied',
+      },
+    ]);
   });
 
   it('allows activation only as the final inactive-to-active reconciliation transition', async () => {
