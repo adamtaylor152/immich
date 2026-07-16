@@ -679,6 +679,14 @@ production-shaped current-fork clone must still be interrupted and resumed for
 every backfill and storage-verification kind, checkpointed, digest-compared,
 cut over, and booted with exact official `v3.0.3` before release.
 
+Independent Task 6 review corrections are complete. The corrected clean `all`
+run additionally proves normal fork API and microservices startup after return,
+exact preservation/default/orphan behavior for all seven sidecar families, a
+second official restart, execution of both preserved upstream workflows, and
+complete CI path triggers. Workflow data remains solely in upstream tables;
+the compatibility correction restores the official v3 plugin host ABI at
+runtime and does not introduce a workflow migration or sidecar.
+
 - [x] **Step 6: Commit**
 
 ```bash

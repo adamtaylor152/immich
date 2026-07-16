@@ -4,7 +4,7 @@ import { HttpException, UnauthorizedException } from '@nestjs/common';
 import _ from 'lodash';
 import { join } from 'node:path';
 import { OnEvent, OnJob } from 'src/decorators';
-import { AlbumsAddAssetsDto } from 'src/dtos/album.dto';
+import { AlbumsAddAssetsDto, CreateAlbumDto, GetAlbumsDto } from 'src/dtos/album.dto';
 import { BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
@@ -34,6 +34,10 @@ type ExecuteOptions<T extends WorkflowType> = {
   write: (changes: WorkflowChanges<T>) => Promise<void>;
 };
 
+type HostContext = {
+  allowedHosts: string[];
+};
+
 export class WorkflowExecutionService extends BaseService {
   private jwtSecret!: string;
 
@@ -58,22 +62,60 @@ export class WorkflowExecutionService extends BaseService {
 
     const albumService = BaseService.create(AlbumService, this);
 
-    const albumAddAssets = this.wrap<[id: string, dto: BulkIdsDto]>((authDto, args) =>
+    const searchAlbums = this.wrap<[dto: GetAlbumsDto]>((authDto, _context, args) =>
+      albumService.getAll(authDto, ...args),
+    );
+    const createAlbum = this.wrap<[dto: CreateAlbumDto]>((authDto, _context, args) =>
+      albumService.create(authDto, ...args),
+    );
+    const addAssetsToAlbum = this.wrap<[id: string, dto: BulkIdsDto]>((authDto, _context, args) =>
       albumService.addAssets(authDto, ...args),
     );
-
-    const addAssetsToAlbums = this.wrap<[dto: AlbumsAddAssetsDto]>((authDto, args) =>
+    const addAssetsToAlbums = this.wrap<[dto: AlbumsAddAssetsDto]>((authDto, _context, args) =>
       albumService.addAssetsToAlbums(authDto, ...args),
     );
+    const httpRequest = this.wrap<
+      [
+        url: string,
+        options?: {
+          method?: string;
+          headers?: Record<string, string>;
+          body?: string;
+        },
+      ]
+    >(async (_authDto, context, args) => {
+      const hostname = new URL(args[0]).hostname;
+
+      for (const pattern of context.allowedHosts) {
+        const regex = new RegExp(pattern.replaceAll('.', String.raw`\.`).replaceAll('*', '.*'));
+        if (regex.test(hostname)) {
+          const res = await fetch(...args);
+
+          return {
+            ok: res.ok,
+            status: res.status,
+            body: await res.text(),
+          };
+        }
+      }
+
+      throw new Error('Hostname did not match any listed in methods[].allowedHosts in the plugin manifest');
+    });
 
     const functions = {
-      albumAddAssets,
+      searchAlbums,
+      createAlbum,
+      addAssetsToAlbum,
       addAssetsToAlbums,
+      httpRequest,
     };
 
-    const stubs = {
-      albumAddAssets: dummy,
+    const stubs: typeof functions = {
+      searchAlbums: dummy,
+      createAlbum: dummy,
+      addAssetsToAlbum: dummy,
       addAssetsToAlbums: dummy,
+      httpRequest: dummy,
     };
 
     const plugins = await this.pluginRepository.getForLoad();
@@ -108,7 +150,7 @@ export class WorkflowExecutionService extends BaseService {
     return id + (hostFunctions ? '/worker' : '');
   }
 
-  private wrap<T>(fn: (authDto: AuthDto, args: T) => Promise<unknown>) {
+  private wrap<T>(fn: (authDto: AuthDto, context: HostContext, args: T) => Promise<unknown>) {
     return async (plugin: CurrentPlugin, offset: bigint) => {
       try {
         const handle = plugin.read(offset);
@@ -123,8 +165,9 @@ export class WorkflowExecutionService extends BaseService {
           throw new Error('authToken is required');
         }
 
+        const context = plugin.hostContext<HostContext>();
         const authDto = this.validate(authToken);
-        const response = await fn(authDto, args);
+        const response = await fn(authDto, context, args);
 
         return plugin.store(JSON.stringify({ success: true, response }));
       } catch (error: Error | any) {

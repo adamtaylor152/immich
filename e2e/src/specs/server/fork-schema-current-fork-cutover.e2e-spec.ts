@@ -6,6 +6,7 @@ import {
   LATER_WORKFLOW_MIGRATIONS,
   LEGACY_WORKFLOW_MIGRATION,
   loadState,
+  migrationEvidence,
   OFFICIAL_WORKFLOW_MIGRATION,
   phase,
   saveState,
@@ -52,6 +53,62 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       ),
     );
     const fixture = await withDatabase(async (client) => {
+      await client.query(`UPDATE public.asset SET is_nsfw = true WHERE id = ANY($1::uuid[])`, [
+        [assets[0]!.id, assets[1]!.id],
+      ]);
+      await client.query(
+        `INSERT INTO public.asset_metadata ("assetId", key, value)
+         SELECT id, 'ml-enrichment', jsonb_build_object(
+           'description', jsonb_build_object('status', 'success', 'result', jsonb_build_object(
+             'description', 'certified generated description', 'tags', jsonb_build_array('certified-tag'))),
+           'nsfwDetection', jsonb_build_object('review', jsonb_build_object('suppressed', true, 'reason', 'certification')))
+         FROM public.asset WHERE id = ANY($1::uuid[])
+         ON CONFLICT ("assetId", key) DO UPDATE SET value = EXCLUDED.value`,
+        [[assets[0]!.id, assets[1]!.id]],
+      );
+      await client.query(`UPDATE public.album SET icon = 'star', "sortOrder" = 42.5 WHERE id = $1`, [albums[0]!.id]);
+      await client.query(
+        `INSERT INTO public.smart_album (id, kind, "ownerId", "albumId")
+         VALUES ('60000000-0000-4000-8000-000000000006', 'certified-non-default', $1, $2)`,
+        [admin.userId, albums[0]!.id],
+      );
+      await client.query(
+        `INSERT INTO public.smart_album_asset ("smartAlbumId", "assetId", "matchReason")
+         VALUES ('60000000-0000-4000-8000-000000000006', $1, 'both')`,
+        [assets[0]!.id],
+      );
+      await client.query(
+        `INSERT INTO public.smart_album_exclusion ("smartAlbumId", "assetId")
+         VALUES ('60000000-0000-4000-8000-000000000006', $1)`,
+        [assets[1]!.id],
+      );
+      await client.query(
+        `INSERT INTO public.asset_health_run
+           (id, category, status, "finishedAt", "totalAssets", "checkedAssets", "foundAssets")
+         VALUES ('70000000-0000-4000-8000-000000000007', 'missing', 'completed', now(), 2, 2, 2)`,
+      );
+      for (const [index, asset] of [assets[0]!, assets[1]!].entries()) {
+        await client.query(
+          `INSERT INTO public.asset_health
+             (id, "assetId", "runId", category, status, severity, "originalPath", "originalFileName",
+              evidence, resolution, "checkedAt")
+           VALUES ($1::uuid, $2, '70000000-0000-4000-8000-000000000007', 'missing', 'open', 'warning',
+                   $3, $4, '{"certified":true}', '{"action":"review"}', now())`,
+          [
+            `80000000-0000-4000-8000-00000000000${index + 8}`,
+            asset.id,
+            `/certified/${index}.png`,
+            `certified-${index}.png`,
+          ],
+        );
+        await client.query(
+          `INSERT INTO public.asset_best_photo_score
+             ("assetId", "ownerId", score, "aestheticScore", "technicalScore", "subjectScore", "diversityScore",
+              "scoreVersion", "computedAt", metadata)
+           VALUES ($1, $2, 0.91, 0.82, 0.73, 0.64, 0.55, 7, now(), '{"certified":true}')`,
+          [asset.id, admin.userId],
+        );
+      }
       await client.query(
         `INSERT INTO public.plugin
           (id, enabled, name, version, title, description, author, "wasmBytes", "createdAt", "updatedAt")
@@ -131,6 +188,9 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       albumId: albums[0]!.id,
       assetCount: fixture.assets,
       assetId: assets[0]!.id,
+      assetIds: assets.map(({ id }) => id),
+      deletedAssetId: assets[1]!.id,
+      albumIds: albums.map(({ id }) => id),
       evidence,
       workflowId: '30000000-0000-4000-8000-000000000003',
     });
@@ -143,9 +203,10 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     let stableSnapshots = 0;
 
     for (let attempt = 0; attempt < 600 && stableSnapshots < 5; attempt++) {
-      const queues = await api<
-        Record<string, { jobCounts: { active: number; delayed: number; waiting: number } }>
-      >('/jobs', { headers: authHeaders(admin.accessToken) });
+      const queues = await api<Record<string, { jobCounts: { active: number; delayed: number; waiting: number } }>>(
+        '/jobs',
+        { headers: authHeaders(admin.accessToken) },
+      );
       const busyQueues = Object.entries(queues).filter(
         ([, { jobCounts }]) => jobCounts.active > 0 || jobCounts.delayed > 0 || jobCounts.waiting > 0,
       );
@@ -188,6 +249,31 @@ describe.runIf(phase === 'current-fork-cutover')(`${lane}: locked cutover`, () =
       );
       expect(item.digest).toMatch(/^[\da-f]{64}$/);
     }
+    const fullState = await loadState<any>(lane);
+    const retainedAssetIds = fullState.assetIds.filter((id: string) => id !== fullState.deletedAssetId);
+    const certification = {
+      deleted: await migrationEvidence(
+        fullState.assetIds,
+        fullState.albumIds,
+        fullState.deletedAssetId,
+        fullState.albumId,
+      ),
+      retained: await migrationEvidence(retainedAssetIds, fullState.albumIds, fullState.assetId, fullState.albumId),
+    };
+    expect(certification.retained.families.privacy).toEqual([
+      expect.objectContaining({ assetId: fullState.assetId, isNsfw: true }),
+    ]);
+    expect(certification.retained.families.enrichment).toEqual([
+      expect.objectContaining({ assetId: fullState.assetId, generatedDescription: 'certified generated description' }),
+    ]);
+    expect(certification.retained.families.albums.metadata).toEqual([
+      expect.objectContaining({ albumId: fullState.albumId, icon: 'star', sortOrder: 42.5 }),
+    ]);
+    expect(certification.retained.families.automation.matches).toHaveLength(1);
+    expect(certification.retained.families.health.findings).toHaveLength(1);
+    expect(certification.retained.families.storage.mappings).toHaveLength(1);
+    expect(certification.retained.families.checksum).toHaveLength(1);
+    await saveState(lane, { ...fullState, certification });
   });
 });
 

@@ -32,7 +32,15 @@ export VITEST_DISABLE_DOCKER_SETUP=true
 compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
 phase() {
   local name="$1" spec="$2"
-  FORK_ROUNDTRIP_PHASE="$name" pnpm --dir "$ROOT" --filter immich-e2e exec vitest --run "$spec"
+  local log="$STATE_DIR/$name.log" status
+  set +e
+  FORK_ROUNDTRIP_PHASE="$name" pnpm --dir "$ROOT" --filter immich-e2e exec vitest --run "$spec" 2>&1 | tee "$log"
+  status="${PIPESTATUS[0]}"
+  set -e
+  if [[ "$status" -ne 0 ]]; then
+    echo "Phase $name failed; durable output: $log" >&2
+    return "$status"
+  fi
 }
 wait_healthy() {
   local service="$1" id status
@@ -61,10 +69,11 @@ reset_lane() {
 start_official() {
   compose up -d official-server
   wait_healthy official-server
-  local id
+  local id logs
   id="$(compose ps -q official-server)"
   for _ in {1..120}; do
-    docker logs "$id" 2>&1 | grep -q 'Immich Microservices is running' && return 0
+    logs="$(docker logs --since 5m "$id" 2>&1)"
+    grep -Fq 'Immich Microservices is running' <<<"$logs" && return 0
     sleep 1
   done
   docker logs "$id" >&2
@@ -76,13 +85,37 @@ start_fork() {
   compose up -d fork-server
   wait_healthy fork-server
 }
+start_fork_normal() {
+  start_fork
+  local id logs
+  id="$(compose ps -q fork-server)"
+  for _ in {1..120}; do
+    logs="$(docker logs --since 5m "$id" 2>&1)"
+    grep -Fq 'Immich Microservices is running' <<<"$logs" && return 0
+    sleep 1
+  done
+  docker logs "$id" >&2
+  echo 'fork-server microservices did not become ready after return' >&2
+  return 1
+}
 stop_fork() { compose stop fork-server; }
 psql_sql() { compose exec -T database psql -v ON_ERROR_STOP=1 -U postgres -d immich "$@"; }
 admin() { compose exec -T fork-server immich-admin "$@"; }
 
 cleanup() {
+  if [[ "${FORK_ROUNDTRIP_KEEP_ON_FAILURE:-false}" == true && "${roundtrip_failed:-false}" == true ]]; then
+    echo 'Preserving fork-roundtrip containers after failure for diagnosis' >&2
+    return
+  fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
+on_error() {
+  local status="$?"
+  roundtrip_failed=true
+  echo "Roundtrip failed with status $status at line ${BASH_LINENO[0]}: ${BASH_COMMAND}" >&2
+  exit "$status"
+}
+trap on_error ERR
 trap cleanup EXIT
 
 echo "Pulling exact official image ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"
@@ -273,7 +306,10 @@ echo 'Lane: official-v3.0.3-to-fork-return'
 # Seed the origin state file with the current auth/workflow identifiers used by
 # the official API phase.
 cp "$STATE_DIR/current-fork-to-official-v3.0.3.json" "$STATE_DIR/origin-v3.0.3-to-fork.json"
-phase official-operations src/specs/server/fork-schema-roundtrip.e2e-spec.ts
+phase official-operations-before-restart src/specs/server/fork-schema-roundtrip.e2e-spec.ts
+stop_official
+start_official
+phase official-operations-after-restart src/specs/server/fork-schema-roundtrip.e2e-spec.ts
 official_token="$(jq -r '.admin.accessToken' "$STATE_DIR/origin-v3.0.3-to-fork.json")"
 curl --fail --silent --show-error \
   --request POST \
@@ -291,7 +327,33 @@ stop_official
 export FORK_IMMICH_ENV=production FORK_DB_SKIP_MIGRATIONS=false FORK_WORKERS_INCLUDE=api,microservices
 # Startup validates the exact official ledger before any provider runs.
 start_fork
-admin fork-handoff prepare-fork --batch-size 1
+set +e
+fork_return_output="$(admin fork-handoff prepare-fork --batch-size 1 2>&1)"
+fork_return_code=$?
+set -e
+echo "$fork_return_output"
+[[ "$fork_return_code" -eq 0 ]] || exit "$fork_return_code"
+grep -q '^Error:' <<<"$fork_return_output" && exit 1
+jq -e '
+  .active == true
+  and .phase == "active"
+  and .schemaVersion == "2"
+  and .reconciliationStatus == "complete"
+  and .verified == true
+  and (.progress | length == 7)
+  and all(.progress[]; .remaining == 0 and .cursor == null and .lastError == null)
+' <<<"$fork_return_output" >/dev/null || { echo 'Fork return did not report completed activation' >&2; exit 1; }
+stop_fork
+set +e
+maintenance_output="$(compose run --rm --no-deps --entrypoint immich-admin fork-server disable-maintenance-mode 2>&1)"
+maintenance_code=$?
+set -e
+echo "$maintenance_output"
+[[ "$maintenance_code" -eq 0 ]] || exit "$maintenance_code"
+grep -q '^Error:' <<<"$maintenance_output" && exit 1
+fork_maintenance="$(psql_sql -Atc "SELECT coalesce((value->>'isMaintenanceMode')::boolean, false) FROM public.system_metadata WHERE key = 'maintenance-mode'")"
+[[ "$fork_maintenance" == f ]] || { echo 'Fork return did not leave maintenance mode' >&2; exit 1; }
+start_fork_normal
 phase fork-return src/specs/server/fork-schema-roundtrip.e2e-spec.ts
 fi
 fi
