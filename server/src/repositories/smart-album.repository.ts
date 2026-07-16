@@ -3,7 +3,7 @@ import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash, randomUUID } from 'node:crypto';
 import { AlbumUserRole } from 'src/enum';
-import { isForkAuthoritative, isLegacyAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled, isLegacyAuthoritative } from 'src/fork-schema/authority';
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
@@ -45,6 +45,9 @@ export class SmartAlbumRepository {
         // chain. The final INSERT references both `new_album` and `new_album_owner`
         // so PostgreSQL is forced to execute every data-modifying CTE.
         const phase = await this.getPhase(trx);
+        if (!isLegacyAuthoritative(phase) && !isForkWriteEnabled(phase)) {
+          return;
+        }
         const album = await trx
           .with('new_album', (qb) => qb.insertInto('album').values({ albumName: name }).returning('id'))
           .with('new_album_owner', (qb) =>
@@ -70,10 +73,10 @@ export class SmartAlbumRepository {
             .values({ albumId: album.albumId, ownerId, kind })
             .returning('id')
             .executeTakeFirstOrThrow();
-          if (phase !== 'legacy') {
+          if (isForkWriteEnabled(phase)) {
             await this.upsertRule(rule.id, album.albumId, ownerId, kind, trx);
           }
-        } else {
+        } else if (isForkWriteEnabled(phase)) {
           await this.upsertRule(randomUUID(), album.albumId, ownerId, kind, trx);
         }
       });
@@ -179,6 +182,9 @@ export class SmartAlbumRepository {
   ): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
+      if (!isLegacyAuthoritative(phase) && !isForkWriteEnabled(phase)) {
+        return;
+      }
       const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
 
       if (!smartAlbum) {
@@ -197,7 +203,7 @@ export class SmartAlbumRepository {
           .onConflict((oc) => oc.columns(['smartAlbumId', 'assetId']).doUpdateSet({ matchReason }))
           .execute();
       }
-      if (phase !== 'legacy') {
+      if (isForkWriteEnabled(phase)) {
         await sql`INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason") VALUES (${smartAlbumId}::uuid, ${assetId}::uuid, ${matchReason}) ON CONFLICT ("smartAlbumId", "assetId") DO UPDATE SET "matchReason" = EXCLUDED."matchReason"`.execute(
           trx,
         );
@@ -224,6 +230,9 @@ export class SmartAlbumRepository {
   async removeAssetFromSmartAlbum(smartAlbumId: string, assetId: string): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
+      if (!isLegacyAuthoritative(phase) && !isForkWriteEnabled(phase)) {
+        return;
+      }
       const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
 
       if (smartAlbum) {
@@ -241,7 +250,7 @@ export class SmartAlbumRepository {
           .where('assetId', '=', assetId)
           .execute();
       }
-      if (phase !== 'legacy') {
+      if (isForkWriteEnabled(phase)) {
         await sql`DELETE FROM immich_fork.smart_album_match WHERE "smartAlbumId" = ${smartAlbumId}::uuid AND "assetId" = ${assetId}::uuid`.execute(
           trx,
         );
@@ -278,6 +287,9 @@ export class SmartAlbumRepository {
   async excludeAsset(smartAlbumId: string, assetId: string): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
+      if (!isLegacyAuthoritative(phase) && !isForkWriteEnabled(phase)) {
+        return;
+      }
       const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
       if (!smartAlbum) {
         return;
@@ -289,7 +301,7 @@ export class SmartAlbumRepository {
           .onConflict((oc) => oc.doNothing())
           .execute();
       }
-      if (phase !== 'legacy') {
+      if (isForkWriteEnabled(phase)) {
         await sql`INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId") VALUES (${smartAlbumId}::uuid, ${assetId}::uuid) ON CONFLICT DO NOTHING`.execute(
           trx,
         );
@@ -308,7 +320,7 @@ export class SmartAlbumRepository {
           .where('assetId', '=', assetId)
           .execute();
       }
-      if (phase !== 'legacy') {
+      if (isForkWriteEnabled(phase)) {
         await sql`DELETE FROM immich_fork.smart_album_match WHERE "smartAlbumId" = ${smartAlbumId}::uuid AND "assetId" = ${assetId}::uuid`.execute(
           trx,
         );
@@ -370,7 +382,7 @@ export class SmartAlbumRepository {
   }
 
   async deleteAssets(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
-    if (assetIds.length === 0) {
+    if (assetIds.length === 0 || !isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
     await sql`DELETE FROM immich_fork.smart_album_match WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
@@ -378,7 +390,7 @@ export class SmartAlbumRepository {
   }
 
   async deleteAlbums(albumIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
-    if (albumIds.length === 0) {
+    if (albumIds.length === 0 || !isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
     const rules = await sql<{ id: string }>`
@@ -395,6 +407,9 @@ export class SmartAlbumRepository {
   }
 
   async deleteOwner(ownerId: string, kysely: Kysely<DB> = this.db): Promise<void> {
+    if (!isForkWriteEnabled(await this.getPhase(kysely))) {
+      return;
+    }
     const rules = await sql<{ albumId: string }>`
       SELECT "albumId"::text AS "albumId" FROM immich_fork.smart_album_rule WHERE "ownerId" = ${ownerId}::uuid
     `.execute(kysely);

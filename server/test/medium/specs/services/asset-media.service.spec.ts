@@ -22,7 +22,7 @@ import { ImmichFileResponse } from 'src/utils/file';
 import { upsertTags } from 'src/utils/tag';
 import { mediumFactory, newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
-import { getKyselyDB } from 'test/utils';
+import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
 

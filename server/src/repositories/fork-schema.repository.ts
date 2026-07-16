@@ -3,7 +3,7 @@ import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { randomUUID } from 'node:crypto';
 import { SystemConfig } from 'src/config';
-import { isForkAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authority';
 import { DB } from 'src/schema';
 import { DeepPartial } from 'src/types';
 
@@ -90,7 +90,7 @@ export class ForkSchemaRepository {
 
   async mirrorConfig(config: SystemConfig): Promise<void> {
     const state = await this.getState();
-    if (state.phase === 'legacy') {
+    if (!isForkWriteEnabled(state.phase)) {
       return;
     }
     await this.db.transaction().execute(async (trx) => {
@@ -116,7 +116,7 @@ export class ForkSchemaRepository {
         INSERT INTO system_metadata (key, value) VALUES ('system-config', ${partialConfig}::jsonb)
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
       `.execute(trx);
-      if (state.rows[0].phase !== 'legacy') {
+      if (isForkWriteEnabled(state.rows[0].phase)) {
         for (const [key, value] of [
           ['machineLearning.runpod', config.machineLearning.runpod],
           ['smartAlbums', config.smartAlbums],
@@ -157,6 +157,9 @@ export class ForkSchemaRepository {
   }
 
   async transitionPhase(expected: ForkSchemaPhase, next: ForkSchemaPhase): Promise<boolean> {
+    if (next === 'active') {
+      throw new Error('Fork schema activation requires return reconciliation');
+    }
     const transitioned = await this.db.transaction().execute(async (trx) => {
       const lockedState = await sql<{ phase: ForkSchemaPhase }>`
         SELECT phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
@@ -171,7 +174,7 @@ export class ForkSchemaRepository {
 
       await sql`
         UPDATE immich_fork.state
-        SET active = ${next === 'active'}, phase = ${next}, "updatedAt" = now()
+        SET active = false, phase = ${next}, "updatedAt" = now()
         WHERE id = 1
       `.execute(trx);
       return true;

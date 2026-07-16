@@ -5,7 +5,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { SystemConfig } from 'src/config';
 import { SystemConfigSchema } from 'src/dtos/system-config.dto';
-import { isForkAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authority';
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
@@ -53,18 +53,18 @@ export class ForkConfigRepository {
         { key: 'smartAlbums', value: config.smartAlbums ?? {} },
       ];
       for (const row of values) {
-        await this.set(row.key, row.value, trx, true);
+        await this.writeReconciliationConfig(row.key, row.value, trx);
       }
       return { count: values.length, digest: digest(values) };
     });
   }
 
   async mirrorConfig(config: Record<string, any>, kysely: Kysely<DB> = this.db): Promise<void> {
-    if ((await this.getPhase(kysely)) === 'legacy') {
+    if (!isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
-    await this.set('machineLearning.runpod', config.machineLearning?.runpod ?? {}, kysely, true);
-    await this.set('smartAlbums', config.smartAlbums ?? {}, kysely, true);
+    await this.writeSidecarConfig('machineLearning.runpod', config.machineLearning?.runpod ?? {}, kysely);
+    await this.writeSidecarConfig('smartAlbums', config.smartAlbums ?? {}, kysely);
   }
 
   async get(key: string, kysely: Kysely<DB> = this.db): Promise<unknown> {
@@ -79,10 +79,11 @@ export class ForkConfigRepository {
     return isForkAuthoritative(phase);
   }
 
-  private async set(key: string, value: unknown, kysely: Kysely<DB>, force: boolean) {
-    if (!force && (await this.getPhase(kysely)) === 'legacy') {
-      return;
-    }
+  private async writeReconciliationConfig(key: string, value: unknown, kysely: Kysely<DB>) {
+    await this.writeSidecarConfig(key, value, kysely);
+  }
+
+  private async writeSidecarConfig(key: string, value: unknown, kysely: Kysely<DB>) {
     await sql`INSERT INTO immich_fork.config (key, value) VALUES (${key}, ${value}::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()`.execute(kysely);
   }

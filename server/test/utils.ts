@@ -4,7 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { transformException } from '@nestjs/platform-express/multer/multer/multer.utils';
 import { Test } from '@nestjs/testing';
 import { NextFunction } from 'express';
-import { Kysely } from 'kysely';
+import { Kysely, sql as kyselySql } from 'kysely';
 import multer from 'multer';
 import { ClsService } from 'nestjs-cls';
 import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
@@ -476,6 +476,12 @@ export const getKyselyDB = async (suffix?: string): Promise<Kysely<DB>> => {
   await sql.unsafe(`CREATE DATABASE ${dbName} WITH TEMPLATE ${templateName} OWNER postgres;`);
 
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url: withDatabase(testUrl, dbName) }));
+};
+
+export const getActiveForkKyselyDB = async (suffix?: string): Promise<Kysely<DB>> => {
+  const db = await getKyselyDB(suffix);
+  await kyselySql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
+  return db;
 };
 
 export const newRandomImage = () => {

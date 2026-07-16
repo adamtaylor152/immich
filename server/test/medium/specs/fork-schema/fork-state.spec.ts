@@ -287,6 +287,9 @@ describe(ForkSchemaRepository.name, () => {
     await expect(repository.activateAfterReturnReconciliation()).rejects.toThrow(
       'Cannot activate fork schema with incomplete backfills',
     );
+    await expect(repository.transitionPhase('inactive', 'active')).rejects.toThrow(
+      'Fork schema activation requires return reconciliation',
+    );
     await expect(repository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
 
     await sql`UPDATE immich_fork.backfill_progress SET remaining = 0 WHERE kind = 'privacy'`.execute(db);

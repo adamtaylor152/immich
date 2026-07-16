@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
-import { isForkAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authority';
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
@@ -44,14 +44,14 @@ export class ForkEnrichmentRepository {
   }
 
   async mirrorFromLegacy(assetId: string, kysely: Kysely<DB> = this.db): Promise<void> {
-    if ((await this.getPhase(kysely)) === 'legacy') {
+    if (!isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
     await this.backfill([assetId], kysely);
   }
 
   async initialize(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
-    if (assetIds.length === 0 || (await this.getPhase(kysely)) === 'legacy') {
+    if (assetIds.length === 0 || !isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
     await sql`
@@ -62,7 +62,7 @@ export class ForkEnrichmentRepository {
   }
 
   async delete(assetIds: string[], kysely: Kysely<DB> = this.db): Promise<void> {
-    if (assetIds.length > 0) {
+    if (assetIds.length > 0 && isForkWriteEnabled(await this.getPhase(kysely))) {
       await sql`DELETE FROM immich_fork.asset_enrichment WHERE "assetId" = ANY(${assetIds}::uuid[])`.execute(kysely);
     }
   }
@@ -78,7 +78,7 @@ export class ForkEnrichmentRepository {
 
   async save(assetId: string, provenance: Record<string, unknown>, kysely: Kysely<DB> = this.db): Promise<void> {
     const phase = await this.getPhase(kysely);
-    if (phase === 'legacy') {
+    if (!isForkWriteEnabled(phase)) {
       return;
     }
     const existing = await this.get(assetId, kysely);
