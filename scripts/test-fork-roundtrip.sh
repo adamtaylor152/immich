@@ -133,6 +133,14 @@ expected_official_digest="ghcr.io/immich-app/immich-server@$manifest_digest"
   exit 1
 }
 echo "Official image digest: $official_digest"
+official_architecture="$(docker image inspect "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG" --format '{{.Architecture}}')"
+expected_official_core_digest="$(node -e '
+  const manifest = require(process.argv[1]);
+  const architecture = process.argv[2];
+  const digest = manifest.certification?.officialCorePluginDigests?.[architecture];
+  if (!/^[0-9a-f]{64}$/.test(digest)) process.exit(2);
+  process.stdout.write(digest);
+' "$ROOT/server/src/fork-schema/supported-versions.json" "$official_architecture")"
 
 compose build fork-server
 
@@ -195,8 +203,8 @@ official_core_container="$(docker create "ghcr.io/immich-app/immich-server:$OFFI
 docker cp "$official_core_container:/build/plugins/immich-plugin-core/dist/plugin.wasm" "$STATE_DIR/immich-plugin-core-v3.0.3.wasm"
 docker rm "$official_core_container" >/dev/null
 official_core_digest="$(node -e "const fs=require('node:fs'),crypto=require('node:crypto'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$STATE_DIR/immich-plugin-core-v3.0.3.wasm")"
-[[ "$official_core_digest" == ce2156934a9ce62010b93f551a6963f46668fdcda1aecb14a0b19cc1bdd8afed ]] || {
-  echo "Unexpected v3.0.3 core plugin digest: $official_core_digest" >&2
+[[ "$official_core_digest" == "$expected_official_core_digest" ]] || {
+  echo "Unexpected v3.0.3 $official_architecture core plugin digest: expected $expected_official_core_digest, received $official_core_digest" >&2
   exit 1
 }
 docker cp "$STATE_DIR/immich-plugin-core-v3.0.3.wasm" "$(compose ps -q database):/tmp/immich-plugin-core-v3.0.3.wasm"

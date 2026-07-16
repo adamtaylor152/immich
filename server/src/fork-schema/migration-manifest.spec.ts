@@ -34,6 +34,13 @@ it('rejects an unsupported upstream version', () => {
 });
 
 describe(assertReleaseManifest, () => {
+  it('pins the certified core plugin for every official image architecture', () => {
+    expect(supportedVersions.certification.officialCorePluginDigests).toEqual({
+      amd64: '7498177fc72f9a9cfa17ab99141c6ccaea6d1720988bfc2ee0fe85a9b2db92c0',
+      arm64: 'ce2156934a9ce62010b93f551a6963f46668fdcda1aecb14a0b19cc1bdd8afed',
+    });
+  });
+
   it('certifies the current server version and exact bundled official migration provider', async () => {
     const migrationFolder = resolve('src/schema/migrations');
     const bundledMigrations = Object.keys(
