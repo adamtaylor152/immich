@@ -18,6 +18,15 @@ export type HandoffCheckpoint = {
   schemaVersion: '2';
 };
 
+export type CutoverCheckpointOptions = {
+  databaseBackupId: string;
+  mediaSnapshotId: string;
+};
+
+export type ApplyCutoverOptions = CutoverCheckpointOptions & {
+  reportDigest: string;
+};
+
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map((item) => canonicalize(item));
@@ -36,6 +45,8 @@ export const cutoverReportDigest = (evidence: ForkSchemaCutoverEvidence): string
   createHash('sha256')
     .update(JSON.stringify(canonicalize(evidence)))
     .digest('hex');
+
+export const canonicalCutoverJson = (value: unknown): string => JSON.stringify(canonicalize(value));
 
 const getBlockers = (
   evidence: ForkSchemaCutoverEvidence,
@@ -133,42 +144,34 @@ const getBlockers = (
   return blockers;
 };
 
-const checkpointIds = (databaseBackupId: string, mediaSnapshotId: string) => {
-  const backup = databaseBackupId.trim();
-  const snapshot = mediaSnapshotId.trim();
-  if (!backup) {
+const checkpointIds = ({ databaseBackupId, mediaSnapshotId }: CutoverCheckpointOptions) => {
+  if (!databaseBackupId?.trim()) {
     throw new Error('Database backup ID is required');
   }
-  if (!snapshot) {
+  if (!mediaSnapshotId?.trim()) {
     throw new Error('Media snapshot ID is required');
   }
-  return { databaseBackupId: backup, mediaSnapshotId: snapshot };
+  return { databaseBackupId, mediaSnapshotId };
 };
 
 @Injectable()
 export class ForkSchemaCutoverService extends BaseService {
-  async preflight(databaseBackupId: string, mediaSnapshotId: string): Promise<CutoverReport> {
-    const checkpoint = checkpointIds(databaseBackupId, mediaSnapshotId);
+  async preflight(options: CutoverCheckpointOptions): Promise<CutoverReport> {
+    const checkpoint = checkpointIds(options);
     const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(undefined, checkpoint);
     const blockers = getBlockers(evidence, checkpoint);
     return { ...evidence, blockers, digest: cutoverReportDigest(evidence), ready: blockers.length === 0 };
   }
 
-  async apply(
-    expectedReportDigest: string,
-    databaseBackupId: string,
-    mediaSnapshotId: string,
-  ): Promise<HandoffCheckpoint> {
-    if (!expectedReportDigest) {
-      throw new Error('Expected preflight report digest is required');
+  async apply(options: ApplyCutoverOptions): Promise<HandoffCheckpoint> {
+    const expectedReportDigest = options.reportDigest?.trim() ?? '';
+    if (!/^[\da-f]{64}$/.test(expectedReportDigest)) {
+      throw new Error('Expected preflight report digest must be a lowercase SHA-256 digest');
     }
-    const checkpointIdsForApply = checkpointIds(databaseBackupId, mediaSnapshotId);
+    const checkpointIdsForApply = checkpointIds(options);
 
     return this.databaseRepository.withLock(DatabaseLock.Migrations, async () => {
-      const lockedReport = await this.preflight(
-        checkpointIdsForApply.databaseBackupId,
-        checkpointIdsForApply.mediaSnapshotId,
-      );
+      const lockedReport = await this.preflight(checkpointIdsForApply);
       if (lockedReport.digest !== expectedReportDigest) {
         throw new Error(
           `Fork schema cutover preflight changed: expected ${expectedReportDigest}, received ${lockedReport.digest}`,
@@ -180,7 +183,6 @@ export class ForkSchemaCutoverService extends BaseService {
 
       const checkpoint = await this.databaseRepository.commitForkSchemaCutover(
         expectedReportDigest,
-        lockedReport.installationClass,
         async (transaction) => {
           const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(
             transaction,
@@ -196,6 +198,7 @@ export class ForkSchemaCutoverService extends BaseService {
           if (blockers.length > 0) {
             throw new Error(blockers[0]);
           }
+          return evidence;
         },
       );
 

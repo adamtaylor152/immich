@@ -96,6 +96,31 @@ const LEGACY_TRIGGER_NAMES = new Set([
   'album_parent_cycle_check_trigger',
 ]);
 
+const LEGACY_MIGRATION_OVERRIDE_NAMES = new Set([
+  'function_album_parent_cycle_check',
+  'index_album_parentId_idx',
+  'index_album_parent_sort_idx',
+  'index_album_root_sort_idx',
+  'index_idx_asset_exif_description_trigram',
+  'index_idx_asset_is_nsfw',
+  'trigger_album_parent_cycle_check_trigger',
+  'trigger_asset_health_candidate_updatedAt',
+  'trigger_asset_health_updatedAt',
+  'trigger_asset_video_duplicate_frame_updatedAt',
+  'trigger_physical_file_updatedAt',
+]);
+
+export const FORK_SCHEMA_CUTOVER_MUTATION_STAGES = [
+  'workflow-alias',
+  'legacy-ledger-audit',
+  'legacy-ledger-delete',
+  'legacy-artifact-shutdown',
+  'state-transition',
+  'checkpoint-audit',
+] as const;
+
+export type ForkSchemaCutoverMutationStage = (typeof FORK_SCHEMA_CUTOVER_MUTATION_STAGES)[number];
+
 export type ForkSchemaCutoverEvidence = {
   activeWrites: number;
   backfills: Array<{
@@ -869,13 +894,17 @@ export class DatabaseRepository {
 
   async commitForkSchemaCutover(
     reportDigest: string,
-    installationClass: ForkSchemaCutoverEvidence['installationClass'],
-    verify: (transaction: Kysely<DB>) => Promise<void>,
+    verify: (transaction: Kysely<DB>) => Promise<ForkSchemaCutoverEvidence | void>,
   ): Promise<ForkSchemaCutoverCheckpoint> {
     return this.db
       .transaction()
       .setIsolationLevel('serializable')
       .execute(async (transaction) => {
+        const classification = await sql<{ currentFork: boolean }>`
+          SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
+        `.execute(transaction);
+        const installationClass: ForkSchemaCutoverEvidence['installationClass'] =
+          classification.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
         const lockTables = getCatalogTableLocks(expectedCatalogFor(installationClass))
           .map((table) =>
             table
@@ -885,12 +914,16 @@ export class DatabaseRepository {
           )
           .join(', ');
         await sql.raw(`LOCK TABLE ${lockTables} IN SHARE ROW EXCLUSIVE MODE`).execute(transaction);
-        await verify(transaction);
+        const verifiedEvidence = await verify(transaction);
+        if (verifiedEvidence && verifiedEvidence.installationClass !== installationClass) {
+          throw new Error('Fork schema cutover installation classification changed under lock');
+        }
 
         const workflowCompatibility = classifyWorkflowCompatibility(
           await getWorkflowCompatibilityEvidence(transaction),
         );
         await aliasLegacyWorkflowMigration(transaction, workflowCompatibility, reportDigest);
+        await this.afterForkSchemaCutoverStage(transaction, 'workflow-alias');
 
         const legacy = await sql<{ name: string; timestamp: string }>`
           SELECT name, timestamp
@@ -914,9 +947,11 @@ export class DatabaseRepository {
             )
           `.execute(transaction);
         }
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-ledger-audit');
         await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[
           ...GENERIC_LEGACY_FORK_MIGRATIONS,
         ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-ledger-delete');
         const legacyTriggers = await sql<{ name: string; schemaName: string; tableName: string }>`
           SELECT trigger.tgname AS name, namespace.nspname AS "schemaName", relation.relname AS "tableName"
           FROM pg_trigger trigger
@@ -934,6 +969,10 @@ export class DatabaseRepository {
             )
             .execute(transaction);
         }
+        await sql`DELETE FROM public.migration_overrides WHERE name = ANY(${[
+          ...LEGACY_MIGRATION_OVERRIDE_NAMES,
+        ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-artifact-shutdown');
 
         const committedAt = new Date().toISOString();
         const state = await sql<{ id: number }>`
@@ -950,22 +989,44 @@ export class DatabaseRepository {
         if (!state.rows[0]) {
           throw new Error('Fork schema cutover requires ready phase');
         }
+        await this.afterForkSchemaCutoverStage(transaction, 'state-transition');
+        const storage = verifiedEvidence?.storageVerification;
         await sql`
           INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
           VALUES (
             'fork-schema-cutover',
             'official-cutover',
             'applied',
-            jsonb_build_object('reportDigest', ${reportDigest}::text),
+            jsonb_build_object(
+              'reportDigest', ${reportDigest}::text,
+              'installationClass', ${installationClass}::text,
+              'databaseBackupId', ${storage?.databaseBackupId ?? null}::text,
+              'mediaSnapshotId', ${storage?.mediaSnapshotId ?? null}::text,
+              'storageVerificationRunId', ${storage?.runId ?? null}::text,
+              'storageVerificationDigest', ${storage?.aggregateDigest ?? null}::text,
+              'storageVerificationAssetCount', ${storage?.assetCount ?? null}::int,
+              'workflowMode', ${verifiedEvidence?.workflowCompatibility.mode ?? workflowCompatibility.mode}::text,
+              'workflowSchemaDigest', ${
+                verifiedEvidence?.workflowCompatibility.schemaDigest ?? workflowCompatibility.schemaDigest
+              }::text
+            ),
             now()
           )
         `.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'checkpoint-audit');
         await this.finishForkSchemaCutover(transaction);
         return { committedAt, phase: 'inactive', reportDigest, schemaVersion: '2' };
       });
   }
 
   protected finishForkSchemaCutover(_transaction: Kysely<DB>): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected afterForkSchemaCutoverStage(
+    _transaction: Kysely<DB>,
+    _stage: ForkSchemaCutoverMutationStage,
+  ): Promise<void> {
     return Promise.resolve();
   }
 

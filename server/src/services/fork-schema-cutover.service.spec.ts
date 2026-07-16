@@ -1,37 +1,62 @@
 import { DatabaseLock } from 'src/enum';
+import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
+import { GENERIC_LEGACY_FORK_MIGRATIONS, SUPPORTED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { LEGACY_WORKFLOW_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
+import { ForkSchemaCutoverEvidence } from 'src/repositories/database.repository';
+import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { newTestService } from 'test/utils';
 
-const evidence = () => ({
+const SHA256_A = 'a'.repeat(64);
+const SHA256_B = 'b'.repeat(64);
+const checkpointOptions = { databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' };
+const currentForkLedger = [
+  ...SUPPORTED_UPSTREAM_MIGRATIONS.map((name) =>
+    name === OFFICIAL_WORKFLOW_MIGRATION ? LEGACY_WORKFLOW_MIGRATION : name,
+  ),
+  ...GENERIC_LEGACY_FORK_MIGRATIONS,
+].map((name, index) => ({
+  classification: (SUPPORTED_UPSTREAM_MIGRATIONS.includes(name) ? 'upstream' : 'legacy-fork') as
+    | 'legacy-fork'
+    | 'upstream',
+  name,
+  timestamp: new Date(Date.UTC(2026, 6, 15, 0, 0, index)).toISOString(),
+}));
+
+const evidence = (): ForkSchemaCutoverEvidence => ({
   activeWrites: 0,
-  backfills: [],
+  backfills: BACKFILL_KINDS.map((kind) => ({
+    claimToken: null,
+    claimedCursor: null,
+    claimedIds: [],
+    cursor: null,
+    digest: SHA256_A,
+    kind,
+    lastError: null,
+    processed: 1,
+    remaining: 0,
+  })),
   backfillKindsValid: true,
   catalogDiff: { clean: true, mismatched: [], missing: [], unexpected: [] },
   checksumCoverage: {
-    applicableCount: 0,
-    applicableDigest: 'empty',
+    applicableCount: 1,
+    applicableDigest: SHA256_A,
     invalidCount: 0,
-    sidecarCount: 0,
-    sidecarDigest: 'empty',
+    sidecarCount: 1,
+    sidecarDigest: SHA256_A,
     valid: true,
   },
   checksumFailures: 0,
   forkLedgerValid: true,
-  forkMigrations: ['0000000000000-ForkSchemaBaseline'],
+  forkMigrations: forkCatalogManifest.forkMigrations,
   installationClass: 'current-fork' as const,
-  ledger: [
-    {
-      classification: 'legacy-fork' as const,
-      name: '1778000000000-PhysicalDeduplication',
-      timestamp: '2026-07-15T00:00:00.000Z',
-    },
-  ],
+  ledger: currentForkLedger,
   maintenanceMode: true,
   mappingCoverage: {
-    mappingCount: 0,
-    mappingDigest: 'empty',
-    normalizedCount: 0,
-    normalizedDigest: 'empty',
+    mappingCount: 1,
+    mappingDigest: SHA256_A,
+    normalizedCount: 1,
+    normalizedDigest: SHA256_A,
     unsafeCount: 0,
     valid: true,
   },
@@ -43,31 +68,81 @@ const evidence = () => ({
     runId: '00000000-0000-4000-8000-000000000001',
     databaseBackupId: 'backup-1',
     mediaSnapshotId: 'snapshot-1',
-    assetCount: 0,
-    aggregateDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    evidenceAggregateDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    evidenceAssetCount: 0,
+    assetCount: 1,
+    aggregateDigest: SHA256_B,
+    evidenceAggregateDigest: SHA256_B,
+    evidenceAssetCount: 1,
     failureCount: 0,
     rootDriftCount: 0,
-    verifiedCount: 0,
+    verifiedCount: 1,
     completedAt: new Date().toISOString(),
   },
-  tableEvidence: [],
+  tableEvidence: forkCatalogManifest.tables.map(({ identity }) => ({
+    count: ['public.plugin', 'public.plugin_method', 'public.workflow', 'public.workflow_step'].includes(identity)
+      ? 1
+      : 0,
+    digest: 'c'.repeat(32),
+    table: identity,
+  })),
   unsafePhysicalMappings: 0,
   workflowCompatibility: {
     mode: 'legacy-alias' as const,
-    rowDigests: [],
-    schemaDigest: 'workflow-schema',
+    rowDigests: (['plugin', 'plugin_method', 'workflow', 'workflow_step'] as const).map((table) => ({
+      count: 1,
+      digest: SHA256_A,
+      table: `public.${table}` as const,
+    })),
+    schemaDigest: SHA256_B,
     timestamp: '2026-07-15T00:00:00.000Z',
   },
 });
 
 describe(ForkSchemaCutoverService.name, () => {
+  it('accepts the complete options object and returns the complete positive contract', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+    mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue(evidence());
+
+    const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
+
+    expect(report).toMatchObject({
+      backfillKindsValid: true,
+      catalogDiff: { clean: true },
+      forkLedgerValid: true,
+      installationClass: 'current-fork',
+      maintenanceMode: true,
+      ready: true,
+      state: { phase: 'ready', schemaVersion: '1', upstreamVersion: '3.0.3' },
+      storageVerification: { databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' },
+      workflowCompatibility: { mode: 'legacy-alias' },
+    });
+    expect(report.backfills).toHaveLength(BACKFILL_KINDS.length);
+    expect(report.tableEvidence).toHaveLength(forkCatalogManifest.tables.length);
+    expect(report.workflowCompatibility.rowDigests).toHaveLength(4);
+    expect(report.digest).toMatch(/^[\da-f]{64}$/);
+  });
+
+  it('rejects malformed apply options before acquiring the mutation lock', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+
+    await expect(
+      sut.apply({
+        databaseBackupId: 'backup-1',
+        mediaSnapshotId: 'snapshot-1',
+        reportDigest: 'not-sha256',
+      }),
+    ).rejects.toThrow('Expected preflight report digest must be a lowercase SHA-256 digest');
+    expect(mocks.database.withLock).not.toHaveBeenCalled();
+  });
+
   it('requires both checkpoint IDs before reading preflight evidence', async () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
 
-    await expect(sut.preflight('', 'snapshot-1')).rejects.toThrow('Database backup ID is required');
-    await expect(sut.preflight('backup-1', '')).rejects.toThrow('Media snapshot ID is required');
+    await expect(sut.preflight({ ...checkpointOptions, databaseBackupId: '' })).rejects.toThrow(
+      'Database backup ID is required',
+    );
+    await expect(sut.preflight({ ...checkpointOptions, mediaSnapshotId: '' })).rejects.toThrow(
+      'Media snapshot ID is required',
+    );
     expect(mocks.database.getForkSchemaCutoverEvidence).not.toHaveBeenCalled();
   });
 
@@ -75,10 +150,10 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
       ...evidence(),
-      storageVerification: { ...evidence().storageVerification, completedAt: '2026-07-15T00:00:00.000Z' },
+      storageVerification: { ...evidence().storageVerification!, completedAt: '2026-07-15T00:00:00.000Z' },
     });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain('Storage verification checkpoint is older than one hour');
@@ -88,10 +163,10 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
       ...evidence(),
-      storageVerification: { ...evidence().storageVerification, rootDriftCount: 1 },
+      storageVerification: { ...evidence().storageVerification!, rootDriftCount: 1 },
     });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain('Storage verification checkpoint evidence is invalid');
@@ -101,17 +176,17 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue(evidence());
     mocks.database.withLock.mockImplementation(async (_lock, callback) => callback());
-    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, _installationClass, verify) => {
+    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, verify) => {
       mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
         ...evidence(),
-        storageVerification: { ...evidence().storageVerification, aggregateDigest: 'b'.repeat(64) },
+        storageVerification: { ...evidence().storageVerification!, aggregateDigest: 'd'.repeat(64) },
       });
       await verify({} as never);
       throw new Error('unreachable');
     });
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
-    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+    await expect(sut.apply({ ...checkpointOptions, reportDigest: report.digest })).rejects.toThrow(
       'Fork schema cutover preflight changed',
     );
   });
@@ -128,9 +203,9 @@ describe(ForkSchemaCutoverService.name, () => {
       return callback();
     });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
-    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+    await expect(sut.apply({ ...checkpointOptions, reportDigest: report.digest })).rejects.toThrow(
       'Fork schema cutover preflight changed',
     );
     expect(mocks.database.commitForkSchemaCutover).not.toHaveBeenCalled();
@@ -149,14 +224,14 @@ describe(ForkSchemaCutoverService.name, () => {
       expect(lock).toBe(DatabaseLock.Migrations);
       return callback();
     });
-    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, _installationClass, verify) => {
+    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, verify) => {
       await verify({} as never);
       return checkpoint;
     });
     mocks.database.runOfficialMigrations.mockRejectedValue(new Error('official migration failed'));
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
-    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+    await expect(sut.apply({ ...checkpointOptions, reportDigest: report.digest })).rejects.toThrow(
       'Fork schema cutover committed but official migrations failed; checkpoint restore required: official migration failed',
     );
     expect(mocks.database.commitForkSchemaCutover).toHaveBeenCalledOnce();
@@ -178,7 +253,7 @@ describe(ForkSchemaCutoverService.name, () => {
       },
     });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain('Unknown catalog object: tables public.physical_file_unexpected');
@@ -224,7 +299,7 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({ ...evidence(), ...overrides });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain(blocker);
@@ -251,7 +326,7 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({ ...evidence(), ...overrides });
 
-    const report = await sut.preflight('backup-1', 'snapshot-1');
+    const report = await sut.preflight(checkpointOptions);
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain(blocker);

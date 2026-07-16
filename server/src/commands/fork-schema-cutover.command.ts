@@ -1,17 +1,17 @@
 import { Command, CommandRunner, Option, SubCommand } from 'nest-commander';
 import { ForkCutoverVerificationCommand } from 'src/commands/fork-cutover-verification.command';
-import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
+import { canonicalCutoverJson, ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 
 type CheckpointOptions = { databaseBackupId?: string; mediaSnapshotId?: string };
 type ApplyOptions = CheckpointOptions & { reportDigest?: string };
+type PreflightOptions = CheckpointOptions & { format?: string };
 
 const checkpointIds = (options: CheckpointOptions) => {
-  const databaseBackupId = options.databaseBackupId?.trim() ?? '';
-  const mediaSnapshotId = options.mediaSnapshotId?.trim() ?? '';
-  if (!databaseBackupId) {
+  const { databaseBackupId, mediaSnapshotId } = options;
+  if (!databaseBackupId?.trim()) {
     throw new Error('Database backup ID is required');
   }
-  if (!mediaSnapshotId) {
+  if (!mediaSnapshotId?.trim()) {
     throw new Error('Media snapshot ID is required');
   }
   return { databaseBackupId, mediaSnapshotId };
@@ -35,9 +35,22 @@ export class ForkSchemaCutoverPreflightCommand extends ForkSchemaCheckpointComma
     super();
   }
 
-  async run(_passedParams: string[], options: CheckpointOptions = {}): Promise<void> {
+  @Option({ flags: '--format <format>', description: 'Output format: json or digest', defaultValue: 'json' })
+  parseFormat(value: string): string {
+    return value;
+  }
+
+  async run(passedParams: string[], options: PreflightOptions = {}): Promise<void> {
+    if (passedParams.length > 0) {
+      throw new Error('Preflight accepts named options only');
+    }
+    const format = options.format ?? 'json';
+    if (format !== 'json' && format !== 'digest') {
+      throw new Error('Format must be json or digest');
+    }
     const ids = checkpointIds(options);
-    console.log(JSON.stringify(await this.cutover.preflight(ids.databaseBackupId, ids.mediaSnapshotId), null, 2));
+    const report = await this.cutover.preflight(ids);
+    process.stdout.write(`${format === 'digest' ? report.digest : canonicalCutoverJson(report)}\n`);
   }
 }
 
@@ -52,19 +65,20 @@ export class ForkSchemaCutoverApplyCommand extends ForkSchemaCheckpointCommand {
     return value;
   }
 
-  async run(_passedParams: string[], options: ApplyOptions = {}): Promise<void> {
-    const expectedReportDigest = options.reportDigest?.trim() ?? '';
-    if (!expectedReportDigest) {
+  async run(passedParams: string[], options: ApplyOptions = {}): Promise<void> {
+    if (passedParams.length > 0) {
+      throw new Error('Apply accepts named options only');
+    }
+    const expectedReportDigest = options.reportDigest ?? '';
+    if (!expectedReportDigest.trim()) {
       throw new Error('Preflight report digest is required');
     }
+    if (!/^[\da-f]{64}$/.test(expectedReportDigest)) {
+      throw new Error('Preflight report digest must be a lowercase SHA-256 digest');
+    }
     const ids = checkpointIds(options);
-    console.log(
-      JSON.stringify(
-        await this.cutover.apply(expectedReportDigest, ids.databaseBackupId, ids.mediaSnapshotId),
-        null,
-        2,
-      ),
-    );
+    const checkpoint = await this.cutover.apply({ ...ids, reportDigest: expectedReportDigest });
+    process.stdout.write(`${canonicalCutoverJson(checkpoint)}\n`);
   }
 }
 
