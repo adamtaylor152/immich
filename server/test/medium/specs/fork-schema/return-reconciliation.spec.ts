@@ -82,6 +82,13 @@ const getReturnBytes = async (db: Kysely<DB>) => {
 
 class PausingForkHandoffRepository extends ForkHandoffRepository {
   onLocks?: (transaction: Kysely<DB>) => Promise<void>;
+  onReturnEvidence?: (transaction: Kysely<DB>) => Promise<void>;
+
+  override async getReturnEvidence(transaction: Kysely<DB> = this.db) {
+    const evidence = await super.getReturnEvidence(transaction);
+    await this.onReturnEvidence?.(transaction);
+    return evidence;
+  }
 
   protected override afterOrphanRelationLocks(transaction: Kysely<DB>): Promise<void> {
     return this.onLocks?.(transaction) ?? Promise.resolve();
@@ -109,6 +116,19 @@ describe('certified fork return evidence', () => {
         VALUES (${name}, ${String(index).padStart(6, '0')})
       `.execute(db);
     }
+  };
+
+  const setupActivationService = () => {
+    const { sut: migration, mocks } = newTestService(ForkSchemaMigrationService, {
+      forkSchema: forkSchemaRepository,
+    });
+    (migration as unknown as { db: Kysely<DB> }).db = db;
+    mocks.systemMetadata.get.mockResolvedValue({});
+    migration.onModuleInit();
+    const database = repository as unknown as ConstructorParameters<typeof ForkHandoffService>[0];
+    (database as unknown as { withLock: <T>(_lock: unknown, callback: () => Promise<T>) => Promise<T> }).withLock =
+      async (_lock, callback) => callback();
+    return new ForkHandoffService(database, migration);
   };
 
   beforeAll(async () => {
@@ -263,6 +283,55 @@ describe('certified fork return evidence', () => {
       storageVerificationRunId: runId,
     });
     await expect(forkSchemaRepository.getState()).resolves.toEqual(stateBefore);
+  });
+
+  it('prepares official evidence and checkpoint from one repeatable read snapshot', async () => {
+    const firstRunId = randomUUID();
+    const secondRunId = randomUUID();
+    const emptyDigest = createHash('sha256').update('').digest('hex');
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run (
+        id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "verifiedCount",
+        "failureCount", "aggregateDigest", "completedAt"
+      ) VALUES
+        (${firstRunId}::uuid, 'backup-1', 'snapshot-1', 'completed', 0, 0, 0, ${emptyDigest}, now()),
+        (${secondRunId}::uuid, 'backup-1', 'snapshot-1', 'completed', 0, 0, 0, ${emptyDigest}, now())
+    `.execute(db);
+    await sql`
+      UPDATE immich_fork.migration_audit
+      SET details = details || jsonb_build_object(
+        'storageVerificationRunId', ${firstRunId}::text,
+        'storageVerificationDigest', ${emptyDigest}::text,
+        'storageVerificationAssetCount', 0
+      )
+      WHERE name = 'fork-schema-cutover'
+    `.execute(db);
+    StorageCore.setMediaLocation('/usr/src/app/upload');
+    const pausing = new PausingForkHandoffRepository(db);
+    const writerDb = await connectToSameDatabase(db);
+    const evidenceReached = deferred();
+    const releaseEvidence = deferred();
+    pausing.onReturnEvidence = async () => {
+      evidenceReached.resolve();
+      await releaseEvidence.promise;
+    };
+    const service = new ForkHandoffService(pausing as never, {} as ForkSchemaMigrationService);
+    const preparation = service.prepareOfficial();
+    try {
+      await evidenceReached.promise;
+      await sql`
+        UPDATE immich_fork.migration_audit
+        SET details = details || jsonb_build_object('storageVerificationRunId', ${secondRunId}::text)
+        WHERE name = 'fork-schema-cutover'
+      `.execute(writerDb);
+      releaseEvidence.resolve();
+
+      await expect(preparation).resolves.toMatchObject({ storageVerificationRunId: firstRunId });
+    } finally {
+      releaseEvidence.resolve();
+      await Promise.allSettled([preparation]);
+      await writerDb.destroy();
+    }
   });
 
   it('rejects official preparation without a fresh bound storage checkpoint', async () => {
@@ -1011,5 +1080,96 @@ describe('certified fork return evidence', () => {
       ),
     ).rejects.toThrow('incomplete backfills');
     await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+  });
+
+  it('rejects a source row inserted after reconciliation instead of sealing zero work', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    await db.insertInto('user').values(user).execute();
+    const service = setupActivationService();
+
+    await expect(
+      service.prepareFork(
+        { batchSize: 1 },
+        {
+          beforeActivate: async (transaction) => {
+            await transaction.insertInto('asset').values(asset).execute();
+          },
+        },
+      ),
+    ).rejects.toThrow(/source|backfill|cardinality/);
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+    await expect(
+      db
+        .selectFrom('asset')
+        .select(({ fn }) => fn.countAll<number>().as('count'))
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ count: 0 });
+  });
+
+  it('rejects a forged non-automation digest with valid hexadecimal shape', async () => {
+    const service = setupActivationService();
+
+    await expect(
+      service.prepareFork(
+        { batchSize: 1 },
+        {
+          beforeActivate: async (transaction) => {
+            await sql`
+              UPDATE immich_fork.backfill_progress SET digest = ${'f'.repeat(64)} WHERE kind = 'privacy'
+            `.execute(transaction);
+          },
+        },
+      ),
+    ).rejects.toThrow(/digest|evidence|drift/);
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+  });
+
+  it('rejects processed-count drift even when remaining is zero', async () => {
+    const service = setupActivationService();
+
+    await expect(
+      service.prepareFork(
+        { batchSize: 1 },
+        {
+          beforeActivate: async (transaction) => {
+            await sql`
+              UPDATE immich_fork.backfill_progress SET processed = processed + 1 WHERE kind = 'privacy'
+            `.execute(transaction);
+          },
+        },
+      ),
+    ).rejects.toThrow(/processed|source|evidence|drift/);
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+  });
+
+  it('fails closed when duplicate running return audits exist', async () => {
+    const service = setupActivationService();
+
+    await expect(
+      service.prepareFork(
+        { batchSize: 1 },
+        {
+          beforeActivate: async (transaction) => {
+            await sql`
+              INSERT INTO immich_fork.migration_audit (name, phase, status, details)
+              VALUES (
+                'fork-return-reconciliation',
+                'inactive',
+                'running',
+                jsonb_build_object('backfillKinds', ${JSON.stringify([...BACKFILL_KINDS])}::jsonb)
+              )
+            `.execute(transaction);
+          },
+        },
+      ),
+    ).rejects.toThrow(/exactly one|single|duplicate|audit/);
+    await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
+    await expect(
+      sql<{ count: number }>`
+        SELECT count(*)::int AS count FROM immich_fork.migration_audit
+        WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+      `.execute(db),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
   });
 });

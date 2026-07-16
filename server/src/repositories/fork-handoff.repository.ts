@@ -10,7 +10,15 @@ import {
   canonicalStorageVerificationDigest,
   StorageVerificationEvidence,
 } from 'src/repositories/fork-cutover-verification.repository';
-import { BACKFILL_KINDS, BackfillProgress, ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
+import {
+  BACKFILL_KINDS,
+  BackfillKind,
+  BackfillProgress,
+  canonicalReturnBackfillDigest,
+  ForkSchemaPhase,
+  ReturnBackfillBatchEvidence,
+  ReturnBackfillEvidence,
+} from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
 export type ForkReturnEvidence = {
@@ -179,11 +187,34 @@ const ORPHAN_RELATIONS = [
 
 const FINAL_ACTIVATION_RELATIONS = [...new Set(forkCatalogManifest.tables.map(({ identity }) => identity))].sort();
 
+const RETURN_BACKFILL_SOURCES: Record<BackfillKind, 'public.album' | 'public.asset'> = {
+  albums: 'public.album',
+  automation: 'public.album',
+  checksum: 'public.asset',
+  enrichment: 'public.asset',
+  health: 'public.asset',
+  privacy: 'public.asset',
+  storage: 'public.asset',
+};
+
 const quoteRelation = (relation: string): string =>
   relation
     .split('.')
     .map((part) => `"${part.replaceAll('"', '""')}"`)
     .join('.');
+
+const isReturnBackfillBatchEvidence = (value: unknown): value is ReturnBackfillBatchEvidence => {
+  const batch = value as Partial<ReturnBackfillBatchEvidence> | null;
+  return (
+    !!batch &&
+    Number.isSafeInteger(batch.count) &&
+    (batch.count ?? 0) > 0 &&
+    typeof batch.digest === 'string' &&
+    /^[0-9a-f]{64}$/.test(batch.digest) &&
+    typeof batch.endCursor === 'string' &&
+    batch.endCursor.length > 0
+  );
+};
 
 @Injectable()
 export class ForkHandoffRepository {
@@ -296,8 +327,19 @@ export class ForkHandoffRepository {
     };
   }
 
-  async getPreparedOfficialHandoffCheckpoint(): Promise<OfficialHandoffCheckpoint> {
-    const checkpoint = await this.getOfficialHandoffCheckpoint();
+  async prepareOfficialHandoffCheckpoint(): Promise<OfficialHandoffCheckpoint> {
+    return this.db
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .setAccessMode('read only')
+      .execute(async (transaction) => {
+        await this.getReturnEvidence(transaction);
+        return this.getPreparedOfficialHandoffCheckpoint(transaction);
+      });
+  }
+
+  async getPreparedOfficialHandoffCheckpoint(kysely: Kysely<DB> = this.db): Promise<OfficialHandoffCheckpoint> {
+    const checkpoint = await this.getOfficialHandoffCheckpoint(kysely);
     if (
       !checkpoint.databaseBackupId ||
       !checkpoint.mediaSnapshotId ||
@@ -328,7 +370,7 @@ export class ForkHandoffRepository {
         "verifiedCount"::int AS "verifiedCount"
       FROM immich_fork.cutover_verification_run
       WHERE id = ${checkpoint.storageVerificationRunId}::uuid
-    `.execute(this.db);
+    `.execute(kysely);
     const run = result.rows[0];
     const storageEvidence = run
       ? await sql<StorageVerificationEvidence>`
@@ -336,7 +378,7 @@ export class ForkHandoffRepository {
           FROM immich_fork.cutover_verification_asset
           WHERE "runId" = ${checkpoint.storageVerificationRunId}::uuid AND status = 'verified'
           ORDER BY "assetId"
-        `.execute(this.db)
+        `.execute(kysely)
       : { rows: [] };
     const rootDrift = run
       ? await sql<{ count: number }>`
@@ -351,7 +393,7 @@ export class ForkHandoffRepository {
               OR verification."approvedRoots" IS DISTINCT FROM
                 ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[])
             )
-        `.execute(this.db)
+        `.execute(kysely)
       : { rows: [{ count: 0 }] };
     const completedAt = run?.completedAt?.getTime() ?? Number.NaN;
     const age = Date.now() - completedAt;
@@ -446,13 +488,12 @@ export class ForkHandoffRepository {
           new Set(progress.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
           BACKFILL_KINDS.every((kind) => progress.some((row) => row.kind === kind)) &&
           progress.every(
-            ({ claimedCursor, claimToken, claimedIds, digest, lastError, remaining }) =>
+            ({ claimedCursor, claimToken, claimedIds, lastError, remaining }) =>
               remaining === 0 &&
               claimedCursor === null &&
               claimToken === null &&
               claimedIds.length === 0 &&
-              lastError === null &&
-              /^[0-9a-f]{64}$/.test(digest ?? ''),
+              lastError === null,
           );
         if (!complete) {
           throw new Error('Cannot activate fork schema with incomplete backfills');
@@ -471,11 +512,62 @@ export class ForkHandoffRepository {
           SELECT id::text AS id, details
           FROM immich_fork.migration_audit
           WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
-          ORDER BY id DESC LIMIT 1 FOR UPDATE
+          ORDER BY id
+          FOR UPDATE
         `.execute(transaction);
+        if (auditResult.rows.length !== 1) {
+          throw new Error('Fork schema activation requires exactly one running return reconciliation audit');
+        }
         const audit = auditResult.rows[0];
-        if (!audit) {
-          throw new Error('Fork schema activation requires a running return reconciliation audit');
+        const backfillEvidence = (audit.details.backfillEvidence ?? {}) as ReturnBackfillEvidence;
+        if (Object.keys(backfillEvidence).some((kind) => !BACKFILL_KINDS.includes(kind as BackfillKind))) {
+          throw new Error('Fork return activation requires the exact backfill evidence set');
+        }
+        for (const kind of BACKFILL_KINDS) {
+          const row = progress.find((candidate) => candidate.kind === kind)!;
+          const sourceCountResult = await sql
+            .raw<{ count: number }>(`SELECT count(*)::int AS count FROM ${RETURN_BACKFILL_SOURCES[kind]}`)
+            .execute(transaction);
+          const sourceCount = sourceCountResult.rows[0]?.count ?? 0;
+          let kindEvidence = backfillEvidence[kind];
+          if (!kindEvidence && sourceCount === 0 && row.processed === 0) {
+            if (kind !== 'automation' && row.digest !== null) {
+              throw new Error(`Fork return ${kind} backfill digest drifted without durable evidence`);
+            }
+            const batches: ReturnBackfillBatchEvidence[] = [];
+            kindEvidence = {
+              batches,
+              cumulativeDigest: canonicalReturnBackfillDigest(batches),
+              processed: 0,
+            };
+            backfillEvidence[kind] = kindEvidence;
+            if (kind !== 'automation') {
+              row.digest = kindEvidence.cumulativeDigest;
+              await sql`
+                UPDATE immich_fork.backfill_progress
+                SET digest = ${row.digest}, "updatedAt" = now()
+                WHERE kind = ${kind}
+              `.execute(transaction);
+            }
+          }
+          const batches = kindEvidence?.batches;
+          if (
+            !kindEvidence ||
+            !Array.isArray(batches) ||
+            !batches.every(isReturnBackfillBatchEvidence) ||
+            kindEvidence.processed !== batches.reduce((total, batch) => total + batch.count, 0) ||
+            kindEvidence.processed !== row.processed ||
+            row.processed !== sourceCount ||
+            kindEvidence.cumulativeDigest !== canonicalReturnBackfillDigest(batches) ||
+            (kindEvidence.sourceCount !== undefined && kindEvidence.sourceCount !== sourceCount) ||
+            (kind !== 'automation' && row.digest !== kindEvidence.cumulativeDigest)
+          ) {
+            throw new Error(`Fork return ${kind} backfill processed, source, or digest evidence drifted`);
+          }
+          backfillEvidence[kind] = { ...kindEvidence, sourceCount };
+        }
+        if (Object.keys(backfillEvidence).length !== BACKFILL_KINDS.length) {
+          throw new Error('Fork return activation requires the exact backfill evidence set');
         }
         const config = audit.details.configReconciliation as
           | { count?: number; digest?: string; source?: string }
@@ -485,6 +577,9 @@ export class ForkHandoffRepository {
           | undefined;
         const backfillKinds = audit.details.backfillKinds;
         const automationProgress = progress.find(({ kind }) => kind === 'automation');
+        const automationBackfill = backfillEvidence.automation!;
+        const expectedAutomationRawDigest =
+          automationBackfill.sourceCount === 0 ? null : automationBackfill.cumulativeDigest;
         const expectedAutomationDigest = automation
           ? createHash('sha256')
               .update(JSON.stringify({ automation: automation.rawDigest, config: automation.configDigest }))
@@ -498,12 +593,10 @@ export class ForkHandoffRepository {
           !/^[0-9a-f]{64}$/.test(config.digest ?? '') ||
           (config.source !== 'database' && config.source !== 'file') ||
           automation?.configDigest !== config.digest ||
+          automation?.rawDigest !== expectedAutomationRawDigest ||
           automation?.digest !== expectedAutomationDigest ||
           automationProgress?.digest !== automation.digest ||
-          !(
-            automation.rawDigest === null ||
-            (typeof automation.rawDigest === 'string' && /^[0-9a-f]{64}$/.test(automation.rawDigest))
-          )
+          !/^[0-9a-f]{64}$/.test(automation?.digest ?? '')
         ) {
           throw new Error('Fork return activation evidence is incomplete or drifted');
         }
@@ -514,6 +607,7 @@ export class ForkHandoffRepository {
             status = 'applied',
             details = coalesce(details, '{}'::jsonb) || jsonb_build_object(
               'officialLedgerDigest', ${evidence.officialLedgerDigest}::text,
+              'backfillEvidence', ${backfillEvidence}::jsonb,
               'orphanArchive', ${orphanArchive}::jsonb,
               'supportedTag', ${CERTIFIED_TAG}::text,
               'workflowSnapshot', ${expectedWorkflow}::jsonb
