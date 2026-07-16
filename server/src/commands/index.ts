@@ -1,3 +1,4 @@
+import { forkHandoffCommands } from 'src/commands/fork-handoff.command';
 import { forkSchemaCutoverCommands } from 'src/commands/fork-schema-cutover.command';
 import { ConfirmForkSchemaStartQuestion, forkSchemaCommands } from 'src/commands/fork-schema.command';
 import { GrantAdminCommand, PromptEmailQuestion, RevokeAdminCommand } from 'src/commands/grant-admin';
@@ -21,6 +22,7 @@ import { VersionCommand } from 'src/commands/version.command';
 // restore from a `pg_dump` backup taken before installing the fork.
 
 export const commandsAndQuestions = [
+  ...forkHandoffCommands,
   ...forkSchemaCutoverCommands,
   ...forkSchemaCommands,
   ConfirmForkSchemaStartQuestion,
