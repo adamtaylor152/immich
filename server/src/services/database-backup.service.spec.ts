@@ -788,6 +788,24 @@ describe(DatabaseBackupService.name, () => {
       },
     );
 
+    it('guards an inactive schema version 2 restore before either migration provider runs', async () => {
+      mocks.user.hasAdmin.mockResolvedValue(true);
+      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
+      mocks.database.isCertifiedReturnStartup.mockResolvedValue(true);
+      mocks.database.assertCertifiedReturnLedger.mockRejectedValue(new Error('certified v3.0.3 ledger rejected'));
+
+      await expect(sut.restoreDatabaseBackup('development-filename.sql')).rejects.toThrow(
+        'certified v3.0.3 ledger rejected',
+      );
+
+      expect(mocks.database.assertCertifiedReturnLedger).toHaveBeenCalledOnce();
+      expect(mocks.database.assertCertifiedReturnLedger.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      );
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();
+    });
+
     it('should generate pg_dumpall specific SQL instructions', async () => {
       let writtenToPsql = '';
 

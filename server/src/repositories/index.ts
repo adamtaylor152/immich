@@ -20,6 +20,7 @@ import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadat
 import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
 import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
+import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -86,6 +87,7 @@ export const repositories = [
   ForkConfigRepository,
   ForkCutoverVerificationRepository,
   ForkEnrichmentRepository,
+  ForkHandoffRepository,
   ForkPrivacyRepository,
   ForkSchemaRepository,
   JobRepository,
