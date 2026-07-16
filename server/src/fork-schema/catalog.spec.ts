@@ -93,6 +93,67 @@ describe('catalog manifests', () => {
     expect(getCatalogTableLocks(originalOfficial)).toHaveLength(91);
   });
 
+  it('records the steady-state geodata primary index rebuilt by the runtime importer', () => {
+    const fork = forkCatalogManifest as CatalogManifest;
+    const official = officialCatalogManifest as CatalogManifest;
+    const tableIdentities = ['public.geodata_places.', 'public.naturalearth_countries.'];
+    const expectedIndexes = [
+      {
+        definition:
+          'CREATE INDEX "IDX_geodata_gist_earthcoord" ON public.geodata_places USING gist (ll_to_earth_public(latitude, longitude))',
+        identity: 'public.geodata_places.IDX_geodata_gist_earthcoord',
+      },
+      {
+        definition:
+          "CREATE UNIQUE INDEX geodata_places_pkey ON public.geodata_places USING btree (id) WITH (fillfactor='100')",
+        identity: 'public.geodata_places.geodata_places_pkey',
+      },
+      {
+        definition:
+          'CREATE INDEX idx_geodata_places_admin1_name ON public.geodata_places USING gin (f_unaccent(("admin1Name")::text) gin_trgm_ops)',
+        identity: 'public.geodata_places.idx_geodata_places_admin1_name',
+      },
+      {
+        definition:
+          'CREATE INDEX idx_geodata_places_admin2_name ON public.geodata_places USING gin (f_unaccent(("admin2Name")::text) gin_trgm_ops)',
+        identity: 'public.geodata_places.idx_geodata_places_admin2_name',
+      },
+      {
+        definition:
+          'CREATE INDEX idx_geodata_places_alternate_names ON public.geodata_places USING gin (f_unaccent(("alternateNames")::text) gin_trgm_ops)',
+        identity: 'public.geodata_places.idx_geodata_places_alternate_names',
+      },
+      {
+        definition:
+          'CREATE INDEX idx_geodata_places_name ON public.geodata_places USING gin (f_unaccent((name)::text) gin_trgm_ops)',
+        identity: 'public.geodata_places.idx_geodata_places_name',
+      },
+      {
+        definition:
+          "CREATE UNIQUE INDEX naturalearth_countries_pkey ON public.naturalearth_countries USING btree (id) WITH (fillfactor='100')",
+        identity: 'public.naturalearth_countries.naturalearth_countries_pkey',
+      },
+    ];
+    const expectedConstraints = [
+      { definition: 'PRIMARY KEY (id)', identity: 'public.geodata_places.geodata_places_pkey' },
+      {
+        definition: 'PRIMARY KEY (id)',
+        identity: 'public.naturalearth_countries.naturalearth_countries_pkey',
+      },
+    ];
+
+    for (const catalog of [fork, official]) {
+      expect(
+        catalog.indexes
+          .filter(({ identity }) => tableIdentities.some((table) => identity.startsWith(table)))
+          .toSorted((left, right) => left.identity.localeCompare(right.identity)),
+      ).toEqual(expectedIndexes.toSorted((left, right) => left.identity.localeCompare(right.identity)));
+      expect(
+        catalog.constraints.filter(({ identity }) => tableIdentities.some((table) => identity.startsWith(table))),
+      ).toEqual(expectedConstraints);
+    }
+  });
+
   it('serializes deterministically regardless of input order', () => {
     const value = manifest({
       schemas: [entry('public'), entry('immich_fork')],

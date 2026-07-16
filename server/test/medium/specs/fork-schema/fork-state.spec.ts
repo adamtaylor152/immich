@@ -162,6 +162,38 @@ describe(ForkSchemaRepository.name, () => {
     );
   });
 
+  it('clears the final source cursor atomically without making the completed batch claimable again', async () => {
+    await seedAssets(1);
+    await repository.setPhase('dual-write');
+    const claim = await repository.claimBatch('privacy', 1);
+
+    await repository.completeBatch('privacy', claim!.cursor, claim!.ids.length, digest);
+
+    const completed = await sql<{
+      claimToken: string | null;
+      claimedCursor: string | null;
+      claimedIds: string[];
+      cursor: string | null;
+      digest: string | null;
+      processed: number;
+      remaining: number;
+    }>`
+      SELECT cursor, processed, remaining, digest, "claimedCursor", "claimedIds", "claimToken"
+      FROM immich_fork.backfill_progress
+      WHERE kind = 'privacy'
+    `.execute(db);
+    expect(completed.rows[0]).toEqual({
+      claimToken: null,
+      claimedCursor: null,
+      claimedIds: [],
+      cursor: null,
+      digest,
+      processed: 1,
+      remaining: 0,
+    });
+    await expect(repository.claimBatch('privacy', 1)).resolves.toBeNull();
+  });
+
   it('fences a stale worker after an expired reservation is reclaimed', async () => {
     await seedAssets(1);
     await repository.setPhase('dual-write');

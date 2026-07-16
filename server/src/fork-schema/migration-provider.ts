@@ -1,7 +1,7 @@
 import { FileMigrationProvider, Migration, MigrationProvider } from 'kysely';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyMigration } from 'src/fork-schema/migration-manifest';
+import { classifyMigration, SUPPORTED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 
 const fileProvider = (migrationFolder: string) =>
   new FileMigrationProvider({
@@ -35,6 +35,30 @@ function createClassifiedMigrationProvider(migrationFolder: string, includeLegac
 
 export function createOfficialMigrationProvider(migrationFolder: string): MigrationProvider {
   return createClassifiedMigrationProvider(migrationFolder, false);
+}
+
+export function createCertifiedLedgerMigrationProvider(
+  provider: MigrationProvider,
+  appliedNames: readonly string[],
+): MigrationProvider {
+  const certifiedNames = new Set(SUPPORTED_UPSTREAM_MIGRATIONS);
+  const appliedCertifiedNames = appliedNames.filter((name) => certifiedNames.has(name));
+
+  return {
+    async getMigrations(): Promise<Record<string, Migration>> {
+      const migrations = await provider.getMigrations();
+      for (const name of appliedCertifiedNames) {
+        if (migrations[name]) {
+          continue;
+        }
+        const failClosed = async () => {
+          throw new Error(`Certified migration sentinel ${name} must never execute`);
+        };
+        migrations[name] = { down: failClosed, up: failClosed };
+      }
+      return Object.fromEntries(Object.entries(migrations).toSorted(([left], [right]) => left.localeCompare(right)));
+    },
+  };
 }
 
 export function createLegacyMigrationProvider(migrationFolder: string): MigrationProvider {

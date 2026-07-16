@@ -1,7 +1,8 @@
 import { schemaDiff, schemaFromCode, schemaFromDatabase } from '@immich/sql-tools';
+/* eslint-disable unicorn/prefer-module -- migration providers resolve paths relative to the compiled CommonJS module */
 import { Injectable } from '@nestjs/common';
 import AsyncLock from 'async-lock';
-import { Kysely, Migration, Migrator, sql } from 'kysely';
+import { Kysely, Migration, MigrationProvider, Migrator, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { join } from 'node:path';
 import semver from 'semver';
@@ -32,6 +33,7 @@ import {
   SUPPORTED_UPSTREAM_MIGRATIONS,
 } from 'src/fork-schema/migration-manifest';
 import {
+  createCertifiedLedgerMigrationProvider,
   createForkMigrationProvider,
   createLegacyMigrationProvider,
   createOfficialMigrationProvider,
@@ -40,6 +42,8 @@ import {
   aliasLegacyWorkflowMigration,
   classifyWorkflowCompatibility,
   getWorkflowCompatibilityEvidence,
+  LEGACY_WORKFLOW_MIGRATION,
+  normalizeWorkflowMigrationForOfficialOrder,
   validateOfficialMigrationLedgerOrder,
   WorkflowCompatibility,
 } from 'src/fork-schema/workflow-compatibility';
@@ -574,7 +578,17 @@ export class DatabaseRepository extends ForkHandoffRepository {
   async runMigrations(): Promise<void> {
     this.logger.log('Running migrations');
 
-    const migrator = this.createMigrator();
+    const ledgerTable = await sql<{ present: boolean }>`
+      SELECT to_regclass('public.kysely_migrations') IS NOT NULL AS present
+    `.execute(this.db);
+    const ledger = ledgerTable.rows[0]?.present
+      ? await sql<{ name: string }>`SELECT name FROM public.kysely_migrations`.execute(this.db)
+      : { rows: [] };
+    const provider = createCertifiedLedgerMigrationProvider(
+      createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+      ledger.rows.map(({ name }) => name),
+    );
+    const migrator = this.createMigrator(provider);
 
     const { error, results } = await migrator.migrateToLatest();
 
@@ -599,13 +613,28 @@ export class DatabaseRepository extends ForkHandoffRepository {
   async runOfficialMigrations(): Promise<void> {
     this.logger.log('Running official migrations');
 
+    const ledgerTable = await sql<{ present: boolean }>`
+      SELECT to_regclass('public.kysely_migrations') IS NOT NULL AS present
+    `.execute(this.db);
+    const ledger = ledgerTable.rows[0]?.present
+      ? await sql<{ name: string }>`
+          SELECT name FROM public.kysely_migrations ORDER BY timestamp, name
+        `.execute(this.db)
+      : { rows: [] };
+    const appliedNames = ledger.rows.map(({ name }) => name);
+    const officialProvider = createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations'));
+    const bundledNames = Object.keys(await officialProvider.getMigrations());
+    if (!validateOfficialMigrationLedgerOrder(appliedNames, bundledNames).valid) {
+      throw new Error('Official migration ledger is not an exact ordered prefix of the bundled provider');
+    }
+    const provider = createCertifiedLedgerMigrationProvider(officialProvider, appliedNames);
+
     const migrator = new Migrator({
       db: this.db,
       migrationLockTableName: 'kysely_migrations_lock',
       allowUnorderedMigrations: this.configRepository.isDev(),
       migrationTableName: 'kysely_migrations',
-      // eslint-disable-next-line unicorn/prefer-module
-      provider: createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+      provider,
     });
 
     await this.runMigrationSet(migrator, 'official');
@@ -614,7 +643,6 @@ export class DatabaseRepository extends ForkHandoffRepository {
   protected async loadOfficialMigrations(): Promise<Record<string, Migration>> {
     // Keep cutover on the same filtered provider used by normal startup. This
     // provider refuses unknown files and cannot expose fork migrations.
-    // eslint-disable-next-line unicorn/prefer-module
     return createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')).getMigrations();
   }
 
@@ -676,8 +704,8 @@ export class DatabaseRepository extends ForkHandoffRepository {
       throw new Error('Official migration provider exposed a non-upstream migration');
     }
     const appliedOfficial = ledger
-      .filter(({ classification }) => classification === 'upstream')
-      .map(({ name }) => name);
+      .filter(({ classification, name }) => classification === 'upstream' || name === LEGACY_WORKFLOW_MIGRATION)
+      .map(({ name }) => normalizeWorkflowMigrationForOfficialOrder(name));
     const officialLedgerOrder = validateOfficialMigrationLedgerOrder(appliedOfficial, officialNames);
 
     const activeWritesResult = await sql<{ count: number }>`
@@ -1048,7 +1076,6 @@ export class DatabaseRepository extends ForkHandoffRepository {
       migrationTableSchema: 'immich_fork',
       migrationTableName: 'migrations',
       migrationLockTableName: 'migrations_lock',
-      // eslint-disable-next-line unicorn/prefer-module
       provider: createForkMigrationProvider(join(__dirname, '..', 'fork-schema/migrations')),
     });
 
@@ -1243,14 +1270,15 @@ export class DatabaseRepository extends ForkHandoffRepository {
    * `allowUnorderedMigrations` is enabled in dev so reordering is forgiving;
    * production migrations should still be timestamp-ordered for clarity.
    */
-  private createMigrator(): Migrator {
+  private createMigrator(
+    provider: MigrationProvider = createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+  ): Migrator {
     return new Migrator({
       db: this.db,
       migrationLockTableName: 'kysely_migrations_lock',
       allowUnorderedMigrations: this.configRepository.isDev(),
       migrationTableName: 'kysely_migrations',
-      // eslint-disable-next-line unicorn/prefer-module
-      provider: createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+      provider,
     });
   }
 

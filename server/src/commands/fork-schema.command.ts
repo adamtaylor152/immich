@@ -1,5 +1,19 @@
-import { Command, CommandRunner, InquirerService, Question, QuestionSet, SubCommand } from 'nest-commander';
+import { Command, CommandRunner, InquirerService, Option, Question, QuestionSet, SubCommand } from 'nest-commander';
 import { ForkSchemaMigrationService, ForkSchemaMigrationStatus } from 'src/services/fork-schema-migration.service';
+
+type BatchOptions = { batchSize?: number };
+const DEFAULT_BATCH_SIZE = 250;
+
+abstract class ForkSchemaBatchCommand extends CommandRunner {
+  @Option({ flags: '--batch-size <count>', description: 'Number of rows to backfill atomically', defaultValue: 250 })
+  parseBatchSize(value: string): number {
+    const batchSize = Number(value);
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+      throw new Error('Batch size must be a positive integer');
+    }
+    return batchSize;
+  }
+}
 
 export const formatForkSchemaStatus = (status: ForkSchemaMigrationStatus): string => {
   const lines = [
@@ -32,7 +46,7 @@ export class ForkSchemaStatusCommand extends CommandRunner {
 }
 
 @SubCommand({ name: 'start', description: 'Start the compatibility backfill' })
-export class ForkSchemaStartCommand extends CommandRunner {
+export class ForkSchemaStartCommand extends ForkSchemaBatchCommand {
   constructor(
     private migration: ForkSchemaMigrationService,
     private inquirer: InquirerService,
@@ -40,13 +54,13 @@ export class ForkSchemaStartCommand extends CommandRunner {
     super();
   }
 
-  async run(): Promise<void> {
+  async run(_passedParams: string[] = [], options: BatchOptions = {}): Promise<void> {
     const { confirmed } = await this.inquirer.ask<{ confirmed: boolean }>('confirm-fork-schema-start', {});
     if (!confirmed) {
       console.log('Fork schema backfill was not started.');
       return;
     }
-    printStatus(await this.migration.start());
+    printStatus(await this.migration.start(options.batchSize ?? DEFAULT_BATCH_SIZE));
   }
 }
 
@@ -62,13 +76,13 @@ export class ForkSchemaPauseCommand extends CommandRunner {
 }
 
 @SubCommand({ name: 'resume', description: 'Resume the compatibility backfill' })
-export class ForkSchemaResumeCommand extends CommandRunner {
+export class ForkSchemaResumeCommand extends ForkSchemaBatchCommand {
   constructor(private migration: ForkSchemaMigrationService) {
     super();
   }
 
-  async run(): Promise<void> {
-    printStatus(await this.migration.resume());
+  async run(_passedParams: string[] = [], options: BatchOptions = {}): Promise<void> {
+    printStatus(await this.migration.resume(options.batchSize ?? DEFAULT_BATCH_SIZE));
   }
 }
 

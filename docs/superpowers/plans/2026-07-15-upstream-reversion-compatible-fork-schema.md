@@ -623,6 +623,13 @@ git commit -m "feat(server): support official handoff and fork return"
 
 ### Task 11: Official-Container Round-Trip Certification
 
+> Corrective certification implemented as the three explicit lanes
+> `origin-v3.0.3-to-fork`, `current-fork-to-official-v3.0.3`, and
+> `official-v3.0.3-to-fork-return`. The harness derives the sole exact certified
+> tag from `supported-versions.json`; it rejects overrides and never floats an
+> image tag. Operator instructions live at
+> `docs/docs/administration/upstream-handoff.md`.
+
 **Files:**
 
 - Create: `e2e/src/specs/server/fork-schema-roundtrip.e2e-spec.ts`
@@ -636,11 +643,11 @@ git commit -m "feat(server): support official handoff and fork return"
 - Produces command: `pnpm --filter immich-e2e test:fork-roundtrip`
 - Consumes: `OFFICIAL_IMMICH_TAG`, defaulting to the exact supported manifest tag.
 
-- [ ] **Step 1: Write the round-trip test harness**
+- [x] **Step 1: Write the round-trip test harness**
 
 The test seeds users, assets, albums, privacy state, enrichment, smart albums, deduplicated files, and fork migration history; it records invariant counts and file digests.
 
-- [ ] **Step 2: Add the container sequence**
+- [x] **Step 2: Add the container sequence**
 
 ```bash
 docker compose -f e2e/docker-compose.fork-roundtrip.yml up -d postgres fork-server
@@ -653,21 +660,26 @@ docker compose -f e2e/docker-compose.fork-roundtrip.yml up -d fork-server
 pnpm --filter immich-e2e test -- --run src/specs/server/fork-schema-roundtrip.e2e-spec.ts --testNamePattern return
 ```
 
-- [ ] **Step 3: Assert official operations**
+- [x] **Step 3: Assert official operations**
 
 The official phase must start twice and pass login, server info, timeline, search, upload, edit, asset deletion, album creation/deletion, and background-job health.
 
-- [ ] **Step 4: Assert return invariants**
+- [x] **Step 4: Assert return invariants**
 
 Verify original counts/digests, new official records receive defaults, deleted records do not reactivate sidecars, and compatible fork features become active.
 
-- [ ] **Step 5: Add CI workflow and run locally**
+- [x] **Step 5: Add CI workflow and run locally**
 
 Run: `OFFICIAL_IMMICH_TAG=v3.0.3 pnpm --filter immich-e2e test:fork-roundtrip`
 
 Expected: PASS through fork -> official -> fork with both official boots healthy.
 
-- [ ] **Step 6: Commit**
+Local completion does not satisfy the release gate. A sanitized,
+production-shaped current-fork clone must still be interrupted and resumed for
+every backfill and storage-verification kind, checkpointed, digest-compared,
+cut over, and booted with exact official `v3.0.3` before release.
+
+- [x] **Step 6: Commit**
 
 ```bash
 git add e2e scripts/test-fork-roundtrip.sh .github/workflows/fork-roundtrip.yml
@@ -705,6 +717,11 @@ immich-admin fork-schema-cutover preflight
 REPORT_DIGEST="$(immich-admin fork-schema-cutover preflight --format digest)"
 immich-admin fork-schema-cutover apply --report-digest "$REPORT_DIGEST"
 immich-admin fork-handoff prepare-official
+# Keep maintenance enabled through the checkpoint, stop the fork server, then
+# run this from a one-shot admin process using the same fork image:
+immich-admin disable-maintenance-mode
+# Immediately start ghcr.io/immich-app/immich-server:v3.0.3 and verify the
+# exact full certified ledger before any official API operation.
 immich-admin fork-handoff prepare-fork
 ```
 

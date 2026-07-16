@@ -1,4 +1,4 @@
-import { Command, CommandRunner, Option, SubCommand } from 'nest-commander';
+import { CommandRunner, Option, SubCommand } from 'nest-commander';
 import { ForkCutoverVerificationService } from 'src/services/fork-cutover-verification.service';
 
 type CheckpointOptions = { databaseBackupId?: string; mediaSnapshotId?: string };
@@ -85,7 +85,7 @@ export class ForkCutoverVerificationStatusCommand extends CheckpointCommand {
   }
 }
 
-@Command({
+@SubCommand({
   name: 'verify-storage',
   description: 'Verify current media bytes for immutable cutover checkpoints',
   subCommands: [

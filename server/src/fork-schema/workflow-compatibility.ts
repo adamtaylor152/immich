@@ -13,6 +13,9 @@ export const WORKFLOW_COMPATIBILITY_MIGRATIONS: ReadonlySet<string> = new Set([
   ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION,
 ]);
 
+export const normalizeWorkflowMigrationForOfficialOrder = (name: string): string =>
+  name === LEGACY_WORKFLOW_MIGRATION ? OFFICIAL_WORKFLOW_MIGRATION : name;
+
 export const WORKFLOW_TABLES = ['plugin', 'plugin_method', 'workflow', 'workflow_step'] as const;
 
 export function validateOfficialMigrationLedgerOrder(
@@ -22,10 +25,12 @@ export function validateOfficialMigrationLedgerOrder(
   const expectedNames = supportedVersions.upstreamMigrations;
   const ledgerSet = new Set(ledgerNames);
   const bundledSet = new Set(bundledNames);
+  const expectedSet = new Set(expectedNames);
+  const isCertifiedProviderGap = (name: string) => expectedSet.has(name) && !bundledSet.has(name);
   const ledgerIsExactPrefix =
     ledgerSet.size === ledgerNames.length && ledgerNames.every((name, index) => expectedNames[index] === name);
   const unbundledLedgerNamesAreAuditedGaps = ledgerNames.every(
-    (name) => bundledSet.has(name) || WORKFLOW_COMPATIBILITY_MIGRATIONS.has(name),
+    (name) => bundledSet.has(name) || isCertifiedProviderGap(name),
   );
 
   let expectedIndex = 0;
@@ -34,7 +39,7 @@ export function validateOfficialMigrationLedgerOrder(
     while (
       expectedIndex < expectedNames.length &&
       expectedNames[expectedIndex] !== bundledName &&
-      WORKFLOW_COMPATIBILITY_MIGRATIONS.has(expectedNames[expectedIndex]!)
+      isCertifiedProviderGap(expectedNames[expectedIndex]!)
     ) {
       expectedIndex++;
     }
@@ -332,7 +337,7 @@ export function classifyWorkflowCompatibility(evidence: WorkflowCompatibilityEvi
     throw new Error('Found workflow tables with no workflow migration marker');
   }
   const expectedStage = expectedStageFromLedger(evidence.ledger);
-  if (evidence.schemaStage !== expectedStage || (legacy && expectedStage !== 'post-update')) {
+  if (evidence.schemaStage !== expectedStage) {
     throw new Error('workflow ledger/schema disagreement');
   }
   if (evidence.schemaDigest !== WORKFLOW_SCHEMA_DIGESTS[expectedStage]) {

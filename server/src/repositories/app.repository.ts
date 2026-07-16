@@ -29,19 +29,31 @@ export class AppRepository {
     const pubClient = new Redis({ ...redis, lazyConnect: true });
     const subClient = pubClient.duplicate();
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    try {
+      await Promise.all([pubClient.connect(), subClient.connect()]);
 
-    server.adapter(createAdapter(pubClient, subClient));
+      server.adapter(createAdapter(pubClient, subClient));
 
-    // => corresponds to notification.service.ts#onAppRestart
-    server.emit('AppRestartV1', state, async () => {
-      const responses = await server.serverSideEmitWithAck('AppRestart', state);
-      if (responses.some((response) => response !== 'ok')) {
-        throw new Error("One or more node(s) returned a non-'ok' response to our restart request!");
+      // => corresponds to notification.service.ts#onAppRestart
+      await new Promise<void>((resolve, reject) => {
+        server.emit('AppRestartV1', state, () => {
+          void server
+            .serverSideEmitWithAck('AppRestart', state)
+            .then((responses) => {
+              if (responses.some((response) => response !== 'ok')) {
+                throw new Error("One or more node(s) returned a non-'ok' response to our restart request!");
+              }
+            })
+            .then(resolve, reject);
+        });
+      });
+    } finally {
+      try {
+        await server.sockets.adapter.close();
+      } finally {
+        pubClient.disconnect();
+        subClient.disconnect();
       }
-
-      pubClient.disconnect();
-      subClient.disconnect();
-    });
+    }
   }
 }
