@@ -128,6 +128,7 @@ export class ForkSchemaCutoverService extends BaseService {
 
       const checkpoint = await this.databaseRepository.commitForkSchemaCutover(
         expectedReportDigest,
+        lockedReport.installationClass,
         async (transaction) => {
           const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(transaction);
           const blockers = getBlockers(evidence);

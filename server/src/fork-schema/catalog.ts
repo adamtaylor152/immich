@@ -135,11 +135,8 @@ export const compareCatalogs = (
   };
 };
 
-export const getForkTableLocks = (manifest: CatalogManifest): string[] =>
-  manifest.tables
-    .map(({ identity }) => identity)
-    .filter((identity) => identity.startsWith('immich_fork.'))
-    .toSorted();
+export const getCatalogTableLocks = (manifest: CatalogManifest): string[] =>
+  manifest.tables.map(({ identity }) => identity).toSorted();
 
 export async function getCatalogEvidence(
   runner: Kysely<DB>,

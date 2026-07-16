@@ -2,9 +2,11 @@ import {
   CatalogEntry,
   CatalogManifest,
   compareCatalogs,
-  getForkTableLocks,
+  getCatalogTableLocks,
   serializeCatalogManifest,
 } from 'src/fork-schema/catalog';
+import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
 
 const entry = (identity: string, definition = identity): CatalogEntry => ({ definition, identity });
 
@@ -59,7 +61,7 @@ describe('catalog manifests', () => {
     expect(compareCatalogs(expected, actual, new Set(['tables:public.legacy_%']))).toMatchObject({ clean: false });
   });
 
-  it('derives the complete sorted fork lock set from the manifest', () => {
+  it('derives the complete sorted table lock set from the manifest', () => {
     const expected = manifest({
       tables: [
         entry('immich_fork.state'),
@@ -69,11 +71,26 @@ describe('catalog manifests', () => {
       ],
     });
 
-    expect(getForkTableLocks(expected)).toEqual([
+    expect(getCatalogTableLocks(expected)).toEqual([
       'immich_fork.asset_health_run',
       'immich_fork.orphaned_records',
       'immich_fork.state',
+      'public.asset',
     ]);
+  });
+
+  it('derives deterministic complete lock sets for both installation classes', () => {
+    const fork = forkCatalogManifest as CatalogManifest;
+    const official = officialCatalogManifest as CatalogManifest;
+    const forkTables = fork.tables.filter(({ identity }) => identity.startsWith('immich_fork.'));
+    const originalOfficial = { ...official, tables: [...official.tables, ...forkTables] };
+
+    expect(getCatalogTableLocks(fork)).toEqual(fork.tables.map(({ identity }) => identity).toSorted());
+    expect(getCatalogTableLocks(originalOfficial)).toEqual(
+      [...official.tables, ...forkTables].map(({ identity }) => identity).toSorted(),
+    );
+    expect(getCatalogTableLocks(fork)).toHaveLength(98);
+    expect(getCatalogTableLocks(originalOfficial)).toHaveLength(89);
   });
 
   it('serializes deterministically regardless of input order', () => {

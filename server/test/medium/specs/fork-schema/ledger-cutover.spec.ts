@@ -10,6 +10,14 @@ import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.servi
 import { getKyselyConfig } from 'src/utils/database';
 import { getKyselyDB, newTestService } from 'test/utils';
 
+const NON_WORKFLOW_PROVIDER_GAPS = [
+  '1780435471692-DeleteMismatchedAssetFaces',
+  '1780592070031-ConvertNegativeRatingToNull',
+  '1780592071031-AssetOcrSync',
+  '1781089983296-CreateIntegrityReportTable',
+  '1782500000000-RestoreLivePhotoStillVisibility',
+] as const;
+
 class FailingPreCommitRepository extends DatabaseRepository {
   protected override async finishForkSchemaCutover(transaction: Kysely<DB>): Promise<void> {
     await sql`CREATE TABLE cutover_should_rollback (id integer PRIMARY KEY)`.execute(transaction);
@@ -37,7 +45,7 @@ const deferred = <T = void>() => {
   return { promise, resolve };
 };
 
-type OverrideWriterLockEvidence = {
+type WriterLockEvidence = {
   granted: boolean;
   mode: string;
   pid: number;
@@ -46,13 +54,14 @@ type OverrideWriterLockEvidence = {
   waitEventType: string | null;
 };
 
-const waitForOverrideWriterLock = async (
+const waitForWriterLock = async (
   transaction: Kysely<DB>,
   writerPid: number,
-): Promise<OverrideWriterLockEvidence> => {
+  tableName: string,
+): Promise<WriterLockEvidence> => {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    const waiting = await sql<OverrideWriterLockEvidence>`
+    const waiting = await sql<WriterLockEvidence>`
       SELECT activity.pid, activity.wait_event_type AS "waitEventType", activity.wait_event AS "waitEvent",
         lock.mode, lock.granted, namespace.nspname || '.' || relation.relname AS "relationName"
       FROM pg_catalog.pg_stat_activity activity
@@ -62,7 +71,7 @@ const waitForOverrideWriterLock = async (
       WHERE activity.pid = ${writerPid}
         AND lock.locktype = 'relation'
         AND namespace.nspname = 'public'
-        AND relation.relname = 'migration_overrides'
+        AND relation.relname = ${tableName}
         AND NOT lock.granted
     `.execute(transaction);
     if (waiting.rows[0]) {
@@ -70,7 +79,7 @@ const waitForOverrideWriterLock = async (
     }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(`Writer backend ${writerPid} did not wait on public.migration_overrides before the deadline`);
+  throw new Error(`Writer backend ${writerPid} did not wait on public.${tableName} before the deadline`);
 };
 
 describe('fork schema ledger cutover', () => {
@@ -88,7 +97,7 @@ describe('fork schema ledger cutover', () => {
     await sql`DELETE FROM public.migration_overrides WHERE name = 'cutover_concurrency_probe'`.execute(db);
     await sql`
       DELETE FROM kysely_migrations
-      WHERE name IN ('9999999999999-CustomPatch', '1780435471692-DeleteMismatchedAssetFaces')
+      WHERE name = '9999999999999-CustomPatch' OR name = ANY(${[...NON_WORKFLOW_PROVIDER_GAPS]})
     `.execute(db);
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     await sql`
@@ -200,20 +209,23 @@ describe('fork schema ledger cutover', () => {
     expect(state.rows[0]?.phase).toBe('ready');
   });
 
-  it('rejects an absent official migration outside the audited workflow compatibility stages', async () => {
-    await sql`
+  it.each(NON_WORKFLOW_PROVIDER_GAPS)(
+    'rejects provider-absent non-workflow migration %s on a current-fork installation',
+    async (name) => {
+      await sql`
       INSERT INTO kysely_migrations (name, timestamp)
-      VALUES ('1780435471692-DeleteMismatchedAssetFaces', '2026-07-15T00:00:01.000Z')
+      VALUES (${name}, '2026-07-15T00:00:01.000Z')
     `.execute(db);
-    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+      const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
+      const report = await sut.preflight();
 
-    expect(report.migrationOrderValid).toBe(false);
-    expect(report.blockers).toContain(
-      'Official migration ledger is not an exact ordered prefix of the bundled provider',
-    );
-  });
+      expect(report.migrationOrderValid).toBe(false);
+      expect(report.blockers).toContain(
+        'Official migration ledger is not an exact ordered prefix of the bundled provider',
+      );
+    },
+  );
 
   it('rolls back pre-commit DDL, ledger surgery, audit, and phase together', async () => {
     const failingRepository = new FailingPreCommitRepository(db, LoggingRepository.create(), new ConfigRepository());
@@ -240,7 +252,7 @@ describe('fork schema ledger cutover', () => {
     const writerMayStart = deferred();
     const writerPid = deferred<number>();
     const releaseVerification = deferred();
-    const observedWaiting = deferred<OverrideWriterLockEvidence>();
+    const observedWaiting = deferred<WriterLockEvidence>();
     let writerCompleted = false;
     const writer = concurrentDb.connection().execute(async (connection) => {
       const backend = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(connection);
@@ -253,9 +265,9 @@ describe('fork schema ledger cutover', () => {
       writerCompleted = true;
     });
     const exactWriterPid = await writerPid.promise;
-    const cutover = repository.commitForkSchemaCutover('b'.repeat(64), async (transaction) => {
+    const cutover = repository.commitForkSchemaCutover('b'.repeat(64), 'current-fork', async (transaction) => {
       writerMayStart.resolve();
-      observedWaiting.resolve(await waitForOverrideWriterLock(transaction, exactWriterPid));
+      observedWaiting.resolve(await waitForWriterLock(transaction, exactWriterPid, 'migration_overrides'));
       await releaseVerification.promise;
     });
 
@@ -286,6 +298,56 @@ describe('fork schema ledger cutover', () => {
           WHERE name = 'cutover_concurrency_probe'
         `.execute(db);
       expect(inserted.rows).toEqual([{ count: 1 }]);
+    } finally {
+      writerMayStart.resolve();
+      releaseVerification.resolve();
+      await Promise.allSettled([cutover, writer]);
+      await concurrentDb.destroy();
+    }
+  }, 10_000);
+
+  it('locks every manifest table before evidence so a public user writer waits', async () => {
+    const concurrentDb = await connectToSameDatabase(db);
+    const writerMayStart = deferred();
+    const writerPid = deferred<number>();
+    const releaseVerification = deferred();
+    const observedWaiting = deferred<WriterLockEvidence>();
+    let writerCompleted = false;
+    const writer = concurrentDb.connection().execute(async (connection) => {
+      const backend = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(connection);
+      writerPid.resolve(backend.rows[0]!.pid);
+      await writerMayStart.promise;
+      await sql`UPDATE public.user SET "updatedAt" = "updatedAt" WHERE false`.execute(connection);
+      writerCompleted = true;
+    });
+    const exactWriterPid = await writerPid.promise;
+    const cutover = repository.commitForkSchemaCutover('c'.repeat(64), 'current-fork', async (transaction) => {
+      writerMayStart.resolve();
+      observedWaiting.resolve(await waitForWriterLock(transaction, exactWriterPid, 'user'));
+      await releaseVerification.promise;
+    });
+
+    try {
+      const evidence = await Promise.race([
+        observedWaiting.promise,
+        cutover.then(() => {
+          throw new Error('Cutover completed before the user writer lock was observed');
+        }),
+      ]);
+      expect(evidence).toEqual({
+        granted: false,
+        mode: 'RowExclusiveLock',
+        pid: exactWriterPid,
+        relationName: 'public.user',
+        waitEvent: 'relation',
+        waitEventType: 'Lock',
+      });
+      expect(writerCompleted).toBe(false);
+
+      releaseVerification.resolve();
+      await cutover;
+      await writer;
+      expect(writerCompleted).toBe(true);
     } finally {
       writerMayStart.resolve();
       releaseVerification.resolve();
