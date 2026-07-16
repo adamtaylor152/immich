@@ -21,6 +21,11 @@ export type ReturnConfigReconciliation = {
   digest: string;
   source: 'database' | 'file';
 };
+type ReturnAutomationReconciliation = {
+  configDigest: string;
+  digest: string;
+  rawDigest: string | null;
+};
 
 export const BACKFILL_KINDS = [
   'privacy',
@@ -226,13 +231,15 @@ export class ForkSchemaRepository {
       throw new Error('Fork return config digest is invalid');
     }
     await this.db.transaction().execute(async (trx) => {
-      const audit = await sql<{ digest: string | null }>`
-        SELECT details -> 'configReconciliation' ->> 'digest' AS digest
+      const audit = await sql<{ details: Record<string, unknown>; id: string }>`
+        SELECT id::text AS id, coalesce(details, '{}'::jsonb) AS details
         FROM immich_fork.migration_audit
         WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
         ORDER BY id DESC LIMIT 1 FOR UPDATE
       `.execute(trx);
-      if (audit.rows[0]?.digest !== configDigest) {
+      const auditRow = audit.rows[0];
+      const config = auditRow?.details.configReconciliation as Partial<ReturnConfigReconciliation> | undefined;
+      if (!auditRow || config?.digest !== configDigest) {
         throw new Error('Fork return automation finalization requires durable config evidence');
       }
       const progress = await sql<{
@@ -248,11 +255,38 @@ export class ForkSchemaRepository {
       if (!row || row.remaining !== 0 || row.lastError || row.claimToken) {
         throw new Error('Fork return automation progress is incomplete');
       }
-      const digest = createHash('sha256')
-        .update(JSON.stringify({ automation: row.digest, config: configDigest }))
-        .digest('hex');
+      const stored = auditRow.details.automationReconciliation as Partial<ReturnAutomationReconciliation> | undefined;
+      if (stored) {
+        const expected = createHash('sha256')
+          .update(JSON.stringify({ automation: stored.rawDigest, config: stored.configDigest }))
+          .digest('hex');
+        if (
+          stored.configDigest !== configDigest ||
+          stored.digest !== expected ||
+          !(
+            stored.rawDigest === null ||
+            (typeof stored.rawDigest === 'string' && /^[0-9a-f]{64}$/.test(stored.rawDigest))
+          ) ||
+          row.digest !== stored.digest
+        ) {
+          throw new Error('Fork return automation reconciliation evidence drifted');
+        }
+        return;
+      }
+      const binding: ReturnAutomationReconciliation = {
+        configDigest,
+        digest: createHash('sha256')
+          .update(JSON.stringify({ automation: row.digest, config: configDigest }))
+          .digest('hex'),
+        rawDigest: row.digest,
+      };
       await sql`
-        UPDATE immich_fork.backfill_progress SET digest = ${digest}, "updatedAt" = now()
+        UPDATE immich_fork.migration_audit
+        SET details = jsonb_set(coalesce(details, '{}'::jsonb), '{automationReconciliation}', ${binding}::jsonb)
+        WHERE id = ${auditRow.id}::bigint
+      `.execute(trx);
+      await sql`
+        UPDATE immich_fork.backfill_progress SET digest = ${binding.digest}, "updatedAt" = now()
         WHERE kind = 'automation'
       `.execute(trx);
     });
@@ -516,7 +550,7 @@ export class ForkSchemaRepository {
         await sql`
           UPDATE immich_fork.backfill_progress
           SET remaining = 0, "updatedAt" = now()
-          WHERE kind = ${kind}
+          WHERE kind = ${kind} AND remaining <> 0
         `.execute(trx);
         return null;
       }

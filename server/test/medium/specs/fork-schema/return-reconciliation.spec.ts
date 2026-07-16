@@ -50,11 +50,48 @@ const waitForWriter = async (db: Kysely<DB>, writerPid: number, tableName: strin
   throw new Error(`Writer ${writerPid} did not block on immich_fork.${tableName}`);
 };
 
+const waitForBackendBlock = async (db: Kysely<DB>, writerPid: number, blockerPid: number) => {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const waiting = await sql<{ blockers: number[]; waitEvent: string; waitEventType: string }>`
+      SELECT pg_blocking_pids(pid) AS blockers, wait_event_type AS "waitEventType", wait_event AS "waitEvent"
+      FROM pg_catalog.pg_stat_activity
+      WHERE pid = ${writerPid} AND ${blockerPid} = ANY(pg_blocking_pids(pid))
+    `.execute(db);
+    if (waiting.rows[0]) {
+      return waiting.rows[0];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Backend ${writerPid} did not block behind ${blockerPid}`);
+};
+
+const getReturnBytes = async (db: Kysely<DB>) => {
+  const result = await sql<{ audit: string; config: string; progress: string }>`
+    SELECT
+      (SELECT row_to_json(audit)::text FROM immich_fork.migration_audit audit
+       WHERE name = 'fork-return-reconciliation' ORDER BY id DESC LIMIT 1) AS audit,
+      (SELECT coalesce(jsonb_agg(to_jsonb(config) ORDER BY key), '[]'::jsonb)::text
+       FROM immich_fork.config config) AS config,
+      (SELECT row_to_json(progress)::text FROM immich_fork.backfill_progress progress
+       WHERE kind = 'automation') AS progress
+  `.execute(db);
+  return result.rows[0]!;
+};
+
 class PausingForkHandoffRepository extends ForkHandoffRepository {
   onLocks?: (transaction: Kysely<DB>) => Promise<void>;
 
   protected override afterOrphanRelationLocks(transaction: Kysely<DB>): Promise<void> {
     return this.onLocks?.(transaction) ?? Promise.resolve();
+  }
+}
+
+class PausingPhysicalFileRepository extends PhysicalFileRepository {
+  onAuthority?: (transaction: Kysely<DB>, action: 'reserve' | 'run' | 'release') => Promise<void>;
+
+  protected afterNormalizationAuthority(transaction: Kysely<DB>, action: 'reserve' | 'run' | 'release'): Promise<void> {
+    return this.onAuthority?.(transaction, action) ?? Promise.resolve();
   }
 }
 
@@ -743,6 +780,86 @@ describe('certified fork return evidence', () => {
       : expect(action).rejects.toThrow('current phase'));
   });
 
+  it('holds the exact return claim through an in-flight run before allowing completion and replacement', async () => {
+    const user = mediumFactory.userInsert();
+    const assets = [
+      mediumFactory.assetInsert({ ownerId: user.id, originalPath: '/claim-a.jpg' }),
+      mediumFactory.assetInsert({ ownerId: user.id, originalPath: '/claim-b.jpg' }),
+    ];
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(assets).execute();
+    await forkSchemaRepository.beginOrResumeReturnReconciliation();
+    const first = await forkSchemaRepository.claimReturnBatch('storage', 1);
+    expect(first).not.toBeNull();
+    const firstCapability = { kind: 'storage' as const, claimToken: first!.cursor, claimedIds: first!.ids };
+    const repository = new PausingPhysicalFileRepository(db);
+    const prepared = await repository.createReturnNormalizationReservation(
+      first!.ids[0]!,
+      (asset) => asset.originalPath,
+      firstCapability,
+    );
+    expect(prepared.status).toBe('reserved');
+    if (prepared.status !== 'reserved') {
+      throw new Error('Expected a storage reservation');
+    }
+
+    const authorityReached = deferred<number>();
+    const releaseRun = deferred();
+    repository.onAuthority = async (transaction, action) => {
+      if (action !== 'run') {
+        return;
+      }
+      const pid = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(transaction);
+      authorityReached.resolve(pid.rows[0]!.pid);
+      await releaseRun.promise;
+    };
+    const run = repository.withLockedReturnNormalizationAsset(
+      first!.ids[0]!,
+      prepared.reservation.token,
+      firstCapability,
+      () => Promise.resolve(),
+    );
+    const observed = await Promise.race([authorityReached.promise.then(() => true), run.then(() => false)]);
+    expect(observed).toBe(true);
+    const workerPid = await authorityReached.promise;
+
+    const writer = await connectToSameDatabase(db);
+    try {
+      const writerPid = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(writer);
+      const completion = new ForkSchemaRepository(writer).completeBatch('storage', first!.cursor, 1, 'd'.repeat(64));
+      await expect(waitForBackendBlock(db, writerPid.rows[0]!.pid, workerPid)).resolves.toMatchObject({
+        waitEventType: 'Lock',
+      });
+      releaseRun.resolve();
+      await run;
+      await completion;
+    } finally {
+      releaseRun.resolve();
+      await writer.destroy();
+    }
+
+    const replacement = await forkSchemaRepository.claimReturnBatch('storage', 1);
+    expect(replacement).not.toBeNull();
+    await expect(
+      repository.createReturnNormalizationReservation(
+        replacement!.ids[0]!,
+        (asset) => asset.originalPath,
+        firstCapability,
+      ),
+    ).rejects.toThrow('durable return storage claim');
+    const replacementCapability = {
+      kind: 'storage' as const,
+      claimToken: replacement!.cursor,
+      claimedIds: replacement!.ids,
+    };
+    const replacementReservation = await repository.createReturnNormalizationReservation(
+      replacement!.ids[0]!,
+      (asset) => asset.originalPath,
+      replacementCapability,
+    );
+    expect(replacementReservation.status).toBe('reserved');
+  }, 15_000);
+
   it.each(['database', 'file'] as const)(
     'durably reconciles %s config with zero albums across interruptions before and after evidence',
     async (source) => {
@@ -796,6 +913,18 @@ describe('certified fork return evidence', () => {
       ).resolves.toMatchObject({ rows: [{ value: expected.smartAlbums }] });
       const effective = await forkSchemaRepository.overlayConfig(expected);
       expect(effective.smartAlbums).toEqual(expected.smartAlbums);
+
+      const firstSuccessfulRun = await getReturnBytes(db);
+      await expect(sut.reconcileAfterOfficialReturn(1)).resolves.toMatchObject({
+        active: false,
+        phase: 'inactive',
+        verified: true,
+      });
+      expect(await getReturnBytes(db)).toEqual(firstSuccessfulRun);
+      await sql`
+        UPDATE immich_fork.backfill_progress SET digest = ${'e'.repeat(64)} WHERE kind = 'automation'
+      `.execute(db);
+      await expect(sut.reconcileAfterOfficialReturn(1)).rejects.toThrow('automation reconciliation evidence drifted');
     },
   );
 });
