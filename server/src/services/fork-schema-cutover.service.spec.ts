@@ -81,7 +81,7 @@ describe(ForkSchemaCutoverService.name, () => {
       expect(lock).toBe(DatabaseLock.Migrations);
       return callback();
     });
-    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, verify) => {
+    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, _installationClass, verify) => {
       await verify({} as never);
       return checkpoint;
     });

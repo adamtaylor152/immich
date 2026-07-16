@@ -1,6 +1,8 @@
 import semver from 'semver';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
 
+export const SUPPORTED_UPSTREAM_MIGRATIONS: readonly string[] = supportedVersions.upstreamMigrations;
+
 export const LEGACY_FORK_MIGRATIONS: ReadonlySet<string> = new Set([
   '1778000000000-PhysicalDeduplication',
   '1778255964846-PhysicalDeduplicationSchemaReconcile',

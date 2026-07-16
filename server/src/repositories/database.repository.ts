@@ -21,11 +21,15 @@ import {
   CatalogManifest,
   compareCatalogs,
   getCatalogEvidence,
-  getForkTableLocks,
+  getCatalogTableLocks,
 } from 'src/fork-schema/catalog';
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
 import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
-import { classifyMigration, GENERIC_LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import {
+  classifyMigration,
+  GENERIC_LEGACY_FORK_MIGRATIONS,
+  SUPPORTED_UPSTREAM_MIGRATIONS,
+} from 'src/fork-schema/migration-manifest';
 import {
   createForkMigrationProvider,
   createLegacyMigrationProvider,
@@ -51,18 +55,6 @@ import { isValidInteger } from 'src/validation';
 export let cachedVectorExtension: VectorExtension | undefined;
 
 const CLIP_TABLES = ['smart_search', 'smart_search_description', 'asset_video_duplicate_frame'] as const;
-
-const CUTOVER_PUBLIC_LOCK_TABLES = [
-  'public.kysely_migrations',
-  'public.migration_overrides',
-  'public.system_metadata',
-  'public.asset_file',
-  'public.plugin',
-  'public.plugin_method',
-  'public.workflow',
-  'public.workflow_step',
-  'public.asset',
-] as const;
 
 const FORK_CATALOG_MANIFEST = forkCatalogManifest as CatalogManifest;
 const OFFICIAL_CATALOG_MANIFEST = officialCatalogManifest as CatalogManifest;
@@ -631,7 +623,6 @@ export class DatabaseRepository {
       .filter(({ classification }) => classification === 'upstream')
       .map(({ name }) => name);
     const officialLedgerOrder = validateOfficialMigrationLedgerOrder(appliedOfficial, officialNames);
-    const migrationOrderValid = officialLedgerOrder.valid;
 
     const activeWritesResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count
@@ -675,14 +666,23 @@ export class DatabaseRepository {
         encode(sha256(convert_to(coalesce(string_agg(asset.id::text || ':' || asset."originalPath", E'\n' ORDER BY asset.id::text), ''), 'UTF8')), 'hex') AS "normalizedDigest",
         count(mapping."assetId")::int AS "mappingCount",
         encode(sha256(convert_to(coalesce(string_agg(mapping."assetId"::text || ':' || mapping."upstreamPath", E'\n' ORDER BY mapping."assetId"::text), ''), 'UTF8')), 'hex') AS "mappingDigest",
-        (
-          count(*) FILTER (WHERE mapping."assetId" IS NULL OR mapping."upstreamPath" IS NULL OR mapping."upstreamPath" <> asset."originalPath")
-          + (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
-          + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
+        count(*) FILTER (
+          WHERE mapping."assetId" IS NULL
+            OR mapping."upstreamPath" IS NULL
+            OR mapping."upstreamPath" <> asset."originalPath"
         )::int AS "unsafeCount"
       FROM public.asset asset
       LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
     `.execute(runner);
+    const publicPhysicalReferenceResult =
+      installationClass === 'current-fork'
+        ? await sql<{ count: number }>`
+            SELECT (
+              (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
+              + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
+            )::int AS count
+          `.execute(runner)
+        : { rows: [{ count: 0 }] };
     const reservationResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
     `.execute(runner);
@@ -690,6 +690,16 @@ export class DatabaseRepository {
     const actualCatalog = await getCatalogEvidence(runner);
     const expectedCatalog = expectedCatalogFor(installationClass);
     const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
+    const exactOriginalOfficialLedger =
+      ledger.length === SUPPORTED_UPSTREAM_MIGRATIONS.length &&
+      ledger.every(
+        ({ classification, name }, index) =>
+          classification === 'upstream' && name === SUPPORTED_UPSTREAM_MIGRATIONS[index],
+      );
+    const migrationOrderValid =
+      installationClass === 'current-fork'
+        ? officialLedgerOrder.valid
+        : exactOriginalOfficialLedger && catalogDiff.clean;
     const forkMigrations = forkLedgerResult.rows.map(({ name }) => name);
     const cutoverAuditResult = await sql<{ present: boolean }>`
       SELECT EXISTS (
@@ -740,12 +750,16 @@ export class DatabaseRepository {
         checksum.applicableCount === checksum.sidecarCount &&
         checksum.applicableDigest === checksum.sidecarDigest,
     };
-    const mapping = mappingResult.rows[0] ?? {
+    const mappingResultRow = mappingResult.rows[0] ?? {
       mappingCount: 0,
       mappingDigest: '',
       normalizedCount: 0,
       normalizedDigest: '',
       unsafeCount: 1,
+    };
+    const mapping = {
+      ...mappingResultRow,
+      unsafeCount: mappingResultRow.unsafeCount + (publicPhysicalReferenceResult.rows[0]?.count ?? 0),
     };
     const mappingCoverage = {
       ...mapping,
@@ -768,7 +782,8 @@ export class DatabaseRepository {
       maintenanceMode: maintenanceResult.rows[0]?.maintenanceMode ?? false,
       mappingCoverage,
       migrationOrderValid,
-      officialPendingMigrations: officialLedgerOrder.pending,
+      officialPendingMigrations:
+        installationClass === 'current-fork' && officialLedgerOrder.valid ? officialLedgerOrder.pending : [],
       state,
       storageReservations: reservationResult.rows[0]?.count ?? 0,
       tableEvidence,
@@ -779,13 +794,14 @@ export class DatabaseRepository {
 
   async commitForkSchemaCutover(
     reportDigest: string,
+    installationClass: ForkSchemaCutoverEvidence['installationClass'],
     verify: (transaction: Kysely<DB>) => Promise<void>,
   ): Promise<ForkSchemaCutoverCheckpoint> {
     return this.db
       .transaction()
       .setIsolationLevel('serializable')
       .execute(async (transaction) => {
-        const lockTables = [...new Set([...CUTOVER_PUBLIC_LOCK_TABLES, ...getForkTableLocks(FORK_CATALOG_MANIFEST)])]
+        const lockTables = getCatalogTableLocks(expectedCatalogFor(installationClass))
           .map((table) =>
             table
               .split('.')

@@ -82,7 +82,7 @@ describe('fork schema authority cutover', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const reportDigest = 'a'.repeat(64);
 
-    const checkpoint = await repository.commitForkSchemaCutover(reportDigest, async (transaction) => {
+    const checkpoint = await repository.commitForkSchemaCutover(reportDigest, 'current-fork', async (transaction) => {
       const locked = await sql<{ active: boolean; phase: string }>`
         SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
       `.execute(transaction);
