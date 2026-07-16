@@ -1,6 +1,13 @@
 import semver from 'semver';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
 
+type ReleaseManifest = {
+  ranges: readonly string[];
+  certifiedTags: readonly string[];
+  upstreamMigrations: readonly string[];
+  reversionSupported: boolean;
+};
+
 export const SUPPORTED_UPSTREAM_MIGRATIONS: readonly string[] = supportedVersions.upstreamMigrations;
 
 export const LEGACY_FORK_MIGRATIONS: ReadonlySet<string> = new Set([
@@ -43,5 +50,26 @@ export function classifyMigration(name: string): 'upstream' | 'legacy-fork' | 'u
 export function assertSupportedUpstream(version: string): void {
   if (!supportedVersions.ranges.some((range) => semver.satisfies(version, range))) {
     throw new Error(`Unsupported official Immich database version: ${version}`);
+  }
+}
+
+export function assertReleaseManifest(
+  serverVersion: string,
+  manifest: ReleaseManifest,
+  bundledMigrations: readonly string[],
+): void {
+  if (!manifest.ranges.some((range) => semver.satisfies(serverVersion, range))) {
+    throw new Error(`Server version ${serverVersion} is outside the reversion compatibility manifest`);
+  }
+
+  if (manifest.reversionSupported && manifest.certifiedTags.length === 0) {
+    throw new Error('Reversion support requires at least one certified official tag');
+  }
+
+  if (
+    manifest.upstreamMigrations.length !== bundledMigrations.length ||
+    manifest.upstreamMigrations.some((name, index) => name !== bundledMigrations[index])
+  ) {
+    throw new Error('Bundled official migration provider does not match the official migration manifest');
   }
 }

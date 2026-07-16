@@ -14,6 +14,12 @@ manifest_tag="$(node -e '
   if (!Array.isArray(manifest.certifiedTags) || manifest.certifiedTags.length !== 1) process.exit(2);
   process.stdout.write(manifest.certifiedTags[0]);
 ' "$ROOT/server/src/fork-schema/supported-versions.json")"
+manifest_digest="$(node -e '
+  const manifest = require(process.argv[1]);
+  const digest = manifest.certification?.officialDigest;
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest)) process.exit(2);
+  process.stdout.write(digest);
+' "$ROOT/server/src/fork-schema/supported-versions.json")"
 
 if [[ "$manifest_tag" != 'v3.0.3' ]]; then
   echo "Certified manifest tag must be exactly v3.0.3, received: $manifest_tag" >&2
@@ -121,8 +127,9 @@ trap cleanup EXIT
 echo "Pulling exact official image ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"
 docker pull "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"
 official_digest="$(docker image inspect "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG" --format '{{index .RepoDigests 0}}')"
-[[ "$official_digest" == ghcr.io/immich-app/immich-server@sha256:* ]] || {
-  echo 'Official image did not resolve to a content digest' >&2
+expected_official_digest="ghcr.io/immich-app/immich-server@$manifest_digest"
+[[ "$official_digest" == "$expected_official_digest" ]] || {
+  echo "Official image digest mismatch: expected $expected_official_digest, received $official_digest" >&2
   exit 1
 }
 echo "Official image digest: $official_digest"

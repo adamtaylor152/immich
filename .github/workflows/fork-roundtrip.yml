@@ -1,6 +1,7 @@
 name: Fork schema official-container certification
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - '.github/workflows/fork-roundtrip.yml'
