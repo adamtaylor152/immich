@@ -70,6 +70,12 @@ export type PhysicalNormalizationPreparation =
       recovered: boolean;
     };
 
+export type ReturnNormalizationClaim = {
+  kind: 'storage' | 'checksum';
+  claimToken: string;
+  claimedIds: string[];
+};
+
 export interface PhysicalFileInput {
   canonicalAssetId: string | null;
   checksum: Buffer;
@@ -168,21 +174,24 @@ export class PhysicalFileRepository {
     assetId: string,
     selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
   ): Promise<PhysicalNormalizationPreparation> {
+    return this.createNormalizationReservationForMode(assetId, selectUpstreamPath);
+  }
+
+  async createReturnNormalizationReservation(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+    claim: ReturnNormalizationClaim,
+  ): Promise<PhysicalNormalizationPreparation> {
+    return this.createNormalizationReservationForMode(assetId, selectUpstreamPath, claim);
+  }
+
+  private async createNormalizationReservationForMode(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<PhysicalNormalizationPreparation> {
     return this.db.transaction().execute(async (trx) => {
-      const state = await sql<{ allowed: boolean }>`
-        SELECT state.phase = 'dual-write' OR (
-          state.phase = 'inactive' AND EXISTS (
-            SELECT 1 FROM immich_fork.migration_audit
-            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
-          )
-        ) AS allowed
-        FROM immich_fork.state state
-        WHERE state.id = 1
-        FOR SHARE
-      `.execute(trx);
-      if (!state.rows[0]?.allowed) {
-        throw new Error('Storage normalization can only reserve in dual-write phase');
-      }
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'reserve');
       const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
       if (locked.rows.length === 0) {
         throw new Error(`Asset ${assetId} does not exist`);
@@ -306,10 +315,29 @@ export class PhysicalFileRepository {
   }
 
   async releaseNormalizationReservation(assetId: string, token: string): Promise<void> {
-    await sql`
-      DELETE FROM immich_fork.asset_storage_reservation
-      WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
-    `.execute(this.db);
+    await this.releaseNormalizationReservationForMode(assetId, token);
+  }
+
+  async releaseReturnNormalizationReservation(
+    assetId: string,
+    token: string,
+    claim: ReturnNormalizationClaim,
+  ): Promise<void> {
+    await this.releaseNormalizationReservationForMode(assetId, token, claim);
+  }
+
+  private async releaseNormalizationReservationForMode(
+    assetId: string,
+    token: string,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'release');
+      await sql`
+        DELETE FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
+      `.execute(trx);
+    });
   }
 
   async withLockedNormalizationAsset<T>(
@@ -321,21 +349,34 @@ export class PhysicalFileRepository {
       commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
     }) => Promise<T>,
   ): Promise<T> {
+    return this.withLockedNormalizationAssetForMode(assetId, token, callback);
+  }
+
+  async withLockedReturnNormalizationAsset<T>(
+    assetId: string,
+    token: string,
+    claim: ReturnNormalizationClaim,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.withLockedNormalizationAssetForMode(assetId, token, callback, claim);
+  }
+
+  private async withLockedNormalizationAssetForMode<T>(
+    assetId: string,
+    token: string,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<T> {
     return this.db.transaction().execute(async (trx) => {
-      const state = await sql<{ allowed: boolean }>`
-        SELECT state.phase = 'dual-write' OR (
-          state.phase = 'inactive' AND EXISTS (
-            SELECT 1 FROM immich_fork.migration_audit
-            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
-          )
-        ) AS allowed
-        FROM immich_fork.state state
-        WHERE state.id = 1
-        FOR SHARE
-      `.execute(trx);
-      if (!state.rows[0]?.allowed) {
-        throw new Error('Storage normalization can only run in dual-write phase');
-      }
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'run');
       const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
       if (locked.rows.length === 0) {
         throw new Error(`Asset ${assetId} does not exist`);
@@ -367,6 +408,41 @@ export class PhysicalFileRepository {
         },
       });
     });
+  }
+
+  private async assertNormalizationAuthority(
+    trx: Transaction<DB>,
+    assetId: string,
+    claim: ReturnNormalizationClaim | undefined,
+    action: 'reserve' | 'run' | 'release',
+  ): Promise<void> {
+    if (!claim) {
+      const state = await sql<{ phase: string }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE
+      `.execute(trx);
+      if (!['dual-write', 'ready', 'active'].includes(state.rows[0]?.phase ?? '')) {
+        throw new Error(`Storage normalization cannot ${action} in the current phase`);
+      }
+      return;
+    }
+    const authority = await sql<{ allowed: boolean }>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM immich_fork.state state
+        JOIN immich_fork.backfill_progress progress ON progress.kind = ${claim.kind}
+        WHERE state.id = 1 AND state.phase = 'inactive' AND state.active = false
+          AND progress."claimToken" = ${claim.claimToken}
+          AND progress."claimedIds" = ${claim.claimedIds}
+          AND ${assetId} = ANY(progress."claimedIds")
+          AND EXISTS (
+            SELECT 1 FROM immich_fork.migration_audit
+            WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          )
+      ) AS allowed
+    `.execute(trx);
+    if (!authority.rows[0]?.allowed) {
+      throw new Error('Storage normalization requires the durable return storage claim');
+    }
   }
 
   private async commitNormalization(

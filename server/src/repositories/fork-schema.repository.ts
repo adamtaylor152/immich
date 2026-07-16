@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { SystemConfig } from 'src/config';
 import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authority';
 import { DB } from 'src/schema';
@@ -16,6 +16,11 @@ export type ForkState = {
   upstreamVersion: string;
 };
 export type BackfillClaim = { ids: string[]; cursor: string };
+export type ReturnConfigReconciliation = {
+  count: number;
+  digest: string;
+  source: 'database' | 'file';
+};
 
 export const BACKFILL_KINDS = [
   'privacy',
@@ -154,6 +159,103 @@ export class ForkSchemaRepository {
       WHERE kind = ANY(${[...BACKFILL_KINDS]})
     `.execute(this.db);
     return result.rows;
+  }
+
+  async getReturnConfigReconciliation(): Promise<ReturnConfigReconciliation | null> {
+    const result = await sql<{ evidence: ReturnConfigReconciliation | null }>`
+      SELECT details -> 'configReconciliation' AS evidence
+      FROM immich_fork.migration_audit
+      WHERE name = 'fork-return-reconciliation'
+      ORDER BY id DESC
+      LIMIT 1
+    `.execute(this.db);
+    const evidence = result.rows[0]?.evidence;
+    if (!evidence) {
+      return null;
+    }
+    if (
+      evidence.count !== 2 ||
+      !/^[0-9a-f]{64}$/.test(evidence.digest) ||
+      (evidence.source !== 'database' && evidence.source !== 'file')
+    ) {
+      throw new Error('Fork return config reconciliation evidence is invalid');
+    }
+    return evidence;
+  }
+
+  async recordReturnConfigReconciliation(evidence: ReturnConfigReconciliation): Promise<void> {
+    if (evidence.count !== 2 || !/^[0-9a-f]{64}$/.test(evidence.digest)) {
+      throw new Error('Fork return config reconciliation evidence is invalid');
+    }
+    await this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (trx) => {
+        const audit = await sql<{ details: Record<string, unknown>; id: string }>`
+          SELECT id::text AS id, coalesce(details, '{}'::jsonb) AS details
+          FROM immich_fork.migration_audit
+          WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          ORDER BY id DESC LIMIT 1 FOR UPDATE
+        `.execute(trx);
+        const row = audit.rows[0];
+        if (!row) {
+          throw new Error('Fork return config reconciliation requires a running audit');
+        }
+        const current = row.details.configReconciliation;
+        if (current) {
+          const stored = current as Partial<ReturnConfigReconciliation>;
+          if (
+            stored.count !== evidence.count ||
+            stored.digest !== evidence.digest ||
+            stored.source !== evidence.source
+          ) {
+            throw new Error('Fork return config reconciliation evidence drifted');
+          }
+          return;
+        }
+        await sql`
+          UPDATE immich_fork.migration_audit
+          SET details = jsonb_set(coalesce(details, '{}'::jsonb), '{configReconciliation}', ${evidence}::jsonb)
+          WHERE id = ${row.id}::bigint
+        `.execute(trx);
+      });
+  }
+
+  async finalizeReturnAutomationProgress(configDigest: string): Promise<void> {
+    if (!/^[0-9a-f]{64}$/.test(configDigest)) {
+      throw new Error('Fork return config digest is invalid');
+    }
+    await this.db.transaction().execute(async (trx) => {
+      const audit = await sql<{ digest: string | null }>`
+        SELECT details -> 'configReconciliation' ->> 'digest' AS digest
+        FROM immich_fork.migration_audit
+        WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+        ORDER BY id DESC LIMIT 1 FOR UPDATE
+      `.execute(trx);
+      if (audit.rows[0]?.digest !== configDigest) {
+        throw new Error('Fork return automation finalization requires durable config evidence');
+      }
+      const progress = await sql<{
+        claimToken: string | null;
+        digest: string | null;
+        lastError: string | null;
+        remaining: number;
+      }>`
+        SELECT remaining::float8 AS remaining, digest, "lastError", "claimToken"
+        FROM immich_fork.backfill_progress WHERE kind = 'automation' FOR UPDATE
+      `.execute(trx);
+      const row = progress.rows[0];
+      if (!row || row.remaining !== 0 || row.lastError || row.claimToken) {
+        throw new Error('Fork return automation progress is incomplete');
+      }
+      const digest = createHash('sha256')
+        .update(JSON.stringify({ automation: row.digest, config: configDigest }))
+        .digest('hex');
+      await sql`
+        UPDATE immich_fork.backfill_progress SET digest = ${digest}, "updatedAt" = now()
+        WHERE kind = 'automation'
+      `.execute(trx);
+    });
   }
 
   async transitionPhase(expected: ForkSchemaPhase, next: ForkSchemaPhase): Promise<boolean> {

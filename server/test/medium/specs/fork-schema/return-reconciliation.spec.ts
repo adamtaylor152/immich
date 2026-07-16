@@ -3,16 +3,60 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { defaults } from 'src/config';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
 import { getWorkflowCompatibilityEvidence } from 'src/fork-schema/workflow-compatibility';
 import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
 import { BACKFILL_KINDS, ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
+import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
+import { ForkStorageNormalizationService } from 'src/services/fork-storage-normalization.service';
+import { getKyselyConfig } from 'src/utils/database';
 import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB, newTestService } from 'test/utils';
+
+const deferred = <T = void>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => (resolve = resolvePromise));
+  return { promise, resolve };
+};
+
+const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
+  const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
+};
+
+const waitForWriter = async (db: Kysely<DB>, writerPid: number, tableName: string) => {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const waiting = await sql<{ granted: boolean; mode: string; waitEvent: string; waitEventType: string }>`
+      SELECT lock.mode, lock.granted, activity.wait_event_type AS "waitEventType", activity.wait_event AS "waitEvent"
+      FROM pg_catalog.pg_stat_activity activity
+      JOIN pg_catalog.pg_locks lock ON lock.pid = activity.pid
+      JOIN pg_catalog.pg_class relation ON relation.oid = lock.relation
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
+      WHERE activity.pid = ${writerPid} AND namespace.nspname = 'immich_fork'
+        AND relation.relname = ${tableName} AND NOT lock.granted
+    `.execute(db);
+    if (waiting.rows[0]) {
+      return waiting.rows[0];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Writer ${writerPid} did not block on immich_fork.${tableName}`);
+};
+
+class PausingForkHandoffRepository extends ForkHandoffRepository {
+  onLocks?: (transaction: Kysely<DB>) => Promise<void>;
+
+  protected override afterOrphanRelationLocks(transaction: Kysely<DB>): Promise<void> {
+    return this.onLocks?.(transaction) ?? Promise.resolve();
+  }
+}
 
 describe('certified fork return evidence', () => {
   let db: Kysely<DB>;
@@ -38,6 +82,17 @@ describe('certified fork return evidence', () => {
   beforeEach(async () => {
     await seedExactLedger();
     await sql`TRUNCATE immich_fork.migration_audit, immich_fork.backfill_progress`.execute(db);
+    await sql`
+      TRUNCATE immich_fork.orphaned_records, immich_fork.asset_health_candidate, immich_fork.asset_health,
+        immich_fork.asset_health_run, immich_fork.smart_album_match, immich_fork.smart_album_exclusion,
+        immich_fork.smart_album_rule, immich_fork.album_closure, immich_fork.album_metadata,
+        immich_fork.asset_privacy, immich_fork.asset_enrichment, immich_fork.asset_best_photo_score,
+        immich_fork.asset_video_duplicate_frame, immich_fork.asset_checksum, immich_fork.asset_physical_file,
+        immich_fork.asset_storage_reservation, immich_fork.physical_file, immich_fork.config
+    `.execute(db);
+    await db.deleteFrom('album').execute();
+    await db.deleteFrom('asset').execute();
+    await db.deleteFrom('user').execute();
     await sql`
       UPDATE immich_fork.state
       SET active = false, phase = 'inactive', "schemaVersion" = '2', "updatedAt" = now()
@@ -196,6 +251,225 @@ describe('certified fork return evidence', () => {
       'exact fork return progress set',
     );
   });
+
+  it.each([
+    ['asset_privacy missing asset', 'asset_privacy'],
+    ['album_metadata missing album', 'album_metadata'],
+    ['album_metadata missing parent', 'album_metadata'],
+    ['album_closure missing ancestor', 'album_closure'],
+    ['album_closure missing descendant', 'album_closure'],
+    ['asset_enrichment missing asset', 'asset_enrichment'],
+    ['smart_album_rule missing album', 'smart_album_rule'],
+    ['smart_album_match missing album', 'smart_album_match'],
+    ['smart_album_match missing asset', 'smart_album_match'],
+    ['smart_album_exclusion missing album', 'smart_album_exclusion'],
+    ['smart_album_exclusion missing asset', 'smart_album_exclusion'],
+    ['asset_health missing asset', 'asset_health'],
+    ['asset_health_candidate missing health', 'asset_health_candidate'],
+    ['asset_health_run without health', 'asset_health_run'],
+    ['asset_best_photo_score missing asset', 'asset_best_photo_score'],
+    ['asset_video_duplicate_frame missing asset', 'asset_video_duplicate_frame'],
+    ['asset_checksum missing asset', 'asset_checksum'],
+    ['asset_physical_file missing asset', 'asset_physical_file'],
+    ['asset_physical_file missing physical file', 'asset_physical_file'],
+    ['asset_storage_reservation missing asset', 'asset_storage_reservation'],
+    ['physical_file missing canonical asset', 'physical_file'],
+    ['physical_file null canonical asset', 'physical_file'],
+  ] as const)('independently archives and deletes %s', async (predicate, sourceTable) => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    const album = mediumFactory.albumInsert({});
+    const orphanAssetId = randomUUID();
+    const orphanAlbumId = randomUUID();
+    const physicalFileId = randomUUID();
+    const now = new Date('2026-07-16T12:00:00.000Z');
+    const bytes = Buffer.from('orphan');
+    const vector = `[${Array.from({ length: 512 }, (_, index) => (index === 0 ? 1 : 0)).join(',')}]`;
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db.insertInto('album').values(album).execute();
+
+    switch (predicate) {
+      case 'asset_privacy missing asset': {
+        await sql`INSERT INTO immich_fork.asset_privacy ("assetId") VALUES (${orphanAssetId}::uuid)`.execute(db);
+        break;
+      }
+      case 'album_metadata missing album': {
+        await sql`INSERT INTO immich_fork.album_metadata ("albumId") VALUES (${orphanAlbumId}::uuid)`.execute(db);
+        break;
+      }
+      case 'album_metadata missing parent': {
+        await sql`INSERT INTO immich_fork.album_metadata ("albumId", "parentId") VALUES (${album.id}::uuid, ${orphanAlbumId}::uuid)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'album_closure missing ancestor': {
+        await sql`INSERT INTO immich_fork.album_closure ("ancestorId", "descendantId") VALUES (${orphanAlbumId}::uuid, ${album.id}::uuid)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'album_closure missing descendant': {
+        await sql`INSERT INTO immich_fork.album_closure ("ancestorId", "descendantId") VALUES (${album.id}::uuid, ${orphanAlbumId}::uuid)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_enrichment missing asset': {
+        await sql`INSERT INTO immich_fork.asset_enrichment ("assetId") VALUES (${orphanAssetId}::uuid)`.execute(db);
+        break;
+      }
+      case 'smart_album_rule missing album': {
+        await sql`INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind) VALUES (${randomUUID()}::uuid, ${orphanAlbumId}::uuid, ${user.id}::uuid, 'review')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'smart_album_match missing album': {
+        await sql`INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason") VALUES (${orphanAlbumId}::uuid, ${asset.id}::uuid, 'tag')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'smart_album_match missing asset': {
+        await sql`INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason") VALUES (${album.id}::uuid, ${orphanAssetId}::uuid, 'tag')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'smart_album_exclusion missing album': {
+        await sql`INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId") VALUES (${orphanAlbumId}::uuid, ${asset.id}::uuid)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'smart_album_exclusion missing asset': {
+        await sql`INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId") VALUES (${album.id}::uuid, ${orphanAssetId}::uuid)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_health missing asset': {
+        await sql`INSERT INTO immich_fork.asset_health (id, "assetId", category, status, severity, "originalPath", "originalFileName", evidence, resolution, "checkedAt") VALUES (${randomUUID()}::uuid, ${orphanAssetId}::uuid, 'missing', 'missing', 'warning', '/orphan.jpg', 'orphan.jpg', '{}'::jsonb, '{}'::jsonb, ${now})`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_health_candidate missing health': {
+        await sql`INSERT INTO immich_fork.asset_health_candidate (id, "healthId", "candidatePath", status, evidence, resolution, "checkedAt") VALUES (${randomUUID()}::uuid, ${randomUUID()}::uuid, '/candidate.jpg', 'candidate', '{}'::jsonb, '{}'::jsonb, ${now})`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_health_run without health': {
+        await sql`INSERT INTO immich_fork.asset_health_run (id, category, status) VALUES (${randomUUID()}::uuid, 'missing', 'completed')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_best_photo_score missing asset': {
+        await sql`INSERT INTO immich_fork.asset_best_photo_score ("assetId", "ownerId", score, "scoreVersion", "computedAt") VALUES (${orphanAssetId}::uuid, ${user.id}::uuid, 0.5, 1, ${now})`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_video_duplicate_frame missing asset': {
+        await sql`INSERT INTO immich_fork.asset_video_duplicate_frame ("assetId", "frameIndex", "timestampMs", path, embedding) VALUES (${orphanAssetId}::uuid, 0, 0, '/frame.jpg', ${vector}::vector)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_checksum missing asset': {
+        await sql`INSERT INTO immich_fork.asset_checksum ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount") VALUES (${orphanAssetId}::uuid, ${bytes}, ${bytes}, 6, ARRAY['/orphan.jpg'], 1)`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_physical_file missing asset': {
+        await sql`INSERT INTO immich_fork.asset_physical_file ("assetId", "upstreamPath") VALUES (${orphanAssetId}::uuid, '/orphan.jpg')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_physical_file missing physical file': {
+        await sql`INSERT INTO immich_fork.asset_physical_file ("assetId", "physicalFileId", "upstreamPath") VALUES (${asset.id}::uuid, ${physicalFileId}::uuid, '/orphan.jpg')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'asset_storage_reservation missing asset': {
+        await sql`INSERT INTO immich_fork.asset_storage_reservation ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status) VALUES (${orphanAssetId}::uuid, ${randomUUID()}::uuid, '/source', '/upstream', '/temp', 'reserved')`.execute(
+          db,
+        );
+        break;
+      }
+      case 'physical_file missing canonical asset': {
+        await sql`INSERT INTO immich_fork.physical_file (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt") VALUES (${physicalFileId}::uuid, ${orphanAssetId}::uuid, 'original', ${bytes}, 6, '/orphan.jpg', ${now}, ${now})`.execute(
+          db,
+        );
+        break;
+      }
+      case 'physical_file null canonical asset': {
+        await sql`INSERT INTO immich_fork.physical_file (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt") VALUES (${physicalFileId}::uuid, NULL, 'original', ${bytes}, 6, '/orphan.jpg', ${now}, ${now})`.execute(
+          db,
+        );
+        break;
+      }
+    }
+
+    await repository.archiveAndDeleteOrphans();
+    await expect(
+      sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.orphaned_records WHERE "sourceTable" = ${sourceTable}
+    `.execute(db),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+  });
+
+  it('blocks an exact-backend-PID orphan writer through the final verification and commit', async () => {
+    const pausing = new PausingForkHandoffRepository(db);
+    const writerDb = await connectToSameDatabase(db);
+    const mayWrite = deferred();
+    const writerPid = deferred<number>();
+    const release = deferred();
+    let writerCompleted = false;
+    let locksReached = false;
+    const writer = writerDb.connection().execute(async (connection) => {
+      const backend = await sql<{ pid: number }>`SELECT pg_backend_pid()::int AS pid`.execute(connection);
+      writerPid.resolve(backend.rows[0]!.pid);
+      await mayWrite.promise;
+      await sql`INSERT INTO immich_fork.asset_privacy ("assetId") VALUES (${randomUUID()}::uuid)`.execute(connection);
+      writerCompleted = true;
+    });
+    const pid = await writerPid.promise;
+    pausing.onLocks = async (transaction) => {
+      locksReached = true;
+      mayWrite.resolve();
+      expect(await waitForWriter(transaction, pid, 'asset_privacy')).toEqual({
+        granted: false,
+        mode: 'RowExclusiveLock',
+        waitEvent: 'relation',
+        waitEventType: 'Lock',
+      });
+      expect(writerCompleted).toBe(false);
+      await release.promise;
+    };
+    const reconciliation = pausing.archiveAndDeleteOrphans();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(locksReached).toBe(true);
+      expect(writerCompleted).toBe(false);
+      release.resolve();
+      await reconciliation;
+      await writer;
+      expect(writerCompleted).toBe(true);
+    } finally {
+      mayWrite.resolve();
+      release.resolve();
+      await Promise.allSettled([reconciliation, writer]);
+      await writerDb.destroy();
+    }
+  }, 10_000);
 
   it('archives before deleting every orphan sidecar family and preserves workflow/plugin bytes and catalog', async () => {
     const assetId = randomUUID();
@@ -375,4 +649,153 @@ describe('certified fork return evidence', () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it('keeps ordinary inactive storage blocked during reconciliation and fences return storage to the durable claim', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'immich-return-storage-capability-'));
+    StorageCore.setMediaLocation(root);
+    try {
+      const bytes = Buffer.from('claimed-storage-asset');
+      const path = join(root, 'claimed.jpg');
+      const unclaimedBytes = Buffer.from('unclaimed-storage-asset');
+      const unclaimedPath = join(root, 'unclaimed.jpg');
+      await writeFile(path, bytes);
+      await writeFile(unclaimedPath, unclaimedBytes);
+      const user = mediumFactory.userInsert();
+      const claimed = mediumFactory.assetInsert({
+        ownerId: user.id,
+        originalPath: path,
+        checksum: createHash('sha1').update(bytes).digest(),
+        checksumAlgorithm: ChecksumAlgorithm.sha1File,
+      });
+      const unclaimed = mediumFactory.assetInsert({
+        ownerId: user.id,
+        originalPath: unclaimedPath,
+        checksum: createHash('sha1').update(unclaimedBytes).digest(),
+        checksumAlgorithm: ChecksumAlgorithm.sha1File,
+      });
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values([claimed, unclaimed]).execute();
+      await forkSchemaRepository.beginOrResumeReturnReconciliation();
+      const claim = await forkSchemaRepository.claimReturnBatch('storage', 1);
+      expect(claim).not.toBeNull();
+      const claimedId = claim!.ids[0]!;
+      const unclaimedId = [claimed.id!, unclaimed.id!].find((id) => id !== claimedId)!;
+      const normalization = new ForkStorageNormalizationService(db);
+      const repository = new PhysicalFileRepository(db);
+
+      await expect(normalization.normalizeBatch([claimedId])).rejects.toThrow('current phase');
+      await expect(
+        repository.createReturnNormalizationReservation(claimedId, (asset) => asset.originalPath, {
+          kind: 'storage',
+          claimToken: 'wrong-token',
+          claimedIds: claim!.ids,
+        }),
+      ).rejects.toThrow('durable return storage claim');
+      await expect(
+        repository.createReturnNormalizationReservation(claimedId, (asset) => asset.originalPath, {
+          kind: 'checksum',
+          claimToken: claim!.cursor,
+          claimedIds: claim!.ids,
+        }),
+      ).rejects.toThrow('durable return storage claim');
+      await expect(
+        repository.createReturnNormalizationReservation(unclaimedId, (asset) => asset.originalPath, {
+          kind: 'storage',
+          claimToken: claim!.cursor,
+          claimedIds: [unclaimedId],
+        }),
+      ).rejects.toThrow('durable return storage claim');
+
+      await expect(
+        normalization.normalizeBatch(claim!.ids, {
+          kind: 'storage',
+          claimToken: claim!.cursor,
+          claimedIds: claim!.ids,
+        }),
+      ).resolves.toMatchObject({ count: 1, digest: expect.stringMatching(/^[0-9a-f]{64}$/) });
+      await expect(
+        sql<{ count: number }>`
+        SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
+      `.execute(db),
+      ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    ['legacy', false],
+    ['dual-write', true],
+    ['ready', true],
+    ['inactive', false],
+    ['active', true],
+    ['failed', false],
+  ] as const)('applies ordinary storage authority in %s phase (allowed=%s)', async (phase, allowed) => {
+    await sql`
+      UPDATE immich_fork.state SET phase = ${phase}, active = ${phase === 'active'} WHERE id = 1
+    `.execute(db);
+    const action = new PhysicalFileRepository(db).createNormalizationReservation(
+      '00000000-0000-4000-8000-000000000000',
+      (asset) => asset.originalPath,
+    );
+    await (allowed
+      ? expect(action).rejects.toThrow('does not exist')
+      : expect(action).rejects.toThrow('current phase'));
+  });
+
+  it.each(['database', 'file'] as const)(
+    'durably reconciles %s config with zero albums across interruptions before and after evidence',
+    async (source) => {
+      const expected = {
+        ...defaults,
+        smartAlbums: { ...defaults.smartAlbums, enabled: !defaults.smartAlbums.enabled },
+      };
+      await sql`
+        INSERT INTO immich_fork.config (key, value) VALUES ('smartAlbums', '{"enabled":"stale"}'::jsonb)
+      `.execute(db);
+      const { sut, mocks } = newTestService(ForkSchemaMigrationService, { forkSchema: forkSchemaRepository });
+      (sut as unknown as { db: Kysely<DB> }).db = db;
+      mocks.systemMetadata.get.mockResolvedValue(source === 'database' ? { smartAlbums: expected.smartAlbums } : null);
+      mocks.systemMetadata.readFile.mockResolvedValue(`smartAlbums:\n  enabled: ${expected.smartAlbums.enabled}\n`);
+      mocks.config.getEnv.mockReturnValue({
+        ...mocks.config.getEnv(),
+        configFile: source === 'file' ? '/config/immich.yml' : undefined,
+      });
+      sut.onModuleInit();
+      const official = await forkSchemaRepository.overlayConfig(expected);
+      expect(official.smartAlbums).toEqual(expected.smartAlbums);
+
+      await expect(
+        sut.reconcileAfterOfficialReturn(1, {
+          beforeConfigEvidence: () => {
+            throw new Error('before-config-evidence');
+          },
+        }),
+      ).rejects.toThrow('before-config-evidence');
+      await expect(forkSchemaRepository.getReturnConfigReconciliation()).resolves.toBeNull();
+
+      await expect(
+        sut.reconcileAfterOfficialReturn(1, {
+          afterConfigEvidence: () => {
+            throw new Error('after-config-evidence');
+          },
+        }),
+      ).rejects.toThrow('after-config-evidence');
+      const evidence = await forkSchemaRepository.getReturnConfigReconciliation();
+      expect(evidence).toMatchObject({ source, digest: expect.stringMatching(/^[0-9a-f]{64}$/) });
+
+      const result = await sut.reconcileAfterOfficialReturn(1);
+      expect(result.progress.find(({ kind }) => kind === 'automation')).toMatchObject({
+        remaining: 0,
+        digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      });
+      await expect(
+        sql<{ value: unknown }>`
+        SELECT value FROM immich_fork.config WHERE key = 'smartAlbums'
+      `.execute(db),
+      ).resolves.toMatchObject({ rows: [{ value: expected.smartAlbums }] });
+      const effective = await forkSchemaRepository.overlayConfig(expected);
+      expect(effective.smartAlbums).toEqual(expected.smartAlbums);
+    },
+  );
 });
