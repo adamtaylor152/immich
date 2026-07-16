@@ -54,7 +54,7 @@ select distinct
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -63,7 +63,14 @@ select distinct
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -72,6 +79,7 @@ select distinct
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -141,7 +149,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -150,7 +158,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -159,6 +174,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -186,7 +202,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -195,7 +211,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -204,6 +227,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -251,7 +275,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -260,7 +284,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -269,6 +300,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -297,7 +329,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -306,7 +338,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -315,6 +354,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -363,7 +403,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -372,7 +412,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -381,6 +428,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -407,7 +455,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -416,7 +464,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -425,6 +480,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -480,7 +536,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -489,7 +545,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -498,6 +561,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -554,7 +618,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -563,7 +627,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -572,6 +643,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -628,7 +700,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -637,7 +709,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -646,6 +725,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -677,7 +757,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -686,7 +766,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -695,6 +782,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -732,7 +820,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -741,7 +829,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -750,6 +845,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -781,7 +877,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -790,7 +886,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -799,6 +902,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -908,7 +1012,7 @@ where
                 id = 1
             ),
             'inactive'
-          ) in ('legacy', 'dual-write') then exists (
+          ) in ('legacy', 'dual-write', 'ready') then exists (
             select
               1
             from
@@ -917,7 +1021,14 @@ where
               nsfw_asset.id = "hidden_content_asset"."id"
               and nsfw_asset.is_nsfw = true
           )
-          else not exists (
+          when (
+            select
+              phase
+            from
+              immich_fork.state
+            where
+              id = 1
+          ) = 'active' then not exists (
             select
               1
             from
@@ -926,6 +1037,7 @@ where
               privacy_asset."assetId" = "hidden_content_asset"."id"
               and privacy_asset."isNsfw" = false
           )
+          else false
         end
       )
   )
@@ -974,7 +1086,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -983,7 +1095,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -992,6 +1111,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -1017,7 +1137,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1026,7 +1146,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1035,6 +1162,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1088,7 +1216,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1097,7 +1225,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1106,6 +1241,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1135,7 +1271,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1144,7 +1280,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1153,6 +1296,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1186,7 +1330,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1195,7 +1339,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1204,6 +1355,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1233,7 +1385,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1242,7 +1394,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1251,6 +1410,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1291,7 +1451,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1300,7 +1460,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1309,6 +1476,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1340,7 +1508,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1349,7 +1517,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1358,6 +1533,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1390,7 +1566,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1399,7 +1575,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1408,6 +1591,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1507,7 +1691,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1516,7 +1700,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1525,6 +1716,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1562,7 +1754,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1571,7 +1763,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1580,6 +1779,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1674,7 +1874,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -1683,7 +1883,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -1692,6 +1899,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -1719,7 +1927,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1728,7 +1936,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1737,6 +1952,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1803,7 +2019,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -1812,7 +2028,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -1821,6 +2044,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -1854,7 +2078,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1863,7 +2087,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1872,6 +2103,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -1926,7 +2158,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -1935,7 +2167,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -1944,6 +2183,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -2004,7 +2244,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -2013,7 +2253,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -2022,6 +2269,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -2076,7 +2324,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -2085,7 +2333,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -2094,6 +2349,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -2134,7 +2390,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -2143,7 +2399,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -2152,6 +2415,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by
@@ -2203,7 +2467,7 @@ select
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -2212,7 +2476,14 @@ select
                 nsfw_asset.id = "hidden_content_asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -2221,6 +2492,7 @@ select
                 privacy_asset."assetId" = "hidden_content_asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     ) then null
@@ -2271,7 +2543,7 @@ where
                   id = 1
               ),
               'inactive'
-            ) in ('legacy', 'dual-write') then exists (
+            ) in ('legacy', 'dual-write', 'ready') then exists (
               select
                 1
               from
@@ -2280,7 +2552,14 @@ where
                 nsfw_asset.id = "asset"."id"
                 and nsfw_asset.is_nsfw = true
             )
-            else not exists (
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
               select
                 1
               from
@@ -2289,6 +2568,7 @@ where
                 privacy_asset."assetId" = "asset"."id"
                 and privacy_asset."isNsfw" = false
             )
+            else false
           end
         )
     )
@@ -2337,7 +2617,7 @@ where
             id = 1
         ),
         'inactive'
-      ) in ('legacy', 'dual-write') then exists (
+      ) in ('legacy', 'dual-write', 'ready') then exists (
         select
           1
         from
@@ -2346,7 +2626,14 @@ where
           nsfw_asset.id = "asset"."id"
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
         select
           1
         from
@@ -2355,6 +2642,7 @@ where
           privacy_asset."assetId" = "asset"."id"
           and privacy_asset."isNsfw" = false
       )
+      else false
     end
   )
 order by

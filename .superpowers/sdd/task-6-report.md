@@ -136,6 +136,10 @@ official workflows execute after normal return.
 - Broad plugin/return/workflow medium selection: 84 passed, 9 expected skips
   because the local optional core-WASM artifact was absent.
 - Legacy/official plugin search schema-stage regression: 2/2 passed.
+- SQL snapshots were regenerated twice against the same migrated PostgreSQL
+  database; both runs produced the identical complete-directory digest and
+  refreshed 14 deterministic query artifacts, including the plugin/workflow
+  capability probes and accumulated branch query changes required by CI.
 - Related workflow medium selection: 16 passed, 9 expected skips because the
   local optional core-WASM artifact was absent; the container run exercised the
   real official WASM in both execution modes.
