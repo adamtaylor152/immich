@@ -6,6 +6,7 @@ import { DatabaseRepository } from 'src/repositories/database.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
+import { getKyselyConfig } from 'src/utils/database';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 class FailingPreCommitRepository extends DatabaseRepository {
@@ -23,6 +24,28 @@ class TaskOneCutoverRepository extends DatabaseRepository {
   }
 }
 
+class PausingCutoverRepository extends DatabaseRepository {
+  private continueResolve!: () => void;
+  private reachedResolve!: () => void;
+  readonly reached = new Promise<void>((resolve) => (this.reachedResolve = resolve));
+  private readonly continuePromise = new Promise<void>((resolve) => (this.continueResolve = resolve));
+
+  continue() {
+    this.continueResolve();
+  }
+
+  protected override async finishForkSchemaCutover(): Promise<void> {
+    this.reachedResolve();
+    await this.continuePromise;
+  }
+}
+
+const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
+  const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
+};
+
 describe('fork schema ledger cutover', () => {
   let db: Kysely<DB>;
   let repository: DatabaseRepository;
@@ -35,6 +58,7 @@ describe('fork schema ledger cutover', () => {
   afterAll(async () => db.destroy());
 
   beforeEach(async () => {
+    await sql`DELETE FROM public.migration_overrides WHERE name = 'cutover_concurrency_probe'`.execute(db);
     await sql`
       DELETE FROM kysely_migrations
       WHERE name IN ('9999999999999-CustomPatch', '1780435471692-DeleteMismatchedAssetFaces')
@@ -42,7 +66,7 @@ describe('fork schema ledger cutover', () => {
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     await sql`
       INSERT INTO kysely_migrations (name, timestamp)
-      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2026-07-15T00:00:00.000Z')
+      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2099-07-15T00:00:00.000Z')
       ON CONFLICT (name) DO NOTHING
     `.execute(db);
     await sql`DROP TABLE IF EXISTS physical_file_unexpected`.execute(db);
@@ -176,6 +200,29 @@ describe('fork schema ledger cutover', () => {
     expect(afterLedger.rows).toEqual(beforeLedger.rows);
     expect(audit.rows).toHaveLength(0);
     expect(state.rows[0]?.phase).toBe('ready');
+  });
+
+  it('locks migration overrides before reclassification so a concurrent writer cannot enter the alias window', async () => {
+    const concurrentDb = await connectToSameDatabase(db);
+    const pausingRepository = new PausingCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
+    const cutover = pausingRepository.commitForkSchemaCutover('b'.repeat(64), async () => {});
+    await pausingRepository.reached;
+
+    const writer = sql`
+      INSERT INTO public.migration_overrides (name, value)
+      VALUES ('cutover_concurrency_probe', '{"type":"trigger","name":"probe","sql":"SELECT 1"}'::jsonb)
+    `.execute(concurrentDb);
+    try {
+      const outcome = await Promise.race([
+        writer.then(() => 'wrote' as const),
+        new Promise<'blocked'>((resolve) => setTimeout(() => resolve('blocked'), 100)),
+      ]);
+      expect(outcome).toBe('blocked');
+    } finally {
+      pausingRepository.continue();
+      await Promise.all([cutover, writer]);
+      await concurrentDb.destroy();
+    }
   });
 
   it('classifies unknown fork residue and refuses cutover', async () => {

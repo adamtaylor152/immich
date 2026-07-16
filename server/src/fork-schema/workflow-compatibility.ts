@@ -1,5 +1,6 @@
 import { Kysely, sql } from 'kysely';
 import { createHash } from 'node:crypto';
+import supportedVersions from 'src/fork-schema/supported-versions.json';
 import { DB } from 'src/schema';
 
 export const LEGACY_WORKFLOW_MIGRATION = '1779400000000-UpdateWorkflowTables';
@@ -13,6 +14,40 @@ export const WORKFLOW_COMPATIBILITY_MIGRATIONS: ReadonlySet<string> = new Set([
 ]);
 
 export const WORKFLOW_TABLES = ['plugin', 'plugin_method', 'workflow', 'workflow_step'] as const;
+
+export function validateOfficialMigrationLedgerOrder(
+  ledgerNames: string[],
+  bundledNames: string[],
+): { pending: string[]; valid: boolean } {
+  const expectedNames = supportedVersions.upstreamMigrations;
+  const ledgerSet = new Set(ledgerNames);
+  const bundledSet = new Set(bundledNames);
+  const ledgerIsExactPrefix =
+    ledgerSet.size === ledgerNames.length && ledgerNames.every((name, index) => expectedNames[index] === name);
+  const unbundledLedgerNamesAreAuditedGaps = ledgerNames.every(
+    (name) => bundledSet.has(name) || WORKFLOW_COMPATIBILITY_MIGRATIONS.has(name),
+  );
+
+  let expectedIndex = 0;
+  let bundledOrderValid = bundledSet.size === bundledNames.length;
+  for (const bundledName of bundledNames) {
+    while (
+      expectedIndex < expectedNames.length &&
+      expectedNames[expectedIndex] !== bundledName &&
+      WORKFLOW_COMPATIBILITY_MIGRATIONS.has(expectedNames[expectedIndex]!)
+    ) {
+      expectedIndex++;
+    }
+    if (expectedNames[expectedIndex] !== bundledName) {
+      bundledOrderValid = false;
+      break;
+    }
+    expectedIndex++;
+  }
+
+  const valid = ledgerIsExactPrefix && unbundledLedgerNamesAreAuditedGaps && bundledOrderValid;
+  return { pending: valid ? bundledNames.filter((name) => !ledgerSet.has(name)) : [], valid };
+}
 
 export type WorkflowSchemaStage = 'post-allowed-hosts' | 'post-plugin-templates' | 'post-update';
 
@@ -332,7 +367,7 @@ export async function getWorkflowCompatibilityEvidence(runner: Kysely<DB>): Prom
       ${ADD_PLUGIN_TEMPLATES_MIGRATION},
       ${ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION}
     )
-    ORDER BY name
+    ORDER BY timestamp, name
   `.execute(runner);
   const tables = await sql<{ persistence: string; tableName: string; tableType: string }>`
     SELECT class.relname AS "tableName", class.relkind::text AS "tableType", class.relpersistence::text AS persistence

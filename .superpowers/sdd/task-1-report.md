@@ -2,7 +2,7 @@
 
 ## Result
 
-Status: DONE
+Status: DONE (including review corrections)
 
 Baseline: `3041f02c85ccc0aa132b8eea342707f27f794064`
 
@@ -35,12 +35,30 @@ The first PostgreSQL implementation runs also exposed and corrected:
 
 All three were fixed without weakening assertions.
 
+### Review-correction RED evidence
+
+The three review findings were reproduced before the corrective production edits:
+
+- Real `commitForkSchemaCutover` tests for both the legacy-alias and original-official paths failed because `workflow_updatedAt` changed from `pg_trigger.tgenabled = 'O'` to `'D'`.
+- The two-connection PostgreSQL test failed with `expected 'wrote' to be 'blocked'`, proving a concurrent `migration_overrides` writer could enter while the cutover transaction was paused after reclassification.
+- Five ordered-ledger unit cases failed before `validateOfficialMigrationLedgerOrder` existed: valid prefixes through each of the three audited gaps, a special marker with missing predecessors, and reversed special-marker timestamp order.
+
+### Review-correction fixes
+
+- Removed workflow trigger and override objects from generic residue classification/cleanup. The workflow compatibility catalog evidence remains their sole cutover authority.
+- Added `public.migration_overrides` to `CUTOVER_LOCK_TABLES`, so the override table is locked before verification, workflow reclassification, and ledger aliasing.
+- Added canonical ordering validation against `supported-versions.json`. Applied upstream ledger names must be an exact timestamp-ordered prefix; unbundled applied names are permitted only at the three audited gap positions; bundled provider names must preserve the canonical prefix/order and may omit only those gaps.
+- Ordered workflow compatibility evidence by ledger timestamp and name.
+
 ## Verification
 
-- Focused classifier/cutover/startup/backup unit regressions: 117 passed across 5 files.
-- PostgreSQL workflow alias, ledger cutover, and migration-ledger regressions: 12 passed across 3 files.
+- Focused classifier/cutover/startup/backup unit regressions: 122 passed across 5 files.
+- PostgreSQL workflow alias, ledger cutover, and migration-ledger regressions: 15 passed across 3 files.
 - The workflow medium fixture contains non-empty binary wasm bytes, plugin schema JSON, workflow config JSON, and one row in each of all four protected tables.
 - Current-fork alias, original-Immich no-op, audit contents, exact timestamp preservation, schema/row digest preservation, and transaction rollback all passed.
+- Both real full-cutover workflow paths preserved final catalog and row digests plus `workflow_updatedAt` enablement.
+- The two-connection override writer remained blocked until the cutover transaction committed.
+- Exact valid prefixes through all three audited gaps passed; missing predecessors and reversed special-marker timestamp order were rejected.
 - `pnpm --filter immich check`: passed (plugin SDK build and TypeScript).
 - `pnpm --filter immich format`: passed.
 - `pnpm --filter immich lint`: passed with zero warnings.
@@ -58,6 +76,8 @@ Pre-edit impact:
 Pre-commit `detect_changes(scope: compare, base_ref: fork/main)` reported HIGH for the accumulated branch delta: 555 changed symbols in 119 files, 11 affected flows. This is branch-wide baseline scope, not this Task 1 commit alone. Task-local `detect_changes(scope: all)` reported LOW: 6 indexed changed symbols in 4 tracked files and zero affected processes. The new untracked compatibility module/tests were not yet present in the index result, so executable tests and the explicit repository blast-radius checks remain the stronger evidence for those files.
 
 After staging the exact Task 1 scope, `detect_changes(scope: staged)` reported LOW: 6 indexed changed symbols across 8 staged files and zero affected processes.
+
+For the review-correction commit, `detect_changes(scope: compare, base_ref: fork/main)` reported HIGH for the accumulated branch delta: 248 indexed changed symbols across 123 files and 8 affected processes. The exact six-file corrective staged scope reported LOW: 2 indexed changed symbols, zero affected processes. GitNexus associated both indexed symbols with `DatabaseRepository`; the compatibility module and test additions were not yet represented as indexed symbols, so the executable regressions remain the primary evidence for those additions.
 
 ## Scope Notes
 
