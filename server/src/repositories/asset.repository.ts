@@ -26,6 +26,8 @@ import {
   AssetVisibility,
   TimeBucketDateType,
 } from 'src/enum';
+import { isForkWriteEnabled } from 'src/fork-schema/authority';
+import { getForkSchemaPhase } from 'src/repositories/fork-derived-results';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
@@ -814,7 +816,7 @@ export class AssetRepository {
   }
 
   private async deleteForkDerivedResults(ids: string[], db: Kysely<DB>): Promise<void> {
-    if (ids.length === 0) {
+    if (ids.length === 0 || !isForkWriteEnabled(await getForkSchemaPhase(db))) {
       return;
     }
     await sql`

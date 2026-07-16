@@ -19,6 +19,87 @@ import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const sha = (algorithm: 'sha1' | 'sha256', bytes: Buffer) => createHash(algorithm).update(bytes).digest();
+const vector = `[${Array.from({ length: 512 }, (_, index) => (index === 0 ? 1 : 0)).join(',')}]`;
+
+const seedForkCleanupSidecars = async (db: Kysely<DB>, assetId: string, ownerId: string, root: string) => {
+  const healthRunId = randomUUID();
+  const healthId = randomUUID();
+  const physicalFileId = randomUUID();
+  const token = randomUUID();
+  const checksum = sha('sha256', Buffer.from(assetId));
+  await sql`
+    INSERT INTO immich_fork.asset_health_run (id, category, status)
+    VALUES (${healthRunId}::uuid, 'missing', 'completed')
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_health
+      (id, "assetId", "runId", category, status, severity, "originalPath", "originalFileName", evidence,
+       resolution, "checkedAt")
+    VALUES (${healthId}::uuid, ${assetId}::uuid, ${healthRunId}::uuid, 'missing', 'missing', 'warning',
+      ${join(root, `${assetId}.jpg`)}, ${`${assetId}.jpg`}, '{}'::jsonb, '{}'::jsonb, now())
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_health_candidate
+      ("healthId", "candidatePath", status, evidence, resolution, "checkedAt")
+    VALUES (${healthId}::uuid, ${join(root, `${assetId}.candidate.jpg`)}, 'candidate', '{}'::jsonb, '{}'::jsonb, now())
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_best_photo_score
+      ("assetId", "ownerId", score, "scoreVersion", "computedAt")
+    VALUES (${assetId}::uuid, ${ownerId}::uuid, 0.75, 1, now())
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_video_duplicate_frame
+      ("assetId", "frameIndex", "timestampMs", path, embedding)
+    VALUES (${assetId}::uuid, 0, 0, ${join(root, `${assetId}.frame.jpg`)}, ${vector}::vector)
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_storage_reservation
+      ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
+    VALUES (${assetId}::uuid, ${token}::uuid, ${join(root, `${assetId}.source.jpg`)},
+      ${join(root, `${assetId}.upstream.jpg`)}, ${join(root, `${assetId}.temporary.jpg`)}, 'reserved')
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_checksum
+      ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount")
+    VALUES (${assetId}::uuid, ${sha('sha1', Buffer.from(assetId))}, ${checksum}, 1, ARRAY[${join(root, `${assetId}.jpg`)}], 1)
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.physical_file
+      (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt")
+    VALUES (${physicalFileId}::uuid, ${assetId}::uuid, 'original', ${checksum}, 1,
+      ${join(root, `${assetId}.physical.jpg`)}, now(), now())
+  `.execute(db);
+  await sql`
+    INSERT INTO immich_fork.asset_physical_file ("assetId", "physicalFileId", "upstreamPath")
+    VALUES (${assetId}::uuid, ${physicalFileId}::uuid, ${join(root, `${assetId}.mapped.jpg`)})
+  `.execute(db);
+  return physicalFileId;
+};
+
+const snapshotForkCleanupSidecars = async (db: Kysely<DB>, assetIds: string[], physicalFileIds: string[]) => {
+  const result = await sql<{ snapshot: unknown }>`SELECT jsonb_build_object(
+    'healthCandidates', (SELECT coalesce(jsonb_agg(to_jsonb(candidate) ORDER BY candidate.id), '[]'::jsonb)
+      FROM immich_fork.asset_health_candidate candidate
+      JOIN immich_fork.asset_health health ON health.id = candidate."healthId"
+      WHERE health."assetId" = ANY(${assetIds}::uuid[])),
+    'health', (SELECT coalesce(jsonb_agg(to_jsonb(health) ORDER BY health.id), '[]'::jsonb)
+      FROM immich_fork.asset_health health WHERE health."assetId" = ANY(${assetIds}::uuid[])),
+    'scores', (SELECT coalesce(jsonb_agg(to_jsonb(score) ORDER BY score."assetId"), '[]'::jsonb)
+      FROM immich_fork.asset_best_photo_score score WHERE score."assetId" = ANY(${assetIds}::uuid[])),
+    'frames', (SELECT coalesce(jsonb_agg(to_jsonb(frame) ORDER BY frame."assetId", frame."frameIndex"), '[]'::jsonb)
+      FROM immich_fork.asset_video_duplicate_frame frame WHERE frame."assetId" = ANY(${assetIds}::uuid[])),
+    'reservations', (SELECT coalesce(jsonb_agg(to_jsonb(reservation) ORDER BY reservation."assetId"), '[]'::jsonb)
+      FROM immich_fork.asset_storage_reservation reservation WHERE reservation."assetId" = ANY(${assetIds}::uuid[])),
+    'checksums', (SELECT coalesce(jsonb_agg(to_jsonb(checksum) ORDER BY checksum."assetId"), '[]'::jsonb)
+      FROM immich_fork.asset_checksum checksum WHERE checksum."assetId" = ANY(${assetIds}::uuid[])),
+    'mappings', (SELECT coalesce(jsonb_agg(to_jsonb(mapping) ORDER BY mapping."assetId"), '[]'::jsonb)
+      FROM immich_fork.asset_physical_file mapping WHERE mapping."assetId" = ANY(${assetIds}::uuid[])),
+    'physicalFiles', (SELECT coalesce(jsonb_agg(to_jsonb(physical) ORDER BY physical.id), '[]'::jsonb)
+      FROM immich_fork.physical_file physical WHERE physical.id = ANY(${physicalFileIds}::uuid[]))
+  ) AS snapshot`.execute(db);
+  return result.rows[0]!.snapshot;
+};
 
 const insertSharedAssets = async (db: Kysely<DB>, root: string, bytes: Buffer) => {
   const canonicalPath = join(root, `${randomUUID()}.jpg`);
@@ -71,6 +152,11 @@ describe('checksum and physical-storage normalization', () => {
     StorageCore.setMediaLocation(temporaryRoot);
     await sql`
       TRUNCATE
+        immich_fork.asset_health_candidate,
+        immich_fork.asset_health,
+        immich_fork.asset_health_run,
+        immich_fork.asset_best_photo_score,
+        immich_fork.asset_video_duplicate_frame,
         immich_fork.asset_physical_file,
         immich_fork.asset_storage_reservation,
         immich_fork.physical_file,
@@ -442,6 +528,62 @@ describe('checksum and physical-storage normalization', () => {
     expect(remaining.rows[0]?.count).toBe(0);
     await expect(readFile(canonicalPath)).resolves.toEqual(bytes);
   });
+
+  it.each([
+    ['single', 'inactive'],
+    ['single', 'failed'],
+    ['owner-wide', 'inactive'],
+    ['owner-wide', 'failed'],
+  ] as const)('does not mutate fork cleanup sidecars during %s deletion in %s', async (mode, phase) => {
+    await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
+    const user = mediumFactory.userInsert();
+    const assets = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(assets).execute();
+    const selected = mode === 'single' ? assets.slice(0, 1) : assets;
+    const assetIds = selected.map(({ id }) => id!);
+    const physicalFileIds = await Promise.all(
+      selected.map(({ id }) => seedForkCleanupSidecars(db, id!, user.id, temporaryRoot)),
+    );
+    const before = await snapshotForkCleanupSidecars(db, assetIds, physicalFileIds);
+
+    const repository = new AssetRepository(db);
+    await (mode === 'single' ? repository.remove({ id: assetIds[0] }) : repository.deleteAll(user.id));
+
+    await expect(snapshotForkCleanupSidecars(db, assetIds, physicalFileIds)).resolves.toEqual(before);
+    const remainingAssets = await db.selectFrom('asset').select('id').where('id', 'in', assetIds).execute();
+    expect(remainingAssets).toHaveLength(0);
+  });
+
+  it.each(['single', 'owner-wide'] as const)(
+    'cleans every fork cleanup sidecar during %s deletion in ready',
+    async (mode) => {
+      await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
+      const user = mediumFactory.userInsert();
+      const assets = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values(assets).execute();
+      const selected = mode === 'single' ? assets.slice(0, 1) : assets;
+      const assetIds = selected.map(({ id }) => id!);
+      const physicalFileIds = await Promise.all(
+        selected.map(({ id }) => seedForkCleanupSidecars(db, id!, user.id, temporaryRoot)),
+      );
+
+      const repository = new AssetRepository(db);
+      await (mode === 'single' ? repository.remove({ id: assetIds[0] }) : repository.deleteAll(user.id));
+
+      await expect(snapshotForkCleanupSidecars(db, assetIds, physicalFileIds)).resolves.toEqual({
+        checksums: [],
+        frames: [],
+        health: [],
+        healthCandidates: [],
+        mappings: [],
+        physicalFiles: [],
+        reservations: [],
+        scores: [],
+      });
+    },
+  );
 
   it.each(['single', 'bulk'] as const)(
     'serializes normalization with %s deletion and returns the locked normalized path',

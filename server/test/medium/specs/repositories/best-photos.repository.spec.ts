@@ -5,7 +5,7 @@ import { BestPhotosRepository } from 'src/repositories/best-photos.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
+import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
 
