@@ -4,7 +4,7 @@ import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
+import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
 

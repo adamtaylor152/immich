@@ -84,3 +84,41 @@ Review-correction verification:
 - Forbidden migration-file check for `177861`, `177980`, and `178241`: no correction diff.
 
 Additional pre-edit GitNexus impact warnings were reported before correction edits: `transitionPhase` was HIGH (9 transitive, 5 direct), `ForkPrivacyRepository.mirrorManyFromLegacy` was HIGH (14 transitive, 4 direct), and `ForkAlbumMetadataRepository.mirrorFromLegacy` was HIGH (13 transitive, 3 direct). The central derived-results write helper was MEDIUM; the remaining corrected mutation symbols were LOW or MEDIUM. Final compare detection against `fork/main` reports HIGH cumulative branch risk across 140 files, 609 indexed symbols, and 11 execution flows. Exact staged detection reports LOW risk across 28 files, 30 indexed symbols, and no affected execution flows.
+
+## Re-review Corrections
+
+The two Important findings in the appended re-review were corrected regression-first on top of `625cd6fc2b9ec8a66667e339a48f71958e6f549c`.
+
+Asset cleanup RED evidence:
+
+- A seeded PostgreSQL regression covered `AssetRepository.remove()` and `deleteAll()` in both `inactive` and `failed`.
+- Before the production correction, all four combinations failed because deletion emptied health candidates, health rows, scores, duplicate frames, storage reservations, checksums, physical mappings, and orphan physical files.
+- The same test proved both single and owner-wide deletion already cleaned all eight categories in `ready`.
+
+Asset cleanup correction and GREEN evidence:
+
+- `deleteForkDerivedResults()` now reads the locked transaction's phase and delegates the decision to central `isForkWriteEnabled` policy. Ordinary inactive/failed asset deletion still removes public assets but leaves all seeded fork rows byte-for-byte unchanged.
+- The focused checksum/storage suite passes 24/24, including the four inactive/failed no-mutation cases and both ready cleanup cases.
+- Pre-edit GitNexus impacts were LOW: `AssetRepository.remove` affected 5 symbols (4 direct), `deleteAll` affected 5 (4 direct), and `deleteForkDerivedResults` affected 10 (2 direct), with no indexed execution flows.
+
+Complete medium authority audit:
+
+- Initial JSON run: 73 files, 514 passed, 19 failed, and 12 skipped. Sixteen failures were repeatable privacy/score authority fixtures; three were EXIF failures caused by absent media assets.
+- Converted the remaining explicit fork-authority fixtures in best photos, workflow eligibility, asset, duplicate, tag, album sync, album-asset sync, album-to-asset sync, asset-metadata sync, and partner-asset sync to `getActiveForkKyselyDB`. No inactive reads were restored.
+- The repaired 10-file fixture selection passes 109/109.
+- Final serialized JSON run: 73 files; 71 passed and 2 failed; 530 tests passed, 3 failed, and 12 skipped. Every privacy, score, Task 1 ledger, and Task 2 authority test is green.
+- The only failures are unchanged environment failures in `exif-date-time.spec.ts` (2) and `exif-tags.spec.ts` (1). The referenced checkout assets `date-priority-test.jpg`, `gps-datetime.jpg`, `metadata/tags/tag.jpg`, and `gps-position/empty_gps.jpg` are absent. The tests were not changed or masked.
+- A concurrent full run briefly produced two migration-ledger failures with `driver has already been destroyed`; the focused ledger rerun passed 3/3 and the serialized full run passed all ledger tests.
+
+Final re-review gates:
+
+- Targeted unit batch: PASS, 8 files and 245 tests.
+- Targeted Task 2/Task 1 PostgreSQL batch: PASS, 8 files and 109 tests.
+- Exact 13-file general-medium batch: PASS, 13 files and 111 tests.
+- `pnpm --filter immich check`: PASS.
+- `pnpm --dir server lint`: PASS.
+- `pnpm --dir server format`: PASS.
+- `git diff --check`: PASS.
+- Forbidden migration-file check for `177861`, `177980`, and `178241`: no re-review correction diff.
+- Compare detection against `fork/main`: HIGH cumulative branch risk across 149 files, 607 indexed symbols, and 11 execution flows.
+- Exact staged detection: LOW risk across 13 files, 5 indexed symbols, and no affected execution flows.

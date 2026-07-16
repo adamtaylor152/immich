@@ -5,7 +5,7 @@ import { WorkflowRepository } from 'src/repositories/workflow.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
-import { getKyselyDB } from 'test/utils';
+import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
 
