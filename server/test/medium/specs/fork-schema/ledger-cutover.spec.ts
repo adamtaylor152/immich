@@ -163,7 +163,7 @@ describe('fork schema ledger cutover', () => {
       SELECT active, phase, "schemaVersion" FROM immich_fork.state WHERE id = 1
     `.execute(db);
     expect(checkpoint).toEqual(
-      expect.objectContaining({ phase: 'ready', reportDigest: report.digest, schemaVersion: '2' }),
+      expect.objectContaining({ phase: 'inactive', reportDigest: report.digest, schemaVersion: '2' }),
     );
     expect(officialAfter.rows).toEqual(officialBefore.rows);
     expect(forkAfter.rows).toEqual(forkBefore.rows);
@@ -173,7 +173,7 @@ describe('fork schema ledger cutover', () => {
         name: legacyName,
       },
     ]);
-    expect(state.rows).toEqual([{ active: false, phase: 'ready', schemaVersion: '2' }]);
+    expect(state.rows).toEqual([{ active: false, phase: 'inactive', schemaVersion: '2' }]);
   });
 
   it('keeps the ledger and phase unchanged when an unknown migration is found', async () => {

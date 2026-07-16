@@ -94,7 +94,7 @@ export class BestPhotosRepository {
         await this.upsertInto(trx.withSchema('public'), score);
       }
       if (writesForkSidecar(phase)) {
-        if (phase === 'dual-write') {
+        if (writesLegacy(phase)) {
           const legacy = await trx
             .withSchema('public')
             .selectFrom('asset_best_photo_score')

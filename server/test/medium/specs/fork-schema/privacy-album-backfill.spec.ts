@@ -146,7 +146,7 @@ describe('privacy and album fork sidecars', () => {
     expect(new Set(secondClosure.rows.map((row) => JSON.stringify(row))).size).toBe(3);
   });
 
-  it('keeps legacy album reads through dual-write and switches to sidecars when ready or isolated', async () => {
+  it('keeps legacy album reads through ready, exposes no inactive overlay, and switches only when active', async () => {
     const album = mediumFactory.albumInsert({ icon: 'legacy', sortOrder: 1 });
     await db.insertInto('album').values(album).execute();
     await db.insertInto('album_closure').values({ id_ancestor: album.id!, id_descendant: album.id! }).execute();
@@ -161,15 +161,18 @@ describe('privacy and album fork sidecars', () => {
     await expect(privacy.shouldReadSidecar()).resolves.toBe(false);
 
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await expect(albums.applyReadMetadata([legacyRow])).resolves.toEqual([legacyRow]);
+    await expect(privacy.shouldReadSidecar()).resolves.toBe(false);
+
+    await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
+    await expect(albums.applyReadMetadata([legacyRow])).resolves.toEqual([legacyRow]);
+    await expect(privacy.shouldReadSidecar()).resolves.toBe(false);
+
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     await expect(albums.applyReadMetadata([legacyRow])).resolves.toEqual([
       { ...legacyRow, icon: 'legacy', sortOrder: 1 },
     ]);
     await expect(privacy.shouldReadSidecar()).resolves.toBe(true);
-
-    await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
-    await expect(albums.applyReadMetadata([legacyRow])).resolves.toEqual([
-      { ...legacyRow, icon: 'legacy', sortOrder: 1 },
-    ]);
   });
 
   it('uses the phase authority for production NSFW predicates and fails closed without a sidecar', async () => {
@@ -205,17 +208,22 @@ describe('privacy and album fork sidecars', () => {
       VALUES (${legacyHidden.id}::uuid, false), (${sidecarHidden.id}::uuid, true)
     `.execute(db);
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-    await expect(visibleIds()).resolves.toEqual([legacyHidden.id]);
-    await expect(hiddenIds()).resolves.toEqual(expect.arrayContaining([sidecarHidden.id, missingSidecar.id]));
+    await expect(visibleIds()).resolves.toEqual([sidecarHidden.id, missingSidecar.id].sort());
+    await expect(hiddenIds()).resolves.toEqual([legacyHidden.id]);
 
     await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
+    await expect(visibleIds()).resolves.toEqual([legacyHidden.id, sidecarHidden.id, missingSidecar.id].sort());
+    await expect(hiddenIds()).resolves.toEqual([]);
+
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     await expect(visibleIds()).resolves.toEqual([legacyHidden.id]);
+    await expect(hiddenIds()).resolves.toEqual(expect.arrayContaining([sidecarHidden.id, missingSidecar.id]));
   });
 
   it('rejects authoritative album reads when the required sidecar is missing', async () => {
     const album = mediumFactory.albumInsert({ icon: 'legacy', sortOrder: 7 });
     await db.insertInto('album').values(album).execute();
-    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
 
     await expect(new ForkAlbumMetadataRepository(db).applyReadMetadata([album as never])).rejects.toThrow(
       `Missing fork album metadata sidecar for album ${album.id}`,
@@ -228,7 +236,7 @@ describe('privacy and album fork sidecars', () => {
     (sut as unknown as { db: Kysely<DB> }).db = db;
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
     mocks.asset.getMetadataByKey.mockResolvedValue({ value: {} } as never);
-    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
 
     await expect(sut.getAssetEnrichment(authStub.user1, assetId)).rejects.toThrow(
       `Missing fork privacy sidecar for asset ${assetId}`,

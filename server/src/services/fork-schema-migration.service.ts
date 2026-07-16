@@ -116,6 +116,11 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     return this.status();
   }
 
+  async activateAfterReturnReconciliation(): Promise<ForkSchemaMigrationStatus> {
+    await this.forkSchemaRepository.activateAfterReturnReconciliation();
+    return this.status();
+  }
+
   async start(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
     const transitioned = await this.forkSchemaRepository.transitionPhase('legacy', 'dual-write');
     const status = await this.status();

@@ -249,7 +249,7 @@ export class MediaHealthRepository {
         result = await this.upsertFindingInto(trx.withSchema('public'), finding);
       }
       if (writesForkSidecar(phase)) {
-        if (phase === 'dual-write') {
+        if (writesLegacy(phase)) {
           await this.copyFindingExact(trx.withSchema('immich_fork'), result!);
         } else {
           result = await this.upsertFindingInto(trx.withSchema('immich_fork'), finding);

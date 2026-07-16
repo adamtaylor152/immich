@@ -3,6 +3,7 @@ import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { randomUUID } from 'node:crypto';
 import { SystemConfig } from 'src/config';
+import { isForkAuthoritative } from 'src/fork-schema/authority';
 import { DB } from 'src/schema';
 import { DeepPartial } from 'src/types';
 
@@ -67,7 +68,7 @@ export class ForkSchemaRepository {
 
   async overlayConfig(config: SystemConfig): Promise<SystemConfig> {
     const state = await this.getState();
-    if (state.phase === 'legacy' || state.phase === 'dual-write') {
+    if (!isForkAuthoritative(state.phase)) {
       return config;
     }
     const result = await sql<{ key: string; value: unknown }>`
@@ -179,6 +180,9 @@ export class ForkSchemaRepository {
   }
 
   async setPhase(phase: ForkSchemaPhase): Promise<void> {
+    if (phase === 'active') {
+      throw new Error('Fork schema activation requires return reconciliation');
+    }
     await this.db.transaction().execute(async (trx) => {
       const lockedState = await sql<{ id: number }>`
         SELECT id FROM immich_fork.state WHERE id = 1 FOR UPDATE
@@ -187,34 +191,53 @@ export class ForkSchemaRepository {
         throw new Error('Fork schema state is not initialized');
       }
 
-      if (phase === 'active') {
-        const readiness = await sql<{
-          claimToken: string | null;
-          claimedCursor: string | null;
-          kind: BackfillKind;
-          lastError: string | null;
-          remaining: number;
-        }>`
-          SELECT kind, remaining, "claimToken", "claimedCursor", "lastError"
-          FROM immich_fork.backfill_progress
-          WHERE kind = ANY(${[...BACKFILL_KINDS]})
-          FOR UPDATE
-        `.execute(trx);
-        const allBackfillsComplete =
-          readiness.rows.length === BACKFILL_KINDS.length &&
-          new Set(readiness.rows.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
-          readiness.rows.every(
-            ({ claimToken, claimedCursor, lastError, remaining }) =>
-              remaining === 0 && claimToken === null && claimedCursor === null && lastError === null,
-          );
-        if (!allBackfillsComplete) {
-          throw new Error('Cannot activate fork schema with incomplete backfills');
-        }
+      await sql`
+        UPDATE immich_fork.state
+        SET active = false, phase = ${phase}, "updatedAt" = now()
+        WHERE id = 1
+      `.execute(trx);
+    });
+  }
+
+  async activateAfterReturnReconciliation(): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      const lockedState = await sql<{ phase: ForkSchemaPhase }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
+      `.execute(trx);
+      const state = lockedState.rows[0];
+      if (!state) {
+        throw new Error('Fork schema state is not initialized');
+      }
+      if (state.phase !== 'inactive') {
+        throw new Error('Fork schema activation requires inactive phase');
+      }
+
+      const readiness = await sql<{
+        claimToken: string | null;
+        claimedCursor: string | null;
+        kind: BackfillKind;
+        lastError: string | null;
+        remaining: number;
+      }>`
+        SELECT kind, remaining, "claimToken", "claimedCursor", "lastError"
+        FROM immich_fork.backfill_progress
+        WHERE kind = ANY(${[...BACKFILL_KINDS]})
+        FOR UPDATE
+      `.execute(trx);
+      const allBackfillsComplete =
+        readiness.rows.length === BACKFILL_KINDS.length &&
+        new Set(readiness.rows.map(({ kind }) => kind)).size === BACKFILL_KINDS.length &&
+        readiness.rows.every(
+          ({ claimToken, claimedCursor, lastError, remaining }) =>
+            remaining === 0 && claimToken === null && claimedCursor === null && lastError === null,
+        );
+      if (!allBackfillsComplete) {
+        throw new Error('Cannot activate fork schema with incomplete backfills');
       }
 
       await sql`
         UPDATE immich_fork.state
-        SET active = ${phase === 'active'}, phase = ${phase}, "updatedAt" = now()
+        SET active = true, phase = 'active', "updatedAt" = now()
         WHERE id = 1
       `.execute(trx);
     });

@@ -13,7 +13,7 @@ export type CutoverReport = ForkSchemaCutoverEvidence & {
 
 export type HandoffCheckpoint = {
   committedAt: string;
-  phase: 'ready';
+  phase: 'inactive';
   reportDigest: string;
   schemaVersion: '2';
 };

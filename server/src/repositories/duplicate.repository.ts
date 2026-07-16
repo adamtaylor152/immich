@@ -294,7 +294,7 @@ export class DuplicateRepository {
         stalePaths = await this.replaceFramesIn(trx.withSchema('public'), assetId, frames);
       }
       if (writesForkSidecar(phase)) {
-        if (phase === 'dual-write') {
+        if (writesLegacy(phase)) {
           const exact = await trx
             .withSchema('public')
             .selectFrom('asset_video_duplicate_frame')
