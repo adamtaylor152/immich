@@ -16,6 +16,7 @@ import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const SHA256 = 'a'.repeat(64);
+const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const ASSET_SHA1 = Buffer.alloc(20, 1);
 const ASSET_SHA256 = Buffer.alloc(32, 2);
 
@@ -104,9 +105,10 @@ describe('complete fork schema cutover evidence', () => {
     const testService = newTestService(ForkSchemaCutoverService);
     service = testService.sut;
     databaseMock = testService.mocks.database;
-    databaseMock.getForkSchemaCutoverEvidence.mockImplementation((runner) =>
-      repository.getForkSchemaCutoverEvidence(runner ?? db),
+    databaseMock.getForkSchemaCutoverEvidence.mockImplementation((runner, checkpoint) =>
+      repository.getForkSchemaCutoverEvidence(runner ?? db, checkpoint),
     );
+    await repository.runForkMigrations();
   });
 
   beforeEach(async () => {
@@ -133,6 +135,7 @@ describe('complete fork schema cutover evidence', () => {
         '0000000000020-EnrichmentAndAutomation',
         '0000000000030-DerivedResults',
         '0000000000040-ChecksumsAndStorage',
+        '0000000000050-CutoverVerification',
       ]}::text[]) AS name
     `.execute(db);
     await sql`
@@ -150,6 +153,12 @@ describe('complete fork schema cutover evidence', () => {
       INSERT INTO public.system_metadata (key, value)
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value
+    `.execute(db);
+    await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (${randomUUID()}::uuid, 'backup-1', 'snapshot-1', 'completed', 0, ${EMPTY_STORAGE_DIGEST}, now())
     `.execute(db);
   });
 
@@ -217,7 +226,7 @@ describe('complete fork schema cutover evidence', () => {
   ])('refuses %s independently', async (_name, mutation) => {
     await mutation.execute(db);
 
-    const preflight = await service.preflight();
+    const preflight = await service.preflight('backup-1', 'snapshot-1');
     expect(preflight.ready).toBe(false);
   });
 
@@ -235,7 +244,7 @@ describe('complete fork schema cutover evidence', () => {
     ['schema', sql`CREATE SCHEMA task3_unexpected`],
   ])('refuses an unknown public %s object', async (_kind, mutation) => {
     await mutation.execute(db);
-    const preflight = await service.preflight();
+    const preflight = await service.preflight('backup-1', 'snapshot-1');
     expect(preflight.ready).toBe(false);
   });
 
@@ -252,7 +261,7 @@ describe('complete fork schema cutover evidence', () => {
     });
     expect(evidence.checksumCoverage.applicableDigest).not.toBe(evidence.checksumCoverage.sidecarDigest);
     expect(evidence.mappingCoverage.valid).toBe(true);
-    const preflight = await service.preflight();
+    const preflight = await service.preflight('backup-1', 'snapshot-1');
     expect(preflight.ready).toBe(false);
   });
 
@@ -269,7 +278,7 @@ describe('complete fork schema cutover evidence', () => {
       valid: false,
     });
     expect(evidence.mappingCoverage.normalizedDigest).not.toBe(evidence.mappingCoverage.mappingDigest);
-    const preflight = await service.preflight();
+    const preflight = await service.preflight('backup-1', 'snapshot-1');
     expect(preflight.ready).toBe(false);
   });
 });
@@ -298,6 +307,11 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value
     `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (${randomUUID()}::uuid, 'backup-1', 'snapshot-1', 'completed', 0, ${EMPTY_STORAGE_DIGEST}, now())
+    `.execute(db);
     const officialLedgerResult = await sql<{ name: string; timestamp: string }>`
       SELECT name, timestamp FROM public.kysely_migrations ORDER BY timestamp, name
     `.execute(db);
@@ -320,7 +334,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.installationClass).toBe('original-official');
     expect(report.catalogDiff).toEqual({ clean: true, mismatched: [], missing: [], unexpected: [] });
@@ -331,7 +345,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
   it('acquires the exact sorted original-official manifest lock set before verification', async () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
     let observedLocks: string[] = [];
 
     await expect(
@@ -353,7 +367,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     ).rejects.toThrow('rollback original-official lock probe');
 
     expect(observedLocks).toEqual(report.tableEvidence.map(({ table }) => table).toSorted());
-    expect(observedLocks).toHaveLength(89);
+    expect(observedLocks).toHaveLength(91);
   });
 
   it.each([
@@ -371,7 +385,7 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.installationClass).toBe('original-official');
     expect(report.catalogDiff.clean).toBe(true);
@@ -389,6 +403,8 @@ describe('exact v3.0.3 public schema cutover evidence', () => {
     const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    await expect(sut.preflight()).rejects.toThrow('Found workflow tables with no workflow migration marker');
+    await expect(sut.preflight('backup-1', 'snapshot-1')).rejects.toThrow(
+      'Found workflow tables with no workflow migration marker',
+    );
   });
 });

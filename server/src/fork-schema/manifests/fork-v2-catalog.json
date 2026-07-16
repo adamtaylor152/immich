@@ -445,6 +445,118 @@
       "identity": "immich_fork.config.value"
     },
     {
+      "definition": "text[]|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.approvedRoots"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.assetId"
+    },
+    {
+      "definition": "bigint|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.device"
+    },
+    {
+      "definition": "bytea|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.expectedSha1"
+    },
+    {
+      "definition": "bytea|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.expectedSha256"
+    },
+    {
+      "definition": "bigint|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.expectedSize"
+    },
+    {
+      "definition": "bigint|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.inode"
+    },
+    {
+      "definition": "integer|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.links"
+    },
+    {
+      "definition": "text|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.path"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "immich_fork.cutover_verification_asset.runId"
+    },
+    {
+      "definition": "text|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.sha1"
+    },
+    {
+      "definition": "text|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.sha256"
+    },
+    {
+      "definition": "bigint|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.size"
+    },
+    {
+      "definition": "text|not null|'pending'::text||",
+      "identity": "immich_fork.cutover_verification_asset.status"
+    },
+    {
+      "definition": "timestamp with time zone|nullable|||",
+      "identity": "immich_fork.cutover_verification_asset.verifiedAt"
+    },
+    {
+      "definition": "text|nullable|||",
+      "identity": "immich_fork.cutover_verification_run.aggregateDigest"
+    },
+    {
+      "definition": "integer|not null|||",
+      "identity": "immich_fork.cutover_verification_run.applicableAssetCount"
+    },
+    {
+      "definition": "timestamp with time zone|nullable|||",
+      "identity": "immich_fork.cutover_verification_run.completedAt"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "immich_fork.cutover_verification_run.createdAt"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "immich_fork.cutover_verification_run.cursor"
+    },
+    {
+      "definition": "text|not null|||",
+      "identity": "immich_fork.cutover_verification_run.databaseBackupId"
+    },
+    {
+      "definition": "text|nullable|||",
+      "identity": "immich_fork.cutover_verification_run.failure"
+    },
+    {
+      "definition": "integer|not null|0||",
+      "identity": "immich_fork.cutover_verification_run.failureCount"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "immich_fork.cutover_verification_run.id"
+    },
+    {
+      "definition": "text|not null|||",
+      "identity": "immich_fork.cutover_verification_run.snapshotId"
+    },
+    {
+      "definition": "text|not null|||",
+      "identity": "immich_fork.cutover_verification_run.status"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "immich_fork.cutover_verification_run.updatedAt"
+    },
+    {
+      "definition": "integer|not null|0||",
+      "identity": "immich_fork.cutover_verification_run.verifiedCount"
+    },
+    {
       "definition": "timestamp with time zone|nullable|||",
       "identity": "immich_fork.migration_audit.completedAt"
     },
@@ -2887,6 +2999,86 @@
       "identity": "immich_fork.config.config_pkey"
     },
     {
+      "definition": "CHECK (cardinality(\"approvedRoots\") > 0)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_approvedRoots_check"
+    },
+    {
+      "definition": "CHECK (status = 'pending'::text AND size IS NULL AND sha1 IS NULL AND sha256 IS NULL AND device IS NULL AND inode IS NULL AND links IS NULL AND \"verifiedAt\" IS NULL OR status = 'verified'::text AND size IS NOT NULL AND sha1 IS NOT NULL AND sha256 IS NOT NULL AND device IS NOT NULL AND inode IS NOT NULL AND links IS NOT NULL AND \"verifiedAt\" IS NOT NULL)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_check"
+    },
+    {
+      "definition": "CHECK (octet_length(\"expectedSha1\") = 20)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_expectedSha1_check"
+    },
+    {
+      "definition": "CHECK (octet_length(\"expectedSha256\") = 32)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_expectedSha256_check"
+    },
+    {
+      "definition": "CHECK (\"expectedSize\" >= 0)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_expectedSize_check"
+    },
+    {
+      "definition": "CHECK (links IS NULL OR links > 0)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_links_check"
+    },
+    {
+      "definition": "PRIMARY KEY (\"runId\", \"assetId\")",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_pkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"runId\") REFERENCES immich_fork.cutover_verification_run(id) ON DELETE CASCADE",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_runId_fkey"
+    },
+    {
+      "definition": "CHECK (sha1 IS NULL OR sha1 ~ '^[0-9a-f]{40}$'::text)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_sha1_check"
+    },
+    {
+      "definition": "CHECK (sha256 IS NULL OR sha256 ~ '^[0-9a-f]{64}$'::text)",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_sha256_check"
+    },
+    {
+      "definition": "CHECK (status = ANY (ARRAY['pending'::text, 'verified'::text]))",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_status_check"
+    },
+    {
+      "definition": "CHECK (\"aggregateDigest\" IS NULL OR \"aggregateDigest\" ~ '^[0-9a-f]{64}$'::text)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_aggregateDigest_check"
+    },
+    {
+      "definition": "CHECK (\"applicableAssetCount\" >= 0)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_applicableAssetCount_check"
+    },
+    {
+      "definition": "CHECK (\"verifiedCount\" <= \"applicableAssetCount\")",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_check"
+    },
+    {
+      "definition": "CHECK (btrim(\"databaseBackupId\") <> ''::text)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_databaseBackupId_check"
+    },
+    {
+      "definition": "CHECK (\"failureCount\" >= 0)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_failureCount_check"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_pkey"
+    },
+    {
+      "definition": "CHECK (btrim(\"snapshotId\") <> ''::text)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_snapshotId_check"
+    },
+    {
+      "definition": "CHECK (status = ANY (ARRAY['running'::text, 'completed'::text, 'failed'::text]))",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_status_check"
+    },
+    {
+      "definition": "CHECK (\"verifiedCount\" >= 0)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_verifiedCount_check"
+    },
+    {
       "definition": "PRIMARY KEY (id)",
       "identity": "immich_fork.migration_audit.migration_audit_pkey"
     },
@@ -3722,9 +3914,14 @@
     "0000000000010-PrivacyAndAlbums",
     "0000000000020-EnrichmentAndAutomation",
     "0000000000030-DerivedResults",
-    "0000000000040-ChecksumsAndStorage"
+    "0000000000040-ChecksumsAndStorage",
+    "0000000000050-CutoverVerification"
   ],
   "functions": [
+    {
+      "definition": "CREATE OR REPLACE FUNCTION immich_fork.prevent_cutover_verification_identity_change()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      IF TG_TABLE_NAME = 'cutover_verification_run' AND\n         jsonb_build_array(to_jsonb(NEW)->'id', to_jsonb(NEW)->'databaseBackupId', to_jsonb(NEW)->'snapshotId',\n           to_jsonb(NEW)->'applicableAssetCount', to_jsonb(NEW)->'createdAt')\n         IS DISTINCT FROM\n         jsonb_build_array(to_jsonb(OLD)->'id', to_jsonb(OLD)->'databaseBackupId', to_jsonb(OLD)->'snapshotId',\n           to_jsonb(OLD)->'applicableAssetCount', to_jsonb(OLD)->'createdAt') THEN\n        RAISE EXCEPTION 'cutover verification run identity is immutable';\n      END IF;\n      IF TG_TABLE_NAME = 'cutover_verification_run' AND OLD.status = 'completed' AND\n         to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN\n        RAISE EXCEPTION 'completed cutover verification run evidence is immutable';\n      END IF;\n      IF TG_TABLE_NAME = 'cutover_verification_asset' AND\n         jsonb_build_array(to_jsonb(NEW)->'runId', to_jsonb(NEW)->'assetId', to_jsonb(NEW)->'path',\n           to_jsonb(NEW)->'approvedRoots', to_jsonb(NEW)->'expectedSize', to_jsonb(NEW)->'expectedSha1',\n           to_jsonb(NEW)->'expectedSha256')\n         IS DISTINCT FROM\n         jsonb_build_array(to_jsonb(OLD)->'runId', to_jsonb(OLD)->'assetId', to_jsonb(OLD)->'path',\n           to_jsonb(OLD)->'approvedRoots', to_jsonb(OLD)->'expectedSize', to_jsonb(OLD)->'expectedSha1',\n           to_jsonb(OLD)->'expectedSha256') THEN\n        RAISE EXCEPTION 'cutover verification asset identity is immutable';\n      END IF;\n      IF TG_TABLE_NAME = 'cutover_verification_asset' AND OLD.status = 'verified' AND\n         to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN\n        RAISE EXCEPTION 'completed cutover verification asset evidence is immutable';\n      END IF;\n      RETURN NEW;\n    END\n    $function$",
+      "identity": "immich_fork.prevent_cutover_verification_identity_change()"
+    },
     {
       "definition": "CREATE OR REPLACE FUNCTION public._vchord_halfvec_operator_maxsim(lhs halfvec[], rhs halfvec[])\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/vchord', $function$_vchord_halfvec_operator_maxsim_wrapper$function$",
       "identity": "public._vchord_halfvec_operator_maxsim(lhs halfvec[], rhs halfvec[])"
@@ -4918,6 +5115,22 @@
     {
       "definition": "CREATE UNIQUE INDEX config_pkey ON immich_fork.config USING btree (key)",
       "identity": "immich_fork.config.config_pkey"
+    },
+    {
+      "definition": "CREATE INDEX cutover_verification_asset_cursor_idx ON immich_fork.cutover_verification_asset USING btree (\"runId\", status, \"assetId\")",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_cursor_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX cutover_verification_asset_pkey ON immich_fork.cutover_verification_asset USING btree (\"runId\", \"assetId\")",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_pkey"
+    },
+    {
+      "definition": "CREATE INDEX cutover_verification_checkpoint_idx ON immich_fork.cutover_verification_run USING btree (\"databaseBackupId\", \"snapshotId\", \"completedAt\" DESC)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_checkpoint_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX cutover_verification_run_pkey ON immich_fork.cutover_verification_run USING btree (id)",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_pkey"
     },
     {
       "definition": "CREATE UNIQUE INDEX migration_audit_pkey ON immich_fork.migration_audit USING btree (id)",
@@ -6210,6 +6423,14 @@
     },
     {
       "definition": "table",
+      "identity": "immich_fork.cutover_verification_asset"
+    },
+    {
+      "definition": "table",
+      "identity": "immich_fork.cutover_verification_run"
+    },
+    {
+      "definition": "table",
       "identity": "immich_fork.migration_audit"
     },
     {
@@ -6546,6 +6767,14 @@
     }
   ],
   "triggers": [
+    {
+      "definition": "CREATE TRIGGER cutover_verification_asset_identity_immutable BEFORE UPDATE ON immich_fork.cutover_verification_asset FOR EACH ROW EXECUTE FUNCTION immich_fork.prevent_cutover_verification_identity_change()",
+      "identity": "immich_fork.cutover_verification_asset.cutover_verification_asset_identity_immutable"
+    },
+    {
+      "definition": "CREATE TRIGGER cutover_verification_run_identity_immutable BEFORE UPDATE ON immich_fork.cutover_verification_run FOR EACH ROW EXECUTE FUNCTION immich_fork.prevent_cutover_verification_identity_change()",
+      "identity": "immich_fork.cutover_verification_run.cutover_verification_run_identity_immutable"
+    },
     {
       "definition": "CREATE TRIGGER \"activity_updatedAt\" BEFORE UPDATE ON activity FOR EACH ROW EXECUTE FUNCTION updated_at()",
       "identity": "public.activity.activity_updatedAt"

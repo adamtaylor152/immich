@@ -14,6 +14,7 @@ import {
   VECTORCHORD_LIST_SLACK_FACTOR,
   VECTORCHORD_VERSION_RANGE,
 } from 'src/constants';
+import { StorageCore } from 'src/cores/storage.core';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
 import {
@@ -43,6 +44,10 @@ import {
   WorkflowCompatibility,
 } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import {
+  canonicalStorageVerificationDigest,
+  StorageVerificationEvidence,
+} from 'src/repositories/fork-cutover-verification.repository';
 import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
@@ -141,6 +146,19 @@ export type ForkSchemaCutoverEvidence = {
     upstreamVersion: string;
   };
   storageReservations: number;
+  storageVerification: {
+    runId: string;
+    databaseBackupId: string;
+    mediaSnapshotId: string;
+    assetCount: number;
+    aggregateDigest: string;
+    completedAt: string;
+    evidenceAggregateDigest: string;
+    evidenceAssetCount: number;
+    failureCount: number;
+    rootDriftCount: number;
+    verifiedCount: number;
+  } | null;
   tableEvidence: Array<{ count: number; digest: string; table: string }>;
   unsafePhysicalMappings: number;
   workflowCompatibility: WorkflowCompatibility;
@@ -565,7 +583,10 @@ export class DatabaseRepository {
     return createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')).getMigrations();
   }
 
-  async getForkSchemaCutoverEvidence(runner: Kysely<DB> = this.db): Promise<ForkSchemaCutoverEvidence> {
+  async getForkSchemaCutoverEvidence(
+    runner: Kysely<DB> = this.db,
+    checkpoint?: { databaseBackupId: string; mediaSnapshotId: string },
+  ): Promise<ForkSchemaCutoverEvidence> {
     const [
       officialMigrations,
       ledgerResult,
@@ -686,6 +707,50 @@ export class DatabaseRepository {
     const reservationResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
     `.execute(runner);
+    const storageVerificationResult = checkpoint
+      ? await sql<{
+          runId: string;
+          databaseBackupId: string;
+          mediaSnapshotId: string;
+          assetCount: number;
+          aggregateDigest: string;
+          completedAt: Date | string;
+          failureCount: number;
+          verifiedCount: number;
+        }>`
+          SELECT id AS "runId", "databaseBackupId", "snapshotId" AS "mediaSnapshotId",
+            "applicableAssetCount"::int AS "assetCount", "aggregateDigest", "completedAt",
+            "failureCount"::int AS "failureCount", "verifiedCount"::int AS "verifiedCount"
+          FROM immich_fork.cutover_verification_run
+          WHERE "databaseBackupId" = ${checkpoint.databaseBackupId}
+            AND "snapshotId" = ${checkpoint.mediaSnapshotId}
+            AND status = 'completed'
+          ORDER BY "completedAt" DESC, id DESC LIMIT 1
+        `.execute(runner)
+      : { rows: [] };
+    const storageVerificationRow = storageVerificationResult.rows[0];
+    const storageEvidenceResult = storageVerificationRow
+      ? await sql<StorageVerificationEvidence>`
+          SELECT "assetId", path, size::float8 AS size, sha1, sha256, device::text, inode::text, links
+          FROM immich_fork.cutover_verification_asset
+          WHERE "runId" = ${storageVerificationRow.runId}::uuid AND status = 'verified'
+          ORDER BY "assetId"
+        `.execute(runner)
+      : { rows: [] };
+    const storageRootDriftResult = storageVerificationRow
+      ? await sql<{ count: number }>`
+          SELECT count(*)::int AS count
+          FROM immich_fork.cutover_verification_asset verification
+          LEFT JOIN public.asset asset ON asset.id = verification."assetId"
+          LEFT JOIN public.library library ON library.id = asset."libraryId"
+          WHERE verification."runId" = ${storageVerificationRow.runId}::uuid
+            AND (
+              asset.id IS NULL
+              OR verification."approvedRoots" IS DISTINCT FROM
+                ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[])
+            )
+        `.execute(runner)
+      : { rows: [] };
 
     const actualCatalog = await getCatalogEvidence(runner);
     const expectedCatalog = expectedCatalogFor(installationClass);
@@ -786,6 +851,15 @@ export class DatabaseRepository {
         installationClass === 'current-fork' && officialLedgerOrder.valid ? officialLedgerOrder.pending : [],
       state,
       storageReservations: reservationResult.rows[0]?.count ?? 0,
+      storageVerification: storageVerificationRow
+        ? {
+            ...storageVerificationRow,
+            completedAt: new Date(storageVerificationRow.completedAt).toISOString(),
+            evidenceAggregateDigest: canonicalStorageVerificationDigest(storageEvidenceResult.rows),
+            evidenceAssetCount: storageEvidenceResult.rows.length,
+            rootDriftCount: storageRootDriftResult.rows[0]?.count ?? 0,
+          }
+        : null,
       tableEvidence,
       unsafePhysicalMappings: mapping.unsafeCount,
       workflowCompatibility,

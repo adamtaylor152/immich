@@ -18,6 +18,7 @@ import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
 import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
+import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
 import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
@@ -83,6 +84,7 @@ export const repositories = [
   EventRepository,
   ForkAlbumMetadataRepository,
   ForkConfigRepository,
+  ForkCutoverVerificationRepository,
   ForkEnrichmentRepository,
   ForkPrivacyRepository,
   ForkSchemaRepository,

@@ -39,6 +39,19 @@ const evidence = () => ({
   officialPendingMigrations: [],
   state: { active: false, phase: 'ready' as const, schemaVersion: '1', upstreamVersion: '3.0.3' },
   storageReservations: 0,
+  storageVerification: {
+    runId: '00000000-0000-4000-8000-000000000001',
+    databaseBackupId: 'backup-1',
+    mediaSnapshotId: 'snapshot-1',
+    assetCount: 0,
+    aggregateDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    evidenceAggregateDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    evidenceAssetCount: 0,
+    failureCount: 0,
+    rootDriftCount: 0,
+    verifiedCount: 0,
+    completedAt: new Date().toISOString(),
+  },
   tableEvidence: [],
   unsafePhysicalMappings: 0,
   workflowCompatibility: {
@@ -50,6 +63,59 @@ const evidence = () => ({
 });
 
 describe(ForkSchemaCutoverService.name, () => {
+  it('requires both checkpoint IDs before reading preflight evidence', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+
+    await expect(sut.preflight('', 'snapshot-1')).rejects.toThrow('Database backup ID is required');
+    await expect(sut.preflight('backup-1', '')).rejects.toThrow('Media snapshot ID is required');
+    expect(mocks.database.getForkSchemaCutoverEvidence).not.toHaveBeenCalled();
+  });
+
+  it('blocks a stale completed storage verification', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+    mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
+      ...evidence(),
+      storageVerification: { ...evidence().storageVerification, completedAt: '2026-07-15T00:00:00.000Z' },
+    });
+
+    const report = await sut.preflight('backup-1', 'snapshot-1');
+
+    expect(report.ready).toBe(false);
+    expect(report.blockers).toContain('Storage verification checkpoint is older than one hour');
+  });
+
+  it('blocks storage verification when approved roots drift after completion', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+    mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
+      ...evidence(),
+      storageVerification: { ...evidence().storageVerification, rootDriftCount: 1 },
+    });
+
+    const report = await sut.preflight('backup-1', 'snapshot-1');
+
+    expect(report.ready).toBe(false);
+    expect(report.blockers).toContain('Storage verification checkpoint evidence is invalid');
+  });
+
+  it('rechecks exact storage identity, count, digest, and freshness during apply', async () => {
+    const { sut, mocks } = newTestService(ForkSchemaCutoverService);
+    mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue(evidence());
+    mocks.database.withLock.mockImplementation(async (_lock, callback) => callback());
+    mocks.database.commitForkSchemaCutover.mockImplementation(async (_digest, _installationClass, verify) => {
+      mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
+        ...evidence(),
+        storageVerification: { ...evidence().storageVerification, aggregateDigest: 'b'.repeat(64) },
+      });
+      await verify({} as never);
+      throw new Error('unreachable');
+    });
+    const report = await sut.preflight('backup-1', 'snapshot-1');
+
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+      'Fork schema cutover preflight changed',
+    );
+  });
+
   it('refuses apply when the locked preflight digest differs', async () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue(evidence());
@@ -62,9 +128,11 @@ describe(ForkSchemaCutoverService.name, () => {
       return callback();
     });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
-    await expect(sut.apply(report.digest)).rejects.toThrow('Fork schema cutover preflight changed');
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+      'Fork schema cutover preflight changed',
+    );
     expect(mocks.database.commitForkSchemaCutover).not.toHaveBeenCalled();
   });
 
@@ -86,9 +154,9 @@ describe(ForkSchemaCutoverService.name, () => {
       return checkpoint;
     });
     mocks.database.runOfficialMigrations.mockRejectedValue(new Error('official migration failed'));
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
-    await expect(sut.apply(report.digest)).rejects.toThrow(
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
       'Fork schema cutover committed but official migrations failed; checkpoint restore required: official migration failed',
     );
     expect(mocks.database.commitForkSchemaCutover).toHaveBeenCalledOnce();
@@ -110,7 +178,7 @@ describe(ForkSchemaCutoverService.name, () => {
       },
     });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain('Unknown catalog object: tables public.physical_file_unexpected');
@@ -156,7 +224,7 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({ ...evidence(), ...overrides });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain(blocker);
@@ -183,7 +251,7 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({ ...evidence(), ...overrides });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.ready).toBe(false);
     expect(report.blockers).toContain(blocker);
