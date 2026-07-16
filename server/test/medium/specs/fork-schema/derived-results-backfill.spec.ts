@@ -204,7 +204,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
     expect(orphan.rows[0]).toEqual({ active: 0, archived: 1 });
   });
 
-  it.each(['dual-write', 'ready', 'active', 'inactive'] as const)(
+  it.each(['dual-write', 'ready', 'active'] as const)(
     'uses phase-aware production writes, reads, and asset cleanup in %s',
     async (phase) => {
       await sql`UPDATE immich_fork.state SET phase = ${phase}, active = ${phase === 'active'} WHERE id = 1`.execute(db);
@@ -247,13 +247,10 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
         { assetId: asset.id!, frameIndex: 0, timestampMs: 0, path: '/frame.jpg', embedding: vector },
       ]);
 
-      const readsAreAuthoritative = phase !== 'inactive';
-      await expect(healthRepository.getByIds([finding.id])).resolves.toHaveLength(readsAreAuthoritative ? 1 : 0);
+      await expect(healthRepository.getByIds([finding.id])).resolves.toHaveLength(1);
       const score = await bestPhotosRepository.getScore(asset.id!);
-      expect(score).toEqual(readsAreAuthoritative ? expect.objectContaining({ score: 0.9 }) : undefined);
-      await expect(duplicateRepository.getVideoDuplicateFrames([asset.id!])).resolves.toHaveLength(
-        readsAreAuthoritative ? 1 : 0,
-      );
+      expect(score).toEqual(expect.objectContaining({ score: 0.9 }));
+      await expect(duplicateRepository.getVideoDuplicateFrames([asset.id!])).resolves.toHaveLength(1);
       const legacy = await sql<{ count: number }>`SELECT
         (SELECT count(*) FROM public.asset_health WHERE "assetId" = ${asset.id}::uuid) +
         (SELECT count(*) FROM public.asset_best_photo_score WHERE "assetId" = ${asset.id}::uuid) +
@@ -270,6 +267,57 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
       expect(Number(remaining.rows[0]?.count)).toBe(0);
     },
   );
+
+  it.each(['inactive', 'failed'] as const)('does not mutate derived-result tables in %s', async (phase) => {
+    await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    const healthRepository = new MediaHealthRepository(db);
+    const run = await healthRepository.createRun(MediaHealthCategory.Corrupt);
+    await healthRepository.upsertFinding({
+      assetId: asset.id!,
+      runId: run.id,
+      category: MediaHealthCategory.Corrupt,
+      status: MediaHealthStatus.Found,
+      severity: MediaHealthSeverity.Warning,
+      originalPath: '/asset.jpg',
+      originalFileName: 'asset.jpg',
+      evidence: {},
+      resolution: {},
+      checkedAt: new Date('2026-07-15T04:05:06.789Z'),
+    });
+    await new BestPhotosRepository(db).upsertScore({
+      assetId: asset.id!,
+      ownerId: user.id,
+      score: 0.9,
+      aestheticScore: null,
+      technicalScore: null,
+      subjectScore: null,
+      diversityScore: null,
+      scoreVersion: 1,
+      computedAt: new Date('2026-07-15T04:05:06.789Z'),
+      metadata: null,
+      bestFrameTimestampMs: null,
+      frameScore: null,
+      frameMetadata: null,
+    });
+    await new DuplicateRepository(db).replaceVideoDuplicateFrames(asset.id!, [
+      { assetId: asset.id!, frameIndex: 0, timestampMs: 0, path: '/frame.jpg', embedding: vector },
+    ]);
+
+    const mutations = await sql<{ count: number }>`SELECT
+      (SELECT count(*) FROM public.asset_health_run) +
+      (SELECT count(*) FROM public.asset_health) +
+      (SELECT count(*) FROM public.asset_best_photo_score) +
+      (SELECT count(*) FROM public.asset_video_duplicate_frame) +
+      (SELECT count(*) FROM immich_fork.asset_health_run) +
+      (SELECT count(*) FROM immich_fork.asset_health) +
+      (SELECT count(*) FROM immich_fork.asset_best_photo_score) +
+      (SELECT count(*) FROM immich_fork.asset_video_duplicate_frame) AS count`.execute(db);
+    expect(Number(mutations.rows[0]?.count)).toBe(0);
+  });
 
   it('uses the Task 4 claim token fence for the real health handler', async () => {
     const user = mediumFactory.userInsert();

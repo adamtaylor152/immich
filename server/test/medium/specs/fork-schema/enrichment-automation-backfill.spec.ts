@@ -76,6 +76,50 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     expect(foreignKeys.rows[0]?.count).toBe(0);
   });
 
+  it.each(['inactive', 'failed'] as const)(
+    'does not mutate enrichment, config, or smart-album sidecars in %s',
+    async (phase) => {
+      const user = mediumFactory.userInsert();
+      const asset = mediumFactory.assetInsert({ ownerId: user.id });
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values(asset).execute();
+      const enrichment = new ForkEnrichmentRepository(db);
+      const config = new ForkConfigRepository(db);
+      await enrichment.backfillEnrichment([asset.id!]);
+      await config.backfillConfig(defaults, 'file');
+      const before = await sql`
+        SELECT 'enrichment' AS source, row_to_json(row)::text AS value FROM immich_fork.asset_enrichment row
+        UNION ALL
+        SELECT 'config', row_to_json(row)::text FROM immich_fork.config row
+        UNION ALL
+        SELECT 'rule', row_to_json(row)::text FROM immich_fork.smart_album_rule row
+        ORDER BY source, value
+      `.execute(db);
+      const changed = {
+        ...defaults,
+        smartAlbums: { ...defaults.smartAlbums, enabled: !defaults.smartAlbums.enabled },
+      };
+
+      await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
+      await enrichment.initialize([asset.id!]);
+      await enrichment.save(asset.id!, { description: { status: 'success', result: { description: 'changed' } } });
+      await enrichment.delete([asset.id!]);
+      await config.mirrorConfig(changed);
+      await new ForkSchemaRepository(db).mirrorConfig(changed);
+      await new SmartAlbumRepository(db).ensureForUser(user.id, [{ kind: 'review', name: 'Review' }]);
+
+      const after = await sql`
+        SELECT 'enrichment' AS source, row_to_json(row)::text AS value FROM immich_fork.asset_enrichment row
+        UNION ALL
+        SELECT 'config', row_to_json(row)::text FROM immich_fork.config row
+        UNION ALL
+        SELECT 'rule', row_to_json(row)::text FROM immich_fork.smart_album_rule row
+        ORDER BY source, value
+      `.execute(db);
+      expect(after.rows).toEqual(before.rows);
+    },
+  );
+
   it('extracts only an exactly reproduced generated description and preserves exact user text', async () => {
     const user = mediumFactory.userInsert();
     const exact = mediumFactory.assetInsert({ ownerId: user.id });
@@ -240,7 +284,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     );
   });
 
-  it.each(['dual-write', 'ready', 'active', 'inactive'] as const)(
+  it.each(['dual-write', 'ready', 'active'] as const)(
     'initializes enrichment on asset creation in %s and cleans asset references on deletion',
     async (phase) => {
       await sql`UPDATE immich_fork.state SET phase = ${phase} WHERE id = 1`.execute(db);
@@ -288,6 +332,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   });
 
   it('cleans rules for an album subtree and all albums owned by a deleted user', async () => {
+    await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
     const user = mediumFactory.userInsert();
     const root = mediumFactory.albumInsert({});
     const child = mediumFactory.albumInsert({ parentId: root.id });

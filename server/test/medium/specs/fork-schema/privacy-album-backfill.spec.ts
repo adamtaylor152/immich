@@ -146,6 +146,46 @@ describe('privacy and album fork sidecars', () => {
     expect(new Set(secondClosure.rows.map((row) => JSON.stringify(row))).size).toBe(3);
   });
 
+  it.each(['inactive', 'failed'] as const)('does not mutate privacy or album sidecars in %s', async (phase) => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
+    const album = mediumFactory.albumInsert({ icon: 'before', sortOrder: 1 });
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db.insertInto('album').values(album).execute();
+    await db.insertInto('album_closure').values({ id_ancestor: album.id!, id_descendant: album.id! }).execute();
+    const privacy = new ForkPrivacyRepository(db);
+    const albums = new ForkAlbumMetadataRepository(db);
+    await privacy.backfillPrivacy([asset.id!]);
+    await albums.backfillAlbums([album.id!]);
+    const before = await sql`
+      SELECT 'privacy' AS source, row_to_json(row)::text AS value FROM immich_fork.asset_privacy row
+      UNION ALL
+      SELECT 'album', row_to_json(row)::text FROM immich_fork.album_metadata row
+      UNION ALL
+      SELECT 'closure', row_to_json(row)::text FROM immich_fork.album_closure row
+      ORDER BY source, value
+    `.execute(db);
+
+    await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
+    await db.updateTable('asset').set({ is_nsfw: true }).where('id', '=', asset.id!).execute();
+    await db.updateTable('album').set({ icon: 'after', sortOrder: 2 }).where('id', '=', album.id!).execute();
+    await privacy.mirrorFromLegacy(asset.id!);
+    await albums.mirrorFromLegacy([album.id!]);
+    await privacy.delete([asset.id!]);
+    await albums.delete([album.id!]);
+
+    const after = await sql`
+      SELECT 'privacy' AS source, row_to_json(row)::text AS value FROM immich_fork.asset_privacy row
+      UNION ALL
+      SELECT 'album', row_to_json(row)::text FROM immich_fork.album_metadata row
+      UNION ALL
+      SELECT 'closure', row_to_json(row)::text FROM immich_fork.album_closure row
+      ORDER BY source, value
+    `.execute(db);
+    expect(after.rows).toEqual(before.rows);
+  });
+
   it('keeps legacy album reads through ready, exposes no inactive overlay, and switches only when active', async () => {
     const album = mediumFactory.albumInsert({ icon: 'legacy', sortOrder: 1 });
     await db.insertInto('album').values(album).execute();
@@ -261,6 +301,7 @@ describe('privacy and album fork sidecars', () => {
       .execute();
     const subtreeIds = [root.id!, child.id!, grandchild.id!];
     await new ForkAlbumMetadataRepository(db).backfillAlbums(subtreeIds);
+    await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
 
     await new AlbumRepository(db).delete(root.id!);
 

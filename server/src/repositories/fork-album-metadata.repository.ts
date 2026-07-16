@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
-import { isForkAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authority';
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
@@ -45,7 +45,7 @@ export class ForkAlbumMetadataRepository {
 
   async mirrorFromLegacy(ids: string[], kysely: Kysely<DB> = this.db): Promise<void> {
     const phase = await this.getPhase(kysely);
-    if (phase === 'legacy') {
+    if (!isForkWriteEnabled(phase)) {
       return;
     }
     await this.backfill(ids, kysely);
@@ -72,7 +72,7 @@ export class ForkAlbumMetadataRepository {
   }
 
   async delete(ids: string[], kysely: Kysely<DB> = this.db): Promise<void> {
-    if (ids.length === 0) {
+    if (ids.length === 0 || !isForkWriteEnabled(await this.getPhase(kysely))) {
       return;
     }
     await sql`

@@ -1,6 +1,6 @@
 import { Kysely, sql } from 'kysely';
 import { createHash } from 'node:crypto';
-import { isForkAuthoritative, isLegacyAuthoritative } from 'src/fork-schema/authority';
+import { isForkAuthoritative, isForkWriteEnabled, isLegacyAuthoritative } from 'src/fork-schema/authority';
 import { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
@@ -52,7 +52,7 @@ export const getForkSchemaPhase = async (db: Kysely<DB>): Promise<ForkSchemaPhas
 
 export const readsForkSidecar = (phase: ForkSchemaPhase): boolean => isForkAuthoritative(phase);
 export const writesLegacy = (phase: ForkSchemaPhase): boolean => isLegacyAuthoritative(phase);
-export const writesForkSidecar = (phase: ForkSchemaPhase): boolean => phase !== 'legacy';
+export const writesForkSidecar = (phase: ForkSchemaPhase): boolean => isForkWriteEnabled(phase);
 
 export const lockForkAssetParent = async (
   db: Kysely<DB>,
