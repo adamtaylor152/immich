@@ -26,7 +26,7 @@ import {
   aliasLegacyWorkflowMigration,
   classifyWorkflowCompatibility,
   getWorkflowCompatibilityEvidence,
-  WORKFLOW_COMPATIBILITY_MIGRATIONS,
+  validateOfficialMigrationLedgerOrder,
   WorkflowCompatibility,
 } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
@@ -67,6 +67,7 @@ const CUTOVER_EVIDENCE_TABLES = [
 
 const CUTOVER_LOCK_TABLES = [
   'public.kysely_migrations',
+  'public.migration_overrides',
   'public.system_metadata',
   'public.asset_file',
   'immich_fork.state',
@@ -87,7 +88,6 @@ const LEGACY_TRIGGER_NAMES = new Set([
   'asset_health_updatedAt',
   'asset_health_candidate_updatedAt',
   'album_parent_cycle_check_trigger',
-  'workflow_updatedAt',
 ]);
 
 const LEGACY_RESIDUE_TABLES = new Set([
@@ -117,7 +117,6 @@ const LEGACY_RESIDUE_OVERRIDES = new Set([
   'trigger_asset_video_duplicate_frame_updatedAt',
   'trigger_asset_health_updatedAt',
   'trigger_asset_health_candidate_updatedAt',
-  'trigger_workflow_updatedAt',
   'index_idx_asset_exif_description_trigram',
   'index_album_parentId_idx',
   'index_album_parent_sort_idx',
@@ -621,16 +620,11 @@ export class DatabaseRepository {
     if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
       throw new Error('Official migration provider exposed a non-upstream migration');
     }
-    const unexpectedUnbundledMigrations = ledger.filter(
-      ({ classification, name }) =>
-        classification === 'upstream' && !officialNames.includes(name) && !WORKFLOW_COMPATIBILITY_MIGRATIONS.has(name),
-    );
     const appliedOfficial = ledger
-      .filter(({ classification, name }) => classification === 'upstream' && officialNames.includes(name))
+      .filter(({ classification }) => classification === 'upstream')
       .map(({ name }) => name);
-    const migrationOrderValid =
-      unexpectedUnbundledMigrations.length === 0 &&
-      appliedOfficial.every((name, index) => officialNames[index] === name);
+    const officialLedgerOrder = validateOfficialMigrationLedgerOrder(appliedOfficial, officialNames);
+    const migrationOrderValid = officialLedgerOrder.valid;
 
     const activeWritesResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count
@@ -721,7 +715,6 @@ export class DatabaseRepository {
           OR trigger_name LIKE 'asset_video_duplicate_frame%'
           OR trigger_name LIKE 'asset_health%'
           OR trigger_name LIKE 'album_parent_cycle%'
-          OR trigger_name LIKE 'workflow%'
           OR event_object_table LIKE 'physical_file%'
           OR event_object_table LIKE 'asset_video_duplicate_frame%'
           OR event_object_table LIKE 'asset_health%'
@@ -769,7 +762,6 @@ export class DatabaseRepository {
          OR name LIKE '%album_parent%'
          OR name LIKE '%asset_is_nsfw%'
          OR name LIKE '%asset_exif_description%'
-         OR name LIKE '%workflow%'
       ORDER BY name
     `.execute(runner);
     for (const { name } of overrides.rows) {
@@ -788,7 +780,7 @@ export class DatabaseRepository {
       ledger,
       maintenanceMode: maintenanceResult.rows[0]?.maintenanceMode ?? false,
       migrationOrderValid,
-      officialPendingMigrations: migrationOrderValid ? officialNames.slice(appliedOfficial.length) : [],
+      officialPendingMigrations: officialLedgerOrder.pending,
       schemaResidue,
       state,
       storageReservations: reservationResult.rows[0]?.count ?? 0,

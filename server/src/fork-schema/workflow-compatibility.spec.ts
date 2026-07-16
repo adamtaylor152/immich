@@ -1,9 +1,11 @@
+import supportedVersions from 'src/fork-schema/supported-versions.json';
 import {
   ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION,
   ADD_PLUGIN_TEMPLATES_MIGRATION,
   classifyWorkflowCompatibility,
   LEGACY_WORKFLOW_MIGRATION,
   OFFICIAL_WORKFLOW_MIGRATION,
+  validateOfficialMigrationLedgerOrder,
   WORKFLOW_SCHEMA_DIGESTS,
   WorkflowCompatibilityEvidence,
 } from 'src/fork-schema/workflow-compatibility';
@@ -95,5 +97,39 @@ describe(classifyWorkflowCompatibility, () => {
     expect(() => classifyWorkflowCompatibility(fixture({ legacy: true, later: ['templates'] }))).toThrow(
       'workflow ledger/schema disagreement',
     );
+  });
+});
+
+describe(validateOfficialMigrationLedgerOrder, () => {
+  const expected = supportedVersions.upstreamMigrations;
+  const providerWithoutAuditedGaps = (prefix: string[]) =>
+    prefix.filter(
+      (name) =>
+        name !== OFFICIAL_WORKFLOW_MIGRATION &&
+        name !== ADD_PLUGIN_TEMPLATES_MIGRATION &&
+        name !== ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION,
+    );
+
+  it.each([OFFICIAL_WORKFLOW_MIGRATION, ADD_PLUGIN_TEMPLATES_MIGRATION, ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION])(
+    'accepts an exact timestamp-ordered prefix spanning the audited provider gap %s',
+    (gap) => {
+      const prefix = expected.slice(0, expected.indexOf(gap) + 1);
+      expect(validateOfficialMigrationLedgerOrder(prefix, providerWithoutAuditedGaps(prefix))).toMatchObject({
+        valid: true,
+      });
+    },
+  );
+
+  it('rejects a special marker when its official predecessors are missing', () => {
+    expect(validateOfficialMigrationLedgerOrder([OFFICIAL_WORKFLOW_MIGRATION], [])).toMatchObject({ valid: false });
+  });
+
+  it('rejects special markers whose ledger timestamps put them in reversed order', () => {
+    const predecessorIndex = expected.indexOf(OFFICIAL_WORKFLOW_MIGRATION);
+    const prefix = expected.slice(0, predecessorIndex);
+    const ledger = [...prefix, ADD_PLUGIN_TEMPLATES_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION];
+    expect(validateOfficialMigrationLedgerOrder(ledger, providerWithoutAuditedGaps(ledger))).toMatchObject({
+      valid: false,
+    });
   });
 });

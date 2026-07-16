@@ -8,6 +8,9 @@ import {
   LEGACY_WORKFLOW_MIGRATION,
   OFFICIAL_WORKFLOW_MIGRATION,
 } from 'src/fork-schema/workflow-compatibility';
+import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -35,6 +38,7 @@ describe('workflow migration ledger alias', () => {
     await db.deleteFrom('user').execute();
     await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${workflowMarkers})`.execute(db);
     await sql`DELETE FROM immich_fork.migration_audit WHERE phase = 'workflow-alias'`.execute(db);
+    await sql`ALTER TABLE public.workflow ENABLE TRIGGER "workflow_updatedAt"`.execute(db);
 
     const user = mediumFactory.userInsert();
     await db.insertInto('user').values(user).execute();
@@ -121,6 +125,36 @@ describe('workflow migration ledger alias', () => {
 
     expect(await getWorkflowCompatibilityEvidence(db)).toEqual(before);
   });
+
+  it.each([
+    ['legacy alias', LEGACY_WORKFLOW_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION],
+    ['original official', OFFICIAL_WORKFLOW_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION],
+  ])(
+    'preserves the workflow catalog, rows, and trigger state through the full cutover for %s',
+    async (_, marker, finalMarker) => {
+      await useMarker(marker);
+      const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
+      const before = await getWorkflowCompatibilityEvidence(db);
+      const triggerBefore = await sql<{ enabled: string }>`
+      SELECT tgenabled::text AS enabled
+      FROM pg_catalog.pg_trigger
+      WHERE tgrelid = 'public.workflow'::regclass AND tgname = 'workflow_updatedAt'
+    `.execute(db);
+
+      await repository.commitForkSchemaCutover(reportDigest, async () => {});
+
+      const after = await getWorkflowCompatibilityEvidence(db);
+      const triggerAfter = await sql<{ enabled: string }>`
+      SELECT tgenabled::text AS enabled
+      FROM pg_catalog.pg_trigger
+      WHERE tgrelid = 'public.workflow'::regclass AND tgname = 'workflow_updatedAt'
+    `.execute(db);
+      expect(after.schemaDigest).toBe(before.schemaDigest);
+      expect(after.rowDigests).toEqual(before.rowDigests);
+      expect(after.ledger).toContainEqual({ name: finalMarker, timestamp: markerTimestamp });
+      expect(triggerAfter.rows).toEqual(triggerBefore.rows);
+    },
+  );
 
   it('rolls ledger, audit, schema, and seeded rows back after an alias transaction failure', async () => {
     await useMarker(LEGACY_WORKFLOW_MIGRATION);
