@@ -251,10 +251,12 @@ describe(ForkSchemaRepository.name, () => {
       SELECT kind, 0
       FROM unnest(${BACKFILL_KINDS.filter((kind) => kind !== 'privacy')}::text[]) AS kind
     `.execute(db);
-    await expect(repository.setPhase('active')).rejects.toThrow(
+    await repository.setPhase('inactive');
+    await expect(repository.activateAfterReturnReconciliation()).rejects.toThrow(
       'Cannot activate fork schema with incomplete backfills',
     );
 
+    await repository.setPhase('dual-write');
     const retryClaim = await repository.claimBatch('privacy', 1);
     expect(retryClaim?.ids).toEqual(failedClaim?.ids);
     expect(retryClaim?.cursor).not.toBe(failedClaim?.cursor);
@@ -282,13 +284,13 @@ describe(ForkSchemaRepository.name, () => {
       FROM unnest(${[...BACKFILL_KINDS]}::text[]) AS kind
     `.execute(db);
 
-    await expect(repository.setPhase('active')).rejects.toThrow(
+    await expect(repository.activateAfterReturnReconciliation()).rejects.toThrow(
       'Cannot activate fork schema with incomplete backfills',
     );
     await expect(repository.getState()).resolves.toMatchObject({ active: false, phase: 'inactive' });
 
     await sql`UPDATE immich_fork.backfill_progress SET remaining = 0 WHERE kind = 'privacy'`.execute(db);
-    await repository.setPhase('active');
+    await repository.activateAfterReturnReconciliation();
 
     await expect(repository.getState()).resolves.toMatchObject({ active: true, phase: 'active' });
   });

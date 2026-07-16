@@ -118,10 +118,10 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
 }
 
 /**
- * Phase-aware NSFW predicate. Legacy and dual-write phases read the denormalized
- * `asset.is_nsfw` value, while ready and isolated phases read the fork-owned
- * privacy sidecar exclusively. A missing authoritative sidecar is treated as
- * hidden so privacy enforcement fails closed.
+ * Phase-aware NSFW predicate. Legacy, dual-write, and ready phases read the
+ * denormalized `asset.is_nsfw` value. Active reads use the fork-owned privacy
+ * sidecar exclusively and fail closed when it is missing. Inactive and failed
+ * expose no fork privacy filtering.
  *
  * The `STRONG_DESCRIPTION_NSFW_TAGS` constant is kept exported because
  * ImageEnrichmentService uses the same derivation rules when computing the
@@ -129,18 +129,19 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
  */
 export const nsfwAssetIdExists = (assetId: Expression<unknown>) => sql<boolean>`case
       when ${assetId} is null then false
-      when coalesce((select phase from immich_fork.state where id = 1), 'inactive') in ('legacy', 'dual-write') then exists (
+      when coalesce((select phase from immich_fork.state where id = 1), 'inactive') in ('legacy', 'dual-write', 'ready') then exists (
         select 1
         from asset as nsfw_asset
         where nsfw_asset.id = ${assetId}
           and nsfw_asset.is_nsfw = true
       )
-      else not exists (
+      when (select phase from immich_fork.state where id = 1) = 'active' then not exists (
         select 1
         from immich_fork.asset_privacy as privacy_asset
         where privacy_asset."assetId" = ${assetId}
           and privacy_asset."isNsfw" = false
       )
+      else false
     end`;
 
 // The shared expression explicitly treats a NULL asset ID as visible. This

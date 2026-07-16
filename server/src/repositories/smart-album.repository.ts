@@ -3,6 +3,8 @@ import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash, randomUUID } from 'node:crypto';
 import { AlbumUserRole } from 'src/enum';
+import { isForkAuthoritative, isLegacyAuthoritative } from 'src/fork-schema/authority';
+import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
 @Injectable()
@@ -62,13 +64,13 @@ export class SmartAlbumRepository {
           .selectFrom('new_album_owner')
           .select('albumId')
           .executeTakeFirstOrThrow();
-        if (phase === 'legacy' || phase === 'dual-write') {
+        if (isLegacyAuthoritative(phase)) {
           const rule = await trx
             .insertInto('smart_album')
             .values({ albumId: album.albumId, ownerId, kind })
             .returning('id')
             .executeTakeFirstOrThrow();
-          if (phase === 'dual-write') {
+          if (phase !== 'legacy') {
             await this.upsertRule(rule.id, album.albumId, ownerId, kind, trx);
           }
         } else {
@@ -177,7 +179,7 @@ export class SmartAlbumRepository {
   ): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
-      const smartAlbum = await this.getRule(smartAlbumId, trx, phase !== 'legacy' && phase !== 'dual-write');
+      const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
 
       if (!smartAlbum) {
         return;
@@ -188,7 +190,7 @@ export class SmartAlbumRepository {
       // matches via tag+clip ("both") or clip alone. The DISTINCT guard makes
       // the write a no-op when the reason hasn't changed — keeps the upsert
       // cheap and avoids bumping updatedAt-style triggers.
-      if (phase === 'legacy' || phase === 'dual-write') {
+      if (isLegacyAuthoritative(phase)) {
         await trx
           .insertInto('smart_album_asset')
           .values({ smartAlbumId, assetId, matchReason })
@@ -222,7 +224,7 @@ export class SmartAlbumRepository {
   async removeAssetFromSmartAlbum(smartAlbumId: string, assetId: string): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
-      const smartAlbum = await this.getRule(smartAlbumId, trx, phase !== 'legacy' && phase !== 'dual-write');
+      const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
 
       if (smartAlbum) {
         await trx
@@ -232,7 +234,7 @@ export class SmartAlbumRepository {
           .execute();
       }
 
-      if (phase === 'legacy' || phase === 'dual-write') {
+      if (isLegacyAuthoritative(phase)) {
         await trx
           .deleteFrom('smart_album_asset')
           .where('smartAlbumId', '=', smartAlbumId)
@@ -276,11 +278,11 @@ export class SmartAlbumRepository {
   async excludeAsset(smartAlbumId: string, assetId: string): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       const phase = await this.getPhase(trx);
-      const smartAlbum = await this.getRule(smartAlbumId, trx, phase !== 'legacy' && phase !== 'dual-write');
+      const smartAlbum = await this.getRule(smartAlbumId, trx, isForkAuthoritative(phase));
       if (!smartAlbum) {
         return;
       }
-      if (phase === 'legacy' || phase === 'dual-write') {
+      if (isLegacyAuthoritative(phase)) {
         await trx
           .insertInto('smart_album_exclusion')
           .values({ smartAlbumId, assetId })
@@ -299,7 +301,7 @@ export class SmartAlbumRepository {
         .where('assetId', '=', assetId)
         .execute();
 
-      if (phase === 'legacy' || phase === 'dual-write') {
+      if (isLegacyAuthoritative(phase)) {
         await trx
           .deleteFrom('smart_album_asset')
           .where('smartAlbumId', '=', smartAlbumId)
@@ -404,16 +406,18 @@ export class SmartAlbumRepository {
 
   private async shouldReadSidecar(kysely: Kysely<DB> = this.db) {
     const phase = await this.getPhase(kysely);
-    return phase !== 'legacy' && phase !== 'dual-write';
+    return isForkAuthoritative(phase);
   }
-  private async getPhase(kysely: Kysely<DB>) {
+  private async getPhase(kysely: Kysely<DB>): Promise<ForkSchemaPhase> {
     const exists = await sql<{ table: string | null }>`SELECT to_regclass('immich_fork.state')::text AS table`.execute(
       kysely,
     );
     if (!exists.rows[0]?.table) {
       return 'legacy';
     }
-    const result = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(kysely);
+    const result = await sql<{ phase: ForkSchemaPhase }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(
+      kysely,
+    );
     return result.rows[0]?.phase ?? 'inactive';
   }
   private async upsertRule(id: string, albumId: string, ownerId: string, kind: string, kysely: Kysely<DB>) {

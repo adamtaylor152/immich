@@ -139,7 +139,9 @@ describe('workflow migration ledger alias', () => {
       SELECT tgenabled::text AS enabled
       FROM pg_catalog.pg_trigger
       WHERE tgrelid = 'public.workflow'::regclass AND tgname = 'workflow_updatedAt'
-    `.execute(db);
+      `.execute(db);
+
+      await sql`UPDATE immich_fork.state SET active = false, phase = 'ready' WHERE id = 1`.execute(db);
 
       await repository.commitForkSchemaCutover(reportDigest, async () => {});
 

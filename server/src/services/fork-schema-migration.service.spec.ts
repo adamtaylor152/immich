@@ -85,6 +85,15 @@ describe(ForkSchemaMigrationService.name, () => {
     mocks.forkSchema.getProgress.mockResolvedValue([]);
   });
 
+  it('delegates inactive-to-active authority to return reconciliation only', async () => {
+    mocks.forkSchema.getState.mockResolvedValue({ ...state(), active: true, phase: 'active' });
+
+    const status = await service.activateAfterReturnReconciliation();
+
+    expect(mocks.forkSchema.activateAfterReturnReconciliation).toHaveBeenCalledOnce();
+    expect(status).toMatchObject({ active: true, phase: 'active' });
+  });
+
   it('does not start outside legacy phase', async () => {
     mocks.forkSchema.getState.mockResolvedValue(state('ready'));
 

@@ -247,15 +247,19 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
         { assetId: asset.id!, frameIndex: 0, timestampMs: 0, path: '/frame.jpg', embedding: vector },
       ]);
 
-      await expect(healthRepository.getByIds([finding.id])).resolves.toHaveLength(1);
-      await expect(bestPhotosRepository.getScore(asset.id!)).resolves.toMatchObject({ score: 0.9 });
-      await expect(duplicateRepository.getVideoDuplicateFrames([asset.id!])).resolves.toHaveLength(1);
+      const readsAreAuthoritative = phase !== 'inactive';
+      await expect(healthRepository.getByIds([finding.id])).resolves.toHaveLength(readsAreAuthoritative ? 1 : 0);
+      const score = await bestPhotosRepository.getScore(asset.id!);
+      expect(score).toEqual(readsAreAuthoritative ? expect.objectContaining({ score: 0.9 }) : undefined);
+      await expect(duplicateRepository.getVideoDuplicateFrames([asset.id!])).resolves.toHaveLength(
+        readsAreAuthoritative ? 1 : 0,
+      );
       const legacy = await sql<{ count: number }>`SELECT
         (SELECT count(*) FROM public.asset_health WHERE "assetId" = ${asset.id}::uuid) +
         (SELECT count(*) FROM public.asset_best_photo_score WHERE "assetId" = ${asset.id}::uuid) +
         (SELECT count(*) FROM public.asset_video_duplicate_frame WHERE "assetId" = ${asset.id}::uuid) AS count
       `.execute(db);
-      expect(Number(legacy.rows[0]?.count)).toBe(phase === 'dual-write' ? 3 : 0);
+      expect(Number(legacy.rows[0]?.count)).toBe(phase === 'dual-write' || phase === 'ready' ? 3 : 0);
 
       await new AssetRepository(db).remove({ id: asset.id! });
       const remaining = await sql<{ count: number }>`SELECT

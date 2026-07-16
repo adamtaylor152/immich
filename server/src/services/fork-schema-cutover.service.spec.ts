@@ -53,7 +53,7 @@ describe(ForkSchemaCutoverService.name, () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     const checkpoint = {
       committedAt: '2026-07-15T00:00:00.000Z',
-      phase: 'ready' as const,
+      phase: 'inactive' as const,
       reportDigest: 'digest',
       schemaVersion: '2' as const,
     };

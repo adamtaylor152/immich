@@ -3,6 +3,7 @@ import { RepositoryInterface } from 'src/types';
 import { Mocked, vitest } from 'vitest';
 
 export const newForkSchemaRepositoryMock = (): Mocked<RepositoryInterface<ForkSchemaRepository>> => ({
+  activateAfterReturnReconciliation: vitest.fn(),
   overlayConfig: vitest.fn((config) => Promise.resolve(config)),
   mirrorConfig: vitest.fn(),
   persistConfig: vitest.fn(),

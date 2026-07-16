@@ -344,7 +344,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     const userTag = mediumFactory.tagInsert({ userId: user.id, value: 'generated-tag' });
     await db.insertInto('tag').values(userTag).execute();
     await db.insertInto('tag_asset').values({ assetId: asset.id!, tagId: userTag.id }).execute();
-    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     await new ForkEnrichmentRepository(db).initialize([asset.id!]);
 
     const { sut, mocks } = newTestService(ImageEnrichmentService);
@@ -467,11 +467,11 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     await expect(automation.getAllSmartAlbumIdsForOwner(user.id)).resolves.toEqual(new Map([['travel', smart.id]]));
 
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-    await expect(automation.getAllSmartAlbumIdsForOwner(user.id)).resolves.toEqual(
-      new Map([['fork-travel', smart.id]]),
-    );
+    await expect(automation.getAllSmartAlbumIdsForOwner(user.id)).resolves.toEqual(new Map([['travel', smart.id]]));
     await db.deleteFrom('smart_album').where('id', '=', smart.id).execute();
     await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
+    await expect(automation.getAllSmartAlbumIdsForOwner(user.id)).resolves.toEqual(new Map());
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     await expect(automation.getAllSmartAlbumIdsForOwner(user.id)).resolves.toEqual(
       new Map([['fork-travel', smart.id]]),
     );
@@ -496,6 +496,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       machineLearning: { ...upstream.machineLearning, runpod: { ...upstream.machineLearning.runpod, enabled: true } },
       smartAlbums: { ...upstream.smartAlbums, enabled: true },
     });
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     clearConfigCache();
 
     const first = await getConfig(repos, { withCache: false });
@@ -560,7 +561,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
       })
       .execute();
     await new ForkConfigRepository(db).backfillConfig(preLockEffective, 'database');
-    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
 
     const complete = await new ForkSchemaRepository(db).overlayConfig(structuredClone(defaults));
     const expectedRunpod = structuredClone(defaults.machineLearning.runpod);
@@ -601,6 +602,11 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
 
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
     await expect(getConfig(repos, { withCache: true })).resolves.toMatchObject({
+      machineLearning: { runpod: { enabled: false } },
+    });
+
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
+    await expect(getConfig(repos, { withCache: true })).resolves.toMatchObject({
       machineLearning: { runpod: { enabled: true } },
     });
 
@@ -629,7 +635,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     } as SystemMetadataRepository;
     const spanningBuild = getConfig({ ...repos, metadataRepo: delayedMetadataRepo }, { withCache: false });
     await baseBuildPaused;
-    await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
+    await sql`UPDATE immich_fork.state SET phase = 'active', active = true WHERE id = 1`.execute(db);
     resumeBaseBuild();
     await expect(spanningBuild).resolves.toMatchObject({
       machineLearning: { runpod: { enabled: true } },

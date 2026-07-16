@@ -164,7 +164,7 @@ export type ForkSchemaCutoverEvidence = {
 
 export type ForkSchemaCutoverCheckpoint = {
   committedAt: string;
-  phase: 'ready';
+  phase: 'inactive';
   reportDigest: string;
   schemaVersion: '2';
 };
@@ -858,18 +858,32 @@ export class DatabaseRepository {
         }
 
         const committedAt = new Date().toISOString();
-        await sql`
+        const state = await sql<{ id: number }>`
           UPDATE immich_fork.state
           SET active = false,
-              phase = 'ready',
+              phase = 'inactive',
               "schemaVersion" = '2',
               "checkpointStartedAt" = coalesce("checkpointStartedAt", now()),
               "checkpointCompletedAt" = now(),
               "updatedAt" = now()
-          WHERE id = 1
+          WHERE id = 1 AND phase = 'ready'
+          RETURNING id
+        `.execute(transaction);
+        if (!state.rows[0]) {
+          throw new Error('Fork schema cutover requires ready phase');
+        }
+        await sql`
+          INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+          VALUES (
+            'fork-schema-cutover',
+            'official-cutover',
+            'applied',
+            jsonb_build_object('reportDigest', ${reportDigest}::text),
+            now()
+          )
         `.execute(transaction);
         await this.finishForkSchemaCutover(transaction);
-        return { committedAt, phase: 'ready', reportDigest, schemaVersion: '2' };
+        return { committedAt, phase: 'inactive', reportDigest, schemaVersion: '2' };
       });
   }
 

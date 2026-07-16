@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
+import { isForkAuthoritative } from 'src/fork-schema/authority';
+import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
 export type EnrichmentSidecar = {
@@ -93,7 +95,7 @@ export class ForkEnrichmentRepository {
 
   async shouldReadSidecar(kysely: Kysely<DB> = this.db): Promise<boolean> {
     const phase = await this.getPhase(kysely);
-    return phase !== 'legacy' && phase !== 'dual-write';
+    return isForkAuthoritative(phase);
   }
 
   private async backfill(ids: string[], kysely: Kysely<DB>): Promise<EnrichmentBatchResult> {
@@ -202,14 +204,16 @@ export class ForkEnrichmentRepository {
     return result.rows;
   }
 
-  private async getPhase(kysely: Kysely<DB>): Promise<string> {
+  private async getPhase(kysely: Kysely<DB>): Promise<ForkSchemaPhase> {
     const exists = await sql<{ table: string | null }>`SELECT to_regclass('immich_fork.state')::text AS table`.execute(
       kysely,
     );
     if (!exists.rows[0]?.table) {
       return 'legacy';
     }
-    const result = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(kysely);
+    const result = await sql<{ phase: ForkSchemaPhase }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(
+      kysely,
+    );
     return result.rows[0]?.phase ?? 'inactive';
   }
 }
