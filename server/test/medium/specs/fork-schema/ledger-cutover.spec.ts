@@ -17,6 +17,7 @@ const NON_WORKFLOW_PROVIDER_GAPS = [
   '1781089983296-CreateIntegrityReportTable',
   '1782500000000-RestoreLivePhotoStillVisibility',
 ] as const;
+const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 class FailingPreCommitRepository extends DatabaseRepository {
   protected override async finishForkSchemaCutover(transaction: Kysely<DB>): Promise<void> {
@@ -89,6 +90,7 @@ describe('fork schema ledger cutover', () => {
   beforeAll(async () => {
     db = await getKyselyDB('ledger_cutover');
     repository = new TaskOneCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
+    await repository.runForkMigrations();
   });
 
   afterAll(async () => db.destroy());
@@ -121,6 +123,12 @@ describe('fork schema ledger cutover', () => {
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
     `.execute(db);
+    await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (gen_random_uuid(), 'backup-1', 'snapshot-1', 'completed', 0, ${EMPTY_STORAGE_DIGEST}, now())
+    `.execute(db);
   });
 
   it('keeps preflight strictly read-only', async () => {
@@ -136,7 +144,7 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     const after = await sql`
       SELECT 'official' AS source, name, timestamp::text AS value FROM public.kysely_migrations
@@ -150,6 +158,58 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
     expect(report.ready).toBe(true);
     expect(after.rows).toEqual(before.rows);
+  });
+
+  it('rejects stale and count-drifted PostgreSQL storage checkpoints', async () => {
+    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (
+        gen_random_uuid(), 'backup-stale', 'snapshot-stale', 'completed', 0,
+        ${EMPTY_STORAGE_DIGEST}, now() - interval '61 minutes'
+      )
+    `.execute(db);
+    const stale = await sut.preflight('backup-stale', 'snapshot-stale');
+    expect(stale.blockers).toContain('Storage verification checkpoint is older than one hour');
+
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (gen_random_uuid(), 'backup-count', 'snapshot-count', 'completed', 1, ${'b'.repeat(64)}, now())
+    `.execute(db);
+    const countDrift = await sut.preflight('backup-count', 'snapshot-count');
+    expect(countDrift.blockers).toContain('Storage verification checkpoint evidence is invalid');
+  });
+
+  it('rejects a completed checkpoint whose stored digest does not match its canonical evidence rows', async () => {
+    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (gen_random_uuid(), 'backup-invalid-digest', 'snapshot-invalid-digest', 'completed', 0, ${'b'.repeat(64)}, now())
+    `.execute(db);
+
+    const report = await sut.preflight('backup-invalid-digest', 'snapshot-invalid-digest');
+
+    expect(report.blockers).toContain('Storage verification checkpoint evidence is invalid');
+  });
+
+  it('rejects apply-time run ID, checkpoint ID, and digest drift', async () => {
+    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+    const report = await sut.preflight('backup-1', 'snapshot-1');
+    await sql`
+      INSERT INTO immich_fork.cutover_verification_run
+        (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
+      VALUES (gen_random_uuid(), 'backup-1', 'snapshot-1', 'completed', 0, ${'b'.repeat(64)}, now() + interval '1 second')
+    `.execute(db);
+
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+      'Fork schema cutover preflight changed',
+    );
+    await expect(sut.apply(report.digest, 'other-backup', 'other-snapshot')).rejects.toThrow(
+      'Fork schema cutover preflight changed',
+    );
   });
 
   it('audits and removes only allowlisted legacy rows at a successful cutover', async () => {
@@ -166,9 +226,9 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
     const forkBefore = await sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
-    const checkpoint = await sut.apply(report.digest);
+    const checkpoint = await sut.apply(report.digest, 'backup-1', 'snapshot-1');
 
     const officialAfter = await sql<{ name: string }>`SELECT name FROM kysely_migrations ORDER BY name`.execute(db);
     const forkAfter = await sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(db);
@@ -200,8 +260,10 @@ describe('fork schema ledger cutover', () => {
     const beforeLedger = await sql`SELECT name, timestamp FROM kysely_migrations ORDER BY name`.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
-    await expect(sut.apply(report.digest)).rejects.toThrow('Unknown migration in kysely_migrations');
+    const report = await sut.preflight('backup-1', 'snapshot-1');
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+      'Unknown migration in kysely_migrations',
+    );
 
     const afterLedger = await sql`SELECT name, timestamp FROM kysely_migrations ORDER BY name`.execute(db);
     const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(db);
@@ -218,7 +280,7 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
       const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-      const report = await sut.preflight();
+      const report = await sut.preflight('backup-1', 'snapshot-1');
 
       expect(report.migrationOrderValid).toBe(false);
       expect(report.blockers).toContain(
@@ -231,9 +293,11 @@ describe('fork schema ledger cutover', () => {
     const failingRepository = new FailingPreCommitRepository(db, LoggingRepository.create(), new ConfigRepository());
     const beforeLedger = await sql`SELECT name, timestamp FROM kysely_migrations ORDER BY name`.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: failingRepository });
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
-    await expect(sut.apply(report.digest)).rejects.toThrow('synthetic pre-commit cutover failure');
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
+      'synthetic pre-commit cutover failure',
+    );
 
     const afterLedger = await sql`SELECT name, timestamp FROM kysely_migrations ORDER BY name`.execute(db);
     const audit = await sql`SELECT * FROM immich_fork.migration_audit`.execute(db);
@@ -360,7 +424,7 @@ describe('fork schema ledger cutover', () => {
     await sql`CREATE TABLE physical_file_unexpected (id integer PRIMARY KEY)`.execute(db);
     const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-    const report = await sut.preflight();
+    const report = await sut.preflight('backup-1', 'snapshot-1');
 
     expect(report.ready).toBe(false);
     expect(report.catalogDiff.unexpected).toContainEqual({
@@ -368,7 +432,7 @@ describe('fork schema ledger cutover', () => {
       identity: 'public.physical_file_unexpected',
       kind: 'tables',
     });
-    await expect(sut.apply(report.digest)).rejects.toThrow(
+    await expect(sut.apply(report.digest, 'backup-1', 'snapshot-1')).rejects.toThrow(
       'Unknown catalog object: tables public.physical_file_unexpected',
     );
   });

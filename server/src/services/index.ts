@@ -12,6 +12,7 @@ import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { DatabaseService } from 'src/services/database.service';
 import { DownloadService } from 'src/services/download.service';
 import { DuplicateService } from 'src/services/duplicate.service';
+import { ForkCutoverVerificationService } from 'src/services/fork-cutover-verification.service';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
 import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
@@ -72,6 +73,7 @@ export const services = [
   DatabaseService,
   DownloadService,
   DuplicateService,
+  ForkCutoverVerificationService,
   ForkSchemaCutoverService,
   ForkSchemaMigrationService,
   ImageEnrichmentService,

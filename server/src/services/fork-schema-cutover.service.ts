@@ -37,7 +37,10 @@ export const cutoverReportDigest = (evidence: ForkSchemaCutoverEvidence): string
     .update(JSON.stringify(canonicalize(evidence)))
     .digest('hex');
 
-const getBlockers = (evidence: ForkSchemaCutoverEvidence): string[] => {
+const getBlockers = (
+  evidence: ForkSchemaCutoverEvidence,
+  checkpoint: { databaseBackupId: string; mediaSnapshotId: string },
+): string[] => {
   const blockers: string[] = [];
   const unknown = evidence.ledger.filter(({ classification }) => classification === 'unknown');
   for (const migration of unknown) {
@@ -99,24 +102,73 @@ const getBlockers = (evidence: ForkSchemaCutoverEvidence): string[] => {
   if (evidence.storageReservations > 0) {
     blockers.push(`Storage normalization has ${evidence.storageReservations} unresolved reservation(s)`);
   }
+  const storage = evidence.storageVerification;
+  if (storage) {
+    if (
+      storage.databaseBackupId !== checkpoint.databaseBackupId ||
+      storage.mediaSnapshotId !== checkpoint.mediaSnapshotId
+    ) {
+      blockers.push('Storage verification checkpoint IDs do not match the operator-supplied IDs');
+    }
+    const completedAt = Date.parse(storage.completedAt);
+    const age = Date.now() - completedAt;
+    if (!Number.isFinite(completedAt) || age < 0 || age > 60 * 60 * 1000) {
+      blockers.push('Storage verification checkpoint is older than one hour');
+    }
+    if (
+      !/^[\da-f]{64}$/.test(storage.aggregateDigest) ||
+      storage.assetCount !== evidence.checksumCoverage.applicableCount ||
+      storage.verifiedCount !== storage.assetCount ||
+      storage.failureCount !== 0 ||
+      storage.rootDriftCount !== 0 ||
+      storage.evidenceAssetCount !== storage.assetCount ||
+      storage.evidenceAggregateDigest !== storage.aggregateDigest ||
+      !storage.runId
+    ) {
+      blockers.push('Storage verification checkpoint evidence is invalid');
+    }
+  } else {
+    blockers.push('A completed storage verification checkpoint is required for the supplied IDs');
+  }
   return blockers;
+};
+
+const checkpointIds = (databaseBackupId: string, mediaSnapshotId: string) => {
+  const backup = databaseBackupId.trim();
+  const snapshot = mediaSnapshotId.trim();
+  if (!backup) {
+    throw new Error('Database backup ID is required');
+  }
+  if (!snapshot) {
+    throw new Error('Media snapshot ID is required');
+  }
+  return { databaseBackupId: backup, mediaSnapshotId: snapshot };
 };
 
 @Injectable()
 export class ForkSchemaCutoverService extends BaseService {
-  async preflight(): Promise<CutoverReport> {
-    const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence();
-    const blockers = getBlockers(evidence);
+  async preflight(databaseBackupId: string, mediaSnapshotId: string): Promise<CutoverReport> {
+    const checkpoint = checkpointIds(databaseBackupId, mediaSnapshotId);
+    const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(undefined, checkpoint);
+    const blockers = getBlockers(evidence, checkpoint);
     return { ...evidence, blockers, digest: cutoverReportDigest(evidence), ready: blockers.length === 0 };
   }
 
-  async apply(expectedReportDigest: string): Promise<HandoffCheckpoint> {
+  async apply(
+    expectedReportDigest: string,
+    databaseBackupId: string,
+    mediaSnapshotId: string,
+  ): Promise<HandoffCheckpoint> {
     if (!expectedReportDigest) {
       throw new Error('Expected preflight report digest is required');
     }
+    const checkpointIdsForApply = checkpointIds(databaseBackupId, mediaSnapshotId);
 
     return this.databaseRepository.withLock(DatabaseLock.Migrations, async () => {
-      const lockedReport = await this.preflight();
+      const lockedReport = await this.preflight(
+        checkpointIdsForApply.databaseBackupId,
+        checkpointIdsForApply.mediaSnapshotId,
+      );
       if (lockedReport.digest !== expectedReportDigest) {
         throw new Error(
           `Fork schema cutover preflight changed: expected ${expectedReportDigest}, received ${lockedReport.digest}`,
@@ -130,8 +182,11 @@ export class ForkSchemaCutoverService extends BaseService {
         expectedReportDigest,
         lockedReport.installationClass,
         async (transaction) => {
-          const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(transaction);
-          const blockers = getBlockers(evidence);
+          const evidence = await this.databaseRepository.getForkSchemaCutoverEvidence(
+            transaction,
+            checkpointIdsForApply,
+          );
+          const blockers = getBlockers(evidence, checkpointIdsForApply);
           const digest = cutoverReportDigest(evidence);
           if (digest !== expectedReportDigest) {
             throw new Error(

@@ -89,8 +89,8 @@ describe('catalog manifests', () => {
     expect(getCatalogTableLocks(originalOfficial)).toEqual(
       [...official.tables, ...forkTables].map(({ identity }) => identity).toSorted(),
     );
-    expect(getCatalogTableLocks(fork)).toHaveLength(98);
-    expect(getCatalogTableLocks(originalOfficial)).toHaveLength(89);
+    expect(getCatalogTableLocks(fork)).toHaveLength(100);
+    expect(getCatalogTableLocks(originalOfficial)).toHaveLength(91);
   });
 
   it('serializes deterministically regardless of input order', () => {
