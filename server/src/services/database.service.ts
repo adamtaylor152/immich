@@ -113,6 +113,9 @@ export class DatabaseService extends BaseService {
 
       const { database } = this.configRepository.getEnv();
       if (!database.skipMigrations) {
+        if (await this.databaseRepository.isCertifiedReturnStartup()) {
+          await this.databaseRepository.assertCertifiedReturnLedger();
+        }
         const migrationMode = await this.databaseRepository.detectMigrationMode();
         if (migrationMode === 'legacy') {
           await this.databaseRepository.runMigrations();

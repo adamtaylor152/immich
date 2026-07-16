@@ -337,6 +337,30 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runMigrations).not.toHaveBeenCalled();
     });
 
+    it('guards an inactive schema version 2 return before either migration provider runs', async () => {
+      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
+      mocks.database.isCertifiedReturnStartup.mockResolvedValue(true);
+      mocks.database.assertCertifiedReturnLedger.mockRejectedValue(new Error('certified v3.0.3 ledger rejected'));
+
+      await expect(sut.onBootstrap()).rejects.toThrow('certified v3.0.3 ledger rejected');
+
+      expect(mocks.database.assertCertifiedReturnLedger).toHaveBeenCalledOnce();
+      expect(mocks.database.assertCertifiedReturnLedger.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      );
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();
+    });
+
+    it.each(['fresh', 'legacy'] as const)('does not apply the return guard to %s startup', async (mode) => {
+      mocks.database.detectMigrationMode.mockResolvedValue(mode);
+      mocks.database.isCertifiedReturnStartup.mockResolvedValue(false);
+
+      await expect(sut.onBootstrap()).resolves.toBeUndefined();
+
+      expect(mocks.database.assertCertifiedReturnLedger).not.toHaveBeenCalled();
+    });
+
     it('refuses unknown migration names before running a migrator', async () => {
       mocks.database.detectMigrationMode.mockRejectedValue(
         new Error('Unknown migration in kysely_migrations: 9999999999999-CustomPatch'),

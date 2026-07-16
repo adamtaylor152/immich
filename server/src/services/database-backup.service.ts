@@ -409,6 +409,9 @@ export class DatabaseBackupService {
       try {
         progressCb?.('migrations', 0.9);
 
+        if (await this.databaseRepository.isCertifiedReturnStartup()) {
+          await this.databaseRepository.assertCertifiedReturnLedger();
+        }
         const migrationMode = await this.databaseRepository.detectMigrationMode();
         if (migrationMode === 'legacy') {
           await this.databaseRepository.runMigrations();

@@ -48,6 +48,7 @@ import {
   canonicalStorageVerificationDigest,
   StorageVerificationEvidence,
 } from 'src/repositories/fork-cutover-verification.repository';
+import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
 import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
@@ -224,15 +225,24 @@ export const probes: Record<VectorIndex, number> = {
 };
 
 @Injectable()
-export class DatabaseRepository {
+export class DatabaseRepository extends ForkHandoffRepository {
   private readonly asyncLock = new AsyncLock();
 
   constructor(
-    @InjectKysely() private db: Kysely<DB>,
+    @InjectKysely() db: Kysely<DB>,
     private logger: LoggingRepository,
     private configRepository: ConfigRepository,
   ) {
+    super(db);
     this.logger.setContext(DatabaseRepository.name);
+  }
+
+  override isCertifiedReturnStartup(kysely: Kysely<DB> = this.db): Promise<boolean> {
+    return super.isCertifiedReturnStartup(kysely);
+  }
+
+  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+    return super.assertCertifiedReturnLedger(kysely);
   }
 
   async shutdown() {
