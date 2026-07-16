@@ -1,5 +1,6 @@
 import { Kysely, sql } from 'kysely';
 import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -14,20 +15,36 @@ class FailingPreCommitRepository extends DatabaseRepository {
   }
 }
 
+class TaskOneCutoverRepository extends DatabaseRepository {
+  // Task 1 validates the pre-migrator ledger transaction. The official files
+  // consumed after commit intentionally arrive in the later catch-up task.
+  override runOfficialMigrations(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 describe('fork schema ledger cutover', () => {
   let db: Kysely<DB>;
   let repository: DatabaseRepository;
 
   beforeAll(async () => {
     db = await getKyselyDB('ledger_cutover');
-    repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
+    repository = new TaskOneCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
   });
 
   afterAll(async () => db.destroy());
 
   beforeEach(async () => {
-    await sql`DELETE FROM kysely_migrations WHERE name = '9999999999999-CustomPatch'`.execute(db);
+    await sql`
+      DELETE FROM kysely_migrations
+      WHERE name IN ('9999999999999-CustomPatch', '1780435471692-DeleteMismatchedAssetFaces')
+    `.execute(db);
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
+    await sql`
+      INSERT INTO kysely_migrations (name, timestamp)
+      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2026-07-15T00:00:00.000Z')
+      ON CONFLICT (name) DO NOTHING
+    `.execute(db);
     await sql`DROP TABLE IF EXISTS physical_file_unexpected`.execute(db);
     await sql`UPDATE immich_fork.state SET phase = 'ready', active = false, "schemaVersion" = '1' WHERE id = 1`.execute(
       db,
@@ -124,6 +141,21 @@ describe('fork schema ledger cutover', () => {
     const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(db);
     expect(afterLedger.rows).toEqual(beforeLedger.rows);
     expect(state.rows[0]?.phase).toBe('ready');
+  });
+
+  it('rejects an absent official migration outside the audited workflow compatibility stages', async () => {
+    await sql`
+      INSERT INTO kysely_migrations (name, timestamp)
+      VALUES ('1780435471692-DeleteMismatchedAssetFaces', '2026-07-15T00:00:01.000Z')
+    `.execute(db);
+    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+
+    const report = await sut.preflight();
+
+    expect(report.migrationOrderValid).toBe(false);
+    expect(report.blockers).toContain(
+      'Official migration ledger is not an exact ordered prefix of the bundled provider',
+    );
   });
 
   it('rolls back pre-commit DDL, ledger surgery, audit, and phase together', async () => {
