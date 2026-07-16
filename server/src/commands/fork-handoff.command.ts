@@ -31,7 +31,7 @@ export class ForkHandoffPrepareForkCommand extends CommandRunner {
     defaultValue: 100,
   })
   parseBatchSize(value: string): number {
-    return Number(value);
+    return +value;
   }
 
   async run(passedParams: string[], options: PrepareForkOptions = {}): Promise<void> {

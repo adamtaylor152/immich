@@ -18,8 +18,7 @@ export class ForkHandoffService {
   ) {}
 
   async prepareOfficial(): Promise<OfficialHandoffCheckpoint> {
-    await this.databaseRepository.getReturnEvidence();
-    return this.databaseRepository.getPreparedOfficialHandoffCheckpoint();
+    return this.databaseRepository.prepareOfficialHandoffCheckpoint();
   }
 
   async prepareFork(options: { batchSize: number }, hooks: ForkHandoffHooks = {}): Promise<ReconciliationReport> {
@@ -31,8 +30,6 @@ export class ForkHandoffService {
     const workflowSnapshot = await this.databaseRepository.getReturnWorkflowSnapshot();
     const orphanArchive = await this.databaseRepository.archiveAndDeleteOrphans();
     await this.migrationService.reconcileAfterOfficialReturn(options.batchSize);
-    await this.databaseRepository.sealEmptyReturnBackfillDigests();
-
     return this.databaseRepository.withLock(DatabaseLock.Migrations, () =>
       this.databaseRepository.activateAfterReturnReconciliation(workflowSnapshot, orphanArchive, hooks.beforeActivate),
     );

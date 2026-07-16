@@ -54,6 +54,24 @@ export type BackfillProgress = {
   lastError: string | null;
 };
 
+export type ReturnBackfillBatchEvidence = {
+  count: number;
+  digest: string;
+  endCursor: string;
+};
+
+export type ReturnBackfillKindEvidence = {
+  batches: ReturnBackfillBatchEvidence[];
+  cumulativeDigest: string;
+  processed: number;
+  sourceCount?: number;
+};
+
+export type ReturnBackfillEvidence = Partial<Record<BackfillKind, ReturnBackfillKindEvidence>>;
+
+export const canonicalReturnBackfillDigest = (batches: readonly ReturnBackfillBatchEvidence[]): string =>
+  createHash('sha256').update(JSON.stringify(batches)).digest('hex');
+
 const CLAIM_LEASE = sql.raw("interval '15 minutes'");
 
 const getBackfillSource = (kind: BackfillKind) => {
@@ -578,8 +596,10 @@ export class ForkSchemaRepository {
     }
 
     await this.db.transaction().execute(async (trx) => {
-      const locked = await sql<Pick<BackfillReservation, 'claimToken' | 'claimedCursor' | 'claimedIds'>>`
-        SELECT "claimToken", "claimedCursor", "claimedIds"
+      const locked = await sql<
+        Pick<BackfillReservation, 'claimToken' | 'claimedCursor' | 'claimedIds'> & { processed: number }
+      >`
+        SELECT "claimToken", "claimedCursor", "claimedIds", processed::float8 AS processed
         FROM immich_fork.backfill_progress
         WHERE kind = ${kind}
         FOR UPDATE
@@ -596,13 +616,49 @@ export class ForkSchemaRepository {
       const remaining = await sql<{ count: number }>`
         SELECT count(*)::int AS count FROM ${source} WHERE id::text > ${progress.claimedCursor}
       `.execute(trx);
+      const audits = await sql<{ details: Record<string, unknown>; id: string }>`
+        SELECT id::text AS id, coalesce(details, '{}'::jsonb) AS details
+        FROM immich_fork.migration_audit
+        WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+        ORDER BY id
+        FOR UPDATE
+      `.execute(trx);
+      if (audits.rows.length > 1) {
+        throw new Error('Fork return batch completion requires exactly one running reconciliation audit');
+      }
+      let storedDigest = digest;
+      const audit = audits.rows[0];
+      if (audit) {
+        const evidence = (audit.details.backfillEvidence ?? {}) as ReturnBackfillEvidence;
+        const current = evidence[kind];
+        if (current && current.processed !== progress.processed) {
+          throw new Error(`Fork return ${kind} backfill evidence processed count drifted`);
+        }
+        const batches = [...(current?.batches ?? []), { count, digest, endCursor: progress.claimedCursor }];
+        const next: ReturnBackfillKindEvidence = {
+          batches,
+          cumulativeDigest: canonicalReturnBackfillDigest(batches),
+          processed: progress.processed + count,
+        };
+        storedDigest = next.cumulativeDigest;
+        await sql`
+          UPDATE immich_fork.migration_audit
+          SET details = jsonb_set(
+            coalesce(details, '{}'::jsonb),
+            '{backfillEvidence}',
+            coalesce(details -> 'backfillEvidence', '{}'::jsonb) || jsonb_build_object(${kind}::text, ${next}::jsonb),
+            true
+          )
+          WHERE id = ${audit.id}::bigint
+        `.execute(trx);
+      }
       await sql`
         UPDATE immich_fork.backfill_progress
         SET
           cursor = ${progress.claimedCursor},
           processed = processed + ${count},
           remaining = ${remaining.rows[0]?.count ?? 0},
-          digest = ${digest},
+          digest = ${storedDigest},
           "lastError" = NULL,
           "claimedCursor" = NULL,
           "claimedIds" = '{}',
