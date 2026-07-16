@@ -746,6 +746,7 @@ export class DatabaseRepository {
           WHERE verification."runId" = ${storageVerificationRow.runId}::uuid
             AND (
               asset.id IS NULL
+              OR verification.path IS DISTINCT FROM asset."originalPath"
               OR verification."approvedRoots" IS DISTINCT FROM
                 ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[])
             )

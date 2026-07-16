@@ -1,11 +1,12 @@
 import { Kysely, sql } from 'kysely';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { chmod, copyFile, link, mkdir, mkdtemp, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, mkdir, mkdtemp, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
+import { down as rollbackCutoverVerification } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
@@ -42,7 +43,7 @@ describe('storage cutover verification', () => {
   afterEach(async () => rm(root, { recursive: true, force: true }));
   afterAll(async () => db.destroy());
 
-  const seed = async (bytes: Buffer, path = join(root, `${randomUUID()}.jpg`)) => {
+  const seedDatabase = async (bytes: Buffer, path: string) => {
     const user = mediumFactory.userInsert();
     const asset = mediumFactory.assetInsert({
       ownerId: user.id,
@@ -50,7 +51,6 @@ describe('storage cutover verification', () => {
       checksum: digest('sha1', bytes),
       checksumAlgorithm: ChecksumAlgorithm.sha1File,
     });
-    await writeFile(path, bytes);
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(asset).execute();
     await sql`
@@ -63,6 +63,11 @@ describe('storage cutover verification', () => {
       VALUES (${asset.id}::uuid, NULL, ${path})
     `.execute(db);
     return { asset, path, user };
+  };
+
+  const seed = async (bytes: Buffer, path = join(root, `${randomUUID()}.jpg`)) => {
+    await writeFile(path, bytes);
+    return seedDatabase(bytes, path);
   };
 
   it('resumes deterministic batches without double-counting and completes with a canonical digest', async () => {
@@ -221,7 +226,12 @@ describe('storage cutover verification', () => {
       }
       throw error;
     }
-    await seed(bytes, clone);
+    const [sourceStats, cloneStats] = await Promise.all([
+      stat(source, { bigint: true }),
+      stat(clone, { bigint: true }),
+    ]);
+    expect(cloneStats.ino).not.toBe(sourceStats.ino);
+    await seedDatabase(bytes, clone);
 
     const started = await service.start('backup-reflink', 'snapshot-reflink');
     await expect(service.resume(started.id, 1)).resolves.toMatchObject({ verifiedCount: 1, status: 'completed' });
@@ -258,5 +268,100 @@ describe('storage cutover verification', () => {
         WHERE "runId" = ${started.id}::uuid
       `.execute(db),
     ).rejects.toThrow('immutable');
+  });
+
+  it('prevents deleting a completed run', async () => {
+    const completed = await service.start('backup-delete-run', 'snapshot-delete-run');
+
+    await expect(
+      sql`DELETE FROM immich_fork.cutover_verification_run WHERE id = ${completed.id}::uuid`.execute(db),
+    ).rejects.toThrow('immutable');
+  });
+
+  it('prevents deleting verified asset evidence', async () => {
+    await seed(Buffer.from('delete evidence'));
+    const completed = await service.start('backup-delete-evidence', 'snapshot-delete-evidence');
+    await service.resume(completed.id, 1);
+
+    await expect(
+      sql`DELETE FROM immich_fork.cutover_verification_asset WHERE "runId" = ${completed.id}::uuid`.execute(db),
+    ).rejects.toThrow('immutable');
+  });
+
+  it('prevents inserting replacement evidence under a completed run', async () => {
+    const completed = await service.start('backup-insert-evidence', 'snapshot-insert-evidence');
+
+    await expect(
+      sql`
+        INSERT INTO immich_fork.cutover_verification_asset
+          ("runId", "assetId", path, "approvedRoots", "expectedSize", "expectedSha1", "expectedSha256")
+        VALUES (
+          ${completed.id}::uuid, ${randomUUID()}::uuid, ${join(root, 'replacement.jpg')}, ARRAY[${root}], 1,
+          ${Buffer.alloc(20, 1)}, ${Buffer.alloc(32, 2)}
+        )
+      `.execute(db),
+    ).rejects.toThrow('immutable');
+  });
+
+  it('prevents delete and reinsert replacement of verified evidence', async () => {
+    await seed(Buffer.from('replace evidence'));
+    const completed = await service.start('backup-replace-evidence', 'snapshot-replace-evidence');
+    await service.resume(completed.id, 1);
+    const original = await sql<{
+      assetId: string;
+      path: string;
+      approvedRoots: string[];
+      expectedSize: number;
+      expectedSha1: Buffer;
+      expectedSha256: Buffer;
+      size: number;
+      sha1: string;
+      sha256: string;
+      device: string;
+      inode: string;
+      links: number;
+      verifiedAt: Date;
+    }>`
+      SELECT "assetId", path, "approvedRoots", "expectedSize"::float8 AS "expectedSize",
+        "expectedSha1", "expectedSha256", size::float8 AS size, sha1, sha256,
+        device::text, inode::text, links, "verifiedAt"
+      FROM immich_fork.cutover_verification_asset WHERE "runId" = ${completed.id}::uuid
+    `.execute(db);
+    const row = original.rows[0]!;
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        await sql`
+          DELETE FROM immich_fork.cutover_verification_asset
+          WHERE "runId" = ${completed.id}::uuid AND "assetId" = ${row.assetId}::uuid
+        `.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.cutover_verification_asset
+            ("runId", "assetId", path, "approvedRoots", "expectedSize", "expectedSha1", "expectedSha256",
+             status, size, sha1, sha256, device, inode, links, "verifiedAt")
+          VALUES (
+            ${completed.id}::uuid, ${row.assetId}::uuid, ${row.path}, ${row.approvedRoots}, ${row.expectedSize},
+            ${row.expectedSha1}, ${row.expectedSha256}, 'verified', ${row.size}, ${row.sha1}, ${row.sha256},
+            ${row.device}::bigint, ${row.inode}::bigint, ${row.links}, ${row.verifiedAt}
+          )
+        `.execute(trx);
+      }),
+    ).rejects.toThrow('immutable');
+  });
+
+  it('allows the migration down path to drop immutable evidence', async () => {
+    const rollbackMarker = 'roll back migration down test';
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        await rollbackCutoverVerification(trx);
+        const catalog = await sql<{ assetTable: string | null; runTable: string | null }>`
+          SELECT to_regclass('immich_fork.cutover_verification_asset')::text AS "assetTable",
+            to_regclass('immich_fork.cutover_verification_run')::text AS "runTable"
+        `.execute(trx);
+        expect(catalog.rows[0]).toEqual({ assetTable: null, runTable: null });
+        throw new Error(rollbackMarker);
+      }),
+    ).rejects.toThrow(rollbackMarker);
   });
 });
