@@ -13,6 +13,7 @@ describe('fork schema migration ledgers', () => {
   beforeAll(async () => {
     db = await getKyselyDB('fork_schema');
     await sql`DROP SCHEMA public CASCADE`.execute(db);
+    await sql`DROP SCHEMA IF EXISTS immich_fork CASCADE`.execute(db);
     await sql`CREATE SCHEMA public`.execute(db);
     repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
   });
@@ -49,7 +50,13 @@ describe('fork schema migration ledgers', () => {
     `.execute(db);
 
     expect(officialForkMigrations.rows).toHaveLength(0);
-    expect(forkMigrations.rows).toEqual([expect.objectContaining({ name: '0000000000000-ForkSchemaBaseline' })]);
+    expect(forkMigrations.rows).toEqual([
+      { name: '0000000000000-ForkSchemaBaseline' },
+      { name: '0000000000010-PrivacyAndAlbums' },
+      { name: '0000000000020-EnrichmentAndAutomation' },
+      { name: '0000000000030-DerivedResults' },
+      { name: '0000000000040-ChecksumsAndStorage' },
+    ]);
     expect(controlTables.rows.map(({ tableName }) => tableName)).toEqual([
       'backfill_progress',
       'migration_audit',
