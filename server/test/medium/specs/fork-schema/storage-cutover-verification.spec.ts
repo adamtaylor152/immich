@@ -6,7 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
-import { down as rollbackCutoverVerification } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
+import {
+  up as createCutoverVerification,
+  down as rollbackCutoverVerification,
+} from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
@@ -17,6 +20,10 @@ import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
 const digest = (algorithm: 'sha1' | 'sha256', bytes: Buffer) => createHash(algorithm).update(bytes).digest();
+const resetCutoverVerification = async (db: Kysely<DB>) => {
+  await rollbackCutoverVerification(db);
+  await createCutoverVerification(db);
+};
 
 describe('storage cutover verification', () => {
   let db: Kysely<DB>;
@@ -32,7 +39,7 @@ describe('storage cutover verification', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'immich-cutover-verification-'));
     StorageCore.setMediaLocation(root);
-    await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+    await resetCutoverVerification(db);
     await sql`TRUNCATE immich_fork.asset_physical_file, immich_fork.physical_file, immich_fork.asset_checksum`.execute(
       db,
     );
@@ -344,6 +351,59 @@ describe('storage cutover verification', () => {
             ${row.expectedSha1}, ${row.expectedSha256}, 'verified', ${row.size}, ${row.sha1}, ${row.sha256},
             ${row.device}::bigint, ${row.inode}::bigint, ${row.links}, ${row.verifiedAt}
           )
+        `.execute(trx);
+      }),
+    ).rejects.toThrow('immutable');
+  });
+
+  it('prevents truncating and recreating completed verification evidence', async () => {
+    await seed(Buffer.from('truncate replacement evidence'));
+    const completed = await service.start('backup-truncate-evidence', 'snapshot-truncate-evidence');
+    await service.resume(completed.id, 1);
+    const original = await sql<{
+      assetId: string;
+      approvedRoots: string[];
+      device: string;
+      expectedSha1: Buffer;
+      expectedSha256: Buffer;
+      expectedSize: number;
+      inode: string;
+      links: number;
+      path: string;
+      sha1: string;
+      sha256: string;
+      size: number;
+      verifiedAt: Date;
+    }>`
+      SELECT "assetId", "approvedRoots", device::text, "expectedSha1", "expectedSha256",
+        "expectedSize"::float8 AS "expectedSize", inode::text, links, path, sha1, sha256,
+        size::float8 AS size, "verifiedAt"
+      FROM immich_fork.cutover_verification_asset WHERE "runId" = ${completed.id}::uuid
+    `.execute(db);
+    const row = original.rows[0]!;
+
+    await expect(
+      db.transaction().execute(async (trx) => {
+        await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.cutover_verification_run
+            (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount")
+          VALUES (${completed.id}::uuid, 'replacement-backup', 'replacement-snapshot', 'running', 1)
+        `.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.cutover_verification_asset
+            ("runId", "assetId", path, "approvedRoots", "expectedSize", "expectedSha1", "expectedSha256",
+             status, size, sha1, sha256, device, inode, links, "verifiedAt")
+          VALUES (
+            ${completed.id}::uuid, ${row.assetId}::uuid, ${join(root, 'replacement.jpg')}, ${row.approvedRoots},
+            ${row.expectedSize}, ${row.expectedSha1}, ${row.expectedSha256}, 'verified', ${row.size}, ${row.sha1},
+            ${row.sha256}, ${row.device}::bigint, ${row.inode}::bigint, ${row.links}, ${row.verifiedAt}
+          )
+        `.execute(trx);
+        await sql`
+          UPDATE immich_fork.cutover_verification_run
+          SET status = 'completed', "verifiedCount" = 1, "aggregateDigest" = ${'f'.repeat(64)}, "completedAt" = now()
+          WHERE id = ${completed.id}::uuid
         `.execute(trx);
       }),
     ).rejects.toThrow('immutable');

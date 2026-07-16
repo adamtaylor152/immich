@@ -6,6 +6,10 @@ import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { ChecksumAlgorithm } from 'src/enum';
 import { getCatalogEvidence } from 'src/fork-schema/catalog';
+import {
+  up as createCutoverVerification,
+  down as rollbackCutoverVerification,
+} from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
@@ -19,6 +23,10 @@ const SHA256 = 'a'.repeat(64);
 const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const ASSET_SHA1 = Buffer.alloc(20, 1);
 const ASSET_SHA256 = Buffer.alloc(32, 2);
+const resetCutoverVerification = async (db: Kysely<DB>) => {
+  await rollbackCutoverVerification(db);
+  await createCutoverVerification(db);
+};
 
 const restoreOfficialPublicSchema = async (db: Kysely<DB>) => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
@@ -154,7 +162,7 @@ describe('complete fork schema cutover evidence', () => {
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = excluded.value
     `.execute(db);
-    await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+    await resetCutoverVerification(db);
     await sql`
       INSERT INTO immich_fork.cutover_verification_run
         (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")

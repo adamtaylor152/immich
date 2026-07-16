@@ -59,6 +59,19 @@ export async function up(db: Kysely<any>): Promise<void> {
     CREATE FUNCTION immich_fork.prevent_cutover_verification_identity_change()
     RETURNS trigger LANGUAGE plpgsql AS $function$
     BEGIN
+      IF TG_OP = 'TRUNCATE' THEN
+        IF TG_TABLE_NAME = 'cutover_verification_run' AND EXISTS (
+          SELECT 1 FROM immich_fork.cutover_verification_run WHERE status = 'completed'
+        ) THEN
+          RAISE EXCEPTION 'completed cutover verification run evidence is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'cutover_verification_asset' AND EXISTS (
+          SELECT 1 FROM immich_fork.cutover_verification_asset WHERE status = 'verified'
+        ) THEN
+          RAISE EXCEPTION 'completed cutover verification asset evidence is immutable';
+        END IF;
+        RETURN NULL;
+      END IF;
       IF TG_OP = 'DELETE' THEN
         IF TG_TABLE_NAME = 'cutover_verification_run' AND OLD.status = 'completed' THEN
           RAISE EXCEPTION 'completed cutover verification run evidence is immutable';
@@ -117,6 +130,16 @@ export async function up(db: Kysely<any>): Promise<void> {
     CREATE TRIGGER cutover_verification_asset_identity_immutable
     BEFORE INSERT OR UPDATE OR DELETE ON immich_fork.cutover_verification_asset
     FOR EACH ROW EXECUTE FUNCTION immich_fork.prevent_cutover_verification_identity_change()
+  `.execute(db);
+  await sql`
+    CREATE TRIGGER cutover_verification_run_truncate_immutable
+    BEFORE TRUNCATE ON immich_fork.cutover_verification_run
+    FOR EACH STATEMENT EXECUTE FUNCTION immich_fork.prevent_cutover_verification_identity_change()
+  `.execute(db);
+  await sql`
+    CREATE TRIGGER cutover_verification_asset_truncate_immutable
+    BEFORE TRUNCATE ON immich_fork.cutover_verification_asset
+    FOR EACH STATEMENT EXECUTE FUNCTION immich_fork.prevent_cutover_verification_identity_change()
   `.execute(db);
 }
 

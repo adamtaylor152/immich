@@ -6,6 +6,10 @@ import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
 import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import {
+  up as createCutoverVerification,
+  down as rollbackCutoverVerification,
+} from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
 import { OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -28,6 +32,10 @@ const NON_WORKFLOW_PROVIDER_GAPS = [
 ] as const;
 const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const fileDigest = (algorithm: 'sha1' | 'sha256', bytes: Buffer) => createHash(algorithm).update(bytes).digest();
+const resetCutoverVerification = async (db: Kysely<DB>) => {
+  await rollbackCutoverVerification(db);
+  await createCutoverVerification(db);
+};
 
 class FailingPreCommitRepository extends DatabaseRepository {
   protected override async finishForkSchemaCutover(transaction: Kysely<DB>): Promise<void> {
@@ -41,6 +49,15 @@ class TaskOneCutoverRepository extends DatabaseRepository {
   // consumed after commit intentionally arrive in the later catch-up task.
   override runOfficialMigrations(): Promise<void> {
     return Promise.resolve();
+  }
+}
+
+class DriftBeforeInnerVerificationRepository extends TaskOneCutoverRepository {
+  drift!: () => Promise<void>;
+
+  override async commitForkSchemaCutover(...args: Parameters<DatabaseRepository['commitForkSchemaCutover']>) {
+    await this.drift();
+    return super.commitForkSchemaCutover(...args);
   }
 }
 
@@ -133,7 +150,7 @@ describe('fork schema ledger cutover', () => {
       VALUES ('maintenance-mode', '{"isMaintenanceMode":true}'::jsonb)
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
     `.execute(db);
-    await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+    await resetCutoverVerification(db);
     await sql`
       INSERT INTO immich_fork.cutover_verification_run
         (id, "databaseBackupId", "snapshotId", status, "applicableAssetCount", "aggregateDigest", "completedAt")
@@ -272,7 +289,93 @@ describe('fork schema ledger cutover', () => {
         sut.apply(report.digest, 'backup-completed-path-drift', 'snapshot-completed-path-drift'),
       ).rejects.toThrow('Storage verification checkpoint evidence is invalid');
     } finally {
-      await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+      await resetCutoverVerification(db);
+      await sql`TRUNCATE immich_fork.asset_physical_file, immich_fork.asset_checksum`.execute(db);
+      await db.deleteFrom('asset').execute();
+      await db.deleteFrom('user').execute();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects path drift introduced between the locked preflight and inner transactional verification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'immich-inner-path-drift-'));
+    StorageCore.setMediaLocation(root);
+    const pathA = join(root, 'verified-a.jpg');
+    const pathB = join(root, 'unverified-b.jpg');
+    const bytesA = Buffer.from('verified inner bytes');
+    const bytesB = Buffer.from('different inner replacement bytes');
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({
+      ownerId: user.id,
+      originalPath: pathA,
+      checksum: fileDigest('sha1', bytesA),
+      checksumAlgorithm: ChecksumAlgorithm.sha1File,
+    });
+    const legacyName = [...LEGACY_FORK_MIGRATIONS][0];
+    try {
+      await Promise.all([writeFile(pathA, bytesA), writeFile(pathB, bytesB)]);
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values(asset).execute();
+      await sql`
+        INSERT INTO immich_fork.asset_checksum
+          ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount")
+        VALUES (
+          ${asset.id}::uuid, ${fileDigest('sha1', bytesA)}, ${fileDigest('sha256', bytesA)},
+          ${bytesA.length}, ARRAY[${pathA}], 1
+        )
+      `.execute(db);
+      await sql`
+        INSERT INTO immich_fork.asset_physical_file ("assetId", "physicalFileId", "upstreamPath")
+        VALUES (${asset.id}::uuid, NULL, ${pathA})
+      `.execute(db);
+      const verification = new ForkCutoverVerificationService(new ForkCutoverVerificationRepository(db));
+      const run = await verification.start('backup-inner-path-drift', 'snapshot-inner-path-drift');
+      await verification.resume(run.id, 1);
+      await sql`
+        INSERT INTO kysely_migrations (name, timestamp)
+        VALUES (${legacyName}, '2026-07-16T00:00:00.000Z')
+      `.execute(db);
+
+      let driftInjected = false;
+      const driftRepository = new DriftBeforeInnerVerificationRepository(
+        db,
+        LoggingRepository.create(),
+        new ConfigRepository(),
+      );
+      driftRepository.drift = async () => {
+        driftInjected = true;
+        await db.updateTable('asset').set({ originalPath: pathB }).where('id', '=', asset.id!).execute();
+        await sql`
+          UPDATE immich_fork.asset_physical_file SET "upstreamPath" = ${pathB}
+          WHERE "assetId" = ${asset.id}::uuid
+        `.execute(db);
+      };
+      const { sut } = newTestService(ForkSchemaCutoverService, { database: driftRepository });
+      StorageCore.setMediaLocation(root);
+      const report = await sut.preflight('backup-inner-path-drift', 'snapshot-inner-path-drift');
+      expect(report.ready).toBe(true);
+
+      await expect(sut.apply(report.digest, 'backup-inner-path-drift', 'snapshot-inner-path-drift')).rejects.toThrow(
+        'Fork schema cutover preflight changed',
+      );
+
+      expect(driftInjected).toBe(true);
+      const state = await sql<{ phase: string; schemaVersion: string }>`
+        SELECT phase, "schemaVersion" FROM immich_fork.state WHERE id = 1
+      `.execute(db);
+      const audit = await sql<{ count: number }>`
+        SELECT count(*)::int AS count FROM immich_fork.migration_audit
+        WHERE name = 'fork-schema-cutover'
+      `.execute(db);
+      const legacy = await sql<{ count: number }>`
+        SELECT count(*)::int AS count FROM kysely_migrations WHERE name = ${legacyName}
+      `.execute(db);
+      expect(state.rows[0]).toEqual({ phase: 'ready', schemaVersion: '1' });
+      expect(audit.rows[0]?.count).toBe(0);
+      expect(legacy.rows[0]?.count).toBe(1);
+    } finally {
+      await sql`DELETE FROM kysely_migrations WHERE name = ${legacyName}`.execute(db);
+      await resetCutoverVerification(db);
       await sql`TRUNCATE immich_fork.asset_physical_file, immich_fork.asset_checksum`.execute(db);
       await db.deleteFrom('asset').execute();
       await db.deleteFrom('user').execute();
