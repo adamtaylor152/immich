@@ -381,6 +381,11 @@ describe(ForkSchemaMigrationService.name, () => {
         claimReturnBatch: vi.fn(),
       });
       mocks.forkSchema.getState.mockResolvedValue(state('inactive'));
+      mocks.forkSchema.getReturnConfigReconciliation.mockResolvedValue({
+        count: 2,
+        digest: 'c'.repeat(64),
+        source: 'database',
+      });
       mocks.forkSchema.getProgress.mockResolvedValue(
         BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0, digest: 'e'.repeat(64) })),
       );
@@ -405,7 +410,12 @@ describe(ForkSchemaMigrationService.name, () => {
 
       expect(mocks.forkSchema.beginOrResumeReturnReconciliation).toHaveBeenCalledOnce();
       for (const kind of BACKFILL_KINDS) {
-        expect(handlers.get(kind)).toHaveBeenCalledWith([`${kind}-id`]);
+        expect(handlers.get(kind)).toHaveBeenCalledWith(
+          [`${kind}-id`],
+          ...(kind === 'storage' || kind === 'checksum'
+            ? [{ kind, claimToken: `${kind}-claim`, claimedIds: [`${kind}-id`] }]
+            : []),
+        );
         expect(mocks.forkSchema.completeBatch).toHaveBeenCalledWith(
           kind,
           `${kind}-claim`,

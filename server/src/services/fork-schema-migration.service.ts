@@ -1,7 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { createHash } from 'node:crypto';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { BestPhotosRepository } from 'src/repositories/best-photos.repository';
@@ -17,8 +16,10 @@ import {
   BackfillKind,
   BackfillProgress,
   ForkState,
+  ReturnConfigReconciliation,
 } from 'src/repositories/fork-schema.repository';
 import { MediaHealthRepository } from 'src/repositories/media-health.repository';
+import { ReturnNormalizationClaim } from 'src/repositories/physical-file.repository';
 import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
@@ -28,13 +29,15 @@ import { JobOf } from 'src/types';
 const DEFAULT_BATCH_SIZE = 100;
 
 export type BackfillBatchResult = { count: number; digest: string };
-export type BackfillBatchHandler = (ids: string[]) => Promise<BackfillBatchResult>;
+export type BackfillBatchHandler = (ids: string[], claim?: ReturnNormalizationClaim) => Promise<BackfillBatchResult>;
 export type ForkSchemaMigrationStatus = ForkState & {
   progress: BackfillProgress[];
   verified: boolean;
 };
 export type ReturnReconciliationHooks = {
   afterBatch?: (kind: BackfillKind, claim: BackfillClaim) => Promise<void> | void;
+  afterConfigEvidence?: (evidence: ReturnConfigReconciliation) => Promise<void> | void;
+  beforeConfigEvidence?: (evidence: ReturnConfigReconciliation) => Promise<void> | void;
 };
 
 @Injectable()
@@ -43,6 +46,7 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
   private db!: Kysely<DB>;
 
   private readonly handlers = new Map<BackfillKind, BackfillBatchHandler>();
+  private forkConfigRepository!: ForkConfigRepository;
   private seedPromise?: Promise<void>;
 
   onModuleInit(): void {
@@ -50,7 +54,7 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     const albumRepository = new ForkAlbumMetadataRepository(this.db);
     const enrichmentRepository = new ForkEnrichmentRepository(this.db);
     const automationRepository = new SmartAlbumRepository(this.db);
-    const configRepository = new ForkConfigRepository(this.db);
+    this.forkConfigRepository = new ForkConfigRepository(this.db);
     const mediaHealthRepository = new MediaHealthRepository(this.db);
     const bestPhotosRepository = new BestPhotosRepository(this.db);
     const duplicateRepository = new DuplicateRepository(this.db);
@@ -58,18 +62,7 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     this.registerHandler('privacy', (ids) => privacyRepository.backfillPrivacy(ids));
     this.registerHandler('albums', (ids) => albumRepository.backfillAlbums(ids));
     this.registerHandler('enrichment', (ids) => enrichmentRepository.backfillEnrichment(ids));
-    this.registerHandler('automation', async (ids) => {
-      const automation = await automationRepository.backfillAutomation(ids);
-      const effectiveConfig = await this.getConfig({ withCache: false });
-      const config = await configRepository.backfillConfig(
-        effectiveConfig,
-        this.configRepository.getEnv().configFile ? 'file' : 'database',
-      );
-      const digest = createHash('sha256')
-        .update(JSON.stringify({ automation: automation.digest, config: config.digest }))
-        .digest('hex');
-      return { count: automation.count, digest };
-    });
+    this.registerHandler('automation', (ids) => automationRepository.backfillAutomation(ids));
     this.registerHandler('health', async (ids) => {
       const health = await mediaHealthRepository.backfillHealth(ids);
       const scores = await bestPhotosRepository.backfillScores(ids);
@@ -79,8 +72,8 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
         digest: digestValue({ health: health.tables, scores: scores.tables, frames: frames.tables }),
       };
     });
-    this.registerHandler('storage', (ids) => storageNormalization.normalizeBatch(ids));
-    this.registerHandler('checksum', (ids) => storageNormalization.normalizeBatch(ids));
+    this.registerHandler('storage', (ids, claim) => storageNormalization.normalizeBatch(ids, claim));
+    this.registerHandler('checksum', (ids, claim) => storageNormalization.normalizeBatch(ids, claim));
   }
 
   registerHandler(kind: BackfillKind, handler: BackfillBatchHandler): void {
@@ -162,6 +155,16 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
       throw new Error('Backfill batch size must be a positive integer');
     }
     await this.forkSchemaRepository.beginOrResumeReturnReconciliation();
+    let configEvidence = await this.forkSchemaRepository.getReturnConfigReconciliation();
+    if (!configEvidence) {
+      const source = this.configRepository.getEnv().configFile ? 'file' : 'database';
+      const effectiveConfig = await this.getConfig({ withCache: false });
+      const config = await this.forkConfigRepository.backfillConfig(effectiveConfig, source);
+      configEvidence = { ...config, source };
+      await hooks.beforeConfigEvidence?.(configEvidence);
+      await this.forkSchemaRepository.recordReturnConfigReconciliation(configEvidence);
+      await hooks.afterConfigEvidence?.(configEvidence);
+    }
     for (const kind of BACKFILL_KINDS) {
       while (true) {
         const claim = await this.forkSchemaRepository.claimReturnBatch(kind, batchSize);
@@ -174,7 +177,11 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
           throw new Error(`No backfill handler registered for ${kind}`);
         }
         try {
-          const result = await handler(claim.ids);
+          const returnClaim =
+            kind === 'storage' || kind === 'checksum'
+              ? { kind, claimToken: claim.cursor, claimedIds: claim.ids }
+              : undefined;
+          const result = returnClaim ? await handler(claim.ids, returnClaim) : await handler(claim.ids);
           await this.forkSchemaRepository.completeBatch(kind, claim.cursor, result.count, result.digest);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -182,6 +189,9 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
           throw error;
         }
         await hooks.afterBatch?.(kind, claim);
+      }
+      if (kind === 'automation') {
+        await this.forkSchemaRepository.finalizeReturnAutomationProgress(configEvidence.digest);
       }
     }
     return this.status();

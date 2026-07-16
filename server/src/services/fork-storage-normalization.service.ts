@@ -9,8 +9,10 @@ import { CryptoRepository } from 'src/repositories/crypto.repository';
 import {
   PhysicalFileRepository,
   PhysicalNormalizationAsset,
+  PhysicalNormalizationCommit,
   PhysicalNormalizationCompleted,
   PhysicalNormalizationReservation,
+  ReturnNormalizationClaim,
 } from 'src/repositories/physical-file.repository';
 import { DB } from 'src/schema';
 
@@ -39,104 +41,115 @@ export class ForkStorageNormalizationService {
     this.physicalFileRepository = physicalFileRepository;
   }
 
-  async normalizeAsset(assetId: string): Promise<NormalizationResult> {
+  async normalizeAsset(assetId: string, claim?: ReturnNormalizationClaim): Promise<NormalizationResult> {
     try {
-      return await this.normalizeAssetWithReservation(assetId);
+      return await this.normalizeAssetWithReservation(assetId, claim);
     } catch (error) {
       if (error instanceof Error && error.message.includes('durable storage reservation is missing or stale')) {
-        return this.normalizeAssetWithReservation(assetId);
+        return this.normalizeAssetWithReservation(assetId, claim);
       }
       throw error;
     }
   }
 
-  private async normalizeAssetWithReservation(assetId: string): Promise<NormalizationResult> {
-    const prepared = await this.physicalFileRepository.createNormalizationReservation(assetId, (asset) =>
-      this.getUpstreamPath(asset),
-    );
+  private async normalizeAssetWithReservation(
+    assetId: string,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<NormalizationResult> {
+    const selectPath = (asset: PhysicalNormalizationAsset) => this.getUpstreamPath(asset);
+    const prepared = claim
+      ? await this.physicalFileRepository.createReturnNormalizationReservation(assetId, selectPath, claim)
+      : await this.physicalFileRepository.createNormalizationReservation(assetId, selectPath);
     if (prepared.status === 'completed') {
-      return this.verifyCompletedNormalization(prepared.asset, prepared.completed, prepared.reservation);
+      return this.verifyCompletedNormalization(prepared.asset, prepared.completed, prepared.reservation, claim);
     }
     let createdPath: string | undefined;
     let metadataCommitted = false;
     try {
-      const result = await this.physicalFileRepository.withLockedNormalizationAsset(
-        assetId,
-        prepared.reservation.token,
-        async ({ asset, reservation, commit }) => {
-          const sourcePath = asset.originalPath;
-          const upstreamPath = reservation.upstreamPath;
-          if (upstreamPath !== this.getUpstreamPath(asset)) {
-            throw new Error(`Asset ${assetId} durable storage reservation target is stale`);
-          }
-          await this.assertSafePaths(asset, sourcePath, upstreamPath);
-          const source = await this.cryptoRepository.hashFileDigests(sourcePath);
-          this.verifyExpectedContent(asset, source);
-          await this.ensureReservationTemp(asset, sourcePath, reservation.temporaryPath, upstreamPath, source);
-          createdPath = await this.publishOrAdoptReservationTemp(
-            asset,
-            reservation.temporaryPath,
-            upstreamPath,
-            source,
-          );
+      const callback = async ({
+        asset,
+        reservation,
+        commit,
+      }: {
+        asset: PhysicalNormalizationAsset;
+        reservation: PhysicalNormalizationReservation;
+        commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+      }) => {
+        const sourcePath = asset.originalPath;
+        const upstreamPath = reservation.upstreamPath;
+        if (upstreamPath !== this.getUpstreamPath(asset)) {
+          throw new Error(`Asset ${assetId} durable storage reservation target is stale`);
+        }
+        await this.assertSafePaths(asset, sourcePath, upstreamPath);
+        const source = await this.cryptoRepository.hashFileDigests(sourcePath);
+        this.verifyExpectedContent(asset, source);
+        await this.ensureReservationTemp(asset, sourcePath, reservation.temporaryPath, upstreamPath, source);
+        createdPath = await this.publishOrAdoptReservationTemp(asset, reservation.temporaryPath, upstreamPath, source);
 
-          await this.assertRegularFile(upstreamPath, 'normalization target');
-          const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
-          const targetStats = await lstat(upstreamPath);
+        await this.assertRegularFile(upstreamPath, 'normalization target');
+        const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
+        const targetStats = await lstat(upstreamPath);
+        if (
+          target.sizeInBytes !== source.sizeInBytes ||
+          !target.sha1.equals(source.sha1) ||
+          !target.sha256.equals(source.sha256)
+        ) {
+          throw new Error(`Staged storage verification mismatch for asset ${assetId}`);
+        }
+
+        const verifiedPaths = [...new Set([asset.physicalPath ?? sourcePath, upstreamPath])];
+        for (const verifiedPath of verifiedPaths) {
+          await this.assertSafePaths(asset, verifiedPath, verifiedPath);
+          await this.assertRegularFile(verifiedPath, 'verified path');
+          if (verifiedPath === upstreamPath) {
+            continue;
+          }
+          const verified = await this.cryptoRepository.hashFileDigests(verifiedPath);
           if (
-            target.sizeInBytes !== source.sizeInBytes ||
-            !target.sha1.equals(source.sha1) ||
-            !target.sha256.equals(source.sha256)
+            verified.sizeInBytes !== target.sizeInBytes ||
+            !verified.sha1.equals(target.sha1) ||
+            !verified.sha256.equals(target.sha256)
           ) {
-            throw new Error(`Staged storage verification mismatch for asset ${assetId}`);
+            throw new Error(`Verified path content mismatch for asset ${assetId}: ${verifiedPath}`);
           }
-
-          const verifiedPaths = [...new Set([asset.physicalPath ?? sourcePath, upstreamPath])];
-          for (const verifiedPath of verifiedPaths) {
-            await this.assertSafePaths(asset, verifiedPath, verifiedPath);
-            await this.assertRegularFile(verifiedPath, 'verified path');
-            if (verifiedPath === upstreamPath) {
-              continue;
-            }
-            const verified = await this.cryptoRepository.hashFileDigests(verifiedPath);
-            if (
-              verified.sizeInBytes !== target.sizeInBytes ||
-              !verified.sha1.equals(target.sha1) ||
-              !verified.sha256.equals(target.sha256)
-            ) {
-              throw new Error(`Verified path content mismatch for asset ${assetId}: ${verifiedPath}`);
-            }
-          }
-          await commit({
-            evidence: {
-              sourcePath,
-              upstreamPath,
-              sizeInBytes: target.sizeInBytes,
-              sha1: target.sha1.toString('hex'),
-              sha256: target.sha256.toString('hex'),
-              device: targetStats.dev,
-              inode: targetStats.ino,
-            },
-            linkCount: targetStats.nlink,
-            sha1: target.sha1,
-            sha256: target.sha256,
-            sizeInBytes: target.sizeInBytes,
+        }
+        await commit({
+          evidence: {
+            sourcePath,
             upstreamPath,
-            verifiedPaths,
-          });
-
-          return {
-            assetId,
+            sizeInBytes: target.sizeInBytes,
             sha1: target.sha1.toString('hex'),
             sha256: target.sha256.toString('hex'),
-            linkCount: targetStats.nlink,
-            verifiedPaths,
-          };
-        },
-      );
+            device: targetStats.dev,
+            inode: targetStats.ino,
+          },
+          linkCount: targetStats.nlink,
+          sha1: target.sha1,
+          sha256: target.sha256,
+          sizeInBytes: target.sizeInBytes,
+          upstreamPath,
+          verifiedPaths,
+        });
+
+        return {
+          assetId,
+          sha1: target.sha1.toString('hex'),
+          sha256: target.sha256.toString('hex'),
+          linkCount: targetStats.nlink,
+          verifiedPaths,
+        };
+      };
+      const result = claim
+        ? await this.physicalFileRepository.withLockedReturnNormalizationAsset(
+            assetId,
+            prepared.reservation.token,
+            claim,
+            callback,
+          )
+        : await this.physicalFileRepository.withLockedNormalizationAsset(assetId, prepared.reservation.token, callback);
       metadataCommitted = true;
       await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
-      await this.physicalFileRepository.releaseNormalizationReservation(assetId, prepared.reservation.token);
+      await this.releaseReservation(assetId, prepared.reservation.token, claim);
       return result;
     } catch (error) {
       if (createdPath && !metadataCommitted) {
@@ -145,16 +158,16 @@ export class ForkStorageNormalizationService {
       }
       if (!metadataCommitted && (!prepared.recovered || createdPath || error instanceof ReservationInodeProofError)) {
         await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
-        await this.physicalFileRepository.releaseNormalizationReservation(assetId, prepared.reservation.token);
+        await this.releaseReservation(assetId, prepared.reservation.token, claim);
       }
       throw error;
     }
   }
 
-  async normalizeBatch(ids: string[]): Promise<NormalizationBatchResult> {
+  async normalizeBatch(ids: string[], claim?: ReturnNormalizationClaim): Promise<NormalizationBatchResult> {
     const results: NormalizationResult[] = [];
     for (const id of ids) {
-      results.push(await this.normalizeAsset(id));
+      results.push(await this.normalizeAsset(id, claim));
     }
     results.sort((left, right) => left.assetId.localeCompare(right.assetId));
     const digest = createHash('sha256').update(JSON.stringify(results)).digest('hex');
@@ -165,6 +178,7 @@ export class ForkStorageNormalizationService {
     asset: PhysicalNormalizationAsset,
     completed: PhysicalNormalizationCompleted,
     reservation: PhysicalNormalizationReservation | null,
+    claim?: ReturnNormalizationClaim,
   ): Promise<NormalizationResult> {
     await this.assertSafePaths(asset, completed.upstreamPath, completed.upstreamPath);
     const actual = await this.cryptoRepository.hashFileDigests(completed.upstreamPath);
@@ -178,7 +192,7 @@ export class ForkStorageNormalizationService {
     const stats = await lstat(completed.upstreamPath);
 
     if (reservation) {
-      await this.cleanupCompletedReservation(asset, reservation);
+      await this.cleanupCompletedReservation(asset, reservation, claim);
     }
 
     return {
@@ -193,6 +207,7 @@ export class ForkStorageNormalizationService {
   private async cleanupCompletedReservation(
     asset: PhysicalNormalizationAsset,
     reservation: PhysicalNormalizationReservation,
+    claim?: ReturnNormalizationClaim,
   ): Promise<void> {
     if (
       dirname(reservation.temporaryPath) !== dirname(reservation.upstreamPath) ||
@@ -203,7 +218,13 @@ export class ForkStorageNormalizationService {
     await this.assertSafeParent(asset, reservation.temporaryPath, 'temporary normalization target');
     await rm(reservation.temporaryPath, { force: true });
     await this.syncDirectory(dirname(reservation.temporaryPath));
-    await this.physicalFileRepository.releaseNormalizationReservation(asset.id, reservation.token);
+    await this.releaseReservation(asset.id, reservation.token, claim);
+  }
+
+  private releaseReservation(assetId: string, token: string, claim?: ReturnNormalizationClaim): Promise<void> {
+    return claim
+      ? this.physicalFileRepository.releaseReturnNormalizationReservation(assetId, token, claim)
+      : this.physicalFileRepository.releaseNormalizationReservation(assetId, token);
   }
 
   private verifyExpectedContent(
