@@ -171,9 +171,11 @@ For NSFW discovery, prefer improving the dedicated NSFW classifier before relyin
 - Expect first backfills to take time on large libraries.
 - Watch machine-learning container logs during early setup, especially when testing GPU acceleration.
 - Keep the fork updated so you continue receiving upstream Immich fixes and improvements.
+- Before switching to official Immich, follow the certified handoff procedure. Official Immich does not enforce fork privacy filters, so fork-hidden assets can become visible while the official image is running.
 
 ## More Detailed Docs
 
+- [Switching Between the Fork and Official Immich](switching-between-fork-and-official.md)
 - [Image Enrichment](image-enrichment.md)
 - [Hardware-Accelerated Machine Learning](ml-hardware-acceleration.md)
 - [Administration: System Settings](../administration/system-settings.md)

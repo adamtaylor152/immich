@@ -1,6 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { assertSupportedUpstream, classifyMigration } from 'src/fork-schema/migration-manifest';
+import { assertReleaseManifest, assertSupportedUpstream, classifyMigration } from 'src/fork-schema/migration-manifest';
+import {
+  createCertifiedLedgerMigrationProvider,
+  createOfficialMigrationProvider,
+} from 'src/fork-schema/migration-provider';
+import supportedVersions from 'src/fork-schema/supported-versions.json';
+const serverPackage = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version: string };
 
 describe(classifyMigration, () => {
   it('classifies known legacy fork migrations', () => {
@@ -23,4 +31,34 @@ it('accepts a supported upstream version', () => {
 
 it('rejects an unsupported upstream version', () => {
   expect(() => assertSupportedUpstream('4.0.0')).toThrow();
+});
+
+describe(assertReleaseManifest, () => {
+  it('certifies the current server version and exact bundled official migration provider', async () => {
+    const migrationFolder = resolve('src/schema/migrations');
+    const bundledMigrations = Object.keys(
+      await createCertifiedLedgerMigrationProvider(
+        createOfficialMigrationProvider(migrationFolder),
+        supportedVersions.upstreamMigrations,
+      ).getMigrations(),
+    );
+
+    expect(() => assertReleaseManifest(serverPackage.version, supportedVersions, bundledMigrations)).not.toThrow();
+  });
+
+  it('rejects reversion support without a certified official tag', () => {
+    expect(() =>
+      assertReleaseManifest(
+        serverPackage.version,
+        { ...supportedVersions, certifiedTags: [], reversionSupported: true },
+        supportedVersions.upstreamMigrations,
+      ),
+    ).toThrow('certified official tag');
+  });
+
+  it('rejects a release whose bundled official migrations drift from the manifest', () => {
+    expect(() =>
+      assertReleaseManifest(serverPackage.version, supportedVersions, supportedVersions.upstreamMigrations.slice(1)),
+    ).toThrow('official migration manifest');
+  });
 });

@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 env:
   IMAGE_TAG: fork-main-unraid
@@ -22,9 +23,14 @@ env:
   SOURCE_SHA: ${{ github.sha }}
 
 jobs:
+  certify-fork-roundtrip:
+    name: Certify fork and official round trips
+    uses: ./.github/workflows/fork-roundtrip.yml
+
   build-server:
     name: Build Server Image
     if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
+    needs: certify-fork-roundtrip
     # Docker-heavy fork image production runs on the local Unraid runner.
     # The deployment bundle packaging job below stays on GitHub-hosted runners.
     runs-on: [self-hosted, linux, x64, aiimmich, docker-build]
@@ -50,6 +56,17 @@ jobs:
         run: |
           set -euo pipefail
           docker version
+
+      - name: Read reversion certification manifest
+        id: certification
+        run: |
+          set -euo pipefail
+          manifest="$(jq -c . server/src/fork-schema/supported-versions.json)"
+          {
+            echo "manifest=${manifest}"
+            echo "official_tag=$(jq -r '.certifiedTags[0]' <<<"${manifest}")"
+            echo "result=$(jq -r '.certification.result' <<<"${manifest}")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -83,6 +100,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.immich.fork.reversion-supported=true
+            org.immich.fork.certified-official-tag=${{ steps.certification.outputs.official_tag }}
+            org.immich.fork.certification-result=${{ steps.certification.outputs.result }}
+            org.immich.fork.supported-versions=${{ steps.certification.outputs.manifest }}
           secrets: |
             mise_github_token=${{ secrets.GITHUB_TOKEN }}
           build-args: |
@@ -93,6 +114,7 @@ jobs:
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
     if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
+    needs: certify-fork-roundtrip
     runs-on: [self-hosted, linux, x64, aiimmich, docker-build]
     permissions:
       contents: read
@@ -110,6 +132,17 @@ jobs:
         run: |
           set -euo pipefail
           docker version
+
+      - name: Read reversion certification manifest
+        id: certification
+        run: |
+          set -euo pipefail
+          manifest="$(jq -c . server/src/fork-schema/supported-versions.json)"
+          {
+            echo "manifest=${manifest}"
+            echo "official_tag=$(jq -r '.certifiedTags[0]' <<<"${manifest}")"
+            echo "result=$(jq -r '.certification.result' <<<"${manifest}")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -139,6 +172,10 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.immich.fork.reversion-supported=true
+            org.immich.fork.certified-official-tag=${{ steps.certification.outputs.official_tag }}
+            org.immich.fork.certification-result=${{ steps.certification.outputs.result }}
+            org.immich.fork.supported-versions=${{ steps.certification.outputs.manifest }}
           build-args: |
             DEVICE=openvino
             BUILD_ID=${{ github.run_id }}
@@ -169,9 +206,17 @@ jobs:
         run: |
           mkdir -p dist/unraid-docker
           cp docker/example.env dist/unraid-docker/example.env
+          cp server/src/fork-schema/supported-versions.json dist/unraid-docker/supported-versions.json
           server_image="${REGISTRY}/${IMAGE_OWNER}/immich-server:${IMAGE_TAG}"
           ml_image="${REGISTRY}/${IMAGE_OWNER}/immich-machine-learning:${ML_IMAGE_TAG}"
           source_label="${SOURCE_REF}@${SOURCE_SHA}"
+
+          jq -n \
+            --arg source "${source_label}" \
+            --arg run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --slurpfile manifest server/src/fork-schema/supported-versions.json \
+            '{source: $source, certificationRun: $run, manifest: $manifest[0]}' \
+            > dist/unraid-docker/fork-roundtrip-certification.json
 
           cat > dist/unraid-docker/docker-compose.yml <<'COMPOSE'
           name: immich
@@ -252,6 +297,8 @@ jobs:
           - \`${ml_image}\`
 
           Use the bundled \`docker-compose.yml\` with your existing Immich \`.env\` values. The machine-learning service is pinned to the OpenVINO image and maps \`/dev/dri\` for an Intel iGPU.
+
+          \`supported-versions.json\` and \`fork-roundtrip-certification.json\` record the exact official compatibility manifest and the successful certification workflow required before these images were published.
           README
 
       - name: Upload deployment bundle
