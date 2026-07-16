@@ -105,6 +105,11 @@ Certification also exposed and corrected two boundary defects:
   unchanged official `1782414436633` migration, repositories use and update
   the upstream column. No workflow migration, workflow sidecar, or workflow
   table rewrite was introduced.
+- Plugin and plugin-method API reads use the same schema capability boundary:
+  legacy searches synthesize an empty `allowedHosts` list without referencing
+  the absent column, while post-migration searches return the official stored
+  values. This covers plugin listing, lookup, and method search before and
+  after handoff.
 - Smart-album child reconciliation now treats a rule whose public album is
   missing as orphaned even before the parent rule is deleted. A medium
   regression deletes only the public album and proves its rule, match, and
@@ -123,13 +128,14 @@ official workflows execute after normal return.
 
 - Clean combined official-container certification: all 3 lanes, exit 0,
   `Local synthetic certification completed for: all`.
-- Broad workflow/fork-schema unit selection: 126/126 passed.
+- Broad plugin/workflow/fork-schema unit selection: 130/130 passed.
 - Workflow host-ABI/privacy/context regression: 3/3 passed.
 - Plugin in-process/worker context boundary regression: 2/2 passed.
 - Legacy/official workflow repository schema-stage regressions: 3/3 passed.
 - Deleted smart-album parent reconciliation regression: 1/1 passed.
-- Broad return/workflow medium selection: 75 passed, 9 expected skips because
-  the local optional core-WASM artifact was absent.
+- Broad plugin/return/workflow medium selection: 84 passed, 9 expected skips
+  because the local optional core-WASM artifact was absent.
+- Legacy/official plugin search schema-stage regression: 2/2 passed.
 - Related workflow medium selection: 16 passed, 9 expected skips because the
   local optional core-WASM artifact was absent; the container run exercised the
   real official WASM in both execution modes.
@@ -141,6 +147,8 @@ official workflows execute after normal return.
   exact staged second correction reported LOW risk (11 files, 20 mapped
   symbols, no affected process); focused ABI/schema-stage tests and the real
   official WASM container run cover the changed boundaries.
+- The exact staged plugin-read correction also reported LOW risk (9 files, 6
+  mapped symbols, no affected process).
 
 The external release gate is unchanged: repeat on a sanitized,
 production-shaped current-fork clone with interruption/resume evidence for all
