@@ -1,7 +1,7 @@
 import { CallContext, Plugin as ExtismPlugin, newPlugin } from '@extism/extism';
 import { Injectable } from '@nestjs/common';
 import { createPool, Pool } from 'generic-pool';
-import { Insertable, Kysely } from 'kysely';
+import { Insertable, Kysely, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
@@ -43,6 +43,7 @@ const asExtismLogLevel = (logLevel: LogLevel) => levels[logLevel] || 'info';
 @Injectable()
 export class PluginRepository {
   private pluginMap: Map<string, { label: string; pool: Pool<ExtismPlugin> }> = new Map();
+  private allowedHostsColumn: Promise<boolean> | undefined;
 
   constructor(
     @InjectKysely() private db: Kysely<DB>,
@@ -139,6 +140,14 @@ export class PluginRepository {
   }
 
   async upsert(dto: Insertable<PluginTable>, initialMethods: Omit<Insertable<PluginMethodTable>, 'pluginId'>[]) {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
+    const compatibleMethods = hasAllowedHosts
+      ? initialMethods
+      : initialMethods.map((method) => {
+          const legacyMethod = { ...method };
+          delete legacyMethod.allowedHosts;
+          return legacyMethod;
+        });
     return this.db.transaction().execute(async (tx) => {
       // Upsert the plugin
       const plugin = await tx
@@ -157,23 +166,23 @@ export class PluginRepository {
         .executeTakeFirstOrThrow();
 
       // prune methods that no longer exist
-      if (initialMethods.length > 0) {
+      if (compatibleMethods.length > 0) {
         await tx
           .deleteFrom('plugin_method')
           .where('plugin_method.pluginId', '=', plugin.id)
           .where(
             'name',
             'not in',
-            initialMethods.map((method) => method.name),
+            compatibleMethods.map((method) => method.name),
           )
           .execute();
       }
 
       const methods =
-        initialMethods.length > 0
+        compatibleMethods.length > 0
           ? await tx
               .insertInto('plugin_method')
-              .values(initialMethods.map((method) => ({ ...method, pluginId: plugin.id })))
+              .values(compatibleMethods.map((method) => ({ ...method, pluginId: plugin.id })))
               .onConflict((oc) =>
                 oc.columns(['pluginId', 'name']).doUpdateSet(({ ref }) => ({
                   pluginId: ref('excluded.pluginId'),
@@ -182,6 +191,7 @@ export class PluginRepository {
                   description: ref('excluded.description'),
                   types: ref('excluded.types'),
                   hostFunctions: ref('excluded.hostFunctions'),
+                  ...(hasAllowedHosts && { allowedHosts: ref('excluded.allowedHosts') }),
                   uiHints: ref('excluded.uiHints'),
                   schema: ref('excluded.schema'),
                 })),
@@ -192,6 +202,20 @@ export class PluginRepository {
 
       return { ...plugin, methods };
     });
+  }
+
+  private hasAllowedHostsColumn(): Promise<boolean> {
+    return (this.allowedHostsColumn ??= sql<{ exists: boolean }>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'plugin_method'
+          AND column_name = 'allowedHosts'
+      ) AS "exists"
+    `
+      .execute(this.db)
+      .then(({ rows }) => rows[0]?.exists === true));
   }
 
   async load({ key, label, wasmBytes }: PluginLoad, { runInWorker, functions }: PluginLoadOptions) {
@@ -231,7 +255,7 @@ export class PluginRepository {
     }
   }
 
-  async callMethod<T>({ pluginKey, methodName }: PluginMethod, input: unknown) {
+  async callMethod<T>({ pluginKey, methodName }: PluginMethod, input: unknown, context?: unknown) {
     const item = this.pluginMap.get(pluginKey);
     if (!item) {
       throw new Error(`No loaded plugin found for ${pluginKey}`);
@@ -242,7 +266,7 @@ export class PluginRepository {
     try {
       const plugin = await pool.acquire();
       try {
-        const result = await plugin.call(methodName, JSON.stringify(input));
+        const result = await plugin.call(methodName, JSON.stringify(input), context);
         return (result ? result.json() : result) as T;
       } finally {
         await pool.release(plugin);

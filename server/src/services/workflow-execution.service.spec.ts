@@ -1,4 +1,5 @@
 import { CurrentPlugin } from '@extism/extism';
+import { WorkflowTrigger, WorkflowType } from 'src/enum';
 import { AlbumService } from 'src/services/album.service';
 import { WorkflowExecutionService } from 'src/services/workflow-execution.service';
 import { newUuid } from 'test/small.factory';
@@ -89,5 +90,42 @@ describe(WorkflowExecutionService.name, () => {
       { ids: [assetId] },
     );
     expect(plugin.hostContext).toHaveBeenCalled();
+  });
+
+  it('passes each workflow method allowedHosts through the Extism call context', async () => {
+    const workflowId = newUuid();
+    const assetId = newUuid();
+    const ownerId = newUuid();
+    const allowedHosts = ['hooks.example.test', '*.trusted.example'];
+    (sut as unknown as { getConfig: () => Promise<unknown> }).getConfig = vitest.fn().mockResolvedValue({
+      machineLearning: { nsfwDetection: { enabled: false }, imageDescription: { enabled: false } },
+    });
+    mocks.workflow.getForWorkflowRun.mockResolvedValue({
+      id: workflowId,
+      name: 'webhook workflow',
+      trigger: WorkflowTrigger.AssetCreate,
+      steps: [
+        {
+          id: newUuid(),
+          config: {},
+          pluginId: newUuid(),
+          methodName: 'webhook',
+          types: [WorkflowType.AssetV1],
+          hostFunctions: true,
+          allowedHosts,
+        },
+      ],
+    });
+    mocks.workflow.isWorkflowEligible.mockResolvedValue(true);
+    mocks.workflow.getForAssetV1.mockResolvedValue({ id: assetId, ownerId } as never);
+    mocks.plugin.callMethod.mockResolvedValue({});
+
+    await sut.handleAssetCreate({ workflowId, assetId });
+
+    expect(mocks.plugin.callMethod).toHaveBeenCalledWith(
+      expect.objectContaining({ methodName: 'webhook' }),
+      expect.any(Object),
+      { allowedHosts },
+    );
   });
 });

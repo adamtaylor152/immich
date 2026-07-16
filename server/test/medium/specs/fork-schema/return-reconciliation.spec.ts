@@ -490,6 +490,38 @@ describe('certified fork return evidence', () => {
     expect(rows.rows[0]).toEqual({ exclusions: 1, matches: 1, rules: 1 });
   });
 
+  it('archives smart-album rules and children when only the upstream album is deleted', async () => {
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({ ownerId: user.id });
+    const album = mediumFactory.albumInsert({});
+    const ruleId = randomUUID();
+    await db.insertInto('user').values(user).execute();
+    await db.insertInto('asset').values(asset).execute();
+    await db.insertInto('album').values(album).execute();
+    await sql`
+      INSERT INTO immich_fork.smart_album_rule (id, "albumId", "ownerId", kind)
+      VALUES (${ruleId}::uuid, ${album.id}::uuid, ${user.id}::uuid, 'certified')
+    `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.smart_album_match ("smartAlbumId", "assetId", "matchReason")
+      VALUES (${ruleId}::uuid, ${asset.id}::uuid, 'both')
+    `.execute(db);
+    await sql`
+      INSERT INTO immich_fork.smart_album_exclusion ("smartAlbumId", "assetId")
+      VALUES (${ruleId}::uuid, ${asset.id}::uuid)
+    `.execute(db);
+    await db.deleteFrom('album').where('id', '=', album.id).execute();
+
+    await expect(repository.archiveAndDeleteOrphans()).resolves.toEqual({ archived: 3, deleted: 3 });
+    const live = await sql<{ exclusions: number; matches: number; rules: number }>`
+      SELECT
+        (SELECT count(*)::int FROM immich_fork.smart_album_rule) AS rules,
+        (SELECT count(*)::int FROM immich_fork.smart_album_match) AS matches,
+        (SELECT count(*)::int FROM immich_fork.smart_album_exclusion) AS exclusions
+    `.execute(db);
+    expect(live.rows[0]).toEqual({ exclusions: 0, matches: 0, rules: 0 });
+  });
+
   it.each([
     ['asset_privacy missing asset', 'asset_privacy'],
     ['album_metadata missing album', 'album_metadata'],

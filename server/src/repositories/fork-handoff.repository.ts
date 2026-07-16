@@ -101,13 +101,13 @@ const ORPHAN_FAMILIES = [
     'smart_album_match',
     'immich_fork.smart_album_match',
     `candidate."smartAlbumId"::text || ':' || candidate."assetId"::text`,
-    'NOT EXISTS (SELECT 1 FROM immich_fork.smart_album_rule rule WHERE rule.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+    'NOT EXISTS (SELECT 1 FROM immich_fork.smart_album_rule rule JOIN public.album album ON album.id = rule."albumId" WHERE rule.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
   ],
   [
     'smart_album_exclusion',
     'immich_fork.smart_album_exclusion',
     `candidate."smartAlbumId"::text || ':' || candidate."assetId"::text`,
-    'NOT EXISTS (SELECT 1 FROM immich_fork.smart_album_rule rule WHERE rule.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
+    'NOT EXISTS (SELECT 1 FROM immich_fork.smart_album_rule rule JOIN public.album album ON album.id = rule."albumId" WHERE rule.id = candidate."smartAlbumId") OR NOT EXISTS (SELECT 1 FROM public.asset asset WHERE asset.id = candidate."assetId")',
   ],
   [
     'smart_album_rule',

@@ -414,6 +414,9 @@ export class WorkflowExecutionService extends BaseService {
           },
           data,
         };
+        const context: HostContext = {
+          allowedHosts: step.allowedHosts,
+        };
 
         if (step.methodName.startsWith('noop')) {
           continue;
@@ -425,6 +428,7 @@ export class WorkflowExecutionService extends BaseService {
             methodName: step.methodName,
           },
           payload,
+          context,
         );
         if (result?.changes) {
           await write(result.changes);
