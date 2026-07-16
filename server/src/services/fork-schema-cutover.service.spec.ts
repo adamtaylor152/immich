@@ -5,8 +5,20 @@ import { newTestService } from 'test/utils';
 const evidence = () => ({
   activeWrites: 0,
   backfills: [],
+  backfillKindsValid: true,
+  catalogDiff: { clean: true, mismatched: [], missing: [], unexpected: [] },
+  checksumCoverage: {
+    applicableCount: 0,
+    applicableDigest: 'empty',
+    invalidCount: 0,
+    sidecarCount: 0,
+    sidecarDigest: 'empty',
+    valid: true,
+  },
   checksumFailures: 0,
+  forkLedgerValid: true,
   forkMigrations: ['0000000000000-ForkSchemaBaseline'],
+  installationClass: 'current-fork' as const,
   ledger: [
     {
       classification: 'legacy-fork' as const,
@@ -15,9 +27,16 @@ const evidence = () => ({
     },
   ],
   maintenanceMode: true,
+  mappingCoverage: {
+    mappingCount: 0,
+    mappingDigest: 'empty',
+    normalizedCount: 0,
+    normalizedDigest: 'empty',
+    unsafeCount: 0,
+    valid: true,
+  },
   migrationOrderValid: true,
   officialPendingMigrations: [],
-  schemaResidue: [],
   state: { active: false, phase: 'ready' as const, schemaVersion: '1', upstreamVersion: '3.0.3' },
   storageReservations: 0,
   tableEvidence: [],
@@ -79,31 +98,54 @@ describe(ForkSchemaCutoverService.name, () => {
     );
   });
 
-  it('fails closed on unknown schema residue', async () => {
+  it('fails closed on an unknown catalog object', async () => {
     const { sut, mocks } = newTestService(ForkSchemaCutoverService);
     mocks.database.getForkSchemaCutoverEvidence.mockResolvedValue({
       ...evidence(),
-      schemaResidue: [{ allowed: false, kind: 'table', name: 'public.physical_file_unexpected' }],
+      catalogDiff: {
+        clean: false,
+        mismatched: [],
+        missing: [],
+        unexpected: [{ actual: 'table', identity: 'public.physical_file_unexpected', kind: 'tables' as const }],
+      },
     });
 
     const report = await sut.preflight();
 
     expect(report.ready).toBe(false);
-    expect(report.blockers).toContain('Unknown fork schema residue: table public.physical_file_unexpected');
+    expect(report.blockers).toContain('Unknown catalog object: tables public.physical_file_unexpected');
   });
 
   it.each([
     [
       'nonzero backfill remainder',
-      { backfills: [{ digest: null, kind: 'privacy', lastError: null, processed: 1, remaining: 1 }] },
-      'Backfill privacy is incomplete or failed',
+      {
+        backfills: [
+          {
+            claimToken: null,
+            claimedCursor: null,
+            claimedIds: [],
+            cursor: null,
+            digest: null,
+            kind: 'privacy',
+            lastError: null,
+            processed: 1,
+            remaining: 1,
+          },
+        ],
+      },
+      'Backfill privacy is not durably complete',
     ],
     ['active writes', { activeWrites: 1 }, 'Fork schema cutover detected 1 active write transaction(s)'],
-    ['checksum failure', { checksumFailures: 1 }, 'Checksum verification failed for 1 asset(s)'],
+    [
+      'checksum failure',
+      { checksumCoverage: { ...evidence().checksumCoverage, invalidCount: 1, valid: false } },
+      'Checksum coverage is incomplete, invalid, or digest-mismatched',
+    ],
     [
       'unsafe physical mapping',
-      { unsafePhysicalMappings: 1 },
-      'Unsafe physical mapping remains for 1 asset/file row(s)',
+      { mappingCoverage: { ...evidence().mappingCoverage, unsafeCount: 1, valid: false } },
+      'Physical mapping coverage is incomplete, unsafe, or digest-mismatched',
     ],
     [
       'unresolved storage reservation',
@@ -122,7 +164,11 @@ describe(ForkSchemaCutoverService.name, () => {
 
   it.each([
     ['maintenance mode disabled', { maintenanceMode: false }, 'Fork schema cutover requires maintenance mode'],
-    ['missing fork baseline', { forkMigrations: [] }, 'Fork schema baseline is not applied'],
+    [
+      'missing fork baseline',
+      { forkLedgerValid: false, forkMigrations: [] },
+      'Fork migration ledger is not the exact ordered applied provider set',
+    ],
     [
       'invalid official migration order',
       { migrationOrderValid: false },

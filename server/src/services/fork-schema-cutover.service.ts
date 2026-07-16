@@ -60,24 +60,41 @@ const getBlockers = (evidence: ForkSchemaCutoverEvidence): string[] => {
   if (!evidence.migrationOrderValid) {
     blockers.push('Official migration ledger is not an exact ordered prefix of the bundled provider');
   }
-  for (const residue of evidence.schemaResidue) {
-    if (!residue.allowed) {
-      blockers.push(`Unknown fork schema residue: ${residue.kind} ${residue.name}`);
+  if (!evidence.catalogDiff.clean) {
+    for (const difference of evidence.catalogDiff.missing) {
+      blockers.push(`Missing catalog object: ${difference.kind} ${difference.identity}`);
+    }
+    for (const difference of evidence.catalogDiff.unexpected) {
+      blockers.push(`Unknown catalog object: ${difference.kind} ${difference.identity}`);
+    }
+    for (const difference of evidence.catalogDiff.mismatched) {
+      blockers.push(`Mismatched catalog object: ${difference.kind} ${difference.identity}`);
     }
   }
-  if (!evidence.forkMigrations.includes('0000000000000-ForkSchemaBaseline')) {
-    blockers.push('Fork schema baseline is not applied');
+  if (!evidence.forkLedgerValid) {
+    blockers.push('Fork migration ledger is not the exact ordered applied provider set');
+  }
+  if (!evidence.backfillKindsValid) {
+    blockers.push('Backfill progress does not contain the exact required kind set');
   }
   for (const backfill of evidence.backfills) {
-    if (backfill.remaining > 0 || backfill.lastError) {
-      blockers.push(`Backfill ${backfill.kind} is incomplete or failed`);
+    if (
+      backfill.remaining !== 0 ||
+      backfill.lastError !== null ||
+      backfill.cursor !== null ||
+      backfill.claimedCursor !== null ||
+      backfill.claimToken !== null ||
+      backfill.claimedIds.length > 0 ||
+      !/^[\da-f]{64}$/.test(backfill.digest ?? '')
+    ) {
+      blockers.push(`Backfill ${backfill.kind} is not durably complete`);
     }
   }
-  if (evidence.checksumFailures > 0) {
-    blockers.push(`Checksum verification failed for ${evidence.checksumFailures} asset(s)`);
+  if (!evidence.checksumCoverage.valid) {
+    blockers.push('Checksum coverage is incomplete, invalid, or digest-mismatched');
   }
-  if (evidence.unsafePhysicalMappings > 0) {
-    blockers.push(`Unsafe physical mapping remains for ${evidence.unsafePhysicalMappings} asset/file row(s)`);
+  if (!evidence.mappingCoverage.valid) {
+    blockers.push('Physical mapping coverage is incomplete, unsafe, or digest-mismatched');
   }
   if (evidence.storageReservations > 0) {
     blockers.push(`Storage normalization has ${evidence.storageReservations} unresolved reservation(s)`);
