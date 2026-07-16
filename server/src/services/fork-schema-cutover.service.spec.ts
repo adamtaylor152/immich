@@ -22,6 +22,12 @@ const evidence = () => ({
   storageReservations: 0,
   tableEvidence: [],
   unsafePhysicalMappings: 0,
+  workflowCompatibility: {
+    mode: 'legacy-alias' as const,
+    rowDigests: [],
+    schemaDigest: 'workflow-schema',
+    timestamp: '2026-07-15T00:00:00.000Z',
+  },
 });
 
 describe(ForkSchemaCutoverService.name, () => {

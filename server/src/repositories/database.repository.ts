@@ -16,12 +16,19 @@ import {
 } from 'src/constants';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
-import { classifyMigration, LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { classifyMigration, GENERIC_LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   createForkMigrationProvider,
   createLegacyMigrationProvider,
   createOfficialMigrationProvider,
 } from 'src/fork-schema/migration-provider';
+import {
+  aliasLegacyWorkflowMigration,
+  classifyWorkflowCompatibility,
+  getWorkflowCompatibilityEvidence,
+  WORKFLOW_COMPATIBILITY_MIGRATIONS,
+  WorkflowCompatibility,
+} from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
@@ -67,6 +74,10 @@ const CUTOVER_LOCK_TABLES = [
   'immich_fork.migration_audit',
   'immich_fork.backfill_progress',
   'immich_fork.asset_storage_reservation',
+  'public.plugin',
+  'public.plugin_method',
+  'public.workflow',
+  'public.workflow_step',
   ...CUTOVER_EVIDENCE_TABLES,
 ] as const;
 
@@ -149,6 +160,7 @@ export type ForkSchemaCutoverEvidence = {
   storageReservations: number;
   tableEvidence: Array<{ count: number; digest: string; table: string }>;
   unsafePhysicalMappings: number;
+  workflowCompatibility: WorkflowCompatibility;
 };
 
 export type ForkSchemaCutoverCheckpoint = {
@@ -604,14 +616,21 @@ export class DatabaseRepository {
       throw new Error('Fork schema state is not initialized');
     }
     const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
+    const workflowCompatibility = classifyWorkflowCompatibility(await getWorkflowCompatibilityEvidence(runner));
     const officialNames = Object.keys(officialMigrations).toSorted();
     if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
       throw new Error('Official migration provider exposed a non-upstream migration');
     }
+    const unexpectedUnbundledMigrations = ledger.filter(
+      ({ classification, name }) =>
+        classification === 'upstream' && !officialNames.includes(name) && !WORKFLOW_COMPATIBILITY_MIGRATIONS.has(name),
+    );
     const appliedOfficial = ledger
-      .filter(({ classification }) => classification === 'upstream')
+      .filter(({ classification, name }) => classification === 'upstream' && officialNames.includes(name))
       .map(({ name }) => name);
-    const migrationOrderValid = appliedOfficial.every((name, index) => officialNames[index] === name);
+    const migrationOrderValid =
+      unexpectedUnbundledMigrations.length === 0 &&
+      appliedOfficial.every((name, index) => officialNames[index] === name);
 
     const activeWritesResult = await sql<{ count: number }>`
       SELECT count(*)::int AS count
@@ -775,6 +794,7 @@ export class DatabaseRepository {
       storageReservations: reservationResult.rows[0]?.count ?? 0,
       tableEvidence,
       unsafePhysicalMappings: unsafeMappingResult.rows[0]?.count ?? 0,
+      workflowCompatibility,
     };
   }
 
@@ -797,10 +817,15 @@ export class DatabaseRepository {
         await sql.raw(`LOCK TABLE ${lockTables} IN SHARE ROW EXCLUSIVE MODE`).execute(transaction);
         await verify(transaction);
 
+        const workflowCompatibility = classifyWorkflowCompatibility(
+          await getWorkflowCompatibilityEvidence(transaction),
+        );
+        await aliasLegacyWorkflowMigration(transaction, workflowCompatibility, reportDigest);
+
         const legacy = await sql<{ name: string; timestamp: string }>`
           SELECT name, timestamp
           FROM public.kysely_migrations
-          WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})
+          WHERE name = ANY(${[...GENERIC_LEGACY_FORK_MIGRATIONS]})
           ORDER BY name
         `.execute(transaction);
         for (const row of legacy.rows) {
@@ -819,9 +844,9 @@ export class DatabaseRepository {
             )
           `.execute(transaction);
         }
-        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(
-          transaction,
-        );
+        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[
+          ...GENERIC_LEGACY_FORK_MIGRATIONS,
+        ]})`.execute(transaction);
         const legacyTriggers = await sql<{ name: string; schemaName: string; tableName: string }>`
           SELECT trigger.tgname AS name, namespace.nspname AS "schemaName", relation.relname AS "tableName"
           FROM pg_trigger trigger

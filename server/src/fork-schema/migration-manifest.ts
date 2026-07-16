@@ -22,6 +22,10 @@ export const LEGACY_FORK_MIGRATIONS: ReadonlySet<string> = new Set([
   '2100000000030-AddSha256ChecksumAlgorithm',
 ]);
 
+export const GENERIC_LEGACY_FORK_MIGRATIONS: ReadonlySet<string> = new Set(
+  [...LEGACY_FORK_MIGRATIONS].filter((name) => name !== '1779400000000-UpdateWorkflowTables'),
+);
+
 export function classifyMigration(name: string): 'upstream' | 'legacy-fork' | 'unknown' {
   if (LEGACY_FORK_MIGRATIONS.has(name)) {
     return 'legacy-fork';
