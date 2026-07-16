@@ -1,13 +1,22 @@
 import { Kysely, sql } from 'kysely';
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { StorageCore } from 'src/cores/storage.core';
+import { ChecksumAlgorithm } from 'src/enum';
 import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import { OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
 import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
+import { ForkCutoverVerificationService } from 'src/services/fork-cutover-verification.service';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { getKyselyConfig } from 'src/utils/database';
+import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB, newTestService } from 'test/utils';
 
 const NON_WORKFLOW_PROVIDER_GAPS = [
@@ -18,6 +27,7 @@ const NON_WORKFLOW_PROVIDER_GAPS = [
   '1782500000000-RestoreLivePhotoStillVisibility',
 ] as const;
 const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+const fileDigest = (algorithm: 'sha1' | 'sha256', bytes: Buffer) => createHash(algorithm).update(bytes).digest();
 
 class FailingPreCommitRepository extends DatabaseRepository {
   protected override async finishForkSchemaCutover(transaction: Kysely<DB>): Promise<void> {
@@ -193,6 +203,81 @@ describe('fork schema ledger cutover', () => {
     const report = await sut.preflight('backup-invalid-digest', 'snapshot-invalid-digest');
 
     expect(report.blockers).toContain('Storage verification checkpoint evidence is invalid');
+  });
+
+  it('rejects preflight and transactional apply after both the asset and mapping move away from verified bytes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'immich-completed-path-drift-'));
+    StorageCore.setMediaLocation(root);
+    const pathA = join(root, 'verified-a.jpg');
+    const pathB = join(root, 'unverified-b.jpg');
+    const bytesA = Buffer.from('verified bytes');
+    const bytesB = Buffer.from('different replacement bytes');
+    const user = mediumFactory.userInsert();
+    const asset = mediumFactory.assetInsert({
+      ownerId: user.id,
+      originalPath: pathA,
+      checksum: fileDigest('sha1', bytesA),
+      checksumAlgorithm: ChecksumAlgorithm.sha1File,
+    });
+    try {
+      await Promise.all([writeFile(pathA, bytesA), writeFile(pathB, bytesB)]);
+      await db.insertInto('user').values(user).execute();
+      await db.insertInto('asset').values(asset).execute();
+      await sql`
+        INSERT INTO immich_fork.asset_checksum
+          ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount")
+        VALUES (
+          ${asset.id}::uuid, ${fileDigest('sha1', bytesA)}, ${fileDigest('sha256', bytesA)},
+          ${bytesA.length}, ARRAY[${pathA}], 1
+        )
+      `.execute(db);
+      await sql`
+        INSERT INTO immich_fork.asset_physical_file ("assetId", "physicalFileId", "upstreamPath")
+        VALUES (${asset.id}::uuid, NULL, ${pathA})
+      `.execute(db);
+      const verification = new ForkCutoverVerificationService(new ForkCutoverVerificationRepository(db));
+      const run = await verification.start('backup-completed-path-drift', 'snapshot-completed-path-drift');
+      await verification.resume(run.id, 1);
+
+      await db.updateTable('asset').set({ originalPath: pathB }).where('id', '=', asset.id!).execute();
+      await sql`
+        UPDATE immich_fork.asset_physical_file SET "upstreamPath" = ${pathB}
+        WHERE "assetId" = ${asset.id}::uuid
+      `.execute(db);
+      const rootEvidence = await sql<{ assetPresent: boolean; approvedRoots: string[]; currentRoots: string[] }>`
+        SELECT asset.id IS NOT NULL AS "assetPresent", verification."approvedRoots",
+          ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[]) AS "currentRoots"
+        FROM immich_fork.cutover_verification_asset verification
+        LEFT JOIN public.asset asset ON asset.id = verification."assetId"
+        LEFT JOIN public.library library ON library.id = asset."libraryId"
+        WHERE verification."runId" = ${run.id}::uuid
+      `.execute(db);
+      expect(rootEvidence.rows[0]).toEqual({ assetPresent: true, approvedRoots: [root], currentRoots: [root] });
+      const failingRepository = new FailingPreCommitRepository(db, LoggingRepository.create(), new ConfigRepository());
+      const { sut } = newTestService(ForkSchemaCutoverService, { database: failingRepository });
+      StorageCore.setMediaLocation(root);
+      const report = await sut.preflight('backup-completed-path-drift', 'snapshot-completed-path-drift');
+
+      expect(report.mappingCoverage.valid).toBe(true);
+      expect(report.storageVerification).toMatchObject({
+        assetCount: 1,
+        evidenceAssetCount: 1,
+        failureCount: 0,
+        rootDriftCount: 1,
+        verifiedCount: 1,
+      });
+      expect.soft(report.ready).toBe(false);
+      expect.soft(report.blockers).toContain('Storage verification checkpoint evidence is invalid');
+      await expect(
+        sut.apply(report.digest, 'backup-completed-path-drift', 'snapshot-completed-path-drift'),
+      ).rejects.toThrow('Storage verification checkpoint evidence is invalid');
+    } finally {
+      await sql`TRUNCATE immich_fork.cutover_verification_asset, immich_fork.cutover_verification_run`.execute(db);
+      await sql`TRUNCATE immich_fork.asset_physical_file, immich_fork.asset_checksum`.execute(db);
+      await db.deleteFrom('asset').execute();
+      await db.deleteFrom('user').execute();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('rejects apply-time run ID, checkpoint ID, and digest drift', async () => {
