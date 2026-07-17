@@ -10,6 +10,23 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
     project.evaluationDependsOn(':app')
+
+    // Some plugins (home_widget 0.8.1) still compile Kotlin at jvmTarget 1.8 while their
+    // androidx dependencies ship JVM 11+ bytecode, which fails on a clean Gradle cache.
+    // Force every subproject onto the app's JVM 17 toolchain.
+    afterEvaluate {
+        if (project.hasProperty('android')) {
+            project.android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions.jvmTarget = '17'
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
