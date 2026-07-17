@@ -21101,6 +21101,7 @@
       "JobName": {
         "description": "Job name",
         "enum": [
+          "ForkSchemaBackfill",
           "AssetDelete",
           "AssetDeleteCheck",
           "AssetDetectFacesQueueAll",

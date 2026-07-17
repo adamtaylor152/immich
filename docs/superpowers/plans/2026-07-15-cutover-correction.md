@@ -51,7 +51,13 @@ it.each([
   { official: true, legacy: true, error: 'both workflow migration markers' },
   { official: false, legacy: false, error: 'no workflow migration marker' },
   { official: false, legacy: true, schema: 'mismatch', error: 'workflow schema fingerprint' },
-  { official: true, legacy: false, schema: 'post-update', later: ['templates-without-ledger'], error: 'workflow ledger/schema disagreement' },
+  {
+    official: true,
+    legacy: false,
+    schema: 'post-update',
+    later: ['templates-without-ledger'],
+    error: 'workflow ledger/schema disagreement',
+  },
 ])('fails closed for $error', ({ official, legacy, schema = 'post-update', later = [], error }) => {
   expect(() => classifyWorkflowCompatibility(fixture({ official, legacy, schema, later }))).toThrow(error);
 });
@@ -298,7 +304,13 @@ if (kinds.size !== BACKFILL_KINDS.length || BACKFILL_KINDS.some((kind) => !kinds
   blockers.push('Backfill progress does not contain the exact required kind set');
 }
 for (const row of evidence.backfills) {
-  if (row.remaining !== 0 || row.lastError || row.claimToken || row.claimedIds.length > 0 || !SHA256.test(row.digest ?? '')) {
+  if (
+    row.remaining !== 0 ||
+    row.lastError ||
+    row.claimToken ||
+    row.claimedIds.length > 0 ||
+    !SHA256.test(row.digest ?? '')
+  ) {
     blockers.push(`Backfill ${row.kind} is not durably complete`);
   }
 }

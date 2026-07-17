@@ -8339,6 +8339,7 @@ export enum QueueJobStatus {
     Paused = "paused"
 }
 export enum JobName {
+    ForkSchemaBackfill = "ForkSchemaBackfill",
     AssetDelete = "AssetDelete",
     AssetDeleteCheck = "AssetDeleteCheck",
     AssetDetectFacesQueueAll = "AssetDetectFacesQueueAll",

@@ -25,6 +25,7 @@
 ### Task 1: Certified Return Startup Guard and Handoff Evidence
 
 **Files:**
+
 - Create: `server/src/repositories/fork-handoff.repository.ts`
 - Create: `server/src/repositories/fork-handoff.repository.spec.ts`
 - Modify: `server/src/repositories/index.ts`
@@ -36,6 +37,7 @@
 - Test: `server/test/medium/specs/fork-schema/return-reconciliation.spec.ts`
 
 **Interfaces:**
+
 - Produces: `ForkReturnEvidence`
 - Produces: `ForkHandoffRepository.getReturnEvidence(kysely?): Promise<ForkReturnEvidence>`
 - Produces: `ForkHandoffRepository.assertCertifiedReturnLedger(kysely?): Promise<'v3.0.3'>`
@@ -44,10 +46,13 @@
 - [ ] **Step 1: Write failing exact-ledger and startup tests**
 
 ```ts
-it.each(['missing', 'extra', 'reordered', 'partial'])('rejects an %s official return ledger before migration', async (mutation) => {
-  await mutateOfficialLedger(db, mutation);
-  await expect(repository.assertCertifiedReturnLedger()).rejects.toThrow(/certified v3\.0\.3 ledger/);
-});
+it.each(['missing', 'extra', 'reordered', 'partial'])(
+  'rejects an %s official return ledger before migration',
+  async (mutation) => {
+    await mutateOfficialLedger(db, mutation);
+    await expect(repository.assertCertifiedReturnLedger()).rejects.toThrow(/certified v3\.0\.3 ledger/);
+  },
+);
 
 it('accepts exact v3.0.3 only while inactive at schema version 2 in maintenance mode', async () => {
   expect(await repository.getReturnEvidence()).toMatchObject({
@@ -63,6 +68,7 @@ it('accepts exact v3.0.3 only while inactive at schema version 2 in maintenance 
 - [ ] **Step 2: Run RED**
 
 Run:
+
 ```bash
 pnpm --filter immich exec vitest --config test/vitest.config.mjs --run src/repositories/fork-handoff.repository.spec.ts src/services/database.service.spec.ts src/services/database-backup.service.spec.ts --pool=forks --maxWorkers=1
 pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/fork-schema/return-reconciliation.spec.ts --pool=forks --maxWorkers=1
@@ -104,6 +110,7 @@ When isolated state is `inactive` at schema version 2, `DatabaseService` and res
 Run the RED commands plus startup/backup migration-mode suites.
 
 Commit:
+
 ```bash
 git add server/src/repositories server/src/services server/test/medium/specs/fork-schema/return-reconciliation.spec.ts
 git commit -m "fix(server): guard certified fork return startup"
@@ -114,6 +121,7 @@ git commit -m "fix(server): guard certified fork return startup"
 ### Task 2: Resumable Inactive Return Reconciliation
 
 **Files:**
+
 - Modify: `server/src/repositories/fork-schema.repository.ts`
 - Modify: `server/src/repositories/fork-schema.repository.mock.ts`
 - Modify: `server/src/repositories/fork-handoff.repository.ts`
@@ -122,6 +130,7 @@ git commit -m "fix(server): guard certified fork return startup"
 - Test: `server/test/medium/specs/fork-schema/return-reconciliation.spec.ts`
 
 **Interfaces:**
+
 - Produces: `ForkSchemaRepository.beginOrResumeReturnReconciliation(): Promise<void>`
 - Produces: `ForkSchemaRepository.claimReturnBatch(kind, size): Promise<BackfillClaim | null>`
 - Produces: `ForkHandoffRepository.archiveAndDeleteOrphans(kysely?): Promise<OrphanArchiveSummary>`
@@ -178,6 +187,7 @@ async claimReturnBatch(kind: BackfillKind, size: number): Promise<BackfillClaim 
 Run migration-service units plus return-reconciliation, privacy/album, enrichment/config/smart, health/score/frame, and checksum/storage medium suites.
 
 Commit:
+
 ```bash
 git add server/src/repositories server/src/services server/test/medium/specs/fork-schema
 git commit -m "feat(server): reconcile fork sidecars after official use"
@@ -188,6 +198,7 @@ git commit -m "feat(server): reconcile fork sidecars after official use"
 ### Task 3: Atomic Activation and Operator Commands
 
 **Files:**
+
 - Create: `server/src/services/fork-handoff.service.ts`
 - Create: `server/src/services/fork-handoff.service.spec.ts`
 - Create: `server/src/commands/fork-handoff.command.ts`
@@ -198,6 +209,7 @@ git commit -m "feat(server): reconcile fork sidecars after official use"
 - Test: `server/test/medium/specs/fork-schema/return-reconciliation.spec.ts`
 
 **Interfaces:**
+
 - Produces: `ForkHandoffService.prepareOfficial(): Promise<OfficialHandoffCheckpoint>`
 - Produces: `ForkHandoffService.prepareFork(options: { batchSize: number }): Promise<ReconciliationReport>`
 - Produces CLI: `immich-admin fork-handoff prepare-official`
@@ -240,6 +252,7 @@ Commands print canonical one-line JSON. `prepare-fork` rejects invalid batch siz
 Run all new units/medium, Task 1–5/Task 8 regressions, startup/backup, check/lint/format/diff, GitNexus compare/staged.
 
 Commit:
+
 ```bash
 git add server/src server/test/medium/specs/fork-schema/return-reconciliation.spec.ts
 git commit -m "feat(server): support official handoff and fork return"

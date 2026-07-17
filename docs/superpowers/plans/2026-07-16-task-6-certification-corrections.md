@@ -20,11 +20,13 @@
 ### Task 1: Full fixture and evidence contract
 
 **Files:**
+
 - Modify: `e2e/src/specs/server/fork-schema-certification.ts`
 - Modify: `e2e/src/specs/server/fork-schema-current-fork-cutover.e2e-spec.ts`
 - Modify: `e2e/src/specs/server/fork-schema-roundtrip.e2e-spec.ts`
 
 **Interfaces:**
+
 - Produces saved public counts/digests and canonical evidence for privacy, albums, enrichment, automation, health, storage, and checksum.
 - Produces IDs for a retained original asset, a deleted original asset with sidecars, an original album, and the original workflow.
 
@@ -37,10 +39,12 @@
 ### Task 2: Real process transitions and second official restart
 
 **Files:**
+
 - Modify: `scripts/test-fork-roundtrip.sh`
 - Modify: `docs/docs/administration/upstream-handoff.md`
 
 **Interfaces:**
+
 - Produces two healthy official boots on the same database.
 - Produces maintenance reconciliation followed by a one-shot maintenance disable and healthy normal fork API/microservices boot.
 
@@ -53,11 +57,13 @@
 ### Task 3: CI, full verification, and correction commit
 
 **Files:**
+
 - Modify: `.github/workflows/fork-roundtrip.yml`
 - Modify: `.superpowers/sdd/task-6-report.md`
 - Modify: `docs/superpowers/plans/2026-07-15-upstream-reversion-compatible-fork-schema.md`
 
 **Interfaces:**
+
 - Produces CI triggers for repositories, commands, admin module, storage initialization, fork schema, harness, docs, and compatibility workflows.
 
 - [x] **Step 1: Broaden CI paths** to `server/src/repositories/**`, `server/src/commands/**`, `server/src/app.module.ts`, `server/src/services/storage.service.ts`, and existing fork-schema/e2e/script surfaces.

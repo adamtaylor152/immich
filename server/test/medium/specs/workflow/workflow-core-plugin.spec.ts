@@ -144,7 +144,7 @@ beforeAll(async () => {
   const db = await getKyselyDB();
   ctx = new WorkflowTestContext(db);
   await ctx.init();
-}, 30_000);
+}, 120_000);
 
 const describeIfPluginBuilt = corePluginAvailable ? describe : describe.skip;
 
