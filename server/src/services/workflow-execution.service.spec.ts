@@ -44,11 +44,14 @@ describe(WorkflowExecutionService.name, () => {
     const [, inProcessOptions] = mocks.plugin.load.mock.calls[0]!;
     const [, workerOptions] = mocks.plugin.load.mock.calls[1]!;
     const officialHostAbi = ['addAssetsToAlbum', 'addAssetsToAlbums', 'createAlbum', 'httpRequest', 'searchAlbums'];
+    // albumAddAssets is a fork-legacy alias the un-ported plugin-core wasm still imports.
+    // Official plugins only import from the official set, so the superset preserves the ABI.
+    const hostFunctions = [...officialHostAbi, 'albumAddAssets'].toSorted();
 
     expect(inProcessOptions.runInWorker).toBe(false);
-    expect(Object.keys(inProcessOptions.functions ?? {}).toSorted()).toEqual(officialHostAbi);
+    expect(Object.keys(inProcessOptions.functions ?? {}).toSorted()).toEqual(hostFunctions);
     expect(workerOptions.runInWorker).toBe(true);
-    expect(Object.keys(workerOptions.functions ?? {}).toSorted()).toEqual(officialHostAbi);
+    expect(Object.keys(workerOptions.functions ?? {}).toSorted()).toEqual(hostFunctions);
   });
 
   it('preserves the fork privacy auth gate for official host functions', async () => {
