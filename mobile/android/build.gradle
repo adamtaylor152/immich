@@ -13,18 +13,18 @@ subprojects {
 
     // Some plugins (home_widget 0.8.1) still compile Kotlin at jvmTarget 1.8 while their
     // androidx dependencies ship JVM 11+ bytecode, which fails on a clean Gradle cache.
-    // Force every subproject onto the app's JVM 17 toolchain.
-    afterEvaluate {
-        if (project.hasProperty('android')) {
-            project.android {
-                compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_17
-                    targetCompatibility JavaVersion.VERSION_17
-                }
+    // Force every subproject onto the app's JVM 17 toolchain. Uses lazy configuration
+    // (configureEach / plugins.withId) because evaluationDependsOn(':app') means some
+    // projects are already evaluated when this block runs.
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions.jvmTarget = '17'
+    }
+    plugins.withId('com.android.library') {
+        android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
             }
-        }
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions.jvmTarget = '17'
         }
     }
 }
