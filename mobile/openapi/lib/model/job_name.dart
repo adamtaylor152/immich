@@ -23,6 +23,7 @@ class JobName {
 
   String toJson() => value;
 
+  static const forkSchemaBackfill = JobName._(r'ForkSchemaBackfill');
   static const assetDelete = JobName._(r'AssetDelete');
   static const assetDeleteCheck = JobName._(r'AssetDeleteCheck');
   static const assetDetectFacesQueueAll = JobName._(r'AssetDetectFacesQueueAll');
@@ -97,6 +98,7 @@ class JobName {
 
   /// List of all possible values in this [enum][JobName].
   static const values = <JobName>[
+    forkSchemaBackfill,
     assetDelete,
     assetDeleteCheck,
     assetDetectFacesQueueAll,
@@ -206,6 +208,7 @@ class JobNameTypeTransformer {
   JobName? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'ForkSchemaBackfill': return JobName.forkSchemaBackfill;
         case r'AssetDelete': return JobName.assetDelete;
         case r'AssetDeleteCheck': return JobName.assetDeleteCheck;
         case r'AssetDetectFacesQueueAll': return JobName.assetDetectFacesQueueAll;

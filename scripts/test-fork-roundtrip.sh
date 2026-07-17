@@ -125,7 +125,22 @@ trap on_error ERR
 trap cleanup EXIT
 
 echo "Pulling exact official image ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"
-docker pull "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"
+# ghcr.io intermittently returns "toomanyrequests" when parallel CI lanes pull at once
+pulled=false
+for attempt in 1 2 3 4 5; do
+  if docker pull "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG"; then
+    pulled=true
+    break
+  fi
+  if [[ "$attempt" -lt 5 ]]; then
+    echo "docker pull failed (attempt $attempt/5); retrying in $((attempt * 15))s" >&2
+    sleep "$((attempt * 15))"
+  fi
+done
+if [[ "$pulled" != true ]]; then
+  echo "docker pull failed after 5 attempts" >&2
+  exit 1
+fi
 official_digest="$(docker image inspect "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG" --format '{{index .RepoDigests 0}}')"
 expected_official_digest="ghcr.io/immich-app/immich-server@$manifest_digest"
 [[ "$official_digest" == "$expected_official_digest" ]] || {
