@@ -71,6 +71,10 @@ export class WorkflowExecutionService extends BaseService {
     const addAssetsToAlbum = this.wrap<[id: string, dto: BulkIdsDto]>((authDto, _context, args) =>
       albumService.addAssets(authDto, ...args),
     );
+    // ponytail: legacy host-function name — the packages/plugin-core wasm still imports
+    // albumAddAssets, and wasm instantiation fails (hanging plugin load) if any import is
+    // missing. Drop when plugin-core/plugin-sdk are ported to the upstream host API.
+    const albumAddAssets = addAssetsToAlbum;
     const addAssetsToAlbums = this.wrap<[dto: AlbumsAddAssetsDto]>((authDto, _context, args) =>
       albumService.addAssetsToAlbums(authDto, ...args),
     );
@@ -106,6 +110,7 @@ export class WorkflowExecutionService extends BaseService {
       searchAlbums,
       createAlbum,
       addAssetsToAlbum,
+      albumAddAssets,
       addAssetsToAlbums,
       httpRequest,
     };
@@ -114,6 +119,7 @@ export class WorkflowExecutionService extends BaseService {
       searchAlbums: dummy,
       createAlbum: dummy,
       addAssetsToAlbum: dummy,
+      albumAddAssets: dummy,
       addAssetsToAlbums: dummy,
       httpRequest: dummy,
     };

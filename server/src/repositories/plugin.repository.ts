@@ -267,9 +267,16 @@ export class PluginRepository {
     );
 
     try {
-      await pool.ready();
+      // pool.ready() never settles if the factory keeps rejecting (e.g. a wasm import the
+      // host does not provide), so surface the first creation error instead of hanging.
+      await new Promise<void>((resolve, reject) => {
+        pool.once('factoryCreateError', reject);
+        pool.ready().then(resolve, reject);
+      });
       this.pluginMap.set(key, { pool, label });
     } catch (error: Error | any) {
+      await pool.drain().catch(() => {});
+      await pool.clear().catch(() => {});
       throw new Error(`Unable to instantiate plugin: ${key}`, { cause: error });
     }
   }
