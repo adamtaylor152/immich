@@ -19,10 +19,10 @@ subprojects {
     tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
         kotlinOptions.jvmTarget = '17'
     }
-    tasks.withType(JavaCompile).configureEach {
-        sourceCompatibility = '17'
-        targetCompatibility = '17'
-    }
+    // Plugin modules keep their own Java compileOptions (AGP convention mapping overrides
+    // task-level JavaCompile settings), so Kotlin 17 vs Java 1.8 trips KGP's consistency
+    // check; kotlin.jvm.target.validation.mode=warning in gradle.properties demotes it.
+    // Java 1.8 bytecode alongside Kotlin 17 is fine at runtime (D8 desugars both).
 }
 
 tasks.register("clean", Delete) {
