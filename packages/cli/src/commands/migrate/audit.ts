@@ -47,9 +47,7 @@ export async function audit(
       break;
     }
     const res = await to.checkBulkUpload(part.map((r) => ({ id: r.aId, checksum: r.bChecksum! })));
-    const present = new Set(
-      res.results.filter((r) => r.action === AssetUploadAction.Reject).map((r) => r.id),
-    );
+    const present = new Set(res.results.filter((r) => r.action === AssetUploadAction.Reject).map((r) => r.id));
     for (const row of part) {
       if (!present.has(row.aId)) {
         missing.push({ aId: row.aId, filename: row.filename, reason: 'absent-on-B' });

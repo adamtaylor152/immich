@@ -1,8 +1,8 @@
 import { Permission } from '@immich/sdk';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { audit, type AuditReport } from 'src/commands/migrate/audit';
 import { migrateAlbums } from 'src/commands/migrate/albums';
+import { audit, type AuditReport } from 'src/commands/migrate/audit';
 import { ServerClient } from 'src/commands/migrate/client';
 import { Controller } from 'src/commands/migrate/controller';
 import { dedupe } from 'src/commands/migrate/dedupe';
@@ -83,13 +83,19 @@ async function runPipeline(
   controller.running = true;
   try {
     await enumerate(from, ledger, options, controller);
-    if (controller.stopped) {return undefined;}
+    if (controller.stopped) {
+      return undefined;
+    }
     await dedupe(to, ledger, controller);
-    if (controller.stopped) {return undefined;}
+    if (controller.stopped) {
+      return undefined;
+    }
 
     if (!options.dryRun) {
       await transferAndOrganize(from, to, ledger, options, controller, tmpDir);
-      if (controller.stopped) {return undefined;}
+      if (controller.stopped) {
+        return undefined;
+      }
     }
 
     return await audit(to, ledger, controller, auditPath, meta);
@@ -107,15 +113,25 @@ async function transferAndOrganize(
   tmpDir: string,
 ) {
   await transfer(from, to, ledger, options, controller, tmpDir);
-  if (controller.stopped) {return;}
+  if (controller.stopped) {
+    return;
+  }
   await applyMetadata(from, to, ledger, options, controller);
-  if (controller.stopped) {return;}
+  if (controller.stopped) {
+    return;
+  }
   await migrateTags(from, to, ledger, options, controller);
-  if (controller.stopped) {return;}
+  if (controller.stopped) {
+    return;
+  }
   await migrateAlbums(from, to, ledger, options, controller);
-  if (controller.stopped) {return;}
+  if (controller.stopped) {
+    return;
+  }
   await migrateStacks(to, ledger, controller);
-  if (controller.stopped) {return;}
+  if (controller.stopped) {
+    return;
+  }
   await migratePeople(from, to, ledger, options, controller);
 }
 
@@ -134,7 +150,9 @@ const printSummary = (report: AuditReport | undefined, ledgerPath: string, audit
   if (report.ok) {
     console.log('\n✅ PASS — every asset is present on SERVER B. SERVER A is safe to decommission.');
   } else {
-    console.log(`\n⚠️  INCOMPLETE — ${t.missing} asset(s) missing, ${t.failed} failed. Re-run to resume; see the audit report.`);
+    console.log(
+      `\n⚠️  INCOMPLETE — ${t.missing} asset(s) missing, ${t.failed} failed. Re-run to resume; see the audit report.`,
+    );
   }
 };
 
@@ -169,7 +187,13 @@ async function runMigrate(raw: MigrateRawOptions) {
 
   const ledger = new Ledger(options.ledger);
   const startedAt = new Date().toISOString();
-  ledger.initRun({ fromUrl: from.baseUrl, toUrl: to.baseUrl, userEmail: toUser.email, startedAt, dryRun: options.dryRun });
+  ledger.initRun({
+    fromUrl: from.baseUrl,
+    toUrl: to.baseUrl,
+    userEmail: toUser.email,
+    startedAt,
+    dryRun: options.dryRun,
+  });
   if (options.retryFailed) {
     ledger.clearErrors();
   }

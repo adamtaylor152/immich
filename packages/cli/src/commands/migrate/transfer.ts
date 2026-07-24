@@ -4,11 +4,11 @@ import { rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { Queue } from 'src/queue';
 import type { ServerClient } from 'src/commands/migrate/client';
 import type { Controller } from 'src/commands/migrate/controller';
 import type { Ledger } from 'src/commands/migrate/ledger';
 import type { AssetRecord, MigrateOptions } from 'src/commands/migrate/types';
+import { Queue } from 'src/queue';
 import { sha256 } from 'src/utils';
 
 const BATCH = 1000;
@@ -42,7 +42,7 @@ export async function transfer(
         throw new Error('empty response body from download');
       }
       await pipeline(Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmp));
-      const {size} = await stat(tmp);
+      const { size } = await stat(tmp);
       const checksum = await sha256(tmp, 'base64');
       const uploaded = await to.uploadAsset({
         filepath: tmp,

@@ -2,13 +2,13 @@ import { AssetUploadAction } from '@immich/sdk';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { audit } from 'src/commands/migrate/audit';
 import type { ServerClient } from 'src/commands/migrate/client';
 import { Controller } from 'src/commands/migrate/controller';
 import { dedupe } from 'src/commands/migrate/dedupe';
 import { Ledger } from 'src/commands/migrate/ledger';
 import type { AssetRecord } from 'src/commands/migrate/types';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const asset = (aId: string, checksum: string, over: Partial<AssetRecord> = {}): AssetRecord => ({
   aId,
@@ -32,7 +32,9 @@ const asset = (aId: string, checksum: string, over: Partial<AssetRecord> = {}): 
 const fakeB = (present: Set<string>, spy?: { calls: number }) =>
   ({
     checkBulkUpload: async (assets: Array<{ id: string; checksum: string }>) => {
-      if (spy) {spy.calls++;}
+      if (spy) {
+        spy.calls++;
+      }
       return {
         results: assets.map((a) => ({
           id: a.id,
@@ -60,16 +62,31 @@ describe('migrate ledger + phases', () => {
 
   it('resume: work queues exclude uploaded and errored rows; --retry-failed re-includes', () => {
     ledger.upsertAssets([asset('a1', 'c1'), asset('a2', 'c2'), asset('a3', 'c3')]);
-    expect(ledger.nextUploadBatch(10).map((a) => a.aId).toSorted()).toEqual(['a1', 'a2', 'a3']);
+    expect(
+      ledger
+        .nextUploadBatch(10)
+        .map((a) => a.aId)
+        .toSorted(),
+    ).toEqual(['a1', 'a2', 'a3']);
 
     ledger.setAssetUploaded('a1', 'b1', 'upload', 'c1');
-    expect(ledger.nextUploadBatch(10).map((a) => a.aId).toSorted()).toEqual(['a2', 'a3']);
+    expect(
+      ledger
+        .nextUploadBatch(10)
+        .map((a) => a.aId)
+        .toSorted(),
+    ).toEqual(['a2', 'a3']);
 
     ledger.setAssetError('a2', 'network boom');
     expect(ledger.nextUploadBatch(10).map((a) => a.aId)).toEqual(['a3']); // errored row skipped, no infinite loop
 
     ledger.clearErrors();
-    expect(ledger.nextUploadBatch(10).map((a) => a.aId).toSorted()).toEqual(['a2', 'a3']);
+    expect(
+      ledger
+        .nextUploadBatch(10)
+        .map((a) => a.aId)
+        .toSorted(),
+    ).toEqual(['a2', 'a3']);
   });
 
   it('--retry-failed reopens people so names can be reattached after B finishes face detection', () => {
@@ -136,7 +153,13 @@ describe('migrate ledger + phases', () => {
     expect(report.missing.find((m) => m.aId === 'a3')?.reason).toBe('not-transferred');
 
     // Now everything present on B -> green light.
-    const okReport = await audit(fakeB(new Set(['c1', 'c2', 'c3'])), reuploadAll(ledger), new Controller(), join(dir, 'audit2.json'), { from: 'A', to: 'B', user: 'u@x' });
+    const okReport = await audit(
+      fakeB(new Set(['c1', 'c2', 'c3'])),
+      reuploadAll(ledger),
+      new Controller(),
+      join(dir, 'audit2.json'),
+      { from: 'A', to: 'B', user: 'u@x' },
+    );
     expect(okReport.ok).toBe(true);
     expect(okReport.missing).toHaveLength(0);
   });

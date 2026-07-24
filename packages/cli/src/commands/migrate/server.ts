@@ -94,20 +94,21 @@ export function startDashboard(
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'POST') {
       switch (url) {
-      case '/pause': {
-      controller.pause();
-      break;
-      }
-      case '/resume': {
-      controller.resume();
-      break;
-      }
-      case '/stop': { {
-      controller.stop();
-      // No default
-      }
-      break;
-      }
+        case '/pause': {
+          controller.pause();
+          break;
+        }
+        case '/resume': {
+          controller.resume();
+          break;
+        }
+        case '/stop': {
+          {
+            controller.stop();
+            // No default
+          }
+          break;
+        }
       }
       res.writeHead(204).end();
       return;

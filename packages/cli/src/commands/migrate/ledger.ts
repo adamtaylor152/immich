@@ -133,8 +133,7 @@ export class Ledger {
 
   // --- cursors ---
   getCursor(name: string): string | undefined {
-    return (this.stmt('SELECT value FROM cursor WHERE name = ?').get(name) as { value: string } | undefined)
-      ?.value;
+    return (this.stmt('SELECT value FROM cursor WHERE name = ?').get(name) as { value: string } | undefined)?.value;
   }
   setCursor(name: string, value: string) {
     this.db
@@ -144,7 +143,8 @@ export class Ledger {
 
   // --- assets ---
   upsertAsset(r: AssetRecord) {
-    this.stmt(`
+    this.stmt(
+      `
     INSERT INTO asset (a_id, checksum, filename, type, file_created_at, file_modified_at, is_favorite,
       visibility, live_video_a_id, description, date_time_original, latitude, longitude, rating)
     VALUES (@a_id, @checksum, @filename, @type, @file_created_at, @file_modified_at, @is_favorite,
@@ -156,7 +156,8 @@ export class Ledger {
       live_video_a_id = excluded.live_video_a_id, description = excluded.description,
       date_time_original = excluded.date_time_original, latitude = excluded.latitude,
       longitude = excluded.longitude, rating = excluded.rating
-    `).run({
+    `,
+    ).run({
       a_id: r.aId,
       checksum: r.checksum,
       filename: r.filename,
@@ -207,8 +208,10 @@ export class Ledger {
   }
 
   bId(aId: string): string | undefined {
-    return (this.stmt('SELECT b_id FROM asset WHERE a_id = ?').get(aId) as { b_id: string | null } | undefined)
-      ?.b_id ?? undefined;
+    return (
+      (this.stmt('SELECT b_id FROM asset WHERE a_id = ?').get(aId) as { b_id: string | null } | undefined)?.b_id ??
+      undefined
+    );
   }
 
   // Batches are materialized (`.all()`), never streamed, because better-sqlite3 forbids
@@ -297,8 +300,10 @@ export class Ledger {
     }));
   }
   albumBId(aId: string): string | undefined {
-    return (this.stmt('SELECT b_id FROM album WHERE a_id = ?').get(aId) as { b_id: string | null } | undefined)
-      ?.b_id ?? undefined;
+    return (
+      (this.stmt('SELECT b_id FROM album WHERE a_id = ?').get(aId) as { b_id: string | null } | undefined)?.b_id ??
+      undefined
+    );
   }
   setAlbumBId(aId: string, bId: string) {
     this.stmt('UPDATE album SET b_id = ? WHERE a_id = ?').run(bId, aId);

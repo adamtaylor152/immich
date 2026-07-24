@@ -1,9 +1,9 @@
 import type { UpdateAssetDto } from '@immich/sdk';
-import { Queue } from 'src/queue';
 import type { ServerClient } from 'src/commands/migrate/client';
 import type { Controller } from 'src/commands/migrate/controller';
 import type { Ledger } from 'src/commands/migrate/ledger';
 import type { AssetRecord, MigrateOptions } from 'src/commands/migrate/types';
+import { Queue } from 'src/queue';
 
 const BATCH = 1000;
 const ML_ENRICHMENT_KEY = 'ml-enrichment';

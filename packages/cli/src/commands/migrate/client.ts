@@ -125,9 +125,7 @@ export class ServerClient {
 
   private async json<T>(method: string, path: string, body?: unknown): Promise<T> {
     const init: RequestInit =
-      body === undefined
-        ? {}
-        : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } };
+      body === undefined ? {} : { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } };
     const response = await this.request(method, path, init);
     return (await response.json()) as T;
   }
