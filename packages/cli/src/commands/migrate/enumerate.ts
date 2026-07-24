@@ -81,8 +81,7 @@ export async function enumerate(from: ServerClient, ledger: Ledger, options: Mig
     ledger.upsertStack({ primaryAId: stack.primaryAssetId, memberAIds: stack.assets.map((a) => a.id) });
   }
   if (options.faces) {
-    const people = await from.getAllPeople();
-    for (const person of people.people) {
+    for (const person of await from.getAllPeople()) {
       if (!person.name) {
         continue; // unnamed clusters aren't worth recreating; B will re-cluster
       }

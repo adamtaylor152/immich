@@ -50,9 +50,13 @@ export async function applyMetadata(
     }
     if (asset.livePhotoVideoAId) {
       const videoBId = ledger.bId(asset.livePhotoVideoAId);
-      if (videoBId) {
-        dto.livePhotoVideoId = videoBId;
+      if (!videoBId) {
+        // The paired video hasn't been transferred yet. Silently dropping the link would
+        // lose the pairing for good, since this asset would be marked applied and never
+        // revisited. Fail instead: it stays pending and resolves once the video lands.
+        throw new Error(`live photo video ${asset.livePhotoVideoAId} not yet on destination`);
       }
+      dto.livePhotoVideoId = videoBId;
     }
     if (Object.keys(dto).length > 0) {
       await to.updateAsset(bId, dto);

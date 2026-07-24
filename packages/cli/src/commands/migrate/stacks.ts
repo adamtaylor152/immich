@@ -25,7 +25,13 @@ export async function migrateStacks(to: ServerClient, ledger: Ledger, controller
       ledger.setStackDone(stack.primaryAId, '');
       continue;
     }
-    const created = await to.createStack(bAssetIds);
-    ledger.setStackDone(stack.primaryAId, created.id);
+    try {
+      const created = await to.createStack(bAssetIds);
+      ledger.setStackDone(stack.primaryAId, created.id);
+    } catch (error) {
+      // Leave it un-done so a later run retries. One rejected stack must not abort the
+      // phase, which would also skip the audit that proves the assets themselves landed.
+      controller.log(`stack ${stack.primaryAId}: failed — ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

@@ -55,27 +55,33 @@ export async function migrateTags(
     if (controller.stopped) {
       return;
     }
-    const bTagId = valueToBId.get(tag.value);
+    // Fall back to the id persisted on a previous run if this upsert didn't return it.
+    const bTagId = valueToBId.get(tag.value) ?? tag.bId;
     if (!bTagId) {
       continue;
     }
-    const direct = new Set(await hier(tag.aId));
-    for (const child of directChildren(tag.value)) {
-      for (const id of await hier(child.aId)) {
-        direct.delete(id);
+    try {
+      const direct = new Set(await hier(tag.aId));
+      for (const child of directChildren(tag.value)) {
+        for (const id of await hier(child.aId)) {
+          direct.delete(id);
+        }
       }
-    }
-    const bAssetIds: string[] = [];
-    for (const aId of direct) {
-      const bId = ledger.bId(aId);
-      if (bId) {
-        bAssetIds.push(bId);
+      const bAssetIds: string[] = [];
+      for (const aId of direct) {
+        const bId = ledger.bId(aId);
+        if (bId) {
+          bAssetIds.push(bId);
+        }
       }
+      for (const part of chunk(bAssetIds, 500)) {
+        await to.bulkTagAssets([bTagId], part);
+      }
+      ledger.setTagAssigned(tag.aId);
+      controller.log(`tags assigned: ${tag.value}`);
+    } catch (error) {
+      // Left unassigned so a later run retries; don't abort the phase or skip the audit.
+      controller.log(`tag ${tag.value}: failed — ${error instanceof Error ? error.message : String(error)}`);
     }
-    for (const part of chunk(bAssetIds, 500)) {
-      await to.bulkTagAssets([bTagId], part);
-    }
-    ledger.setTagAssigned(tag.aId);
-    controller.log(`tags assigned: ${tag.value}`);
   }
 }

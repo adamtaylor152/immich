@@ -388,12 +388,14 @@ An admin key will not work. In Immich an API key can only reach the library of t
 
 Sign in as the user on each server, go to **Account Settings → API Keys**, and create a key with:
 
-| Server                        | Required permissions                                                                           | Optional                                           |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Source** (moving _from_)    | `asset.read`, `asset.download`, `album.read`, `tag.read`                                       | `stack.read`, `person.read`                        |
-| **Destination** (moving _to_) | `asset.upload`, `asset.update`, `album.create`, `albumAsset.create`, `tag.create`, `tag.asset` | `stack.create`, `person.create`, `person.reassign` |
+| Server                        | Required permissions                                                                           | Optional                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Source** (moving _from_)    | `asset.read`, `asset.download`, `album.read`, `tag.read`                                       | `stack.read`, `person.read`                                     |
+| **Destination** (moving _to_) | `asset.upload`, `asset.update`, `album.create`, `albumAsset.create`, `tag.create`, `tag.asset` | `stack.create`, `person.create`, `person.reassign`, `face.read` |
 
 A key with the `all` permission also works. The command verifies permissions on startup and names anything missing. The optional ones only affect stacks and people; without them those items are skipped and everything else still migrates.
+
+If the two accounts have different email addresses the command warns and continues, since the same person often has different logins on each server — but check the warning, because everything is uploaded into whichever account the destination key belongs to.
 
 If the user doesn't exist on the destination yet, create the account there first, then sign in as them to generate the key.
 
@@ -449,7 +451,7 @@ Progress lives in the ledger file (`./immich-migrate.sqlite` by default). Keep i
 
 ### Confirming it's safe to decommission
 
-Every run ends with an audit that re-checks **every single source asset against the destination by file hash**, then prints a summary:
+A run that reaches the end performs an audit that re-checks **every single source asset against the destination by file hash**, then prints a summary. (If you stop a run part-way, the audit is reported as `AUDIT INCOMPLETE` rather than a pass — it can only clear the source server once it has checked everything.)
 
 ```text
 ──────── Migration summary ────────
@@ -495,6 +497,8 @@ Anything short of `PASS` names the specific assets still missing, both on screen
 > People's **names** always transfer, but linking them back to faces is best effort: the destination re-runs its own face detection, so a face must already be detected there before a name can be attached to it.
 >
 > For the best result, migrate with `--no-faces` first, wait for the destination to finish its face-detection jobs, then re-run without the flag to attach names to the faces it found. If people were already processed too early, re-run with `--retry-failed` to try them again.
+>
+> When an asset has **more than one** face, there's no way to tell which one was the named person (face data doesn't cross between servers), so those are skipped rather than risk putting the wrong name on someone. The per-person progress line reports how many faces were attached and how many were skipped as ambiguous or not-yet-detected.
 
 ### Options
 

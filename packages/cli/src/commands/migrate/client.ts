@@ -2,6 +2,7 @@ import type {
   AlbumResponseDto,
   ApiKeyResponseDto,
   AssetBulkUploadCheckResponseDto,
+  AssetFaceResponseDto,
   AssetMediaResponseDto,
   AssetMetadataResponseDto,
   AssetMetadataUpsertItemDto,
@@ -77,6 +78,7 @@ export class ServerClient {
     readonly baseUrl: string,
     private readonly apiKey: string,
     readonly retries = 4,
+    private readonly timeoutMs = 10 * 60 * 1000,
   ) {}
 
   /** Resolve the real API endpoint via `.well-known/immich`, then verify the key. */
@@ -101,6 +103,10 @@ export class ServerClient {
           ...init,
           method,
           redirect: 'error',
+          // Without a timeout a half-open connection hangs the whole migration indefinitely.
+          // Applied per attempt, so a timeout is just another retryable network failure.
+          // Generous, because uploads and downloads of large originals live on this path.
+          signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
           headers: { 'x-api-key': this.apiKey, Accept: 'application/json', ...init.headers },
         });
         if (response.ok) {
@@ -140,7 +146,20 @@ export class ServerClient {
   getAlbumInfo = (id: string) => this.json<AlbumResponseDto>('GET', `/albums/${id}`);
   getAllTags = () => this.json<TagResponseDto[]>('GET', '/tags');
   searchStacks = () => this.json<StackResponseDto[]>('GET', '/stacks');
-  getAllPeople = () => this.json<PeopleResponseDto>('GET', `/people${buildQuery({ withHidden: true, size: 1000 })}`);
+  /** All people, following pagination — a large library can have well over one page. */
+  async getAllPeople(): Promise<PersonResponseDto[]> {
+    const people: PersonResponseDto[] = [];
+    for (let page = 1; ; page++) {
+      const res = await this.json<PeopleResponseDto>(
+        'GET',
+        `/people${buildQuery({ withHidden: true, size: 500, page })}`,
+      );
+      people.push(...res.people);
+      if (!res.hasNextPage) {
+        return people;
+      }
+    }
+  }
 
   // --- dedup / download ---
   checkBulkUpload = (assets: Array<{ id: string; checksum: string }>) =>
@@ -196,6 +215,8 @@ export class ServerClient {
 
   searchPerson = (name: string) =>
     this.json<PersonResponseDto[]>('GET', `/search/person${buildQuery({ name, withHidden: true })}`);
+  /** Faces detected on an asset, each with the person it currently belongs to (if any). */
+  getFaces = (assetId: string) => this.json<AssetFaceResponseDto[]>('GET', `/faces${buildQuery({ id: assetId })}`);
   createPerson = (dto: PersonCreateDto) => this.json<PersonResponseDto>('POST', '/people', dto);
   reassignFaces = (personId: string, data: Array<{ assetId: string; personId: string }>) =>
     this.json<PersonResponseDto>('PUT', `/people/${personId}/reassign`, { data });

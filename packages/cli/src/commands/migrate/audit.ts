@@ -5,11 +5,18 @@ import type { ServerClient } from 'src/commands/migrate/client';
 import type { Controller } from 'src/commands/migrate/controller';
 import type { Ledger } from 'src/commands/migrate/ledger';
 
+const PAGE = 20_000;
+const MAX_MISSING_DETAIL = 5000;
+
 export interface AuditReport {
   generatedAt: string;
   from: string;
   to: string;
   user: string;
+  /** False when the audit was interrupted before checking every asset. */
+  complete: boolean;
+  /** How many transferred assets were actually verified against the destination. */
+  verified: number;
   ok: boolean;
   totals: Record<string, number>;
   missing: Array<{ aId: string; filename: string; reason: string }>;
@@ -28,33 +35,53 @@ export async function audit(
   meta: { from: string; to: string; user: string },
 ): Promise<AuditReport> {
   controller.setPhase('audit');
-  const rows = ledger.auditRows();
   const missing: AuditReport['missing'] = [];
-
-  // Anything never transferred is definitively missing.
-  const verifiable = rows.filter((r) => r.uploaded && r.bChecksum);
-  for (const row of rows) {
-    if (!row.uploaded || !row.bChecksum) {
-      missing.push({ aId: row.aId, filename: row.filename, reason: 'not-transferred' });
+  let missingCount = 0;
+  // Keep the report readable (and bounded) if a run went badly wrong; the count stays exact.
+  const record = (row: { aId: string; filename: string }, reason: string) => {
+    missingCount++;
+    if (missing.length < MAX_MISSING_DETAIL) {
+      missing.push({ aId: row.aId, filename: row.filename, reason });
     }
-  }
+  };
 
-  // Defensively confirm transferred assets really exist on B, by the checksum B stores.
   let checked = 0;
-  for (const part of chunk(verifiable, 5000)) {
-    await controller.gate();
-    if (controller.stopped) {
+  let interrupted = false;
+  let after = '';
+  pages: for (;;) {
+    const page = ledger.auditRows(after, PAGE);
+    if (page.length === 0) {
       break;
     }
-    const res = await to.checkBulkUpload(part.map((r) => ({ id: r.aId, checksum: r.bChecksum! })));
-    const present = new Set(res.results.filter((r) => r.action === AssetUploadAction.Reject).map((r) => r.id));
-    for (const row of part) {
-      if (!present.has(row.aId)) {
-        missing.push({ aId: row.aId, filename: row.filename, reason: 'absent-on-B' });
+    after = page.at(-1)!.aId;
+
+    // Anything never transferred is definitively missing.
+    const verifiable = page.filter((r) => r.uploaded && r.bChecksum);
+    for (const row of page) {
+      if (!row.uploaded || !row.bChecksum) {
+        record(row, 'not-transferred');
       }
     }
-    checked += part.length;
-    controller.log(`audited ${checked}/${verifiable.length}`);
+
+    // Defensively confirm transferred assets really exist on B, by the checksum B stores.
+    for (const part of chunk(verifiable, 5000)) {
+      await controller.gate();
+      if (controller.stopped) {
+        // Bailing out leaves the remaining rows unverified. That must never be reported as
+        // a clean audit, or a partially-checked run would read as "safe to decommission".
+        interrupted = true;
+        break pages;
+      }
+      const res = await to.checkBulkUpload(part.map((r) => ({ id: r.aId, checksum: r.bChecksum! })));
+      const present = new Set(res.results.filter((r) => r.action === AssetUploadAction.Reject).map((r) => r.id));
+      for (const row of part) {
+        if (!present.has(row.aId)) {
+          record(row, 'absent-on-B');
+        }
+      }
+      checked += part.length;
+      controller.log(`audited ${checked}`);
+    }
   }
 
   const counts = ledger.counts();
@@ -63,11 +90,13 @@ export async function audit(
     from: meta.from,
     to: meta.to,
     user: meta.user,
-    ok: missing.length === 0 && counts.assetsFailed === 0,
+    complete: !interrupted,
+    verified: checked,
+    ok: !interrupted && missingCount === 0 && counts.assetsFailed === 0,
     totals: {
       assets: counts.assetsTotal,
       uploaded: counts.assetsUploaded,
-      missing: missing.length,
+      missing: missingCount,
       failed: counts.assetsFailed,
       albums: counts.albumsTotal,
       albumsLinked: counts.albumsLinked,

@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
+import { createServer } from 'node:http';
 import type { Controller } from 'src/commands/migrate/controller';
 import type { Ledger } from 'src/commands/migrate/ledger';
 
@@ -50,7 +51,8 @@ button{font:inherit;padding:.45rem .9rem;border-radius:8px;border:1px solid #bbb
 <script>
 const $=id=>document.getElementById(id);
 const pct=(a,b)=>b>0?Math.round(a/b*100):0;
-async function post(p){await fetch(p,{method:'POST'});tick()}
+const TOKEN=new URLSearchParams(location.search).get('t')||'';
+async function post(p){await fetch(p,{method:'POST',headers:{'x-migrate-token':TOKEN}});tick()}
 async function tick(){
   let s;try{s=await(await fetch('/status')).json()}catch(e){return}
   const c=s.counts||{};
@@ -70,17 +72,27 @@ async function tick(){
   if(s.phase==='done'||s.phase==='audit'){
     try{const a=await(await fetch('/audit')).json();
       if(a&&a.generatedAt){$('auditCard').style.display='block';
-        $('auditVerdict').innerHTML=a.ok?'<span class=ok>PASS — safe to decommission A</span>':'<span class=bad>INCOMPLETE</span>';
+        $('auditVerdict').innerHTML=a.ok?'<span class=ok>PASS — safe to decommission A</span>':(a.complete===false?'<span class=bad>AUDIT INCOMPLETE — not a pass</span>':'<span class=bad>INCOMPLETE</span>');
         $('auditMsg').textContent='missing: '+(a.totals?a.totals.missing:'?')+', failed: '+(a.totals?a.totals.failed:'?');}}catch(e){}
   }
 }
 setInterval(tick,1500);tick();
 </script></body></html>`;
 
+export interface Dashboard {
+  url: string;
+  close: () => void;
+}
+
 /**
  * A tiny localhost-only dashboard. The Node process (and thus the migration) keeps running
  * regardless of the browser, so the tab can be closed and reopened freely. Read-only status
  * from SQLite COUNTs + pause/resume/stop controls. No credentials are ever exposed.
+ *
+ * Control endpoints require a per-run token supplied in a custom header. Binding to loopback
+ * is not on its own an authorization boundary: any page the user visits can POST to
+ * 127.0.0.1. A custom header can't be set by a cross-origin form, and the token isn't
+ * readable by another origin, so a drive-by page can't pause or kill a running migration.
  */
 export function startDashboard(
   port: number,
@@ -89,10 +101,15 @@ export function startDashboard(
   meta: { from: string; to: string; user: string },
   auditPath: string,
   dryRun: boolean,
-): Server {
+): Promise<Dashboard> {
+  const token = randomBytes(16).toString('hex');
   const server = createServer(async (req, res) => {
     const url = (req.url || '/').split('?')[0];
     if (req.method === 'POST') {
+      if (req.headers['x-migrate-token'] !== token) {
+        res.writeHead(403).end();
+        return;
+      }
       switch (url) {
         case '/pause': {
           controller.pause();
@@ -103,10 +120,7 @@ export function startDashboard(
           break;
         }
         case '/stop': {
-          {
-            controller.stop();
-            // No default
-          }
+          controller.stop();
           break;
         }
       }
@@ -142,6 +156,19 @@ export function startDashboard(
     }
     res.writeHead(200, { 'content-type': 'text/html' }).end(DASHBOARD_HTML);
   });
-  server.listen(port, '127.0.0.1');
-  return server;
+
+  // Surface listen failures (most often EADDRINUSE) instead of leaving the caller printing a
+  // dashboard URL that was never actually bound.
+  return new Promise((resolve, reject) => {
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      reject(
+        error.code === 'EADDRINUSE'
+          ? new Error(`Dashboard port ${port} is already in use. Pass a different --port.`)
+          : error,
+      );
+    });
+    server.listen(port, '127.0.0.1', () => {
+      resolve({ url: `http://127.0.0.1:${port}/?t=${token}`, close: () => server.close() });
+    });
+  });
 }

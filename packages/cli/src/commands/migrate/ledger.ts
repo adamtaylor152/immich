@@ -226,17 +226,20 @@ export class Ledger {
     const sql = 'SELECT * FROM asset WHERE uploaded = 1 AND meta_applied = 0 AND error IS NULL LIMIT ?';
     return (this.stmt(sql).all(limit) as AssetRow[]).map((row) => rowToRecord(row));
   }
-  // Not-yet-on-B assets, for the dedup pre-check. Materialized: present ones get marked
-  // uploaded and excluded on the next run, so re-running only re-checks the remainder.
-  pendingChecksums(): Array<{ aId: string; checksum: string }> {
-    const rows = this.stmt('SELECT a_id, checksum FROM asset WHERE uploaded = 0').all() as Array<{
-      a_id: string;
-      checksum: string;
-    }>;
+  // Keyset-paginated so neither of these materializes the whole asset table; callers stream
+  // a page at a time and memory stays bounded regardless of library size. Ordering by the
+  // primary key makes `a_id > after` a stable, index-backed cursor.
+  pendingChecksums(after: string, limit: number): Array<{ aId: string; checksum: string }> {
+    const sql = 'SELECT a_id, checksum FROM asset WHERE uploaded = 0 AND a_id > ? ORDER BY a_id LIMIT ?';
+    const rows = this.stmt(sql).all(after, limit) as Array<{ a_id: string; checksum: string }>;
     return rows.map((r) => ({ aId: r.a_id, checksum: r.checksum }));
   }
-  auditRows(): Array<{ aId: string; checksum: string; bChecksum: string | null; filename: string; uploaded: boolean }> {
-    const rows = this.stmt('SELECT a_id, checksum, b_checksum, filename, uploaded FROM asset').all() as Array<{
+  auditRows(
+    after: string,
+    limit: number,
+  ): Array<{ aId: string; checksum: string; bChecksum: string | null; filename: string; uploaded: boolean }> {
+    const sql = 'SELECT a_id, checksum, b_checksum, filename, uploaded FROM asset WHERE a_id > ? ORDER BY a_id LIMIT ?';
+    const rows = this.stmt(sql).all(after, limit) as Array<{
       a_id: string;
       checksum: string;
       b_checksum: string | null;

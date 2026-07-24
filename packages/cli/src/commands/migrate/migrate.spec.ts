@@ -163,11 +163,47 @@ describe('migrate ledger + phases', () => {
     expect(okReport.ok).toBe(true);
     expect(okReport.missing).toHaveLength(0);
   });
+
+  it('audit: an interrupted audit never reports PASS, even with nothing found missing', async () => {
+    ledger.upsertAssets([asset('a1', 'c1'), asset('a2', 'c2')]);
+    reuploadAll(ledger);
+
+    // Everything IS present on B, so a naive implementation would find missing=[] and
+    // report a clean pass — despite having verified nothing.
+    const stopped = new Controller();
+    stopped.stop();
+    const report = await audit(fakeB(new Set(['c1', 'c2'])), ledger, stopped, join(dir, 'audit3.json'), {
+      from: 'A',
+      to: 'B',
+      user: 'u@x',
+    });
+
+    expect(report.missing).toHaveLength(0);
+    expect(report.complete).toBe(false);
+    expect(report.verified).toBe(0);
+    expect(report.ok).toBe(false); // the point: not a green light to decommission
+  });
+
+  it('ledger: paged reads cover every row without duplicates', () => {
+    ledger.upsertAssets(Array.from({ length: 25 }, (_, i) => asset(`a${String(i).padStart(2, '0')}`, `c${i}`)));
+    const seen: string[] = [];
+    let after = '';
+    for (;;) {
+      const page = ledger.auditRows(after, 10);
+      if (page.length === 0) {
+        break;
+      }
+      seen.push(...page.map((r) => r.aId));
+      after = page.at(-1)!.aId;
+    }
+    expect(seen).toHaveLength(25);
+    expect(new Set(seen).size).toBe(25);
+  });
 });
 
 // Helper: mark every row uploaded (as if the transfer phase completed), for the green-light case.
 function reuploadAll(ledger: Ledger): Ledger {
-  for (const row of ledger.auditRows()) {
+  for (const row of ledger.auditRows('', 10_000)) {
     ledger.setAssetUploaded(row.aId, `b-${row.aId}`, 'upload', row.checksum);
   }
   return ledger;

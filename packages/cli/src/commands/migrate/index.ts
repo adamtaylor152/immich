@@ -26,7 +26,12 @@ const DEST_REQUIRED = [
   Permission.TagCreate,
   Permission.TagAsset,
 ];
-const DEST_OPTIONAL = [Permission.StackCreate, Permission.PersonCreate, Permission.PersonReassign];
+const DEST_OPTIONAL = [
+  Permission.StackCreate,
+  Permission.PersonCreate,
+  Permission.PersonReassign,
+  Permission.FaceRead, // needed to find which face on B a name should attach to
+];
 
 const die = (message: string): never => {
   console.error(message);
@@ -149,9 +154,14 @@ const printSummary = (report: AuditReport | undefined, ledgerPath: string, audit
   console.log(`Ledger:       ${ledgerPath}`);
   if (report.ok) {
     console.log('\n✅ PASS — every asset is present on SERVER B. SERVER A is safe to decommission.');
-  } else {
+  } else if (report.complete) {
     console.log(
       `\n⚠️  INCOMPLETE — ${t.missing} asset(s) missing, ${t.failed} failed. Re-run to resume; see the audit report.`,
+    );
+  } else {
+    console.log(
+      `\n⚠️  AUDIT INCOMPLETE — stopped after verifying ${report.verified}/${t.uploaded} transferred asset(s).` +
+        `\n   This is NOT a pass. Re-run to finish the audit before decommissioning anything.`,
     );
   }
 };
@@ -213,24 +223,34 @@ async function runMigrate(raw: MigrateRawOptions) {
   }
 
   process.on('SIGINT', () => {
+    if (controller.stopped) {
+      // Already winding down and the user asked again — don't make them wait out an
+      // in-flight upload. The ledger is committed per item, so this is still resumable.
+      console.log('\nForce quit.');
+      process.exit(130);
+    }
     console.log('\nStopping after the current items (state is saved; re-run to resume)…');
+    console.log('Press Ctrl+C again to quit immediately.');
     controller.stop();
   });
 
+  let dashboard;
   if (options.serve) {
-    startDashboard(options.port, controller, ledger, meta, auditPath, options.dryRun);
-    console.log(`Dashboard: http://127.0.0.1:${options.port}  (close the browser anytime; this process keeps running)`);
+    dashboard = await startDashboard(options.port, controller, ledger, meta, auditPath, options.dryRun);
+    console.log(`Dashboard: ${dashboard.url}  (close the browser anytime; this process keeps running)`);
   }
 
   const report = await runPipeline(from, to, ledger, options, controller, tmpDir, auditPath, meta);
   printSummary(report, options.ledger, auditPath);
 
-  if (options.serve && !controller.stopped) {
+  if (dashboard && !controller.stopped) {
     controller.phase = 'done';
     console.log('\nDashboard still running for review. Press Ctrl+C to exit.');
     return; // keep the process alive via the HTTP server
   }
 
+  dashboard?.close();
   ledger.close();
-  process.exit(report && report.ok ? 0 : report ? 2 : 0);
+  // A stopped/interrupted run is NOT a success: only a complete, clean audit exits 0.
+  process.exit(report?.ok ? 0 : 2);
 }

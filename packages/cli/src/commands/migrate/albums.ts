@@ -6,6 +6,10 @@ import type { Ledger } from 'src/commands/migrate/ledger';
 import { collectAssetIds } from 'src/commands/migrate/search';
 import type { MigrateOptions } from 'src/commands/migrate/types';
 
+// Identity of an album as a user sees it: its name within its parent. Joined with a NUL,
+// which (unlike a space) cannot occur in a name, so "A" / "B C" can't collide with "A B" / "C".
+const albumKey = (parentId: string | null | undefined, name: string) => `${parentId ?? ''}\u0000${name}`;
+
 /**
  * Phase 6: recreate albums (the top priority) — nested parents first — then link each
  * album's assets and set its thumbnail. Album membership is a per-album set; ordering is
@@ -36,6 +40,12 @@ export async function migrateAlbums(
   };
   const ordered = albums.toSorted((a, b) => depthOf(a.aId) - depthOf(b.aId));
 
+  // Existing destination albums, so a crash between createAlbum and setAlbumBId can't
+  // produce a duplicate on resume. Keyed by name + parent, which is what identifies an
+  // album to a user.
+  const existingAlbums = await to.getAllAlbums();
+  const existing = new Map(existingAlbums.map((a) => [albumKey(a.parentId, a.albumName), a.id]));
+
   // 1. Create albums (parents first) and copy order/sortOrder.
   for (const album of ordered) {
     if (album.bId) {
@@ -46,12 +56,16 @@ export async function migrateAlbums(
       return;
     }
     const parentBId = album.parentAId ? ledger.albumBId(album.parentAId) : undefined;
-    const createdAlbum = await to.createAlbum({
-      albumName: album.name,
-      description: album.description || undefined,
-      icon: album.icon ?? undefined,
-      parentId: parentBId,
-    });
+    const key = albumKey(parentBId, album.name);
+    const createdAlbum = existing.has(key)
+      ? { id: existing.get(key)! }
+      : await to.createAlbum({
+          albumName: album.name,
+          description: album.description || undefined,
+          icon: album.icon ?? undefined,
+          parentId: parentBId,
+        });
+    existing.set(key, createdAlbum.id);
     ledger.setAlbumBId(album.aId, createdAlbum.id);
     const patch: UpdateAlbumDto = {};
     if (album.order) {
@@ -78,24 +92,30 @@ export async function migrateAlbums(
     if (!bAlbumId) {
       continue;
     }
-    const memberAIds = await collectAssetIds(from, { albumIds: [album.aId] }, options.includeTrashed);
-    const bAssetIds: string[] = [];
-    for (const aId of memberAIds) {
-      const bId = ledger.bId(aId);
-      if (bId) {
-        bAssetIds.push(bId);
+    try {
+      const memberAIds = await collectAssetIds(from, { albumIds: [album.aId] }, options.includeTrashed);
+      const bAssetIds: string[] = [];
+      for (const aId of memberAIds) {
+        const bId = ledger.bId(aId);
+        if (bId) {
+          bAssetIds.push(bId);
+        }
       }
-    }
-    for (const part of chunk(bAssetIds, 500)) {
-      await to.addAssetsToAlbum(bAlbumId, part);
-    }
-    if (album.thumbAId) {
-      const thumbBId = ledger.bId(album.thumbAId);
-      if (thumbBId) {
-        await to.updateAlbum(bAlbumId, { albumThumbnailAssetId: thumbBId });
+      for (const part of chunk(bAssetIds, 500)) {
+        await to.addAssetsToAlbum(bAlbumId, part);
       }
+      if (album.thumbAId) {
+        const thumbBId = ledger.bId(album.thumbAId);
+        if (thumbBId) {
+          await to.updateAlbum(bAlbumId, { albumThumbnailAssetId: thumbBId });
+        }
+      }
+      ledger.setAlbumLinked(album.aId);
+      controller.log(`album linked: ${album.name}`);
+    } catch (error) {
+      // Not marked linked, so a later run retries this album. Keep going: albums are the
+      // most important thing to preserve, and one failure shouldn't cost the rest.
+      controller.log(`album ${album.name}: failed — ${error instanceof Error ? error.message : String(error)}`);
     }
-    ledger.setAlbumLinked(album.aId);
-    controller.log(`album linked: ${album.name}`);
   }
 }
