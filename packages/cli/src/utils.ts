@@ -203,6 +203,17 @@ export const sha1 = (filepath: string) => {
   });
 };
 
+// The server stores SHA-256 for all new uploads, so migration dedup/audit must match on SHA-256.
+export const sha256 = (filepath: string, encoding: 'hex' | 'base64' = 'base64') => {
+  const hash = createHash('sha256');
+  return new Promise<string>((resolve, reject) => {
+    const rs = createReadStream(filepath);
+    rs.on('error', reject);
+    rs.on('data', (chunk) => hash.update(chunk));
+    rs.on('end', () => resolve(hash.digest(encoding)));
+  });
+};
+
 /**
  * Batches items and calls onBatch to process them
  * when the batch size is reached or the debounce time has passed.

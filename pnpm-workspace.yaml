@@ -28,6 +28,7 @@ onlyBuiltDependencies:
   - sharp
   - '@tailwindcss/oxide'
   - bcrypt
+  - better-sqlite3
 overrides:
   canvas: 3.2.3
   sharp: ^0.34.5

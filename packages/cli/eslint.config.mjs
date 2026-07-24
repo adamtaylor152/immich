@@ -48,4 +48,13 @@ export default typescriptEslint.config([
       'object-shorthand': ['error', 'always'],
     },
   },
+  {
+    // The migrate module is a SQLite + API-DTO layer: `null` is the value better-sqlite3
+    // binds/returns and the shape SDK response types use (`string | null`). `undefined` is
+    // not a valid substitute (better-sqlite3 throws on undefined binds), so allow `null` here.
+    files: ['src/commands/migrate/**/*.ts'],
+    rules: {
+      'unicorn/no-null': 'off',
+    },
+  },
 ]);
