@@ -7,6 +7,17 @@ import { Chunked, DummyValue, GenerateSql } from 'src/decorators';
 import { MapAsset } from 'src/dtos/asset-response.dto';
 import { AssetType, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
+import {
+  combineVerifications,
+  DerivedBackfillResult,
+  getForkSchemaPhase,
+  lockForkAssetParent,
+  readsForkSidecar,
+  TableVerification,
+  verifyRows,
+  writesForkSidecar,
+  writesLegacy,
+} from 'src/repositories/fork-derived-results';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetVideoDuplicateFrameTable } from 'src/schema/tables/asset-video-duplicate-frame.table';
@@ -42,6 +53,7 @@ type VideoDuplicateFrameMatchOptions = {
   maxDistance: number;
   minMatchingFrames: number;
 };
+type VideoFrameBackfillTables = { assetVideoDuplicateFrame: TableVerification };
 
 @Injectable()
 export class DuplicateRepository {
@@ -257,7 +269,9 @@ export class DuplicateRepository {
       return [];
     }
 
+    const phase = await getForkSchemaPhase(this.db);
     return this.db
+      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_video_duplicate_frame')
       .selectAll()
       .where('assetId', '=', anyUuid(assetIds))
@@ -267,23 +281,62 @@ export class DuplicateRepository {
   }
 
   async replaceVideoDuplicateFrames(assetId: string, frames: VideoDuplicateFrameInsert[]): Promise<string[]> {
+    const phase = await getForkSchemaPhase(this.db);
     return this.db.transaction().execute(async (trx) => {
-      const existing = await trx
-        .selectFrom('asset_video_duplicate_frame')
-        .select('path')
-        .where('assetId', '=', asUuid(assetId))
-        .execute();
-      const nextPaths = new Set(frames.map(({ path }) => path));
-      const stalePaths = existing.map(({ path }) => path).filter((path) => !nextPaths.has(path));
-
-      await trx.deleteFrom('asset_video_duplicate_frame').where('assetId', '=', asUuid(assetId)).execute();
-
-      if (frames.length > 0) {
-        await trx.insertInto('asset_video_duplicate_frame').values(frames).execute();
+      if (frames.some((frame) => frame.assetId !== assetId)) {
+        throw new Error(`Cannot replace video duplicate frames for multiple assets`);
       }
-
+      if (writesForkSidecar(phase)) {
+        await lockForkAssetParent(trx, assetId);
+      }
+      let stalePaths: string[] = [];
+      if (writesLegacy(phase)) {
+        stalePaths = await this.replaceFramesIn(trx.withSchema('public'), assetId, frames);
+      }
+      if (writesForkSidecar(phase)) {
+        if (writesLegacy(phase)) {
+          const exact = await trx
+            .withSchema('public')
+            .selectFrom('asset_video_duplicate_frame')
+            .selectAll()
+            .where('assetId', '=', asUuid(assetId))
+            .execute();
+          await trx
+            .withSchema('immich_fork')
+            .deleteFrom('asset_video_duplicate_frame')
+            .where('assetId', '=', asUuid(assetId))
+            .execute();
+          if (exact.length > 0) {
+            await trx.withSchema('immich_fork').insertInto('asset_video_duplicate_frame').values(exact).execute();
+          }
+        } else {
+          stalePaths = await this.replaceFramesIn(trx.withSchema('immich_fork'), assetId, frames);
+        }
+      }
       return stalePaths;
     });
+  }
+
+  private async replaceFramesIn(
+    db: Kysely<DB>,
+    assetId: string,
+    frames: VideoDuplicateFrameInsert[],
+  ): Promise<string[]> {
+    const existing = await db
+      .selectFrom('asset_video_duplicate_frame')
+      .select('path')
+      .where('assetId', '=', asUuid(assetId))
+      .execute();
+    const nextPaths = new Set(frames.map(({ path }) => path));
+    const stalePaths = existing.map(({ path }) => path).filter((path) => !nextPaths.has(path));
+
+    await db.deleteFrom('asset_video_duplicate_frame').where('assetId', '=', asUuid(assetId)).execute();
+
+    if (frames.length > 0) {
+      await db.insertInto('asset_video_duplicate_frame').values(frames).execute();
+    }
+
+    return stalePaths;
   }
 
   async getVideoDuplicateFrameMatches({
@@ -296,10 +349,14 @@ export class DuplicateRepository {
       return [];
     }
 
+    const phase = await getForkSchemaPhase(this.db);
+    const framesTable = sql.raw(
+      readsForkSidecar(phase) ? 'immich_fork.asset_video_duplicate_frame' : 'public.asset_video_duplicate_frame',
+    );
     const { rows } = await sql<{ assetId: string }>`
       select candidate."assetId" as "assetId"
-      from "asset_video_duplicate_frame" source
-      inner join "asset_video_duplicate_frame" candidate
+      from ${framesTable} source
+      inner join ${framesTable} candidate
         on candidate."frameIndex" = source."frameIndex"
         and candidate."assetId" = ${anyUuid(candidateAssetIds)}
       where source."assetId" = ${asUuid(assetId)}
@@ -309,5 +366,43 @@ export class DuplicateRepository {
     `.execute(this.db);
 
     return rows.map(({ assetId }) => assetId);
+  }
+
+  async backfillVideoDuplicateFrames(ids: string[]): Promise<DerivedBackfillResult<VideoFrameBackfillTables>> {
+    return this.db.transaction().execute(async (trx) => {
+      await sql`
+        INSERT INTO immich_fork.orphaned_records ("sourceTable", "sourceKey", payload)
+        SELECT 'asset_video_duplicate_frame', frame."assetId"::text || ':' || frame."frameIndex"::text, to_jsonb(frame)
+        FROM public.asset_video_duplicate_frame frame
+        LEFT JOIN public.asset ON asset.id = frame."assetId"
+        WHERE asset.id IS NULL
+        ON CONFLICT ("sourceTable", "sourceKey") DO UPDATE SET payload = EXCLUDED.payload
+      `.execute(trx);
+      if (ids.length > 0) {
+        await sql`DELETE FROM immich_fork.asset_video_duplicate_frame WHERE "assetId" = ANY(${ids}::uuid[])`.execute(
+          trx,
+        );
+        await sql`
+          INSERT INTO immich_fork.asset_video_duplicate_frame
+          SELECT frame.* FROM public.asset_video_duplicate_frame frame
+          INNER JOIN public.asset ON asset.id = frame."assetId"
+          WHERE frame."assetId" = ANY(${ids}::uuid[])
+          ON CONFLICT ("assetId", "frameIndex") DO UPDATE SET
+            "timestampMs" = EXCLUDED."timestampMs", path = EXCLUDED.path, embedding = EXCLUDED.embedding,
+            "createdAt" = EXCLUDED."createdAt", "updatedAt" = EXCLUDED."updatedAt"
+        `.execute(trx);
+      }
+      await sql`
+        DELETE FROM immich_fork.asset_video_duplicate_frame frame
+        WHERE NOT EXISTS (SELECT 1 FROM public.asset WHERE asset.id = frame."assetId")
+      `.execute(trx);
+      const rows = await sql<Record<string, unknown>>`
+        SELECT "assetId"::text AS "assetId", "frameIndex", "timestampMs", path, embedding::text AS embedding,
+          "createdAt", "updatedAt"
+        FROM immich_fork.asset_video_duplicate_frame
+        WHERE "assetId" = ANY(${ids}::uuid[]) ORDER BY "assetId"::text, "frameIndex"
+      `.execute(trx);
+      return combineVerifications(ids.length, { assetVideoDuplicateFrame: verifyRows(rows.rows) });
+    });
   }
 }

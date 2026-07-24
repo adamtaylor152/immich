@@ -1,7 +1,7 @@
 import { CallContext, Plugin as ExtismPlugin, newPlugin } from '@extism/extism';
 import { Injectable } from '@nestjs/common';
 import { createPool, Pool } from 'generic-pool';
-import { Insertable, Kysely } from 'kysely';
+import { Insertable, Kysely, sql } from 'kysely';
 import { jsonArrayFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
 import { columns } from 'src/database';
@@ -43,6 +43,7 @@ const asExtismLogLevel = (logLevel: LogLevel) => levels[logLevel] || 'info';
 @Injectable()
 export class PluginRepository {
   private pluginMap: Map<string, { label: string; pool: Pool<ExtismPlugin> }> = new Map();
+  private allowedHostsColumn: Promise<boolean> | undefined;
 
   constructor(
     @InjectKysely() private db: Kysely<DB>,
@@ -71,7 +72,8 @@ export class PluginRepository {
       .execute();
   }
 
-  private queryBuilder() {
+  private async queryBuilder() {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
     return this.db.selectFrom('plugin').select((eb) => [
       'plugin.id',
       'plugin.name',
@@ -84,15 +86,22 @@ export class PluginRepository {
       jsonArrayFrom(
         eb
           .selectFrom('plugin_method')
-          .select([...columns.pluginMethod, 'plugin.name as pluginName'])
+          .select((methodBuilder) => [
+            ...columns.pluginMethod,
+            hasAllowedHosts
+              ? methodBuilder.ref('plugin_method.allowedHosts').as('allowedHosts')
+              : sql<string[]>`ARRAY[]::character varying[]`.as('allowedHosts'),
+            'plugin.name as pluginName',
+          ])
           .whereRef('plugin_method.pluginId', '=', 'plugin.id'),
       ).as('methods'),
     ]);
   }
 
   @GenerateSql()
-  search(dto: PluginSearchDto = {}) {
-    return this.queryBuilder()
+  async search(dto: PluginSearchDto = {}) {
+    const query = await this.queryBuilder();
+    return query
       .$if(!!dto.id, (qb) => qb.where('plugin.id', '=', dto.id!))
       .$if(!!dto.name, (qb) => qb.where('plugin.name', '=', dto.name!))
       .$if(!!dto.title, (qb) => qb.where('plugin.title', '=', dto.title!))
@@ -103,13 +112,15 @@ export class PluginRepository {
   }
 
   @GenerateSql({ params: [DummyValue.STRING] })
-  getByName(name: string) {
-    return this.queryBuilder().where('plugin.name', '=', name).executeTakeFirst();
+  async getByName(name: string) {
+    const query = await this.queryBuilder();
+    return query.where('plugin.name', '=', name).executeTakeFirst();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  get(id: string) {
-    return this.queryBuilder().where('plugin.id', '=', id).executeTakeFirst();
+  async get(id: string) {
+    const query = await this.queryBuilder();
+    return query.where('plugin.id', '=', id).executeTakeFirst();
   }
 
   @GenerateSql()
@@ -122,11 +133,20 @@ export class PluginRepository {
   }
 
   @GenerateSql()
-  searchMethods(dto: PluginMethodSearchDto = {}) {
+  async searchMethods(dto: PluginMethodSearchDto = {}) {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
     return this.db
       .selectFrom('plugin_method')
       .innerJoin('plugin', 'plugin.id', 'plugin_method.pluginId')
-      .select(['plugin.name as pluginName', 'plugin_method.pluginId', 'plugin_method.id', ...columns.pluginMethod])
+      .select((eb) => [
+        'plugin.name as pluginName',
+        'plugin_method.pluginId',
+        'plugin_method.id',
+        ...columns.pluginMethod,
+        hasAllowedHosts
+          ? eb.ref('plugin_method.allowedHosts').as('allowedHosts')
+          : sql<string[]>`ARRAY[]::character varying[]`.as('allowedHosts'),
+      ])
       .$if(!!dto.id, (qb) => qb.where('plugin_method.id', '=', dto.id!))
       .$if(!!dto.name, (qb) => qb.where('plugin_method.name', '=', dto.name!))
       .$if(!!dto.title, (qb) => qb.where('plugin_method.title', '=', dto.title!))
@@ -139,6 +159,14 @@ export class PluginRepository {
   }
 
   async upsert(dto: Insertable<PluginTable>, initialMethods: Omit<Insertable<PluginMethodTable>, 'pluginId'>[]) {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
+    const compatibleMethods = hasAllowedHosts
+      ? initialMethods
+      : initialMethods.map((method) => {
+          const legacyMethod = { ...method };
+          delete legacyMethod.allowedHosts;
+          return legacyMethod;
+        });
     return this.db.transaction().execute(async (tx) => {
       // Upsert the plugin
       const plugin = await tx
@@ -157,23 +185,23 @@ export class PluginRepository {
         .executeTakeFirstOrThrow();
 
       // prune methods that no longer exist
-      if (initialMethods.length > 0) {
+      if (compatibleMethods.length > 0) {
         await tx
           .deleteFrom('plugin_method')
           .where('plugin_method.pluginId', '=', plugin.id)
           .where(
             'name',
             'not in',
-            initialMethods.map((method) => method.name),
+            compatibleMethods.map((method) => method.name),
           )
           .execute();
       }
 
       const methods =
-        initialMethods.length > 0
+        compatibleMethods.length > 0
           ? await tx
               .insertInto('plugin_method')
-              .values(initialMethods.map((method) => ({ ...method, pluginId: plugin.id })))
+              .values(compatibleMethods.map((method) => ({ ...method, pluginId: plugin.id })))
               .onConflict((oc) =>
                 oc.columns(['pluginId', 'name']).doUpdateSet(({ ref }) => ({
                   pluginId: ref('excluded.pluginId'),
@@ -182,6 +210,7 @@ export class PluginRepository {
                   description: ref('excluded.description'),
                   types: ref('excluded.types'),
                   hostFunctions: ref('excluded.hostFunctions'),
+                  ...(hasAllowedHosts && { allowedHosts: ref('excluded.allowedHosts') }),
                   uiHints: ref('excluded.uiHints'),
                   schema: ref('excluded.schema'),
                 })),
@@ -192,6 +221,20 @@ export class PluginRepository {
 
       return { ...plugin, methods };
     });
+  }
+
+  private hasAllowedHostsColumn(): Promise<boolean> {
+    return (this.allowedHostsColumn ??= sql<{ exists: boolean }>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'plugin_method'
+          AND column_name = 'allowedHosts'
+      ) AS "exists"
+    `
+      .execute(this.db)
+      .then(({ rows }) => rows[0]?.exists === true));
   }
 
   async load({ key, label, wasmBytes }: PluginLoad, { runInWorker, functions }: PluginLoadOptions) {
@@ -224,14 +267,21 @@ export class PluginRepository {
     );
 
     try {
-      await pool.ready();
+      // pool.ready() never settles if the factory keeps rejecting (e.g. a wasm import the
+      // host does not provide), so surface the first creation error instead of hanging.
+      await new Promise<void>((resolve, reject) => {
+        pool.once('factoryCreateError', reject);
+        pool.ready().then(resolve, reject);
+      });
       this.pluginMap.set(key, { pool, label });
     } catch (error: Error | any) {
+      await pool.drain().catch(() => {});
+      await pool.clear().catch(() => {});
       throw new Error(`Unable to instantiate plugin: ${key}`, { cause: error });
     }
   }
 
-  async callMethod<T>({ pluginKey, methodName }: PluginMethod, input: unknown) {
+  async callMethod<T>({ pluginKey, methodName }: PluginMethod, input: unknown, context?: unknown) {
     const item = this.pluginMap.get(pluginKey);
     if (!item) {
       throw new Error(`No loaded plugin found for ${pluginKey}`);
@@ -242,7 +292,7 @@ export class PluginRepository {
     try {
       const plugin = await pool.acquire();
       try {
-        const result = await plugin.call(methodName, JSON.stringify(input));
+        const result = await plugin.call(methodName, JSON.stringify(input), context);
         return (result ? result.json() : result) as T;
       } finally {
         await pool.release(plugin);

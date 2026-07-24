@@ -3,6 +3,9 @@ import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
 class SidebarStore {
   isOpen = $derived.by(() => mediaQueryManager.isFullSidebar);
 
+  /** True while the user is dragging the resize handle; used to suppress width transitions. */
+  isResizing = $state(false);
+
   /**
    * Reset the sidebar visibility to the default, based on the current screen width.
    */

@@ -5,6 +5,7 @@ import { SystemConfig, defaults } from 'src/config';
 import { SystemConfigSchema } from 'src/dtos/system-config.dto';
 import { DatabaseLock, SystemMetadataKey } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DeepPartial } from 'src/types';
@@ -14,6 +15,7 @@ type RepoDeps = {
   configRepo: ConfigRepository;
   metadataRepo: SystemMetadataRepository;
   logger: LoggingRepository;
+  forkSchemaRepo?: ForkSchemaRepository;
 };
 
 const asyncLock = new AsyncLock();
@@ -36,7 +38,7 @@ export const getConfig = async (repos: RepoDeps, { withCache }: { withCache: boo
     });
   }
 
-  return config!;
+  return repos.forkSchemaRepo ? repos.forkSchemaRepo.overlayConfig(config!) : config!;
 };
 
 export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Promise<SystemConfig> => {
@@ -56,8 +58,11 @@ export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Pr
     _.set(partialConfig, property, newValue);
   }
 
-  await metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig);
+  await (repos.forkSchemaRepo
+    ? repos.forkSchemaRepo.persistConfig(partialConfig, newConfig)
+    : metadataRepo.set(SystemMetadataKey.SystemConfig, partialConfig));
 
+  clearConfigCache();
   return getConfig(repos, { withCache: false });
 };
 

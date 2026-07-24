@@ -243,7 +243,9 @@ export class SmartAlbumService extends BaseService {
    * Ensure the 6 built-in smart albums exist for the given user. Idempotent —
    * safe to call on every server start or user creation event.
    *
-   * Performance (server.md Medium #bootstrap): query existing smart_album rows
+   * Performance (server.md Medium #bootstrap): query existing automation rules
+   * through the phase-aware repository (legacy through dual-write, fork sidecar
+   * after cutover) before creating static upstream album rows.
    * for this owner FIRST and only pass missing kinds to the repository. This
    * skips the per-kind advisory-lock transaction when nothing is missing —
    * common case after a server restart.

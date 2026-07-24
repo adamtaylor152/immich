@@ -22,6 +22,7 @@ import { DownloadRepository } from 'src/repositories/download.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -84,6 +85,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   DuplicateRepository,
   EmailRepository,
   EventRepository,
+  ForkSchemaRepository,
   JobRepository,
   LibraryRepository,
   MachineLearningRepository,
@@ -146,6 +148,7 @@ export class BaseService {
     protected duplicateRepository: DuplicateRepository,
     protected emailRepository: EmailRepository,
     protected eventRepository: EventRepository,
+    protected forkSchemaRepository: ForkSchemaRepository,
     protected jobRepository: JobRepository,
     protected libraryRepository: LibraryRepository,
     protected machineLearningRepository: MachineLearningRepository,
@@ -217,6 +220,7 @@ export class BaseService {
       ctx.duplicateRepository,
       ctx.emailRepository,
       ctx.eventRepository,
+      ctx.forkSchemaRepository,
       ctx.jobRepository,
       ctx.libraryRepository,
       ctx.machineLearningRepository,
@@ -270,6 +274,7 @@ export class BaseService {
       configRepo: this.configRepository,
       metadataRepo: this.systemMetadataRepository,
       logger: this.logger,
+      forkSchemaRepo: this.forkSchemaRepository,
     };
   }
 

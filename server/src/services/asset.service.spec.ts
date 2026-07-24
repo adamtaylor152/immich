@@ -36,6 +36,12 @@ describe(AssetService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(AssetService));
     mocks.duplicateRepository.getVideoDuplicateFrames.mockResolvedValue([]);
+    mocks.asset.remove.mockImplementation((asset) =>
+      Promise.resolve({
+        originalPath: (asset as unknown as { originalPath: string }).originalPath,
+        reservationTemporaryPath: null,
+      }),
+    );
   });
 
   describe('getStatistics', () => {

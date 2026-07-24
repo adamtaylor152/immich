@@ -36,7 +36,47 @@ where
   "person"."ownerId" = $1
   and "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
   and "person"."isHidden" = $2
 group by
   "person"."id"
@@ -224,7 +264,47 @@ where
       "asset_face"."personId" = "person"."id"
       and "asset_face"."deletedAt" is null
       and "asset_face"."isVisible" is true
-      and not (coalesce("asset"."is_nsfw", false) = true)
+      and not (
+        case
+          when "asset"."id" is null then false
+          when coalesce(
+            (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ),
+            'inactive'
+          ) in ('legacy', 'dual-write', 'ready') then exists (
+            select
+              1
+            from
+              asset as nsfw_asset
+            where
+              nsfw_asset.id = "asset"."id"
+              and nsfw_asset.is_nsfw = true
+          )
+          when (
+            select
+              phase
+            from
+              immich_fork.state
+            where
+              id = 1
+          ) = 'active' then not exists (
+            select
+              1
+            from
+              immich_fork.asset_privacy as privacy_asset
+            where
+              privacy_asset."assetId" = "asset"."id"
+              and privacy_asset."isNsfw" = false
+          )
+          else false
+        end
+      )
   )
 order by
   f_unaccent ("person"."name") <->>> f_unaccent ($3)
@@ -255,7 +335,47 @@ where
   "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
   and "asset_face"."personId" = $1
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 
 -- PersonRepository.getNumberOfPeople
 select
@@ -286,7 +406,47 @@ where
           "asset"."id" = "asset_face"."assetId"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
-          and not (coalesce("asset"."is_nsfw", false) = true)
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write', 'ready') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              when (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ) = 'active' then not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+              else false
+            end
+          )
       )
   )
   and "person"."ownerId" = $3

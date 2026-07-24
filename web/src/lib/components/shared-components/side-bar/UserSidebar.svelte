@@ -1,11 +1,13 @@
 <script lang="ts">
+  import AlbumNavigationTree from '$lib/components/shared-components/side-bar/AlbumNavigationTree.svelte';
   import BottomInfo from '$lib/components/shared-components/side-bar/BottomInfo.svelte';
   import RecentAlbums from '$lib/components/shared-components/side-bar/RecentAlbums.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { Route } from '$lib/route';
-  import { recentAlbumsDropdown } from '$lib/stores/preferences.store';
+  import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
+  import { albumTreeDropdown, recentAlbumsDropdown, sidebarCollapsed } from '$lib/stores/preferences.store';
   import { NavbarGroup, NavbarItem } from '@immich/ui';
   import {
     mdiAccount,
@@ -51,6 +53,10 @@
   }
 
   let { children }: Props = $props();
+
+  // When collapsed to the icon-only rail, suppress expandable content (recent albums,
+  // album tree), section headers and bottom info — only top-level icons remain.
+  const iconOnly = $derived($sidebarCollapsed && mediaQueryManager.isFullSidebar);
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>
@@ -61,7 +67,14 @@
     href={Route.recentlyAdded()}
     icon={mdiClockPlusOutline}
     activeIcon={mdiClockPlus}
-  />
+    bind:expanded={$recentAlbumsDropdown}
+  >
+    {#snippet items()}
+      <span in:fly={{ y: -20 }} class={iconOnly ? 'hidden' : 'hidden md:block'}>
+        <RecentAlbums />
+      </span>
+    {/snippet}
+  </NavbarItem>
 
   {#if featureFlagsManager.value.search}
     <NavbarItem title={$t('explore')} href={Route.explore()} icon={mdiMagnify} />
@@ -86,7 +99,9 @@
     activeIcon={mdiAccountMultiple}
   />
 
-  <NavbarGroup title={$t('library')} size="tiny" />
+  {#if !iconOnly}
+    <NavbarGroup title={$t('library')} size="tiny" />
+  {/if}
 
   <NavbarItem title={$t('favorites')} href={Route.favorites()} icon={mdiHeartOutline} activeIcon={mdiHeart} />
 
@@ -96,11 +111,11 @@
     title={$t('albums')}
     href={Route.albums()}
     icon={{ icon: mdiImageAlbum, flipped: true }}
-    bind:expanded={$recentAlbumsDropdown}
+    bind:expanded={$albumTreeDropdown}
   >
     {#snippet items()}
-      <span in:fly={{ y: -20 }} class="hidden md:block">
-        <RecentAlbums />
+      <span in:fly={{ y: -20 }} class={iconOnly ? 'hidden' : 'hidden md:block'}>
+        <AlbumNavigationTree />
       </span>
     {/snippet}
   </NavbarItem>
@@ -137,5 +152,7 @@
 
   {@render children?.()}
 
-  <BottomInfo />
+  {#if !iconOnly}
+    <BottomInfo />
+  {/if}
 </Sidebar>

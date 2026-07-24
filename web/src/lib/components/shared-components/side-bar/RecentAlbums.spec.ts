@@ -5,7 +5,7 @@ import RecentAlbums from '$lib/components/shared-components/side-bar/RecentAlbum
 import { albumFactory } from '@test-data/factories/album-factory';
 
 describe('RecentAlbums component', () => {
-  it('sorts albums by most recently updated', async () => {
+  it('renders the three most recently updated albums for the Recently Added shortcut', async () => {
     const albums = [
       albumFactory.build({ updatedAt: '2024-01-01T00:00:00Z' }),
       albumFactory.build({ updatedAt: '2024-01-09T00:00:01Z' }),

@@ -1,12 +1,80 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, Selectable } from 'kysely';
+import { Kysely, Selectable, Transaction, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { AssetFileType, AssetStatus, PhysicalFileType } from 'src/enum';
+import { randomUUID } from 'node:crypto';
+import { dirname, join, parse } from 'node:path';
+import { AssetFileType, AssetStatus, ChecksumAlgorithm, PhysicalFileType } from 'src/enum';
 import { DB } from 'src/schema';
 import { PhysicalFileTable } from 'src/schema/tables/physical-file.table';
 import { asUuid } from 'src/utils/database';
 
 type PhysicalFile = Selectable<PhysicalFileTable>;
+
+export type PhysicalNormalizationAsset = {
+  id: string;
+  checksum: Buffer;
+  checksumAlgorithm: ChecksumAlgorithm;
+  originalPath: string;
+  physicalFileId: string | null;
+  physicalCanonicalAssetId: string | null;
+  physicalChecksum: Buffer | null;
+  physicalCreatedAt: Date | null;
+  physicalPath: string | null;
+  physicalSizeInBytes: number | null;
+  physicalType: string | null;
+  physicalUpdatedAt: Date | null;
+  sharedPathCount: number;
+  libraryImportPaths: string[];
+  mappedUpstreamPath: string | null;
+};
+
+export type PhysicalNormalizationCommit = {
+  asset: PhysicalNormalizationAsset;
+  evidence: Record<string, unknown>;
+  linkCount: number;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+  upstreamPath: string;
+  verifiedPaths: string[];
+};
+
+export type PhysicalNormalizationReservation = {
+  assetId: string;
+  token: string;
+  sourcePath: string;
+  upstreamPath: string;
+  temporaryPath: string;
+};
+
+export type PhysicalNormalizationCompleted = {
+  upstreamPath: string;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+  linkCount: number;
+  verifiedPaths: string[];
+};
+
+export type PhysicalNormalizationPreparation =
+  | {
+      status: 'completed';
+      asset: PhysicalNormalizationAsset;
+      completed: PhysicalNormalizationCompleted;
+      reservation: PhysicalNormalizationReservation | null;
+    }
+  | {
+      status: 'reserved';
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      recovered: boolean;
+    };
+
+export type ReturnNormalizationClaim = {
+  kind: 'storage' | 'checksum';
+  claimToken: string;
+  claimedIds: string[];
+};
 
 export interface PhysicalFileInput {
   canonicalAssetId: string | null;
@@ -19,6 +87,13 @@ export interface PhysicalFileInput {
 @Injectable()
 export class PhysicalFileRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  protected afterNormalizationAuthority(
+    _transaction: Kysely<DB>,
+    _action: 'reserve' | 'run' | 'release',
+  ): Promise<void> {
+    return Promise.resolve();
+  }
 
   async getMasterOriginalCandidate(masterUserId: string, checksum: Buffer, sizeInBytes: number) {
     return this.db
@@ -58,6 +133,407 @@ export class PhysicalFileRepository {
       .selectAll('physical_file')
       .where('asset.id', '=', asUuid(assetId))
       .executeTakeFirst();
+  }
+
+  private async getNormalizationAssetFrom(
+    db: Kysely<DB> | Transaction<DB>,
+    assetId: string,
+  ): Promise<PhysicalNormalizationAsset | undefined> {
+    const result = await sql<PhysicalNormalizationAsset>`
+      SELECT
+        asset.id,
+        asset.checksum,
+        asset."checksumAlgorithm",
+        asset."originalPath",
+        coalesce(asset."physicalOriginalFileId", mapping."physicalFileId") AS "physicalFileId",
+        coalesce(physical."canonicalAssetId", fork_physical."canonicalAssetId") AS "physicalCanonicalAssetId",
+        coalesce(physical.checksum, fork_physical.checksum) AS "physicalChecksum",
+        coalesce(physical."createdAt", fork_physical."createdAt") AS "physicalCreatedAt",
+        coalesce(physical.path, fork_physical."canonicalPath") AS "physicalPath",
+        coalesce(physical."sizeInBytes", fork_physical."sizeInBytes")::float8 AS "physicalSizeInBytes",
+        coalesce(physical.type::text, fork_physical.type) AS "physicalType",
+        coalesce(physical."updatedAt", fork_physical."updatedAt") AS "physicalUpdatedAt",
+        coalesce(library."importPaths", ARRAY[]::text[]) AS "libraryImportPaths",
+        mapping."upstreamPath" AS "mappedUpstreamPath",
+        (
+          SELECT count(*)::int FROM public.asset shared
+          WHERE shared."originalPath" = asset."originalPath"
+             OR (
+               asset."physicalOriginalFileId" IS NOT NULL
+               AND shared."physicalOriginalFileId" = asset."physicalOriginalFileId"
+             )
+        ) AS "sharedPathCount"
+      FROM public.asset asset
+      LEFT JOIN public.physical_file physical ON physical.id = asset."physicalOriginalFileId"
+      LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+      LEFT JOIN immich_fork.physical_file fork_physical ON fork_physical.id = mapping."physicalFileId"
+      LEFT JOIN public.library library ON library.id = asset."libraryId"
+      WHERE asset.id = ${assetId}::uuid
+    `.execute(db);
+    return result.rows[0];
+  }
+
+  async getNormalizationAsset(assetId: string): Promise<PhysicalNormalizationAsset | undefined> {
+    return this.getNormalizationAssetFrom(this.db, assetId);
+  }
+
+  async createNormalizationReservation(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+  ): Promise<PhysicalNormalizationPreparation> {
+    return this.createNormalizationReservationForMode(assetId, selectUpstreamPath);
+  }
+
+  async createReturnNormalizationReservation(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+    claim: ReturnNormalizationClaim,
+  ): Promise<PhysicalNormalizationPreparation> {
+    return this.createNormalizationReservationForMode(assetId, selectUpstreamPath, claim);
+  }
+
+  private async createNormalizationReservationForMode(
+    assetId: string,
+    selectUpstreamPath: (asset: PhysicalNormalizationAsset) => string,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<PhysicalNormalizationPreparation> {
+    return this.db.transaction().execute(async (trx) => {
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'reserve');
+      const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
+      if (locked.rows.length === 0) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const asset = await this.getNormalizationAssetFrom(trx, assetId);
+      if (!asset) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const completed = await sql<
+        PhysicalNormalizationCompleted & {
+          reservationAssetId: string | null;
+          reservationToken: string | null;
+          reservationSourcePath: string | null;
+          reservationUpstreamPath: string | null;
+          reservationTemporaryPath: string | null;
+        }
+      >`
+        SELECT
+          mapping."upstreamPath",
+          checksum.sha1,
+          checksum.sha256,
+          checksum."sizeInBytes"::float8 AS "sizeInBytes",
+          checksum."linkCount"::int AS "linkCount",
+          checksum."verifiedPaths",
+          reservation."assetId" AS "reservationAssetId",
+          reservation.token AS "reservationToken",
+          reservation."sourcePath" AS "reservationSourcePath",
+          reservation."upstreamPath" AS "reservationUpstreamPath",
+          reservation."temporaryPath" AS "reservationTemporaryPath"
+        FROM public.asset asset
+        INNER JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = asset.id
+        INNER JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+        LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
+        WHERE asset.id = ${assetId}::uuid
+          AND asset."originalPath" = mapping."upstreamPath"
+          AND asset.checksum = checksum.sha1
+          AND asset."checksumAlgorithm" = ${ChecksumAlgorithm.sha1File}::asset_checksum_algorithm_enum
+          AND asset."physicalOriginalFileId" IS NULL
+      `.execute(trx);
+      const committed = completed.rows[0];
+      if (committed) {
+        const reservation =
+          committed.reservationAssetId &&
+          committed.reservationToken &&
+          committed.reservationSourcePath &&
+          committed.reservationUpstreamPath &&
+          committed.reservationTemporaryPath
+            ? {
+                assetId: committed.reservationAssetId,
+                token: committed.reservationToken,
+                sourcePath: committed.reservationSourcePath,
+                upstreamPath: committed.reservationUpstreamPath,
+                temporaryPath: committed.reservationTemporaryPath,
+              }
+            : null;
+        return {
+          status: 'completed',
+          asset,
+          completed: {
+            upstreamPath: committed.upstreamPath,
+            sha1: committed.sha1,
+            sha256: committed.sha256,
+            sizeInBytes: committed.sizeInBytes,
+            linkCount: committed.linkCount,
+            verifiedPaths: committed.verifiedPaths,
+          },
+          reservation,
+        };
+      }
+      const upstreamPath = selectUpstreamPath(asset);
+      const existing = await sql<PhysicalNormalizationReservation>`
+        SELECT
+          "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+        FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid
+        FOR UPDATE
+      `.execute(trx);
+      const reservation = existing.rows[0];
+      if (reservation) {
+        const reservationMatchesSource =
+          reservation.sourcePath === asset.originalPath && reservation.upstreamPath === upstreamPath;
+        const reservationMatchesCommittedMapping =
+          asset.originalPath === reservation.upstreamPath && asset.mappedUpstreamPath === reservation.upstreamPath;
+        if (!reservationMatchesSource && !reservationMatchesCommittedMapping) {
+          throw new Error(`Asset ${assetId} has a conflicting durable storage reservation`);
+        }
+        return { status: 'reserved', asset, reservation, recovered: true };
+      }
+
+      const conflictingReservation = await sql<{ assetId: string }>`
+        SELECT "assetId" FROM immich_fork.asset_storage_reservation WHERE "upstreamPath" = ${upstreamPath}
+      `.execute(trx);
+      if (conflictingReservation.rows[0]) {
+        throw new Error(`Normalization target is reserved by another asset: ${upstreamPath}`);
+      }
+      const existingMapping = await sql<{ assetId: string }>`
+        SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
+      `.execute(trx);
+      if (existingMapping.rows[0] && existingMapping.rows[0].assetId !== asset.id) {
+        throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
+      }
+      if (upstreamPath !== asset.originalPath) {
+        const publicOwner = await sql<{ id: string }>`
+          SELECT id FROM public.asset WHERE "originalPath" = ${upstreamPath} AND id <> ${asset.id}::uuid LIMIT 1
+        `.execute(trx);
+        if (publicOwner.rows[0]) {
+          throw new Error(`Normalization target is owned by another public asset: ${upstreamPath}`);
+        }
+      }
+
+      const token = randomUUID();
+      const temporaryPath = join(dirname(upstreamPath), `.${parse(upstreamPath).base}.${token}.normalize`);
+      const inserted = await sql<PhysicalNormalizationReservation>`
+        INSERT INTO immich_fork.asset_storage_reservation
+          ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
+        VALUES (${asset.id}::uuid, ${token}::uuid, ${asset.originalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
+        RETURNING "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+      `.execute(trx);
+      return { status: 'reserved', asset, reservation: inserted.rows[0]!, recovered: false };
+    });
+  }
+
+  async releaseNormalizationReservation(assetId: string, token: string): Promise<void> {
+    await this.releaseNormalizationReservationForMode(assetId, token);
+  }
+
+  async releaseReturnNormalizationReservation(
+    assetId: string,
+    token: string,
+    claim: ReturnNormalizationClaim,
+  ): Promise<void> {
+    await this.releaseNormalizationReservationForMode(assetId, token, claim);
+  }
+
+  private async releaseNormalizationReservationForMode(
+    assetId: string,
+    token: string,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'release');
+      await sql`
+        DELETE FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
+      `.execute(trx);
+    });
+  }
+
+  async withLockedNormalizationAsset<T>(
+    assetId: string,
+    token: string,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.withLockedNormalizationAssetForMode(assetId, token, callback);
+  }
+
+  async withLockedReturnNormalizationAsset<T>(
+    assetId: string,
+    token: string,
+    claim: ReturnNormalizationClaim,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+  ): Promise<T> {
+    return this.withLockedNormalizationAssetForMode(assetId, token, callback, claim);
+  }
+
+  private async withLockedNormalizationAssetForMode<T>(
+    assetId: string,
+    token: string,
+    callback: (context: {
+      asset: PhysicalNormalizationAsset;
+      reservation: PhysicalNormalizationReservation;
+      commit: (input: Omit<PhysicalNormalizationCommit, 'asset'>) => Promise<void>;
+    }) => Promise<T>,
+    claim?: ReturnNormalizationClaim,
+  ): Promise<T> {
+    return this.db.transaction().execute(async (trx) => {
+      await this.assertNormalizationAuthority(trx, assetId, claim, 'run');
+      const locked = await sql`SELECT id FROM public.asset WHERE id = ${assetId}::uuid FOR UPDATE`.execute(trx);
+      if (locked.rows.length === 0) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const asset = await this.getNormalizationAssetFrom(trx, assetId);
+      if (!asset) {
+        throw new Error(`Asset ${assetId} does not exist`);
+      }
+      const reservations = await sql<PhysicalNormalizationReservation>`
+        SELECT "assetId", token, "sourcePath", "upstreamPath", "temporaryPath"
+        FROM immich_fork.asset_storage_reservation
+        WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
+        FOR UPDATE
+      `.execute(trx);
+      const reservation = reservations.rows[0];
+      const reservationMatchesSource = reservation?.sourcePath === asset.originalPath;
+      const reservationMatchesCommittedMapping =
+        reservation &&
+        asset.originalPath === reservation.upstreamPath &&
+        asset.mappedUpstreamPath === reservation.upstreamPath;
+      if (!reservation || (!reservationMatchesSource && !reservationMatchesCommittedMapping)) {
+        throw new Error(`Asset ${assetId} durable storage reservation is missing or stale`);
+      }
+      return callback({
+        asset,
+        reservation,
+        commit: async (input) => {
+          await this.commitNormalization(trx, { ...input, asset });
+        },
+      });
+    });
+  }
+
+  private async assertNormalizationAuthority(
+    trx: Transaction<DB>,
+    assetId: string,
+    claim: ReturnNormalizationClaim | undefined,
+    action: 'reserve' | 'run' | 'release',
+  ): Promise<void> {
+    if (!claim) {
+      const state = await sql<{ phase: string }>`
+        SELECT phase FROM immich_fork.state WHERE id = 1 FOR SHARE
+      `.execute(trx);
+      if (!['dual-write', 'ready', 'active'].includes(state.rows[0]?.phase ?? '')) {
+        throw new Error(`Storage normalization cannot ${action} in the current phase`);
+      }
+      return;
+    }
+    const state = await sql<{ active: boolean; phase: string }>`
+      SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR SHARE
+    `.execute(trx);
+    const audit = await sql<{ id: string }>`
+      SELECT id::text AS id FROM immich_fork.migration_audit
+      WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+      ORDER BY id DESC LIMIT 1 FOR SHARE
+    `.execute(trx);
+    const progress = await sql<{ claimToken: string | null; claimedIds: string[] }>`
+      SELECT "claimToken", "claimedIds" FROM immich_fork.backfill_progress
+      WHERE kind = ${claim.kind} FOR SHARE
+    `.execute(trx);
+    const progressRow = progress.rows[0];
+    const exactIds =
+      progressRow?.claimedIds.length === claim.claimedIds.length &&
+      progressRow.claimedIds.every((id, index) => id === claim.claimedIds[index]);
+    if (
+      state.rows[0]?.phase !== 'inactive' ||
+      state.rows[0]?.active !== false ||
+      !audit.rows[0] ||
+      progressRow?.claimToken !== claim.claimToken ||
+      !exactIds ||
+      !progressRow.claimedIds.includes(assetId)
+    ) {
+      throw new Error('Storage normalization requires the durable return storage claim');
+    }
+    await this.afterNormalizationAuthority(trx, action);
+  }
+
+  private async commitNormalization(
+    db: Kysely<DB> | Transaction<DB>,
+    input: PhysicalNormalizationCommit,
+  ): Promise<void> {
+    const { asset, evidence, linkCount, sha1, sha256, sizeInBytes, upstreamPath, verifiedPaths } = input;
+    if (asset.physicalFileId && asset.physicalPath && asset.physicalChecksum && asset.physicalType) {
+      await sql`
+          INSERT INTO immich_fork.physical_file
+            (id, "canonicalAssetId", type, checksum, "sizeInBytes", "canonicalPath", "createdAt", "updatedAt")
+          VALUES (
+            ${asset.physicalFileId}::uuid,
+            ${asset.physicalCanonicalAssetId}::uuid,
+            ${asset.physicalType},
+            ${asset.physicalChecksum},
+            ${asset.physicalSizeInBytes ?? sizeInBytes},
+            ${asset.physicalPath},
+            ${asset.physicalCreatedAt ?? new Date()},
+            ${asset.physicalUpdatedAt ?? new Date()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            "canonicalAssetId" = excluded."canonicalAssetId",
+            type = excluded.type,
+            checksum = excluded.checksum,
+            "sizeInBytes" = excluded."sizeInBytes",
+            "canonicalPath" = excluded."canonicalPath",
+            "updatedAt" = excluded."updatedAt"
+        `.execute(db);
+    }
+
+    await sql`
+        INSERT INTO immich_fork.asset_checksum
+          ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount", evidence, "verifiedAt", "updatedAt")
+        VALUES (
+          ${asset.id}::uuid,
+          ${sha1},
+          ${sha256},
+          ${sizeInBytes},
+          ${verifiedPaths},
+          ${linkCount},
+          ${JSON.stringify(evidence)}::jsonb,
+          now(),
+          now()
+        )
+        ON CONFLICT ("assetId") DO UPDATE SET
+          sha1 = excluded.sha1,
+          sha256 = excluded.sha256,
+          "sizeInBytes" = excluded."sizeInBytes",
+          "verifiedPaths" = excluded."verifiedPaths",
+          "linkCount" = excluded."linkCount",
+          evidence = excluded.evidence,
+          "verifiedAt" = excluded."verifiedAt",
+          "updatedAt" = excluded."updatedAt"
+      `.execute(db);
+    await sql`
+        INSERT INTO immich_fork.asset_physical_file
+          ("assetId", "physicalFileId", "upstreamPath", "verifiedAt", "updatedAt")
+        VALUES (${asset.id}::uuid, ${asset.physicalFileId}::uuid, ${upstreamPath}, now(), now())
+        ON CONFLICT ("assetId") DO UPDATE SET
+          "physicalFileId" = excluded."physicalFileId",
+          "upstreamPath" = excluded."upstreamPath",
+          "verifiedAt" = excluded."verifiedAt",
+          "updatedAt" = excluded."updatedAt"
+      `.execute(db);
+    await sql`
+        UPDATE public.asset
+        SET
+          checksum = ${sha1},
+          "checksumAlgorithm" = ${ChecksumAlgorithm.sha1File}::asset_checksum_algorithm_enum,
+          "originalPath" = ${upstreamPath},
+          "physicalOriginalFileId" = NULL,
+          "updatedAt" = now()
+        WHERE id = ${asset.id}::uuid
+      `.execute(db);
   }
 
   async upsertPhysicalFile(input: PhysicalFileInput): Promise<PhysicalFile> {

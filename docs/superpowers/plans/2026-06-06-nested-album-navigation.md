@@ -43,6 +43,7 @@
 ### Task 0: Restore Focused Web Test Readiness
 
 **Files:**
+
 - Generate: `packages/sdk/build/index.js`
 - Generate: `packages/sdk/build/index.d.ts`
 
@@ -71,6 +72,7 @@ Expected: `tree-utils.spec.ts` passes. If Vite still reports unresolved `@immich
 ### Task 1: Album Search Helper
 
 **Files:**
+
 - Modify: `web/src/lib/utils/album-utils.ts`
 - Create or modify: `web/src/lib/utils/album-utils.spec.ts`
 - Modify: `web/src/lib/components/album-page/AlbumsList.svelte`
@@ -174,9 +176,7 @@ import {
 Replace the `normalizedSearchQuery` and `filteredAlbums` derived block with:
 
 ```ts
-let filteredAlbums = $derived(
-  searchQuery ? albums.filter((album) => matchesAlbumSearch(album, searchQuery)) : albums,
-);
+let filteredAlbums = $derived(searchQuery ? albums.filter((album) => matchesAlbumSearch(album, searchQuery)) : albums);
 ```
 
 - [ ] **Step 5: Run tests to verify GREEN**
@@ -203,6 +203,7 @@ git commit -m "feat(web): improve album search matching"
 ### Task 2: Album Tree Component
 
 **Files:**
+
 - Create: `web/src/lib/components/shared-components/side-bar/AlbumNavigationTree.svelte`
 - Create: `web/src/lib/components/shared-components/side-bar/AlbumNavigationTree.spec.ts`
 
@@ -428,6 +429,7 @@ git commit -m "feat(web): add nested album nav tree"
 ### Task 3: Sidebar Wiring and Preferences
 
 **Files:**
+
 - Modify: `web/src/lib/stores/preferences.store.ts`
 - Modify: `web/src/lib/components/shared-components/side-bar/UserSidebar.svelte`
 - Modify: `web/src/lib/components/shared-components/side-bar/RecentAlbums.spec.ts`
@@ -568,6 +570,7 @@ git commit -m "feat(web): wire nested albums into sidebar"
 ### Task 4: Final Verification
 
 **Files:**
+
 - Verify: `web/src/lib/components/shared-components/side-bar/UserSidebar.svelte`
 - Verify: `web/src/lib/components/shared-components/side-bar/AlbumNavigationTree.svelte`
 - Verify: `web/src/lib/components/album-page/AlbumsList.svelte`

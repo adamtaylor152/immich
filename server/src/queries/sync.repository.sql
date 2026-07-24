@@ -42,7 +42,45 @@ select distinct
       where
         hidden_content_asset.id = "album"."albumThumbnailAssetId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else album."albumThumbnailAssetId"
@@ -99,7 +137,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -113,7 +189,47 @@ where
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" >= $3
   and "album_asset"."albumId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -147,7 +263,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -162,7 +316,47 @@ where
   and "asset"."updateId" > $2
   and "album_asset"."updateId" <= $3
   and "album_user"."userId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset"."updateId" asc
 
@@ -197,7 +391,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -210,7 +442,47 @@ where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" > $2
   and "album_user"."userId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -251,7 +523,47 @@ where
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" >= $3
   and "album_asset"."albumId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -293,7 +605,47 @@ where
   and "asset_exif"."updateId" > $2
   and "album_asset"."updateId" <= $3
   and "album_user"."userId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_exif"."updateId" asc
 
@@ -335,7 +687,47 @@ where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" > $2
   and "album_user"."userId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -352,7 +744,47 @@ where
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" >= $3
   and "album_asset"."albumId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -375,7 +807,47 @@ where
     where
       "album_user"."userId" = $3
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset_audit"."id" asc
 
@@ -392,7 +864,47 @@ where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" > $2
   and "album_user"."userId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "album_asset"."updateId" asc
 
@@ -488,7 +1000,45 @@ where
     where
       hidden_content_asset.id = "asset"."id"
       and (
-        coalesce("hidden_content_asset"."is_nsfw", false) = true
+        case
+          when "hidden_content_asset"."id" is null then false
+          when coalesce(
+            (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ),
+            'inactive'
+          ) in ('legacy', 'dual-write', 'ready') then exists (
+            select
+              1
+            from
+              asset as nsfw_asset
+            where
+              nsfw_asset.id = "hidden_content_asset"."id"
+              and nsfw_asset.is_nsfw = true
+          )
+          when (
+            select
+              phase
+            from
+              immich_fork.state
+            where
+              id = 1
+          ) = 'active' then not exists (
+            select
+              1
+            from
+              immich_fork.asset_privacy as privacy_asset
+            where
+              privacy_asset."assetId" = "hidden_content_asset"."id"
+              and privacy_asset."isNsfw" = false
+          )
+          else false
+        end
       )
   )
 order by
@@ -524,7 +1074,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -536,7 +1124,47 @@ where
   "asset"."updateId" < $1
   and "asset"."updateId" > $2
   and "ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset"."updateId" asc
 
@@ -575,7 +1203,47 @@ where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
   and "asset"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_exif"."updateId" asc
 
@@ -590,7 +1258,47 @@ where
   "asset_edit_audit"."id" < $1
   and "asset_edit_audit"."id" > $2
   and "asset"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_edit_audit"."id" asc
 
@@ -609,7 +1317,47 @@ where
   "asset_edit"."updateId" < $1
   and "asset_edit"."updateId" > $2
   and "asset"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_edit"."updateId" asc
 
@@ -624,7 +1372,47 @@ where
   "asset_face_audit"."id" < $1
   and "asset_face_audit"."id" > $2
   and "asset"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_face_audit"."id" asc
 
@@ -650,7 +1438,47 @@ where
   "asset_face"."updateId" < $1
   and "asset_face"."updateId" > $2
   and "asset"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_face"."updateId" asc
 
@@ -667,7 +1495,47 @@ where
   and "asset_metadata_audit"."id" > $2
   and "asset"."ownerId" = $3
   and "asset_metadata_audit"."key" != $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_metadata_audit"."id" asc
 
@@ -685,7 +1553,47 @@ where
   and "asset_metadata"."updateId" > $2
   and "asset"."ownerId" = $3
   and "asset_metadata"."key" != $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_metadata"."updateId" asc
 
@@ -770,7 +1678,47 @@ where
     where
       "ownerId" = $3
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "memory_asset_audit"."id" asc
 
@@ -793,7 +1741,47 @@ where
     where
       "ownerId" = $3
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "memory_asset"."updateId" asc
 
@@ -874,7 +1862,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -888,7 +1914,47 @@ where
   and "asset"."updateId" <= $3
   and "asset"."updateId" >= $4
   and "asset"."ownerId" = $5
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset"."updateId" asc
 
@@ -941,7 +2007,45 @@ select
       where
         hidden_content_asset.id = "asset"."livePhotoVideoId"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else asset."livePhotoVideoId"
@@ -961,7 +2065,47 @@ where
     where
       "sharedWithId" = $4
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset"."updateId" asc
 
@@ -1001,7 +2145,47 @@ where
   and "asset_exif"."updateId" <= $2
   and "asset_exif"."updateId" >= $3
   and "asset"."ownerId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_exif"."updateId" asc
 
@@ -1047,7 +2231,47 @@ where
     where
       "sharedWithId" = $3
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "asset_exif"."updateId" asc
 
@@ -1087,7 +2311,47 @@ where
   and "stack"."updateId" <= $2
   and "stack"."updateId" >= $3
   and "stack"."ownerId" = $4
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "stack"."updateId" asc
 
@@ -1113,7 +2377,47 @@ where
     where
       "sharedWithId" = $3
   )
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "stack"."updateId" asc
 
@@ -1151,7 +2455,45 @@ select
       where
         hidden_content_asset.id = "person_face_asset"."id"
         and (
-          coalesce("hidden_content_asset"."is_nsfw", false) = true
+          case
+            when "hidden_content_asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "hidden_content_asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "hidden_content_asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
         )
     ) then null
     else person."faceAssetId"
@@ -1188,7 +2530,47 @@ where
         "asset_face"."personId" = "person"."id"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
-        and not (coalesce("asset"."is_nsfw", false) = true)
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
+        )
     )
   )
 order by
@@ -1222,7 +2604,47 @@ where
   "stack"."updateId" < $1
   and "stack"."updateId" > $2
   and "stack"."ownerId" = $3
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 order by
   "stack"."updateId" asc
 

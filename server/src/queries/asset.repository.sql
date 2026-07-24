@@ -88,10 +88,12 @@ where
   and "key" = $2
 
 -- AssetRepository.deleteMetadataByKey
+begin
 delete from "asset_metadata"
 where
   "assetId" = $1
   and "key" = $2
+commit
 
 -- AssetRepository.deleteBulkMetadata
 begin
@@ -227,9 +229,26 @@ where
   "asset"."id" = any ($1::uuid[])
 
 -- AssetRepository.deleteAll
-delete from "asset"
-where
-  "ownerId" = $1
+begin
+SELECT
+  asset.id,
+  coalesce(
+    mapping."upstreamPath",
+    reservation."upstreamPath",
+    asset."originalPath"
+  ) AS "originalPath",
+  reservation."temporaryPath" AS "reservationTemporaryPath",
+  asset."libraryId",
+  asset."isOffline"
+FROM
+  public.asset asset
+  LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+  LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
+WHERE
+  asset."ownerId" = $1::uuid
+FOR UPDATE OF
+  asset
+rollback
 
 -- AssetRepository.getByLibraryIdAndOriginalPath
 select
@@ -327,7 +346,47 @@ from
 where
   "ownerId" = $1::uuid
   and "checksum" in ($2)
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 
 -- AssetRepository.getUploadAssetIdByChecksum
 select
@@ -338,7 +397,47 @@ where
   "ownerId" = $1::uuid
   and "checksum" = $2
   and "libraryId" is null
-  and not (coalesce("asset"."is_nsfw", false) = true)
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 limit
   $3
 
@@ -511,7 +610,45 @@ from
   "asset"
 where
   "asset"."id" = any ($1::uuid[])
-  and coalesce("asset"."is_nsfw", false) = true
+  and case
+    when "asset"."id" is null then false
+    when coalesce(
+      (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ),
+      'inactive'
+    ) in ('legacy', 'dual-write', 'ready') then exists (
+      select
+        1
+      from
+        asset as nsfw_asset
+      where
+        nsfw_asset.id = "asset"."id"
+        and nsfw_asset.is_nsfw = true
+    )
+    when (
+      select
+        phase
+      from
+        immich_fork.state
+      where
+        id = 1
+    ) = 'active' then not exists (
+      select
+        1
+      from
+        immich_fork.asset_privacy as privacy_asset
+      where
+        privacy_asset."assetId" = "asset"."id"
+        and privacy_asset."isNsfw" = false
+    )
+    else false
+  end
 
 -- AssetRepository.detectOfflineExternalAssets
 update "asset"

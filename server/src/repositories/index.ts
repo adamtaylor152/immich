@@ -16,6 +16,13 @@ import { DownloadRepository } from 'src/repositories/download.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { ForkConfigRepository } from 'src/repositories/fork-config.repository';
+import { ForkCutoverVerificationRepository } from 'src/repositories/fork-cutover-verification.repository';
+import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
+import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
+import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LivePhotoRepository } from 'src/repositories/live-photo.repository';
@@ -76,6 +83,13 @@ export const repositories = [
   DuplicateRepository,
   EmailRepository,
   EventRepository,
+  ForkAlbumMetadataRepository,
+  ForkConfigRepository,
+  ForkCutoverVerificationRepository,
+  ForkEnrichmentRepository,
+  ForkHandoffRepository,
+  ForkPrivacyRepository,
+  ForkSchemaRepository,
   JobRepository,
   LibraryRepository,
   LoggingRepository,

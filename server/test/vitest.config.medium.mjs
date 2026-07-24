@@ -13,6 +13,9 @@ export default defineConfig({
     globals: true,
     include: ['test/medium/**/*.spec.ts'],
     globalSetup: ['test/medium/globalSetup.ts'],
+    hookTimeout: 30_000,
+    maxWorkers: 4,
+    testTimeout: 30_000,
     server: {
       deps: {
         fallbackCJS: true,

@@ -13,7 +13,7 @@ import { DB } from 'src/schema';
 import { MemoryService } from 'src/services/memory.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
-import { getKyselyDB } from 'test/utils';
+import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
 

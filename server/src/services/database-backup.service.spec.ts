@@ -642,6 +642,7 @@ describe(DatabaseBackupService.name, () => {
       mocks.storage.createWriteStream.mockReturnValue(new PassThrough());
       mocks.storage.createGzip.mockReturnValue(new PassThrough());
       mocks.storage.createGunzip.mockReturnValue(new PassThrough());
+      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
 
       const configMock = {
         getEnv: () => ({
@@ -743,6 +744,66 @@ describe(DatabaseBackupService.name, () => {
           GRANT ALL ON SCHEMA public TO public;
         SELECT 1;"
       `);
+    });
+
+    it('runs the combined then isolated fork migrator when restoring a legacy database', async () => {
+      const migrationOrder: string[] = [];
+      mocks.user.hasAdmin.mockResolvedValue(true);
+      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
+      mocks.database.runMigrations.mockImplementation(() => {
+        migrationOrder.push('combined');
+        return Promise.resolve();
+      });
+      mocks.database.runForkMigrations.mockImplementation(() => {
+        migrationOrder.push('fork');
+        return Promise.resolve();
+      });
+
+      await sut.restoreDatabaseBackup('development-filename.sql');
+
+      expect(mocks.database.detectMigrationMode).toHaveBeenCalledOnce();
+      expect(migrationOrder).toEqual(['combined', 'fork']);
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+    });
+
+    it.each(['fresh', 'isolated'] as const)(
+      'runs official then fork migrations when restoring a %s database',
+      async (mode) => {
+        const migrationOrder: string[] = [];
+        mocks.user.hasAdmin.mockResolvedValue(true);
+        mocks.database.detectMigrationMode.mockResolvedValue(mode);
+        mocks.database.runOfficialMigrations.mockImplementation(() => {
+          migrationOrder.push('official');
+          return Promise.resolve();
+        });
+        mocks.database.runForkMigrations.mockImplementation(() => {
+          migrationOrder.push('fork');
+          return Promise.resolve();
+        });
+
+        await sut.restoreDatabaseBackup('development-filename.sql');
+
+        expect(migrationOrder).toEqual(['official', 'fork']);
+        expect(mocks.database.runMigrations).not.toHaveBeenCalled();
+      },
+    );
+
+    it('guards an inactive schema version 2 restore before either migration provider runs', async () => {
+      mocks.user.hasAdmin.mockResolvedValue(true);
+      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
+      mocks.database.isCertifiedReturnStartup.mockResolvedValue(true);
+      mocks.database.assertCertifiedReturnLedger.mockRejectedValue(new Error('certified v3.0.3 ledger rejected'));
+
+      await expect(sut.restoreDatabaseBackup('development-filename.sql')).rejects.toThrow(
+        'certified v3.0.3 ledger rejected',
+      );
+
+      expect(mocks.database.assertCertifiedReturnLedger).toHaveBeenCalledOnce();
+      expect(mocks.database.assertCertifiedReturnLedger.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      );
+      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();
     });
 
     it('should generate pg_dumpall specific SQL instructions', async () => {

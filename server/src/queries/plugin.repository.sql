@@ -26,6 +26,17 @@ where
   "enabled" = $1
 
 -- PluginRepository.search
+SELECT
+  EXISTS (
+    SELECT
+      1
+    FROM
+      information_schema.columns
+    WHERE
+      table_schema = 'public'
+      AND table_name = 'plugin_method'
+      AND column_name = 'allowedHosts'
+  ) AS "exists"
 select
   "plugin"."id",
   "plugin"."name",
@@ -48,6 +59,7 @@ select
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
           "plugin_method"."uiHints",
+          ARRAY[]::character varying[] as "allowedHosts",
           "plugin"."name" as "pluginName"
         from
           "plugin_method"
@@ -83,6 +95,7 @@ select
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
           "plugin_method"."uiHints",
+          ARRAY[]::character varying[] as "allowedHosts",
           "plugin"."name" as "pluginName"
         from
           "plugin_method"
@@ -118,6 +131,7 @@ select
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
           "plugin_method"."uiHints",
+          ARRAY[]::character varying[] as "allowedHosts",
           "plugin"."name" as "pluginName"
         from
           "plugin_method"
@@ -151,7 +165,8 @@ select
   "plugin_method"."types",
   "plugin_method"."schema",
   "plugin_method"."hostFunctions",
-  "plugin_method"."uiHints"
+  "plugin_method"."uiHints",
+  ARRAY[]::character varying[] as "allowedHosts"
 from
   "plugin_method"
   inner join "plugin" on "plugin"."id" = "plugin_method"."pluginId"

@@ -1,0 +1,470 @@
+import {
+  ForkSchemaStartCommand,
+  ForkSchemaVerifyCommand,
+  formatForkSchemaStatus,
+} from 'src/commands/fork-schema.command';
+import { JobName, JobStatus } from 'src/enum';
+import { BACKFILL_KINDS, BackfillKind, BackfillProgress } from 'src/repositories/fork-schema.repository';
+import { BackfillBatchHandler, ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
+import { newTestService, ServiceMocks } from 'test/utils';
+
+const state = (phase: 'legacy' | 'dual-write' | 'ready' | 'inactive' = 'legacy') => ({
+  active: false,
+  phase,
+  schemaVersion: '2',
+  upstreamVersion: '3.0.3',
+});
+
+describe('fork-schema command', () => {
+  const completeStatus = {
+    ...state('dual-write'),
+    verified: true,
+    progress: BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0, digest: 'e'.repeat(64) })),
+  };
+
+  it('prints phase and per-kind progress details', () => {
+    const output = formatForkSchemaStatus(completeStatus);
+
+    expect(output).toContain('Phase: dual-write');
+    expect(output).toContain('privacy: processed=0 remaining=0');
+    expect(output).toContain(`digest=${'e'.repeat(64)}`);
+    expect(output).toContain('lastError=none');
+  });
+
+  it('requires explicit confirmation before start', async () => {
+    const migration = { start: vi.fn() } as unknown as ForkSchemaMigrationService;
+    const inquirer = { ask: vi.fn().mockResolvedValue({ confirmed: false }) };
+    const command = new ForkSchemaStartCommand(migration, inquirer as never);
+
+    await command.run();
+
+    expect(inquirer.ask).toHaveBeenCalledOnce();
+    expect(migration.start).not.toHaveBeenCalled();
+  });
+
+  it('keeps the verify command read-only', async () => {
+    const migration = { verify: vi.fn().mockResolvedValue(completeStatus) } as unknown as ForkSchemaMigrationService;
+    const command = new ForkSchemaVerifyCommand(migration);
+
+    await command.run();
+
+    expect(migration.verify).toHaveBeenCalledOnce();
+    expect('start' in migration).toBe(false);
+    expect('pause' in migration).toBe(false);
+    expect('resume' in migration).toBe(false);
+  });
+});
+
+const progress = (kind: BackfillKind, overrides: Partial<BackfillProgress> = {}): BackfillProgress => ({
+  kind,
+  cursor: null,
+  processed: 0,
+  remaining: 10,
+  digest: null,
+  lastError: null,
+  ...overrides,
+});
+
+const deferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+};
+
+describe(ForkSchemaMigrationService.name, () => {
+  let service: ForkSchemaMigrationService;
+  let mocks: ServiceMocks;
+
+  beforeEach(() => {
+    ({ sut: service, mocks } = newTestService(ForkSchemaMigrationService));
+    mocks.forkSchema.getState.mockResolvedValue(state());
+    mocks.forkSchema.getProgress.mockResolvedValue([]);
+  });
+
+  it('delegates inactive-to-active authority to return reconciliation only', async () => {
+    mocks.forkSchema.getState.mockResolvedValue({ ...state(), active: true, phase: 'active' });
+
+    const status = await service.activateAfterReturnReconciliation();
+
+    expect(mocks.forkSchema.activateAfterReturnReconciliation).toHaveBeenCalledOnce();
+    expect(status).toMatchObject({ active: true, phase: 'active' });
+  });
+
+  it('does not start outside legacy phase', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('ready'));
+
+    await expect(service.start()).rejects.toThrow('Backfill can only start from legacy phase');
+  });
+
+  it('starts dual-write and queues exactly one batch per kind', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state());
+    mocks.forkSchema.transitionPhase.mockResolvedValue(true);
+
+    await service.start(250);
+
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('legacy', 'dual-write');
+    expect(mocks.job.queueAll).toHaveBeenCalledOnce();
+    expect(mocks.job.queueAll).toHaveBeenCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
+  it('allows only one concurrent start call to seed jobs', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+
+    await Promise.all([service.start(250), service.start(250)]);
+
+    expect(mocks.job.queueAll).toHaveBeenCalledOnce();
+    expect(mocks.job.queueAll).toHaveBeenCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
+  it('reseeds after pause overtakes start before its seed is created', async () => {
+    const startStatus = deferred<ReturnType<typeof state>>();
+    mocks.forkSchema.transitionPhase.mockResolvedValue(true);
+    mocks.forkSchema.getState
+      .mockImplementationOnce(() => startStatus.promise)
+      .mockResolvedValueOnce(state('legacy'))
+      .mockResolvedValue(state('dual-write'));
+
+    const starting = service.start(250);
+    await vi.waitFor(() => expect(mocks.forkSchema.getState).toHaveBeenCalledOnce());
+    await service.pause();
+
+    startStatus.resolve(state('legacy'));
+    await starting;
+    await service.resume(250);
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('repairs missing initial seeds after a partial queue failure', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockRejectedValueOnce(new Error('partial queue failure')).mockResolvedValueOnce();
+
+    await expect(service.start(250)).rejects.toThrow('partial queue failure');
+    await expect(service.start(250)).resolves.toMatchObject({ phase: 'dual-write' });
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+    expect(mocks.job.queueAll).toHaveBeenLastCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
+  it('repairs missing resume seeds after a partial queue failure', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockRejectedValueOnce(new Error('partial queue failure')).mockResolvedValueOnce();
+
+    await expect(service.resume(250)).rejects.toThrow('partial queue failure');
+    await expect(service.resume(250)).resolves.toMatchObject({ phase: 'dual-write' });
+
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+    expect(mocks.job.queueAll).toHaveBeenLastCalledWith(
+      BACKFILL_KINDS.map((kind) => ({ name: JobName.ForkSchemaBackfill, data: { kind, batchSize: 250 } })),
+    );
+  });
+
+  it('pauses idempotently', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('legacy'));
+
+    await service.pause();
+    await service.pause();
+
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledTimes(2);
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('dual-write', 'legacy');
+  });
+
+  it('re-enters per-kind deduplication for repeated resume repair', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+
+    await service.resume(50);
+    await service.resume(50);
+
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledTimes(2);
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('legacy', 'dual-write');
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows only one concurrent resume call to seed jobs', async () => {
+    mocks.forkSchema.transitionPhase.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+
+    await Promise.all([service.resume(50), service.resume(50)]);
+
+    expect(mocks.job.queueAll).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a replacement resume seed when the pre-pause seed finishes later', async () => {
+    const staleSeed = deferred<void>();
+    const replacementSeed = deferred<void>();
+    mocks.forkSchema.transitionPhase
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    mocks.forkSchema.getState
+      .mockResolvedValueOnce(state('dual-write'))
+      .mockResolvedValueOnce(state('legacy'))
+      .mockResolvedValue(state('dual-write'));
+    mocks.job.queueAll.mockReturnValueOnce(staleSeed.promise).mockReturnValueOnce(replacementSeed.promise);
+
+    const staleResume = service.resume(50);
+    await vi.waitFor(() => expect(mocks.job.queueAll).toHaveBeenCalledOnce());
+    await service.pause();
+
+    const replacementResume = service.resume(50);
+    await vi.waitFor(() => expect(mocks.job.queueAll).toHaveBeenCalledTimes(2));
+    staleSeed.resolve();
+    await staleResume;
+
+    const coalescedResume = service.resume(50);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+
+    replacementSeed.resolve();
+    await Promise.all([replacementResume, coalescedResume]);
+    expect(mocks.job.queueAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('projects structured status for every backfill kind', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.getProgress.mockResolvedValue([
+      progress('privacy', { processed: 4, remaining: 6, digest: 'a'.repeat(64), lastError: 'stopped' }),
+    ]);
+
+    const result = await service.status();
+
+    expect(result.phase).toBe('dual-write');
+    expect(result.verified).toBe(false);
+    expect(result.progress).toHaveLength(BACKFILL_KINDS.length);
+    expect(result.progress[0]).toEqual({
+      kind: 'privacy',
+      cursor: null,
+      processed: 4,
+      remaining: 6,
+      digest: 'a'.repeat(64),
+      lastError: 'stopped',
+    });
+    expect(result.progress[1]).toEqual(progress('albums', { remaining: 0 }));
+  });
+
+  it('verify is read-only', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.getProgress.mockResolvedValue(BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0 })));
+
+    const result = await service.verify();
+
+    expect(result.verified).toBe(true);
+    expect(mocks.forkSchema.setPhase).not.toHaveBeenCalled();
+    expect(mocks.forkSchema.claimBatch).not.toHaveBeenCalled();
+    expect(mocks.job.queueAll).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when no handler is registered', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1'], cursor: 'claim-token' });
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Failed);
+
+    expect(mocks.forkSchema.failBatch).toHaveBeenCalledWith(
+      'privacy',
+      'claim-token',
+      'No backfill handler registered for privacy',
+    );
+    expect(mocks.forkSchema.completeBatch).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue another batch when a claim is already held', async () => {
+    mocks.forkSchema.claimBatch.mockResolvedValue(null);
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.getProgress.mockResolvedValue([progress('privacy', { remaining: 10 })]);
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Skipped);
+
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+    expect(mocks.forkSchema.setPhase).not.toHaveBeenCalled();
+  });
+
+  it('skips a queued batch after pause without claiming or recording an error', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('legacy'));
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Skipped);
+
+    expect(mocks.forkSchema.claimBatch).not.toHaveBeenCalled();
+    expect(mocks.forkSchema.failBatch).not.toHaveBeenCalled();
+    expect(mocks.forkSchema.completeBatch).not.toHaveBeenCalled();
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  });
+
+  it('records a failed batch without advancing its cursor', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    const handler: BackfillBatchHandler = vi.fn().mockRejectedValue(new Error('sidecar write failed'));
+    service.registerHandler('privacy', handler);
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1'], cursor: 'claim-token' });
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Failed);
+
+    expect(mocks.forkSchema.failBatch).toHaveBeenCalledWith('privacy', 'claim-token', 'sidecar write failed');
+    expect(mocks.forkSchema.completeBatch).not.toHaveBeenCalled();
+  });
+
+  it('completes under the claim token and queues only the next batch for that kind', async () => {
+    const handler: BackfillBatchHandler = vi.fn().mockResolvedValue({ count: 2, digest: 'b'.repeat(64) });
+    service.registerHandler('privacy', handler);
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1', 'asset-2'], cursor: 'claim-token' });
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.getProgress.mockResolvedValue([progress('privacy', { processed: 2, remaining: 8 })]);
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Success);
+
+    expect(handler).toHaveBeenCalledWith(['asset-1', 'asset-2']);
+    expect(mocks.forkSchema.completeBatch).toHaveBeenCalledWith('privacy', 'claim-token', 2, 'b'.repeat(64));
+    expect(mocks.forkSchema.failBatch).not.toHaveBeenCalled();
+    expect(mocks.job.queue).toHaveBeenCalledOnce();
+    expect(mocks.job.queue).toHaveBeenCalledWith({
+      name: JobName.ForkSchemaBackfill,
+      data: { kind: 'privacy', batchSize: 100 },
+    });
+  });
+
+  it('does not advance when completion fails', async () => {
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    service.registerHandler('privacy', vi.fn().mockResolvedValue({ count: 1, digest: 'c'.repeat(64) }));
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1'], cursor: 'claim-token' });
+    mocks.forkSchema.completeBatch.mockRejectedValue(new Error('completion rejected'));
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Failed);
+
+    expect(mocks.forkSchema.failBatch).toHaveBeenCalledWith('privacy', 'claim-token', 'completion rejected');
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  });
+
+  it('moves to ready when every kind is complete', async () => {
+    service.registerHandler('privacy', vi.fn().mockResolvedValue({ count: 1, digest: 'd'.repeat(64) }));
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1'], cursor: 'claim-token' });
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.getProgress.mockResolvedValue(BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0 })));
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('dual-write', 'ready');
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a concurrent pause when transitioning to ready', async () => {
+    service.registerHandler('privacy', vi.fn().mockResolvedValue({ count: 1, digest: 'd'.repeat(64) }));
+    mocks.forkSchema.getState.mockResolvedValue(state('dual-write'));
+    mocks.forkSchema.claimBatch.mockResolvedValue({ ids: ['asset-1'], cursor: 'claim-token' });
+    mocks.forkSchema.getProgress.mockResolvedValue(BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0 })));
+    mocks.forkSchema.transitionPhase.mockResolvedValue(false);
+
+    await expect(service.runBatch('privacy', 100)).resolves.toBe(JobStatus.Success);
+
+    expect(mocks.forkSchema.transitionPhase).toHaveBeenCalledWith('dual-write', 'ready');
+    expect(mocks.job.queue).not.toHaveBeenCalled();
+  });
+
+  describe('official return reconciliation', () => {
+    beforeEach(() => {
+      Object.assign(mocks.forkSchema, {
+        beginOrResumeReturnReconciliation: vi.fn(),
+        claimReturnBatch: vi.fn(),
+      });
+      mocks.forkSchema.getState.mockResolvedValue(state('inactive'));
+      mocks.forkSchema.getReturnConfigReconciliation.mockResolvedValue({
+        count: 2,
+        digest: 'c'.repeat(64),
+        source: 'database',
+      });
+      mocks.forkSchema.getProgress.mockResolvedValue(
+        BACKFILL_KINDS.map((kind) => progress(kind, { remaining: 0, digest: 'e'.repeat(64) })),
+      );
+    });
+
+    it('reuses every registered handler through inactive return claims without changing phase', async () => {
+      const handlers = new Map<BackfillKind, BackfillBatchHandler>();
+      for (const kind of BACKFILL_KINDS) {
+        const handler = vi.fn().mockResolvedValue({ count: 1, digest: 'a'.repeat(64) });
+        handlers.set(kind, handler);
+        service.registerHandler(kind, handler);
+      }
+      mocks.forkSchema.claimReturnBatch.mockImplementation((kind) =>
+        Promise.resolve(
+          handlers.get(kind) && (handlers.get(kind) as ReturnType<typeof vi.fn>).mock.calls.length === 0
+            ? { ids: [`${kind}-id`], cursor: `${kind}-claim` }
+            : null,
+        ),
+      );
+
+      const result = await service.reconcileAfterOfficialReturn(10);
+
+      expect(mocks.forkSchema.beginOrResumeReturnReconciliation).toHaveBeenCalledOnce();
+      for (const kind of BACKFILL_KINDS) {
+        expect(handlers.get(kind)).toHaveBeenCalledWith(
+          [`${kind}-id`],
+          ...(kind === 'storage' || kind === 'checksum'
+            ? [{ kind, claimToken: `${kind}-claim`, claimedIds: [`${kind}-id`] }]
+            : []),
+        );
+        expect(mocks.forkSchema.completeBatch).toHaveBeenCalledWith(
+          kind,
+          `${kind}-claim`,
+          1,
+          expect.stringMatching(/^[0-9a-f]{64}$/),
+        );
+      }
+      expect(result).toMatchObject({ active: false, phase: 'inactive', verified: true });
+      expect(mocks.forkSchema.transitionPhase).not.toHaveBeenCalled();
+      expect(mocks.forkSchema.activateAfterReturnReconciliation).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+
+    it('preserves completed progress when an interruption is resumed', async () => {
+      const handler = vi.fn().mockResolvedValue({ count: 1, digest: 'a'.repeat(64) });
+      const afterBatch = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('injected'))
+        .mockImplementation(() => Promise.resolve());
+      service.registerHandler('privacy', handler);
+      mocks.forkSchema.claimReturnBatch
+        .mockResolvedValueOnce({ ids: ['asset-1'], cursor: 'claim-1' })
+        .mockResolvedValueOnce({ ids: ['asset-2'], cursor: 'claim-2' })
+        .mockResolvedValue(null);
+
+      await expect(service.reconcileAfterOfficialReturn(1, { afterBatch })).rejects.toThrow('injected');
+      await expect(service.reconcileAfterOfficialReturn(1, { afterBatch })).resolves.toMatchObject({
+        active: false,
+        phase: 'inactive',
+      });
+
+      expect(mocks.forkSchema.beginOrResumeReturnReconciliation).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenNthCalledWith(1, ['asset-1']);
+      expect(handler).toHaveBeenNthCalledWith(2, ['asset-2']);
+      expect(mocks.forkSchema.completeBatch).toHaveBeenNthCalledWith(1, 'privacy', 'claim-1', 1, 'a'.repeat(64));
+      expect(mocks.forkSchema.completeBatch).toHaveBeenNthCalledWith(2, 'privacy', 'claim-2', 1, 'a'.repeat(64));
+      expect(mocks.forkSchema.transitionPhase).not.toHaveBeenCalled();
+    });
+
+    it('records a failed inactive batch and leaves reconciliation resumable', async () => {
+      service.registerHandler('privacy', vi.fn().mockRejectedValue(new Error('sidecar write failed')));
+      mocks.forkSchema.claimReturnBatch.mockResolvedValueOnce({ ids: ['asset-1'], cursor: 'claim-1' });
+
+      await expect(service.reconcileAfterOfficialReturn(1)).rejects.toThrow('sidecar write failed');
+
+      expect(mocks.forkSchema.failBatch).toHaveBeenCalledWith('privacy', 'claim-1', 'sidecar write failed');
+      expect(mocks.forkSchema.completeBatch).not.toHaveBeenCalled();
+      expect(mocks.forkSchema.transitionPhase).not.toHaveBeenCalled();
+    });
+  });
+});

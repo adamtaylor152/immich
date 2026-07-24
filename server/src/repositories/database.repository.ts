@@ -1,9 +1,9 @@
 import { schemaDiff, schemaFromCode, schemaFromDatabase } from '@immich/sql-tools';
+/* eslint-disable unicorn/prefer-module -- migration providers resolve paths relative to the compiled CommonJS module */
 import { Injectable } from '@nestjs/common';
 import AsyncLock from 'async-lock';
-import { FileMigrationProvider, Kysely, Migrator, sql } from 'kysely';
+import { Kysely, Migration, MigrationProvider, Migrator, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import semver from 'semver';
 import {
@@ -15,9 +15,45 @@ import {
   VECTORCHORD_LIST_SLACK_FACTOR,
   VECTORCHORD_VERSION_RANGE,
 } from 'src/constants';
+import { StorageCore } from 'src/cores/storage.core';
 import { GenerateSql } from 'src/decorators';
 import { DatabaseExtension, DatabaseLock, VectorIndex } from 'src/enum';
+import {
+  CatalogDiff,
+  CatalogManifest,
+  compareCatalogs,
+  getCatalogEvidence,
+  getCatalogTableLocks,
+} from 'src/fork-schema/catalog';
+import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
+import {
+  classifyMigration,
+  GENERIC_LEGACY_FORK_MIGRATIONS,
+  SUPPORTED_UPSTREAM_MIGRATIONS,
+} from 'src/fork-schema/migration-manifest';
+import {
+  createCertifiedLedgerMigrationProvider,
+  createForkMigrationProvider,
+  createLegacyMigrationProvider,
+  createOfficialMigrationProvider,
+} from 'src/fork-schema/migration-provider';
+import {
+  aliasLegacyWorkflowMigration,
+  classifyWorkflowCompatibility,
+  getWorkflowCompatibilityEvidence,
+  LEGACY_WORKFLOW_MIGRATION,
+  normalizeWorkflowMigrationForOfficialOrder,
+  validateOfficialMigrationLedgerOrder,
+  WorkflowCompatibility,
+} from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import {
+  canonicalStorageVerificationDigest,
+  StorageVerificationEvidence,
+} from 'src/repositories/fork-cutover-verification.repository';
+import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
+import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import 'src/schema'; // make sure all schema definitions are imported for schemaFromCode
 import { DB } from 'src/schema';
@@ -29,6 +65,143 @@ import { isValidInteger } from 'src/validation';
 export let cachedVectorExtension: VectorExtension | undefined;
 
 const CLIP_TABLES = ['smart_search', 'smart_search_description', 'asset_video_duplicate_frame'] as const;
+
+const FORK_CATALOG_MANIFEST = forkCatalogManifest as CatalogManifest;
+const OFFICIAL_CATALOG_MANIFEST = officialCatalogManifest as CatalogManifest;
+
+const INERT_LEGACY_CATALOG_ALLOWLIST = new Set<string>();
+
+const forkEntries = <T extends { identity: string }>(entries: T[]) =>
+  entries.filter(({ identity }) => identity === 'immich_fork' || identity.startsWith('immich_fork.'));
+
+const expectedCatalogFor = (installationClass: ForkSchemaCutoverEvidence['installationClass']): CatalogManifest => {
+  if (installationClass === 'current-fork') {
+    return FORK_CATALOG_MANIFEST;
+  }
+  return {
+    ...OFFICIAL_CATALOG_MANIFEST,
+    columns: [...OFFICIAL_CATALOG_MANIFEST.columns, ...forkEntries(FORK_CATALOG_MANIFEST.columns)],
+    constraints: [...OFFICIAL_CATALOG_MANIFEST.constraints, ...forkEntries(FORK_CATALOG_MANIFEST.constraints)],
+    enums: [...OFFICIAL_CATALOG_MANIFEST.enums, ...forkEntries(FORK_CATALOG_MANIFEST.enums)],
+    forkMigrations: FORK_CATALOG_MANIFEST.forkMigrations,
+    functions: [...OFFICIAL_CATALOG_MANIFEST.functions, ...forkEntries(FORK_CATALOG_MANIFEST.functions)],
+    indexes: [...OFFICIAL_CATALOG_MANIFEST.indexes, ...forkEntries(FORK_CATALOG_MANIFEST.indexes)],
+    schemas: [...OFFICIAL_CATALOG_MANIFEST.schemas, ...forkEntries(FORK_CATALOG_MANIFEST.schemas)],
+    source: 'v3.0.3+fork-v2',
+    tables: [...OFFICIAL_CATALOG_MANIFEST.tables, ...forkEntries(FORK_CATALOG_MANIFEST.tables)],
+    triggers: [...OFFICIAL_CATALOG_MANIFEST.triggers, ...forkEntries(FORK_CATALOG_MANIFEST.triggers)],
+  };
+};
+
+const LEGACY_TRIGGER_NAMES = new Set([
+  'physical_file_updatedAt',
+  'asset_video_duplicate_frame_updatedAt',
+  'asset_health_updatedAt',
+  'asset_health_candidate_updatedAt',
+  'album_parent_cycle_check_trigger',
+]);
+
+const LEGACY_MIGRATION_OVERRIDE_NAMES = new Set([
+  'function_album_parent_cycle_check',
+  'index_album_parentId_idx',
+  'index_album_parent_sort_idx',
+  'index_album_root_sort_idx',
+  'index_idx_asset_exif_description_trigram',
+  'index_idx_asset_is_nsfw',
+  'trigger_album_parent_cycle_check_trigger',
+  'trigger_asset_health_candidate_updatedAt',
+  'trigger_asset_health_updatedAt',
+  'trigger_asset_video_duplicate_frame_updatedAt',
+  'trigger_physical_file_updatedAt',
+]);
+
+export const FORK_SCHEMA_CUTOVER_MUTATION_STAGES = [
+  'workflow-alias',
+  'legacy-ledger-audit',
+  'legacy-ledger-delete',
+  'legacy-artifact-shutdown',
+  'state-transition',
+  'checkpoint-audit',
+] as const;
+
+export type ForkSchemaCutoverMutationStage = (typeof FORK_SCHEMA_CUTOVER_MUTATION_STAGES)[number];
+
+export type ForkSchemaCutoverEvidence = {
+  activeWrites: number;
+  backfills: Array<{
+    claimToken: string | null;
+    claimedCursor: string | null;
+    claimedIds: string[];
+    cursor: string | null;
+    digest: string | null;
+    kind: string;
+    lastError: string | null;
+    processed: number;
+    remaining: number;
+  }>;
+  backfillKindsValid: boolean;
+  catalogDiff: CatalogDiff;
+  checksumCoverage: {
+    applicableCount: number;
+    applicableDigest: string;
+    invalidCount: number;
+    sidecarCount: number;
+    sidecarDigest: string;
+    valid: boolean;
+  };
+  checksumFailures: number;
+  forkLedgerValid: boolean;
+  forkMigrations: string[];
+  installationClass: 'current-fork' | 'original-official';
+  ledger: Array<{
+    classification: 'legacy-fork' | 'unknown' | 'upstream';
+    name: string;
+    timestamp: string;
+  }>;
+  maintenanceMode: boolean;
+  migrationOrderValid: boolean;
+  officialPendingMigrations: string[];
+  mappingCoverage: {
+    mappingCount: number;
+    mappingDigest: string;
+    normalizedCount: number;
+    normalizedDigest: string;
+    unsafeCount: number;
+    valid: boolean;
+  };
+  state: {
+    active: boolean;
+    phase: 'active' | 'dual-write' | 'failed' | 'inactive' | 'legacy' | 'ready';
+    schemaVersion: string;
+    upstreamVersion: string;
+  };
+  storageReservations: number;
+  storageVerification: {
+    runId: string;
+    databaseBackupId: string;
+    mediaSnapshotId: string;
+    assetCount: number;
+    aggregateDigest: string;
+    completedAt: string;
+    evidenceAggregateDigest: string;
+    evidenceAssetCount: number;
+    failureCount: number;
+    rootDriftCount: number;
+    verifiedCount: number;
+  } | null;
+  tableEvidence: Array<{ count: number; digest: string; table: string }>;
+  unsafePhysicalMappings: number;
+  workflowCompatibility: WorkflowCompatibility;
+};
+
+export type ForkSchemaCutoverCheckpoint = {
+  committedAt: string;
+  phase: 'inactive';
+  reportDigest: string;
+  schemaVersion: '2';
+};
+
+const quoteIdentifier = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 export async function getVectorExtension(runner: Kysely<DB>): Promise<VectorExtension> {
   if (cachedVectorExtension) {
@@ -56,15 +229,24 @@ export const probes: Record<VectorIndex, number> = {
 };
 
 @Injectable()
-export class DatabaseRepository {
+export class DatabaseRepository extends ForkHandoffRepository {
   private readonly asyncLock = new AsyncLock();
 
   constructor(
-    @InjectKysely() private db: Kysely<DB>,
+    @InjectKysely() db: Kysely<DB>,
     private logger: LoggingRepository,
     private configRepository: ConfigRepository,
   ) {
+    super(db);
     this.logger.setContext(DatabaseRepository.name);
+  }
+
+  override isCertifiedReturnStartup(kysely: Kysely<DB> = this.db): Promise<boolean> {
+    return super.isCertifiedReturnStartup(kysely);
+  }
+
+  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+    return super.assertCertifiedReturnLedger(kysely);
   }
 
   async shutdown() {
@@ -396,7 +578,17 @@ export class DatabaseRepository {
   async runMigrations(): Promise<void> {
     this.logger.log('Running migrations');
 
-    const migrator = this.createMigrator();
+    const ledgerTable = await sql<{ present: boolean }>`
+      SELECT to_regclass('public.kysely_migrations') IS NOT NULL AS present
+    `.execute(this.db);
+    const ledger = ledgerTable.rows[0]?.present
+      ? await sql<{ name: string }>`SELECT name FROM public.kysely_migrations`.execute(this.db)
+      : { rows: [] };
+    const provider = createCertifiedLedgerMigrationProvider(
+      createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+      ledger.rows.map(({ name }) => name),
+    );
+    const migrator = this.createMigrator(provider);
 
     const { error, results } = await migrator.migrateToLatest();
 
@@ -416,6 +608,508 @@ export class DatabaseRepository {
     }
 
     this.logger.log('Finished running migrations');
+  }
+
+  async runOfficialMigrations(): Promise<void> {
+    this.logger.log('Running official migrations');
+
+    const ledgerTable = await sql<{ present: boolean }>`
+      SELECT to_regclass('public.kysely_migrations') IS NOT NULL AS present
+    `.execute(this.db);
+    const ledger = ledgerTable.rows[0]?.present
+      ? await sql<{ name: string }>`
+          SELECT name FROM public.kysely_migrations ORDER BY timestamp, name
+        `.execute(this.db)
+      : { rows: [] };
+    const appliedNames = ledger.rows.map(({ name }) => name);
+    const officialProvider = createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations'));
+    const bundledNames = Object.keys(await officialProvider.getMigrations());
+    if (!validateOfficialMigrationLedgerOrder(appliedNames, bundledNames).valid) {
+      throw new Error('Official migration ledger is not an exact ordered prefix of the bundled provider');
+    }
+    const provider = createCertifiedLedgerMigrationProvider(officialProvider, appliedNames);
+
+    const migrator = new Migrator({
+      db: this.db,
+      migrationLockTableName: 'kysely_migrations_lock',
+      allowUnorderedMigrations: this.configRepository.isDev(),
+      migrationTableName: 'kysely_migrations',
+      provider,
+    });
+
+    await this.runMigrationSet(migrator, 'official');
+  }
+
+  protected async loadOfficialMigrations(): Promise<Record<string, Migration>> {
+    // Keep cutover on the same filtered provider used by normal startup. This
+    // provider refuses unknown files and cannot expose fork migrations.
+    return createOfficialMigrationProvider(join(__dirname, '..', 'schema/migrations')).getMigrations();
+  }
+
+  async getForkSchemaCutoverEvidence(
+    runner: Kysely<DB> = this.db,
+    checkpoint?: { databaseBackupId: string; mediaSnapshotId: string },
+  ): Promise<ForkSchemaCutoverEvidence> {
+    const [
+      officialMigrations,
+      ledgerResult,
+      forkLedgerResult,
+      stateResult,
+      backfillResult,
+      maintenanceResult,
+      classificationResult,
+    ] = await Promise.all([
+      this.loadOfficialMigrations(),
+      sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp FROM public.kysely_migrations ORDER BY timestamp, name
+        `.execute(runner),
+      sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY timestamp, name`.execute(runner),
+      sql<ForkSchemaCutoverEvidence['state']>`
+          SELECT active, phase, "schemaVersion", "upstreamVersion" FROM immich_fork.state WHERE id = 1
+        `.execute(runner),
+      sql<{
+        digest: string | null;
+        claimToken: string | null;
+        claimedCursor: string | null;
+        claimedIds: string[];
+        cursor: string | null;
+        kind: string;
+        lastError: string | null;
+        processed: string;
+        remaining: string;
+      }>`
+          SELECT kind, cursor, processed, remaining, digest, "claimedCursor", "claimedIds", "claimToken", "lastError"
+          FROM immich_fork.backfill_progress
+          ORDER BY kind
+        `.execute(runner),
+      sql<{ maintenanceMode: boolean }>`
+          SELECT coalesce((value->>'isMaintenanceMode')::boolean, false) AS "maintenanceMode"
+          FROM public.system_metadata
+          WHERE key = 'maintenance-mode'
+        `.execute(runner),
+      sql<{ currentFork: boolean }>`
+          SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
+        `.execute(runner),
+    ]);
+
+    const state = stateResult.rows[0];
+    if (!state) {
+      throw new Error('Fork schema state is not initialized');
+    }
+    const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
+    const workflowCompatibility = classifyWorkflowCompatibility(await getWorkflowCompatibilityEvidence(runner));
+    const installationClass = classificationResult.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+    const officialNames = Object.keys(officialMigrations).toSorted();
+    if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
+      throw new Error('Official migration provider exposed a non-upstream migration');
+    }
+    const appliedOfficial = ledger
+      .filter(({ classification, name }) => classification === 'upstream' || name === LEGACY_WORKFLOW_MIGRATION)
+      .map(({ name }) => normalizeWorkflowMigrationForOfficialOrder(name));
+    const officialLedgerOrder = validateOfficialMigrationLedgerOrder(appliedOfficial, officialNames);
+
+    const activeWritesResult = await sql<{ count: number }>`
+      SELECT count(*)::int AS count
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND pid <> pg_backend_pid()
+        AND backend_xid IS NOT NULL
+    `.execute(runner);
+    const checksumResult = await sql<{
+      applicableCount: number;
+      applicableDigest: string;
+      invalidCount: number;
+      sidecarCount: number;
+      sidecarDigest: string;
+    }>`
+      SELECT
+        count(asset.id)::int AS "applicableCount",
+        encode(sha256(convert_to(coalesce(string_agg(asset.id::text, E'\n' ORDER BY asset.id::text), ''), 'UTF8')), 'hex') AS "applicableDigest",
+        count(checksum."assetId")::int AS "sidecarCount",
+        encode(sha256(convert_to(coalesce(string_agg(checksum."assetId"::text, E'\n' ORDER BY checksum."assetId"::text), ''), 'UTF8')), 'hex') AS "sidecarDigest",
+        count(*) FILTER (WHERE
+          checksum."assetId" IS NULL
+          OR checksum.sha1 IS NULL OR octet_length(checksum.sha1) <> 20
+          OR checksum.sha256 IS NULL OR octet_length(checksum.sha256) <> 32
+          OR asset.checksum IS NULL
+          OR asset."checksumAlgorithm" <> 'sha1'
+          OR asset.checksum <> checksum.sha1
+        )::int AS "invalidCount"
+      FROM public.asset asset
+      LEFT JOIN immich_fork.asset_checksum checksum ON checksum."assetId" = asset.id
+    `.execute(runner);
+    const mappingResult = await sql<{
+      mappingCount: number;
+      mappingDigest: string;
+      normalizedCount: number;
+      normalizedDigest: string;
+      unsafeCount: number;
+    }>`
+      SELECT
+        count(asset.id)::int AS "normalizedCount",
+        encode(sha256(convert_to(coalesce(string_agg(asset.id::text || ':' || asset."originalPath", E'\n' ORDER BY asset.id::text), ''), 'UTF8')), 'hex') AS "normalizedDigest",
+        count(mapping."assetId")::int AS "mappingCount",
+        encode(sha256(convert_to(coalesce(string_agg(mapping."assetId"::text || ':' || mapping."upstreamPath", E'\n' ORDER BY mapping."assetId"::text), ''), 'UTF8')), 'hex') AS "mappingDigest",
+        count(*) FILTER (
+          WHERE mapping."assetId" IS NULL
+            OR mapping."upstreamPath" IS NULL
+            OR mapping."upstreamPath" <> asset."originalPath"
+        )::int AS "unsafeCount"
+      FROM public.asset asset
+      LEFT JOIN immich_fork.asset_physical_file mapping ON mapping."assetId" = asset.id
+    `.execute(runner);
+    const publicPhysicalReferenceResult =
+      installationClass === 'current-fork'
+        ? await sql<{ count: number }>`
+            SELECT (
+              (SELECT count(*) FROM public.asset WHERE "physicalOriginalFileId" IS NOT NULL)
+              + (SELECT count(*) FROM public.asset_file WHERE "physicalFileId" IS NOT NULL)
+            )::int AS count
+          `.execute(runner)
+        : { rows: [{ count: 0 }] };
+    const reservationResult = await sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation
+    `.execute(runner);
+    const storageVerificationResult = checkpoint
+      ? await sql<{
+          runId: string;
+          databaseBackupId: string;
+          mediaSnapshotId: string;
+          assetCount: number;
+          aggregateDigest: string;
+          completedAt: Date | string;
+          failureCount: number;
+          verifiedCount: number;
+        }>`
+          SELECT id AS "runId", "databaseBackupId", "snapshotId" AS "mediaSnapshotId",
+            "applicableAssetCount"::int AS "assetCount", "aggregateDigest", "completedAt",
+            "failureCount"::int AS "failureCount", "verifiedCount"::int AS "verifiedCount"
+          FROM immich_fork.cutover_verification_run
+          WHERE "databaseBackupId" = ${checkpoint.databaseBackupId}
+            AND "snapshotId" = ${checkpoint.mediaSnapshotId}
+            AND status = 'completed'
+          ORDER BY "completedAt" DESC, id DESC LIMIT 1
+        `.execute(runner)
+      : { rows: [] };
+    const storageVerificationRow = storageVerificationResult.rows[0];
+    const storageEvidenceResult = storageVerificationRow
+      ? await sql<StorageVerificationEvidence>`
+          SELECT "assetId", path, size::float8 AS size, sha1, sha256, device::text, inode::text, links
+          FROM immich_fork.cutover_verification_asset
+          WHERE "runId" = ${storageVerificationRow.runId}::uuid AND status = 'verified'
+          ORDER BY "assetId"
+        `.execute(runner)
+      : { rows: [] };
+    const storageRootDriftResult = storageVerificationRow
+      ? await sql<{ count: number }>`
+          SELECT count(*)::int AS count
+          FROM immich_fork.cutover_verification_asset verification
+          LEFT JOIN public.asset asset ON asset.id = verification."assetId"
+          LEFT JOIN public.library library ON library.id = asset."libraryId"
+          WHERE verification."runId" = ${storageVerificationRow.runId}::uuid
+            AND (
+              asset.id IS NULL
+              OR verification.path IS DISTINCT FROM asset."originalPath"
+              OR verification."approvedRoots" IS DISTINCT FROM
+                ARRAY[${StorageCore.getMediaLocation()}] || coalesce(library."importPaths", ARRAY[]::text[])
+            )
+        `.execute(runner)
+      : { rows: [] };
+
+    const actualCatalog = await getCatalogEvidence(runner);
+    const expectedCatalog = expectedCatalogFor(installationClass);
+    const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
+    const exactOriginalOfficialLedger =
+      ledger.length === SUPPORTED_UPSTREAM_MIGRATIONS.length &&
+      ledger.every(
+        ({ classification, name }, index) =>
+          classification === 'upstream' && name === SUPPORTED_UPSTREAM_MIGRATIONS[index],
+      );
+    const migrationOrderValid =
+      installationClass === 'current-fork'
+        ? officialLedgerOrder.valid
+        : exactOriginalOfficialLedger && catalogDiff.clean;
+    const forkMigrations = forkLedgerResult.rows.map(({ name }) => name);
+    const cutoverAuditResult = await sql<{ present: boolean }>`
+      SELECT EXISTS (
+        SELECT 1 FROM immich_fork.migration_audit
+        WHERE name = 'fork-schema-cutover' AND phase = 'official-cutover' AND status = 'applied'
+      ) AS present
+    `.execute(runner);
+    const forkLedgerValid =
+      forkMigrations.length === expectedCatalog.forkMigrations.length &&
+      forkMigrations.every((name, index) => expectedCatalog.forkMigrations[index] === name) &&
+      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present === true);
+    const tableEvidence: ForkSchemaCutoverEvidence['tableEvidence'] = [];
+    for (const table of expectedCatalog.tables.map(({ identity }) => identity)) {
+      const [schema, name] = table.split('.');
+      const identifier = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
+      const result = await sql
+        .raw<{ count: number; digest: string }>(
+          String.raw`
+        SELECT count(*)::int AS count,
+          md5(coalesce(string_agg(row_data, E'\n' ORDER BY row_data), '')) AS digest
+        FROM (SELECT row_to_json(t)::text AS row_data FROM ${identifier} t) rows
+      `,
+        )
+        .execute(runner);
+      tableEvidence.push({ table, count: result.rows[0]?.count ?? 0, digest: result.rows[0]?.digest ?? '' });
+    }
+
+    const backfills = backfillResult.rows.map((row) => ({
+      ...row,
+      processed: Number(row.processed),
+      remaining: Number(row.remaining),
+    }));
+    const requiredKinds = new Set<string>(BACKFILL_KINDS);
+    const actualKinds = new Set(backfills.map(({ kind }) => kind));
+    const backfillKindsValid =
+      actualKinds.size === requiredKinds.size && [...requiredKinds].every((kind) => actualKinds.has(kind));
+    const checksum = checksumResult.rows[0] ?? {
+      applicableCount: 0,
+      applicableDigest: '',
+      invalidCount: 1,
+      sidecarCount: 0,
+      sidecarDigest: '',
+    };
+    const checksumCoverage = {
+      ...checksum,
+      valid:
+        checksum.invalidCount === 0 &&
+        checksum.applicableCount === checksum.sidecarCount &&
+        checksum.applicableDigest === checksum.sidecarDigest,
+    };
+    const mappingResultRow = mappingResult.rows[0] ?? {
+      mappingCount: 0,
+      mappingDigest: '',
+      normalizedCount: 0,
+      normalizedDigest: '',
+      unsafeCount: 1,
+    };
+    const mapping = {
+      ...mappingResultRow,
+      unsafeCount: mappingResultRow.unsafeCount + (publicPhysicalReferenceResult.rows[0]?.count ?? 0),
+    };
+    const mappingCoverage = {
+      ...mapping,
+      valid:
+        mapping.unsafeCount === 0 &&
+        mapping.normalizedCount === mapping.mappingCount &&
+        mapping.normalizedDigest === mapping.mappingDigest,
+    };
+    return {
+      activeWrites: activeWritesResult.rows[0]?.count ?? 0,
+      backfills,
+      backfillKindsValid,
+      catalogDiff,
+      checksumCoverage,
+      checksumFailures: checksum.invalidCount,
+      forkLedgerValid,
+      forkMigrations,
+      installationClass,
+      ledger,
+      maintenanceMode: maintenanceResult.rows[0]?.maintenanceMode ?? false,
+      mappingCoverage,
+      migrationOrderValid,
+      officialPendingMigrations:
+        installationClass === 'current-fork' && officialLedgerOrder.valid ? officialLedgerOrder.pending : [],
+      state,
+      storageReservations: reservationResult.rows[0]?.count ?? 0,
+      storageVerification: storageVerificationRow
+        ? {
+            ...storageVerificationRow,
+            completedAt: new Date(storageVerificationRow.completedAt).toISOString(),
+            evidenceAggregateDigest: canonicalStorageVerificationDigest(storageEvidenceResult.rows),
+            evidenceAssetCount: storageEvidenceResult.rows.length,
+            rootDriftCount: storageRootDriftResult.rows[0]?.count ?? 0,
+          }
+        : null,
+      tableEvidence,
+      unsafePhysicalMappings: mapping.unsafeCount,
+      workflowCompatibility,
+    };
+  }
+
+  async commitForkSchemaCutover(
+    reportDigest: string,
+    verify: (transaction: Kysely<DB>) => Promise<ForkSchemaCutoverEvidence | void>,
+  ): Promise<ForkSchemaCutoverCheckpoint> {
+    return this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (transaction) => {
+        const classification = await sql<{ currentFork: boolean }>`
+          SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
+        `.execute(transaction);
+        const installationClass: ForkSchemaCutoverEvidence['installationClass'] =
+          classification.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+        const lockTables = getCatalogTableLocks(expectedCatalogFor(installationClass))
+          .map((table) =>
+            table
+              .split('.')
+              .map((segment) => quoteIdentifier(segment))
+              .join('.'),
+          )
+          .join(', ');
+        await sql.raw(`LOCK TABLE ${lockTables} IN SHARE ROW EXCLUSIVE MODE`).execute(transaction);
+        const verifiedEvidence = await verify(transaction);
+        if (verifiedEvidence && verifiedEvidence.installationClass !== installationClass) {
+          throw new Error('Fork schema cutover installation classification changed under lock');
+        }
+
+        const workflowCompatibility = classifyWorkflowCompatibility(
+          await getWorkflowCompatibilityEvidence(transaction),
+        );
+        await aliasLegacyWorkflowMigration(transaction, workflowCompatibility, reportDigest);
+        await this.afterForkSchemaCutoverStage(transaction, 'workflow-alias');
+
+        const legacy = await sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp
+          FROM public.kysely_migrations
+          WHERE name = ANY(${[...GENERIC_LEGACY_FORK_MIGRATIONS]})
+          ORDER BY name
+        `.execute(transaction);
+        for (const row of legacy.rows) {
+          await sql`
+            INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+            VALUES (
+              ${row.name},
+              'ledger-cutover',
+              'applied',
+              jsonb_build_object(
+                'classification', 'legacy-fork',
+                'originalTimestamp', ${row.timestamp}::text,
+                'reportDigest', ${reportDigest}::text
+              ),
+              now()
+            )
+          `.execute(transaction);
+        }
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-ledger-audit');
+        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[
+          ...GENERIC_LEGACY_FORK_MIGRATIONS,
+        ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-ledger-delete');
+        const legacyTriggers = await sql<{ name: string; schemaName: string; tableName: string }>`
+          SELECT trigger.tgname AS name, namespace.nspname AS "schemaName", relation.relname AS "tableName"
+          FROM pg_trigger trigger
+          JOIN pg_class relation ON relation.oid = trigger.tgrelid
+          JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+          WHERE NOT trigger.tgisinternal AND namespace.nspname = 'public'
+        `.execute(transaction);
+        for (const trigger of legacyTriggers.rows) {
+          if (!LEGACY_TRIGGER_NAMES.has(trigger.name)) {
+            continue;
+          }
+          await sql
+            .raw(
+              `ALTER TABLE ${quoteIdentifier(trigger.schemaName)}.${quoteIdentifier(trigger.tableName)} DISABLE TRIGGER ${quoteIdentifier(trigger.name)}`,
+            )
+            .execute(transaction);
+        }
+        await sql`DELETE FROM public.migration_overrides WHERE name = ANY(${[
+          ...LEGACY_MIGRATION_OVERRIDE_NAMES,
+        ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'legacy-artifact-shutdown');
+
+        const committedAt = new Date().toISOString();
+        const state = await sql<{ id: number }>`
+          UPDATE immich_fork.state
+          SET active = false,
+              phase = 'inactive',
+              "schemaVersion" = '2',
+              "checkpointStartedAt" = coalesce("checkpointStartedAt", now()),
+              "checkpointCompletedAt" = now(),
+              "updatedAt" = now()
+          WHERE id = 1 AND phase = 'ready'
+          RETURNING id
+        `.execute(transaction);
+        if (!state.rows[0]) {
+          throw new Error('Fork schema cutover requires ready phase');
+        }
+        await this.afterForkSchemaCutoverStage(transaction, 'state-transition');
+        const storage = verifiedEvidence?.storageVerification;
+        await sql`
+          INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+          VALUES (
+            'fork-schema-cutover',
+            'official-cutover',
+            'applied',
+            jsonb_build_object(
+              'reportDigest', ${reportDigest}::text,
+              'installationClass', ${installationClass}::text,
+              'databaseBackupId', ${storage?.databaseBackupId ?? null}::text,
+              'mediaSnapshotId', ${storage?.mediaSnapshotId ?? null}::text,
+              'storageVerificationRunId', ${storage?.runId ?? null}::text,
+              'storageVerificationDigest', ${storage?.aggregateDigest ?? null}::text,
+              'storageVerificationAssetCount', ${storage?.assetCount ?? null}::int,
+              'workflowMode', ${verifiedEvidence?.workflowCompatibility.mode ?? workflowCompatibility.mode}::text,
+              'workflowSchemaDigest', ${
+                verifiedEvidence?.workflowCompatibility.schemaDigest ?? workflowCompatibility.schemaDigest
+              }::text
+            ),
+            now()
+          )
+        `.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'checkpoint-audit');
+        await this.finishForkSchemaCutover(transaction);
+        return { committedAt, phase: 'inactive', reportDigest, schemaVersion: '2' };
+      });
+  }
+
+  protected finishForkSchemaCutover(_transaction: Kysely<DB>): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected afterForkSchemaCutoverStage(
+    _transaction: Kysely<DB>,
+    _stage: ForkSchemaCutoverMutationStage,
+  ): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async runForkMigrations(): Promise<void> {
+    this.logger.log('Running fork migrations');
+
+    const migrator = new Migrator({
+      db: this.db,
+      migrationTableSchema: 'immich_fork',
+      migrationTableName: 'migrations',
+      migrationLockTableName: 'migrations_lock',
+      provider: createForkMigrationProvider(join(__dirname, '..', 'fork-schema/migrations')),
+    });
+
+    await this.runMigrationSet(migrator, 'fork');
+  }
+
+  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'fresh'> {
+    const {
+      rows: [ledgers],
+    } = await sql<{ forkLedger: string | null; officialLedger: string | null }>`
+      SELECT
+        to_regclass('public.kysely_migrations')::text AS "officialLedger",
+        to_regclass('immich_fork.migrations')::text AS "forkLedger"
+    `.execute(this.db);
+
+    let hasLegacyMigrations = false;
+    if (ledgers.officialLedger) {
+      const { rows } = await sql<{ name: string }>`SELECT name FROM public.kysely_migrations ORDER BY name`.execute(
+        this.db,
+      );
+      for (const { name } of rows) {
+        const owner = classifyMigration(name);
+        if (owner === 'unknown') {
+          throw new Error(`Unknown migration in kysely_migrations: ${name}`);
+        }
+        hasLegacyMigrations ||= owner === 'legacy-fork';
+      }
+    }
+
+    if (hasLegacyMigrations) {
+      return 'legacy';
+    }
+
+    return ledgers.forkLedger ? 'isolated' : 'fresh';
   }
 
   async migrateFilePaths(sourceFolder: string, targetFolder: string): Promise<void> {
@@ -576,18 +1270,36 @@ export class DatabaseRepository {
    * `allowUnorderedMigrations` is enabled in dev so reordering is forgiving;
    * production migrations should still be timestamp-ordered for clarity.
    */
-  private createMigrator(): Migrator {
+  private createMigrator(
+    provider: MigrationProvider = createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
+  ): Migrator {
     return new Migrator({
       db: this.db,
       migrationLockTableName: 'kysely_migrations_lock',
       allowUnorderedMigrations: this.configRepository.isDev(),
       migrationTableName: 'kysely_migrations',
-      provider: new FileMigrationProvider({
-        fs: { readdir },
-        path: { join },
-        // eslint-disable-next-line unicorn/prefer-module
-        migrationFolder: join(__dirname, '..', 'schema/migrations'),
-      }),
+      provider,
     });
+  }
+
+  private async runMigrationSet(migrator: Migrator, owner: 'official' | 'fork'): Promise<void> {
+    const { error, results } = await migrator.migrateToLatest();
+
+    for (const result of results ?? []) {
+      if (result.status === 'Success') {
+        this.logger.log(`${owner} migration "${result.migrationName}" succeeded`);
+      }
+
+      if (result.status === 'Error') {
+        this.logger.warn(`${owner} migration "${result.migrationName}" failed`);
+      }
+    }
+
+    if (error) {
+      this.logger.error(`${owner} migrations failed: ${error}`);
+      throw error;
+    }
+
+    this.logger.log(`Finished running ${owner} migrations`);
   }
 }

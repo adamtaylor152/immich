@@ -15,6 +15,7 @@ export type WorkflowStepUpsert = Omit<Insertable<WorkflowStepTable>, 'workflowId
 
 @Injectable()
 export class WorkflowRepository {
+  private allowedHostsColumn: Promise<boolean> | undefined;
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   private queryBuilder(db?: Kysely<DB>) {
@@ -62,7 +63,8 @@ export class WorkflowRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  getForWorkflowRun(id: string) {
+  async getForWorkflowRun(id: string) {
+    const hasAllowedHosts = await this.hasAllowedHostsColumn();
     return this.db
       .selectFrom('workflow')
       .select(['workflow.id', 'workflow.name', 'workflow.trigger'])
@@ -73,19 +75,36 @@ export class WorkflowRepository {
             .innerJoin('plugin_method', 'plugin_method.id', 'workflow_step.pluginMethodId')
             .whereRef('workflow_step.workflowId', '=', 'workflow.id')
             .where('workflow_step.enabled', '=', true)
-            .select([
+            .select((eb) => [
               'workflow_step.id',
               'workflow_step.config',
               'plugin_method.pluginId as pluginId',
               'plugin_method.name as methodName',
               'plugin_method.types as types',
               'plugin_method.hostFunctions',
+              hasAllowedHosts
+                ? eb.ref('plugin_method.allowedHosts').as('allowedHosts')
+                : sql<string[]>`ARRAY[]::character varying[]`.as('allowedHosts'),
             ]),
         ).as('steps'),
       ])
       .where('id', '=', id)
       .where('enabled', '=', true)
       .executeTakeFirst();
+  }
+
+  private hasAllowedHostsColumn(): Promise<boolean> {
+    return (this.allowedHostsColumn ??= sql<{ exists: boolean }>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'plugin_method'
+          AND column_name = 'allowedHosts'
+      ) AS "exists"
+    `
+      .execute(this.db)
+      .then(({ rows }) => rows[0]?.exists === true));
   }
 
   create(dto: Insertable<WorkflowTable>, steps?: WorkflowStepUpsert[]) {
@@ -145,10 +164,8 @@ export class WorkflowRepository {
       .selectFrom('asset')
       .select((eb) => [
         'asset.visibility',
-        // `asset.is_nsfw` is a non-nullable boolean (DEFAULT false), so the predicate
-        // is never NULL and `coalesce(...)` is unnecessary. The predicate body
-        // lives in `nsfwAssetIdExists` (utils/database.ts) and resolves to an
-        // aliased EXISTS subquery against the `asset` table.
+        // The shared phase-aware predicate uses legacy state during legacy and
+        // dual-write, then switches exclusively to the fork privacy sidecar.
         nsfwAssetIdExists(sql.ref('asset.id')).as('isNsfw'),
         eb
           .exists(

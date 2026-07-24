@@ -15,6 +15,8 @@ import { columns } from 'src/database';
 import { Chunked, ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserCreateDto, MapAlbumDto } from 'src/dtos/album.dto';
 import { AlbumUserRole } from 'src/enum';
+import { ForkAlbumMetadataRepository } from 'src/repositories/fork-album-metadata.repository';
+import { SmartAlbumRepository } from 'src/repositories/smart-album.repository';
 import { DB } from 'src/schema';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
@@ -87,11 +89,17 @@ const isAlbumOwned = (ownerId: string) => (eb: ExpressionBuilder<DB, 'album'>) =
 
 @Injectable()
 export class AlbumRepository {
-  constructor(@InjectKysely() private db: Kysely<DB>) {}
+  private readonly forkMetadata: ForkAlbumMetadataRepository;
+  private readonly smartAlbums: SmartAlbumRepository;
+
+  constructor(@InjectKysely() private db: Kysely<DB>) {
+    this.forkMetadata = new ForkAlbumMetadataRepository(db);
+    this.smartAlbums = new SmartAlbumRepository(db);
+  }
 
   @GenerateSql({ params: [DummyValue.UUID, { withAssets: true }, DummyValue.UUID] })
-  getById(id: string, options: AlbumInfoOptions, authUserId?: string) {
-    return this.db
+  async getById(id: string, options: AlbumInfoOptions, authUserId?: string) {
+    const row = await this.db
       .with('album_user', (qb) => qb.selectFrom('album_user').selectAll().where('album_user.albumId', '=', id))
       .selectFrom('album')
       .selectAll('album')
@@ -102,11 +110,16 @@ export class AlbumRepository {
       .$if(options.withAssets, (eb) => eb.select(withAssets(options)))
       .$narrowType<{ assets: NotNull }>()
       .executeTakeFirst();
+    if (!row) {
+      return;
+    }
+    const [result] = await this.forkMetadata.applyReadMetadata([row]);
+    return result;
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { excludeNsfw: true }] })
-  getByAssetId(ownerId: string, assetId: string, options: HiddenContentQueryOptions = {}) {
-    return this.db
+  async getByAssetId(ownerId: string, assetId: string, options: HiddenContentQueryOptions = {}) {
+    const rows = await this.db
       .selectFrom('album')
       .selectAll('album')
       .innerJoin('album_asset', 'album_asset.albumId', 'album.id')
@@ -126,6 +139,7 @@ export class AlbumRepository {
       .select(withAlbumUsers(ownerId))
       .orderBy('album.createdAt', 'desc')
       .execute();
+    return this.forkMetadata.applyReadMetadata(rows);
   }
 
   @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
@@ -219,14 +233,24 @@ export class AlbumRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { isOwned: true, isShared: true }] })
-  getAll(ownerId: string, options: { isOwned?: boolean; isShared?: boolean } = {}): Promise<MapAlbumDto[]> {
-    return this.buildAlbumBaseQuery(ownerId, options)
+  async getAll(ownerId: string, options: { isOwned?: boolean; isShared?: boolean } = {}): Promise<MapAlbumDto[]> {
+    const rows = await this.buildAlbumBaseQuery(ownerId, options)
       .selectAll('album')
       .select(withAlbumUsers(ownerId))
       .select(withSharedLink)
       .orderBy('album.sortOrder', sql`asc nulls last`)
       .orderBy('album.createdAt', 'desc')
       .execute();
+    const albums = await this.forkMetadata.applyReadMetadata(rows);
+    return albums.sort((left, right) => {
+      if (left.sortOrder === null && right.sortOrder !== null) {
+        return 1;
+      }
+      if (left.sortOrder !== null && right.sortOrder === null) {
+        return -1;
+      }
+      return (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || right.createdAt.getTime() - left.createdAt.getTime();
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { isOwned: true, isShared: true }] })
@@ -247,7 +271,19 @@ export class AlbumRepository {
   }
 
   async deleteAll(userId: string): Promise<void> {
-    await this.db.deleteFrom('album').where(isAlbumOwned(userId)).execute();
+    await this.db.transaction().execute(async (tx) => {
+      const albums = await tx.selectFrom('album').select('id').where(isAlbumOwned(userId)).execute();
+      await this.smartAlbums.deleteAlbums(
+        albums.map(({ id }) => id),
+        tx,
+      );
+      await this.smartAlbums.deleteOwner(userId, tx);
+      await this.forkMetadata.delete(
+        albums.map(({ id }) => id),
+        tx,
+      );
+      await tx.deleteFrom('album').where(isAlbumOwned(userId)).execute();
+    });
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })
@@ -380,23 +416,39 @@ export class AlbumRepository {
           .execute();
       }
 
+      await this.forkMetadata.mirrorFromLegacy([result.id], tx);
+
       return result;
     });
   }
 
   update(id: string, album: Updateable<AlbumTable>, authUserId: string) {
-    return this.db
-      .updateTable('album')
-      .set(album)
-      .where('album.id', '=', id)
-      .returningAll('album')
-      .returning(withSharedLink)
-      .returning(withAlbumUsers(authUserId))
-      .executeTakeFirstOrThrow();
+    return this.db.transaction().execute(async (tx) => {
+      const result = await tx
+        .updateTable('album')
+        .set(album)
+        .where('album.id', '=', id)
+        .returningAll('album')
+        .returning(withSharedLink)
+        .returning(withAlbumUsers(authUserId))
+        .executeTakeFirstOrThrow();
+      await this.forkMetadata.mirrorFromLegacy([id], tx);
+      return result;
+    });
   }
 
   async delete(id: string): Promise<void> {
-    await this.db.deleteFrom('album').where('id', '=', id).execute();
+    await this.db.transaction().execute(async (tx) => {
+      const subtree = await tx
+        .selectFrom('album_closure')
+        .select('id_descendant')
+        .where('id_ancestor', '=', id)
+        .execute();
+      const subtreeIds = subtree.length > 0 ? subtree.map(({ id_descendant }) => id_descendant) : [id];
+      await this.smartAlbums.deleteAlbums(subtreeIds, tx);
+      await tx.deleteFrom('album').where('id', '=', id).execute();
+      await this.forkMetadata.delete(subtreeIds, tx);
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -451,6 +503,11 @@ export class AlbumRepository {
    */
   async reparent(id: string, newParentId: string | null): Promise<void> {
     await this.db.transaction().execute(async (tx) => {
+      const subtree = await tx
+        .selectFrom('album_closure')
+        .select('id_descendant')
+        .where('id_ancestor', '=', id)
+        .execute();
       if (newParentId !== null) {
         const cycle = await tx
           .selectFrom('album_closure')
@@ -490,6 +547,11 @@ export class AlbumRepository {
           )
           .execute();
       }
+
+      await this.forkMetadata.mirrorFromLegacy(
+        subtree.map(({ id_descendant }) => id_descendant),
+        tx,
+      );
     });
   }
 

@@ -1,76 +1,35 @@
-# Reverting Back to Upstream Immich
+# Reverting Back to Official Immich
 
-This page explains how to migrate a database that was managed by this fork back to the official `immich-app/immich` release so you can switch your `docker-compose.yml` to `ghcr.io/immich-app/immich-server:release` and keep using your existing assets.
+The supported procedure depends on which fork release first opened your database.
 
-> [!CAUTION]
-> The fork does not provide an automated revert command. The previously documented `immich-admin schema-revert-to-upstream` CLI was removed because several fork migrations had empty `down()` stubs that silently reported success while leaving fork-only tables intact. Re-pointing an "auto-reverted" database at the upstream image would crash on the next migration run.
->
-> The supported procedure is to restore from a pre-fork `pg_dump` backup taken before you first started the fork image. **If you do not have such a backup, you cannot reliably downgrade to upstream.** Take backups before installing the fork.
+## Compatibility-certified releases (3.0 and later)
 
-## When You Need This
+Databases converted by a compatibility-certified 3.x fork can move to the exact certified official Immich image without deleting fork data. The fork keeps official migrations in `public.kysely_migrations` and stores fork-owned state in the isolated `immich_fork` schema. During official operation, those sidecars remain dormant in the database.
 
-You need to downgrade if all of the following are true:
+Do not change only the image tag. Follow the complete [fork-to-official handoff and return runbook](../administration/upstream-handoff.md). It requires:
 
-- You ran this fork's `immich-server` image against your database (so fork migrations were applied).
-- You want to switch to the official `ghcr.io/immich-app/immich-server` image.
-- You have a `pg_dump` from before you ran the fork image.
+- completed, resumable backfills for every fork sidecar family;
+- a fresh database backup and matching media snapshot;
+- maintenance mode and a digest-bound, locked cutover;
+- the exact certified official image, currently `ghcr.io/immich-app/immich-server:v3.0.3`;
+- a compatible fork release before returning from official Immich.
 
-If you have never run this fork's server image against your database, you do not need to downgrade — your database is still pure upstream.
+Official Immich owns plugin and workflow data. The compatibility process does not copy, translate, delete, or sidecar `plugin`, `plugin_method`, `workflow`, or `workflow_step` rows. Existing official workflows, workflows created while on the fork, and workflows created during official operation remain in the official tables. The fork restores the matching official plugin host ABI when it starts again.
 
-## Recommended Procedure: Restore from Backup
+Original Immich users upgrading directly to this fork retain their official data. Fork sidecars are initialized from public rows or safe defaults; official workflow data is left unchanged.
 
-### 1. Stop the fork container
+While the official image is running, fork-only behavior is unavailable. In particular, assets hidden only by fork privacy filters can become visible through official timelines, search, albums, downloads, sharing, and mobile clients. Review that exposure before handoff.
 
-```bash
-docker compose stop immich-server
-```
+On return, `prepare-fork` validates the exact official ledger, reconciles non-workflow sidecars, archives sidecars whose public records were deleted, supplies defaults for newly created official records, and activates fork features only after reconciliation completes. Fork data that is not applicable while official Immich runs remains dormant rather than being dropped.
 
-### 2. Restore the pre-fork dump
+The local synthetic certification does not replace the release gate against a sanitized production-shaped clone. Complete that external gate before using the cutover in production.
 
-Follow the restore steps in [Backup and Restore](../administration/backup-and-restore.md), pointing `pg_restore` at the `pg_dump` you took before installing the fork. The fork-only tables (`physical_file`, `asset_health*`, `asset_best_photo_score`, `smart_search_description`, `asset_video_duplicate_frame`, and the `asset.is_nsfw` column) are dropped wholesale when the upstream-shape database replaces them.
+## Pre-compatibility fork releases
 
-### 3. Switch the image
+Older fork releases wrote fork migrations and columns directly into the public schema and do not have a safe in-place downgrade. Their historical `down()` migrations are not exhaustive. For those databases, retain the original safety rule: restore a matched database and media backup taken before the fork first opened the database, or remain on the fork until it has been upgraded and successfully converted by a compatibility release.
 
-In `docker-compose.yml`:
+Never point an official image at an unconverted legacy-fork database. It may reject the migration ledger or leave a schema that neither implementation can safely operate.
 
-```yaml
-services:
-  immich-server:
-    image: ghcr.io/immich-app/immich-server:release
-```
+## Backups remain mandatory
 
-(Or pin to a specific upstream version tag.)
-
-### 4. Start upstream
-
-```bash
-docker compose pull immich-server
-docker compose up -d immich-server
-docker compose logs -f immich-server
-```
-
-Upstream's migrator should report no pending migrations against the restored database, and the API should come up.
-
-## Data You Will Lose
-
-Anything that the fork added on top of the original backup is gone after restore:
-
-- New assets you imported after starting the fork.
-- Fork-only data: physical-file dedup graph, video duplicate frame embeddings, asset-health history, best-photo scores, VLM image-description embeddings, the denormalized `asset.is_nsfw` column.
-- Any preferences, smart-album configurations, or workflows you added after starting the fork.
-- Anything that happened on the fork: face merges, album reorders, new users, etc.
-
-To minimize loss, take a fresh `pg_dump` _and_ snapshot the upload volume right before the restore so you can selectively re-import recent originals from the snapshot once upstream is running.
-
-## If You Do Not Have a Pre-Fork Backup
-
-There is no supported path. The fork's `down()` migrations are not exhaustive; an attempted "downgrade in place" leaves the database in a partial schema state that neither the fork nor upstream can boot against. Options:
-
-- Re-create the database from scratch under upstream, then re-import originals from your media volume (faces, albums, etc. are lost).
-- Stay on the fork.
-
-If you absolutely need to attempt a partial downgrade without a backup, take a new full `pg_dump` first and accept that the fork-only objects will linger in the schema and may collide with future upstream migrations. This is unsupported and may break on upstream upgrades.
-
-## Re-Upgrading to the Fork
-
-If you later want to switch back to the fork image, simply re-point the image tag in `docker-compose.yml`. The fork migrator will detect any fork tables already present and skip them (`IF NOT EXISTS`-guarded), and create the rest. Fork-only data (best-photo scores, asset-health history, the physical-file dedup graph, video duplicate frame embeddings, VLM description embeddings) starts empty and will be regenerated by the fork's background jobs. Any workflows or installed plugins lost during the downgrade need to be re-installed.
+Even on a compatibility-certified release, take and verify both the database backup and media snapshot immediately before handoff. A failure before the checkpoint transaction commits rolls back. A failure in the unchanged official migrator after checkpoint commit crosses the rollback boundary and requires restoring the matched database and media checkpoints.

@@ -192,7 +192,7 @@ export class SystemConfigService extends BaseService {
       throw new BadRequestException(error instanceof Error ? error.message : error);
     }
 
-    const newConfig = await this.updateConfig(dto);
+    const newConfig: SystemConfig = await this.updateConfig(dto);
 
     await this.eventRepository.emit('ConfigUpdate', { newConfig, oldConfig });
 

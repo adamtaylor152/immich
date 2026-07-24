@@ -1,0 +1,58 @@
+name: Fork schema official-container certification
+
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - '.github/workflows/fork-roundtrip.yml'
+      - 'e2e/docker-compose.fork-roundtrip.yml'
+      - 'e2e/src/specs/server/fork-schema-*.ts'
+      - 'scripts/test-fork-roundtrip.sh'
+      - 'server/src/app.module.ts'
+      - 'server/src/commands/**'
+      - 'server/src/fork-schema/**'
+      - 'server/src/repositories/**'
+      - 'server/src/schema/migrations/**'
+      - 'server/src/services/storage.service.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  certify:
+    name: ${{ matrix.lane }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        lane:
+          - origin-v3.0.3-to-fork
+          - current-fork-to-official-v3.0.3
+          - official-v3.0.3-to-fork-return
+    env:
+      FORK_ROUNDTRIP_LANE: ${{ matrix.lane }}
+      GITHUB_TOKEN: ${{ github.token }}
+      OFFICIAL_IMMICH_TAG: v3.0.3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run real official-container certification lane
+        run: pnpm --filter immich-e2e test:fork-roundtrip
+      - name: Capture container evidence
+        if: always()
+        run: |
+          docker compose -f e2e/docker-compose.fork-roundtrip.yml ps -a
+          docker compose -f e2e/docker-compose.fork-roundtrip.yml logs --no-color > fork-roundtrip-${{ matrix.lane }}.log || true
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: fork-roundtrip-${{ matrix.lane }}
+          path: fork-roundtrip-${{ matrix.lane }}.log

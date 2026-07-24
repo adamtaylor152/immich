@@ -710,6 +710,84 @@ describe('TimelineManager', () => {
     });
   });
 
+  describe('retrieveRange', () => {
+    let timelineManager: TimelineManager;
+
+    beforeEach(async () => {
+      timelineManager = new TimelineManager();
+      sdkMock.getTimeBuckets.mockResolvedValue([]);
+      sdkMock.getAssetInfo.mockRejectedValue(new Error('Asset not found'));
+      await timelineManager.updateViewport({ width: 1588, height: 1000 });
+    });
+
+    const build = (id: string, localIso: string, fileIso: string) =>
+      timelineAssetFactory.build({
+        id,
+        localDateTime: fromISODateTimeUTCToObject(localIso),
+        fileCreatedAt: fromISODateTimeUTCToObject(fileIso),
+      });
+
+    it('selects only the range between two same-day assets when local time and file time disagree', async () => {
+      // A and B fall on the same local day, but their fileCreatedAt order is the
+      // reverse of their localDateTime order (e.g. photos taken across timezones).
+      // The timeline groups days by localDateTime but sorts within a day by
+      // fileCreatedAt, so the on-screen order is [B, A].
+      const b = build('B', '2024-06-15T17:00:00.000Z', '2024-06-15T05:00:00.000Z');
+      const a = build('A', '2024-06-15T18:00:00.000Z', '2024-06-15T02:00:00.000Z');
+
+      // Older assets that must NOT be pulled in when ranging within 2024-06-15.
+      const older = [
+        build('older-1', '2024-05-10T12:00:00.000Z', '2024-05-10T12:00:00.000Z'),
+        build('older-2', '2024-04-10T12:00:00.000Z', '2024-04-10T12:00:00.000Z'),
+        build('older-3', '2024-03-10T12:00:00.000Z', '2024-03-10T12:00:00.000Z'),
+      ];
+
+      // Insertion order mirrors the backend's within-day order (fileCreatedAt
+      // descending), which is how the real timeline lays a day group out: [B, A].
+      timelineManager.upsertAssets([b, a, ...older]);
+
+      // Anchor on the top asset (B), shift-select down to A — expect just {B, A}.
+      const range = await timelineManager.retrieveRange({ id: 'B' }, { id: 'A' });
+      expect(range.map((asset) => asset.id)).toEqual(['B', 'A']);
+    });
+
+    it('returns the same range regardless of which endpoint is the anchor', async () => {
+      const b = build('B', '2024-06-15T17:00:00.000Z', '2024-06-15T05:00:00.000Z');
+      const a = build('A', '2024-06-15T18:00:00.000Z', '2024-06-15T02:00:00.000Z');
+      const older = build('older-1', '2024-05-10T12:00:00.000Z', '2024-05-10T12:00:00.000Z');
+      timelineManager.upsertAssets([b, a, older]);
+
+      const range = await timelineManager.retrieveRange({ id: 'A' }, { id: 'B' });
+      expect(range.map((asset) => asset.id)).toEqual(['B', 'A']);
+    });
+
+    it('selects the inclusive range across days for single-timezone assets', async () => {
+      const assets = [
+        build('d20', '2024-06-20T12:00:00.000Z', '2024-06-20T12:00:00.000Z'),
+        build('d18', '2024-06-18T12:00:00.000Z', '2024-06-18T12:00:00.000Z'),
+        build('d15', '2024-06-15T12:00:00.000Z', '2024-06-15T12:00:00.000Z'),
+        build('d10', '2024-06-10T12:00:00.000Z', '2024-06-10T12:00:00.000Z'),
+      ];
+      timelineManager.upsertAssets(assets);
+
+      const range = await timelineManager.retrieveRange({ id: 'd18' }, { id: 'd15' });
+      expect(range.map((asset) => asset.id)).toEqual(['d18', 'd15']);
+    });
+
+    it('includes intermediate months when ranging across several months', async () => {
+      const assets = [
+        build('jun', '2024-06-15T12:00:00.000Z', '2024-06-15T12:00:00.000Z'),
+        build('may', '2024-05-15T12:00:00.000Z', '2024-05-15T12:00:00.000Z'),
+        build('apr', '2024-04-15T12:00:00.000Z', '2024-04-15T12:00:00.000Z'),
+        build('mar', '2024-03-15T12:00:00.000Z', '2024-03-15T12:00:00.000Z'),
+      ];
+      timelineManager.upsertAssets(assets);
+
+      const range = await timelineManager.retrieveRange({ id: 'jun' }, { id: 'apr' });
+      expect(range.map((asset) => asset.id)).toEqual(['jun', 'may', 'apr']);
+    });
+  });
+
   describe('getTimelineMonthIndexByAssetId', () => {
     let timelineManager: TimelineManager;
 

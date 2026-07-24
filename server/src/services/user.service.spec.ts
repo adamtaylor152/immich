@@ -284,7 +284,11 @@ describe(UserService.name, () => {
         options,
       );
       expect(mocks.album.deleteAll).toHaveBeenCalledWith(user.id);
+      expect(mocks.asset.deleteAll).toHaveBeenCalledWith(user.id);
       expect(mocks.user.delete).toHaveBeenCalledWith(user, true);
+      expect(mocks.asset.deleteAll.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.user.delete.mock.invocationCallOrder[0]!,
+      );
     });
 
     it('should delete the library path for a storage label', async () => {

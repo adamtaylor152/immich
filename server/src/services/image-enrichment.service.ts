@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
+import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
@@ -21,6 +22,8 @@ import {
   QueueName,
   StorageFolder,
 } from 'src/enum';
+import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repository';
+import { ForkPrivacyRepository, PrivacySidecar } from 'src/repositories/fork-privacy.repository';
 import { ImageDescriptionResult, NsfwDetectionResult } from 'src/repositories/machine-learning.repository';
 import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
@@ -155,6 +158,9 @@ const normalizeTag = (tag: string) =>
 
 @Injectable()
 export class ImageEnrichmentService extends BaseService {
+  @InjectKysely()
+  private db?: Kysely<DB>;
+
   private readonly promptAssembler = new ImageDescriptionPromptAssembler();
   private readonly identityPostValidator = new IdentityPostValidator();
   private _smartAlbumService: SmartAlbumService | undefined;
@@ -743,7 +749,8 @@ export class ImageEnrichmentService extends BaseService {
       metadata.description.result.description,
     ]);
 
-    const visible = description !== existingDescription.trim();
+    const sidecarOnly = await this.isEnrichmentSidecarAuthoritative();
+    const visible = !sidecarOnly && description !== existingDescription.trim();
     if (visible) {
       await this.assetRepository.upsertExif({
         exif: updateLockedColumns({ assetId: id, description }),
@@ -774,6 +781,9 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async clearGeneratedTags(id: string, ownerId: string, tags: string[]) {
+    if (await this.isEnrichmentSidecarAuthoritative()) {
+      return { visible: false, metadata: false };
+    }
     let visible = false;
     for (const tag of tags) {
       const existing = await this.tagRepository.getByValue(ownerId, tag);
@@ -865,22 +875,85 @@ export class ImageEnrichmentService extends BaseService {
   }
 
   private async getEnrichmentMetadata(id: string, kysely?: Kysely<DB>): Promise<EnrichmentMetadata> {
-    const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
-    return isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    const database = kysely ?? this.db;
+    let authoritativePrivacy: PrivacySidecar | undefined;
+    if (this.db) {
+      const privacyRepository = new ForkPrivacyRepository(this.db);
+      if (await privacyRepository.shouldReadSidecar(database)) {
+        authoritativePrivacy = await privacyRepository.get(id, database);
+        if (!authoritativePrivacy) {
+          throw new Error(`Missing fork privacy sidecar for asset ${id}`);
+        }
+      }
+    }
+    let metadata: EnrichmentMetadata;
+    if (this.db && database && (await new ForkEnrichmentRepository(this.db).shouldReadSidecar(database))) {
+      const sidecar = await new ForkEnrichmentRepository(this.db).get(id, database);
+      if (!sidecar) {
+        throw new Error(`Missing fork enrichment sidecar for asset ${id}`);
+      }
+      metadata = sidecar.provenance as EnrichmentMetadata;
+    } else {
+      const row = await this.assetRepository.getMetadataByKey(id, AssetMetadataKey.MlEnrichment, kysely);
+      metadata = isRecord(row?.value) ? (row.value as EnrichmentMetadata) : {};
+    }
+    if (!this.db) {
+      return metadata;
+    }
+
+    if (!authoritativePrivacy) {
+      return metadata;
+    }
+    return this.applyPrivacySidecar(metadata, authoritativePrivacy);
   }
 
   private async saveEnrichmentMetadata(id: string, value: EnrichmentMetadata, kysely?: Kysely<DB>) {
-    await this.assetRepository.upsertMetadata(
-      id,
-      [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
-      kysely,
-    );
-    // Mirror the derived NSFW state into the denormalized `asset.is_nsfw` column
-    // so the privacy filter (utils/database.ts nsfwAssetIdExists) can do a cheap
-    // boolean probe instead of a correlated JSONB EXISTS. The boolean is owned
-    // by this service — every NSFW-affecting write goes through here.
-    const effectiveIsNsfw = this.getEffectiveNsfw(value) ?? false;
-    await this.assetRepository.updateIsNsfw(id, effectiveIsNsfw, kysely);
+    const database = kysely ?? this.db;
+    if (!this.db || !database) {
+      await this.assetRepository.upsertMetadata(
+        id,
+        [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
+        kysely,
+      );
+      return;
+    }
+    const repository = new ForkEnrichmentRepository(this.db);
+    if (!(await repository.shouldReadSidecar(database))) {
+      await this.assetRepository.upsertMetadata(
+        id,
+        [{ key: AssetMetadataKey.MlEnrichment, value: value as Record<string, unknown> }],
+        kysely,
+      );
+    }
+    await repository.save(id, value as Record<string, unknown>, database);
+  }
+
+  private applyPrivacySidecar(metadata: EnrichmentMetadata, privacy: PrivacySidecar): EnrichmentMetadata {
+    const current = metadata.nsfwDetection;
+    const suppression = privacy.suppression as EnrichmentReview | null;
+    if (current?.status === 'success') {
+      const nsfwDetection: NsfwEnrichmentTask = {
+        ...current,
+        result: { ...current.result, isNsfw: privacy.isNsfw },
+      };
+      if (suppression) {
+        nsfwDetection.review = suppression;
+      } else {
+        delete nsfwDetection.review;
+      }
+      return { ...metadata, nsfwDetection };
+    }
+
+    return {
+      ...metadata,
+      nsfwDetection: {
+        status: 'success',
+        modelName: 'privacy-sidecar',
+        updatedAt: suppression?.reviewedAt ?? new Date(0).toISOString(),
+        result: { isNsfw: privacy.isNsfw, score: privacy.isNsfw ? 1 : 0, labels: {} },
+        ...(suppression ? { review: suppression } : {}),
+      },
+    };
   }
 
   private async applyVisibleMetadata({
@@ -904,6 +977,8 @@ export class ImageEnrichmentService extends BaseService {
   }) {
     let visible = false;
     let metadataChanged = false;
+    const enrichmentRepository = this.db ? new ForkEnrichmentRepository(this.db) : undefined;
+    const sidecarOnly = !!enrichmentRepository && (await enrichmentRepository.shouldReadSidecar());
 
     const descriptionHash = hash(result.description);
     if (
@@ -917,7 +992,7 @@ export class ImageEnrichmentService extends BaseService {
         previousDescription ? [previousDescription] : [],
       );
 
-      if (block && !baseDescription.includes(block)) {
+      if (!sidecarOnly && block && !baseDescription.includes(block)) {
         const description = baseDescription ? `${baseDescription}\n\n${block}` : block;
         await this.assetRepository.upsertExif({
           exif: updateLockedColumns({ assetId: id, description }),
@@ -939,11 +1014,15 @@ export class ImageEnrichmentService extends BaseService {
       (tags.length > 0 || hasStoredTagApplication) &&
       descriptionMetadata.appliedTagHash !== tagHash
     ) {
-      const cleared = await this.clearGeneratedTags(id, ownerId, previousTagValues);
-      visible ||= cleared.visible;
+      if (!sidecarOnly) {
+        const cleared = await this.clearGeneratedTags(id, ownerId, previousTagValues);
+        visible ||= cleared.visible;
+      }
 
       if (tags.length > 0) {
-        const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
+        const tagsChanged = sidecarOnly
+          ? { visible: false, appliedTagValues: tags }
+          : await this.upsertAssetTags(id, ownerId, tags);
         visible ||= tagsChanged.visible;
 
         descriptionMetadata.appliedTagHash = tagHash;
@@ -973,6 +1052,12 @@ export class ImageEnrichmentService extends BaseService {
       return { visible: false, metadata: false };
     }
 
+    if (await this.isEnrichmentSidecarAuthoritative()) {
+      metadata.nsfwDetection.appliedTagHash = tagHash;
+      metadata.nsfwDetection.appliedTagValues = tags;
+      return { visible: false, metadata: true };
+    }
+
     const cleared = await this.clearGeneratedTags(id, ownerId, metadata.nsfwDetection.appliedTagValues ?? []);
     const tagsChanged = await this.upsertAssetTags(id, ownerId, tags);
     metadata.nsfwDetection.appliedTagHash = tagHash;
@@ -994,6 +1079,10 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     return changed;
+  }
+
+  private async isEnrichmentSidecarAuthoritative(kysely?: Kysely<DB>): Promise<boolean> {
+    return !!this.db && new ForkEnrichmentRepository(this.db).shouldReadSidecar(kysely ?? this.db);
   }
 
   private getTags(result: ImageDescriptionResult, nsfw?: NsfwDetectionResult, metadata?: EnrichmentMetadata) {
