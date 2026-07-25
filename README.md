@@ -37,6 +37,7 @@ It is designed for users who want to keep the Immich experience they already kno
 - Natural-language local discovery
 - A "Recently Added" media view
 - A "Best Photos" view for locally ranked high-quality images
+- **Server-to-server migration** that moves a user's whole library between Immich servers, resumably, and audits the result
 
 This fork is actively maintained and kept up to date with upstream Immich while preserving the additional features documented below.
 
@@ -363,6 +364,158 @@ screenshots from last month
 receipts from 2024
 photos of Alice in Calgary from April 2024
 ```
+
+---
+
+## Server-to-Server Library Migration
+
+This fork adds an `immich migrate` command that moves **one user's entire library from one Immich server to another** over the API — originals, albums, tags, descriptions, and everything else — then **audits the result** so you can safely retire the old server.
+
+It is built for real migrations: consolidating two home-lab servers, moving to new hardware, or folding a second instance into your main one.
+
+Two things make it practical for large libraries:
+
+- **It resumes.** Runs are checkpointed to a local database, so a migration of hundreds of thousands of assets can be interrupted — Ctrl+C, a reboot, a dropped VPN, a full disk — and picked up exactly where it left off by re-running the same command.
+- **It never stores a file twice.** Every upload is hash-matched by the destination, so files it already has are linked instead of duplicated, and re-running a finished migration transfers nothing.
+
+Nothing is ever deleted from the source server. This is a copy-then-verify operation, and you decide when to decommission the old server.
+
+### Before you start
+
+You need an API key **for the user being migrated, on both servers**.
+
+An admin key will not work. In Immich an API key can only reach the library of the user it belongs to, and anything it uploads is owned by that same user — so an admin key would copy the library into the admin's own account instead. Migrate one user at a time, with that user's own key on each side.
+
+Sign in as the user on each server, go to **Account Settings → API Keys**, and create a key with:
+
+| Server                        | Required permissions                                                                           | Optional                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Source** (moving _from_)    | `asset.read`, `asset.download`, `album.read`, `tag.read`                                       | `stack.read`, `person.read`                                     |
+| **Destination** (moving _to_) | `asset.upload`, `asset.update`, `album.create`, `albumAsset.create`, `tag.create`, `tag.asset` | `stack.create`, `person.create`, `person.reassign`, `face.read` |
+
+A key with the `all` permission also works. The command verifies permissions on startup and names anything missing. The optional ones only affect stacks and people; without them those items are skipped and everything else still migrates.
+
+If the two accounts have different email addresses the command warns and continues, since the same person often has different logins on each server — but check the warning, because everything is uploaded into whichever account the destination key belongs to.
+
+If the user doesn't exist on the destination yet, create the account there first, then sign in as them to generate the key.
+
+### Building the CLI
+
+`migrate` is fork-only, so build the CLI from this repository instead of installing `@immich/cli` from npm:
+
+```bash
+pnpm install
+pnpm --filter @immich/sdk build
+pnpm --filter @immich/cli build
+```
+
+Run it from anywhere that can reach both servers — a laptop, or ideally a machine on the same network as one of them. Each file is streamed to a temporary folder next to the ledger and deleted immediately after upload, so you only need enough free disk for the files in flight, not for the whole library.
+
+### Preview it first
+
+Start with a dry run. It inventories the source, asks the destination what it already has, and writes an audit report — without changing anything on the destination:
+
+```bash
+node packages/cli/dist/index.js migrate \
+  --from-url https://old-server.example.com/api --from-key <SOURCE_KEY> \
+  --to-url   https://new-server.example.com/api --to-key   <DEST_KEY> \
+  --dry-run
+```
+
+### Run the migration
+
+Drop `--dry-run` and add `--serve` to get a live progress dashboard:
+
+```bash
+node packages/cli/dist/index.js migrate \
+  --from-url https://old-server.example.com/api --from-key <SOURCE_KEY> \
+  --to-url   https://new-server.example.com/api --to-key   <DEST_KEY> \
+  --serve
+```
+
+Open <http://127.0.0.1:2285> to watch progress, pause, resume, or stop.
+
+The dashboard is only a window onto the migration — the work happens in the terminal process. **You can close the browser, or the whole tab, and the migration keeps running.** Reopen the page any time to check on it.
+
+To avoid putting API keys in your shell history, use environment variables instead: `IMMICH_FROM_URL`, `IMMICH_FROM_KEY`, `IMMICH_TO_URL`, `IMMICH_TO_KEY`.
+
+### If it stops, just run it again
+
+Press Ctrl+C, lose the network, or reboot the machine — nothing is lost. Re-run the exact same command and it continues, skipping everything already done and reporting what it resumed:
+
+```text
+Resuming: 148291/512773 assets already on B.
+```
+
+Progress lives in the ledger file (`./immich-migrate.sqlite` by default). Keep it until the migration is verified complete. If some assets failed — a corrupt source file, a timeout — the run continues past them, records them, and you can retry just those with `--retry-failed`.
+
+### Confirming it's safe to decommission
+
+A run that reaches the end performs an audit that re-checks **every single source asset against the destination by file hash**, then prints a summary. (If you stop a run part-way, the audit is reported as `AUDIT INCOMPLETE` rather than a pass — it can only clear the source server once it has checked everything.)
+
+```text
+──────── Migration summary ────────
+Assets:  512773/512773 on B   (0 failed, 0 missing)
+Albums:  184/184   Tags: 96/96
+Stacks:  312/312   People: 47/47
+Audit report: ./immich-migrate.sqlite.audit.json
+Ledger:       ./immich-migrate.sqlite
+
+✅ PASS — every asset is present on SERVER B. SERVER A is safe to decommission.
+```
+
+Anything short of `PASS` names the specific assets still missing, both on screen and in the audit report file (`<ledger>.audit.json`). **Only retire the source server once you see the PASS line.** The command also exits with a non-zero status when the migration is incomplete, so it can be checked from a script.
+
+### What gets moved
+
+**Copied to the destination**
+
+- Original photo and video files, byte for byte
+- Live Photo pairing (still + video)
+- Albums — including nested folders, custom icons, sort direction, and thumbnails
+- Tags — including the full nested hierarchy
+- Descriptions, including AI-generated text from this fork
+- Capture date, GPS location, and star rating
+- Favorites and archived status
+- Stacks
+- AI enrichment data (detected objects, generated tags, sensitive-content review state)
+- People's names
+
+**Rebuilt automatically by the destination**
+
+- Thumbnails and previews
+- Face detection and clustering
+- Smart-search embeddings
+- Reverse-geocoded city, state, and country names
+
+**Not migrated**
+
+- Album sharing, activity, and comments
+- Anything owned by a different user — migrate each user separately
+
+> [!NOTE]
+> People's **names** always transfer, but linking them back to faces is best effort: the destination re-runs its own face detection, so a face must already be detected there before a name can be attached to it.
+>
+> For the best result, migrate with `--no-faces` first, wait for the destination to finish its face-detection jobs, then re-run without the flag to attach names to the faces it found. If people were already processed too early, re-run with `--retry-failed` to try them again.
+>
+> When an asset has **more than one** face, there's no way to tell which one was the named person (face data doesn't cross between servers), so those are skipped rather than risk putting the wrong name on someone. The per-person progress line reports how many faces were attached and how many were skipped as ambiguous or not-yet-detected.
+
+### Options
+
+| Option                       | Description                                                       |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `--from-url`, `--from-key`   | Source server API URL and that user's API key                     |
+| `--to-url`, `--to-key`       | Destination server API URL and that user's API key                |
+| `-n, --dry-run`              | Preview what would move; writes nothing to the destination        |
+| `--serve`                    | Serve the progress dashboard on `127.0.0.1`                       |
+| `--port <number>`            | Dashboard port (default `2285`)                                   |
+| `-c, --concurrency <number>` | Assets transferred in parallel (default: CPU cores − 1)           |
+| `-l, --ledger <path>`        | Resume/audit database (default `./immich-migrate.sqlite`)         |
+| `--retry-failed`             | Retry assets that failed on an earlier run, and re-attempt people |
+| `--include-trashed`          | Also migrate trashed assets                                       |
+| `--no-faces`                 | Skip people and face migration                                    |
+
+Run `node packages/cli/dist/index.js migrate --help` for the full list.
 
 <br/>
 <a href="https://immich.app">

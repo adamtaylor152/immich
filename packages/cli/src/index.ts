@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { upload } from 'src/commands/asset';
 import { login, logout } from 'src/commands/auth';
+import { migrate } from 'src/commands/migrate';
 import { serverInfo } from 'src/commands/server-info';
 import { version } from '../package.json';
 
@@ -89,5 +90,36 @@ program
   )
   .argument('[paths...]', 'One or more paths to assets to be uploaded')
   .action((paths, options) => upload(paths, program.opts(), options));
+
+program
+  .command('migrate')
+  .description("Migrate a user's entire library from one Immich server to another (server-to-server)")
+  .addOption(new Option('--from-url <url>', 'Source server URL (SERVER A)').env('IMMICH_FROM_URL'))
+  .addOption(
+    new Option('--from-key <key>', "Source server API key (the migrated user's own key)").env('IMMICH_FROM_KEY'),
+  )
+  .addOption(new Option('--to-url <url>', 'Destination server URL (SERVER B)').env('IMMICH_TO_URL'))
+  .addOption(
+    new Option('--to-key <key>', "Destination server API key (the migrated user's own key)").env('IMMICH_TO_KEY'),
+  )
+  .addOption(
+    new Option('-l, --ledger <path>', 'Path to the resumable SQLite ledger/audit file')
+      .env('IMMICH_MIGRATE_LEDGER')
+      .default('./immich-migrate.sqlite'),
+  )
+  .addOption(
+    new Option('-c, --concurrency <number>', 'Number of assets to transfer in parallel')
+      .env('IMMICH_MIGRATE_CONCURRENCY')
+      .default(defaultConcurrency),
+  )
+  .addOption(new Option('-n, --dry-run', 'Enumerate + dedup-check + audit preview only; no writes to B').default(false))
+  .addOption(new Option('--include-trashed', 'Also migrate trashed assets').default(false))
+  .addOption(new Option('--retry-failed', 'Requeue assets that errored on a previous run').default(false))
+  .addOption(new Option('--no-faces', "Skip person/face migration (faces are best-effort and depend on B's ML)"))
+  .addOption(new Option('--serve', 'Serve a local browser dashboard to monitor/control the run').default(false))
+  .addOption(
+    new Option('--port <number>', 'Port for the local dashboard (127.0.0.1)').env('IMMICH_MIGRATE_PORT').default(2285),
+  )
+  .action((options) => migrate(options));
 
 program.parse(process.argv);
