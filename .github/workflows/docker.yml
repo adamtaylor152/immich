@@ -201,7 +201,7 @@ jobs:
 
   latest-ml:
     name: Tag ML Latest
-    needs: [machine-learning, machine-learning-rocm, retag_ml]
+    needs: [machine-learning, retag_ml]
     permissions:
       contents: read
       packages: write
