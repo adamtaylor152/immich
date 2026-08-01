@@ -3,22 +3,19 @@ import { PhysicalDeduplicationService } from 'src/services/physical-deduplicatio
 import { newTestService } from 'test/utils';
 
 describe(PhysicalDeduplicationService.name, () => {
-  it.each(['inactive', 'failed'] as const)(
-    'refuses to create physical mappings in the %s phase',
-    async (phase) => {
-      const { sut, mocks } = newTestService(PhysicalDeduplicationService);
-      mocks.forkSchema.getState.mockResolvedValue({
-        active: false,
-        phase,
-        schemaVersion: '1',
-        upstreamVersion: '3.0.3',
-      });
+  it.each(['inactive', 'failed'] as const)('refuses to create physical mappings in the %s phase', async (phase) => {
+    const { sut, mocks } = newTestService(PhysicalDeduplicationService);
+    mocks.forkSchema.getState.mockResolvedValue({
+      active: false,
+      phase,
+      schemaVersion: '1',
+      upstreamVersion: '3.0.3',
+    });
 
-      await expect(sut.handleApply({})).resolves.toBe(JobStatus.Skipped);
+    await expect(sut.handleApply({})).resolves.toBe(JobStatus.Skipped);
 
-      expect(mocks.physicalFile.getMigrationCandidates).not.toHaveBeenCalled();
-    },
-  );
+    expect(mocks.physicalFile.getMigrationCandidates).not.toHaveBeenCalled();
+  });
 
   it.each(['legacy', 'dual-write', 'ready', 'active'] as const)(
     'runs deduplication in the %s phase when enabled',
