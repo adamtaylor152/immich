@@ -181,7 +181,8 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
     // so a current-fork origin ledgers them before cutover (aliasing only maps
     // the legacy rewrite marker to its official name).
     expect(evidence.ledger.map(({ name }) => name)).toEqual(expect.arrayContaining([...LATER_WORKFLOW_MIGRATIONS]));
-    expect(evidence.columns).not.toEqual(
+    // Post-sync these upstream columns exist on a current-fork origin too.
+    expect(evidence.columns).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ column_name: 'templates', table_name: 'plugin' }),
         expect.objectContaining({ column_name: 'allowedHosts', table_name: 'plugin_method' }),
