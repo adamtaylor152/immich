@@ -332,9 +332,11 @@ export class PhysicalFileRepository {
       }
       {
         const existingMapping = await sql<{ assetId: string }>`
-          SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
+          SELECT "assetId" FROM immich_fork.asset_physical_file
+          WHERE "upstreamPath" = ${upstreamPath} AND "assetId" <> ${asset.id}::uuid
+          LIMIT 1
         `.execute(trx);
-        if (existingMapping.rows[0] && existingMapping.rows[0].assetId !== asset.id) {
+        if (existingMapping.rows[0]) {
           throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
         }
       }
