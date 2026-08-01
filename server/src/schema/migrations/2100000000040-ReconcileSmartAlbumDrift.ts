@@ -29,7 +29,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   );
 }
 
-export async function down(db: Kysely<any>): Promise<void> {
+export async function down(_db: Kysely<any>): Promise<void> {
   // Reconciliation only converges old databases onto the current shape; there is no
   // meaningful prior state to restore.
 }
