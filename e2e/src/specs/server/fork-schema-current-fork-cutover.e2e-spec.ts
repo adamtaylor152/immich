@@ -230,7 +230,14 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     // certifies what it intends: cutover itself preserves every workflow row
     // digest. Stable across later restarts — each re-import writes identical
     // values from the same image.
-    const converged = await workflowEvidence();
+    // The import runs asynchronously on the microservices boot, so queue
+    // drain alone doesn't guarantee it has landed — poll until the manifest's
+    // 12 methods are present.
+    let converged = await workflowEvidence();
+    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 12; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      converged = await workflowEvidence();
+    }
     expect(converged.rows.plugin).toHaveLength(1);
     expect(converged.rows.plugin[0]).toMatchObject({ name: 'immich-plugin-core', version: '2.0.1' });
     expect(converged.rows.plugin_method).toHaveLength(12);
