@@ -417,11 +417,16 @@ export class DatabaseBackupService {
           await this.databaseRepository.assertCertifiedReturnLedger();
         }
         const migrationMode = await this.databaseRepository.detectMigrationMode();
-        if (migrationMode === 'legacy') {
-          await this.databaseRepository.runMigrations();
-        } else {
-          await this.databaseRepository.runOfficialMigrations();
-        }
+        // Mirror the startup routing in DatabaseService: only post-cutover
+        // isolated and adopted official-origin databases are certified-upstream.
+        // A restored blank/fresh database has no ledger at all and still needs
+        // the legacy-fork public-schema migrations (they create plugin_method,
+        // whose upstream creator is an audited provider gap), or later upstream
+        // migrations that ALTER those tables fail against a schema that never
+        // got them.
+        await (migrationMode === 'isolated' || migrationMode === 'official-origin'
+          ? this.databaseRepository.runOfficialMigrations()
+          : this.databaseRepository.runMigrations());
         await this.databaseRepository.runForkMigrations();
 
         const hasAdmin = await this.userRepository.hasAdmin();

@@ -746,27 +746,30 @@ describe(DatabaseBackupService.name, () => {
       `);
     });
 
-    it('runs the combined then isolated fork migrator when restoring a legacy database', async () => {
-      const migrationOrder: string[] = [];
-      mocks.user.hasAdmin.mockResolvedValue(true);
-      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
-      mocks.database.runMigrations.mockImplementation(() => {
-        migrationOrder.push('combined');
-        return Promise.resolve();
-      });
-      mocks.database.runForkMigrations.mockImplementation(() => {
-        migrationOrder.push('fork');
-        return Promise.resolve();
-      });
+    it.each(['legacy', 'fresh'] as const)(
+      'runs the combined then isolated fork migrator when restoring a %s database',
+      async (mode) => {
+        const migrationOrder: string[] = [];
+        mocks.user.hasAdmin.mockResolvedValue(true);
+        mocks.database.detectMigrationMode.mockResolvedValue(mode);
+        mocks.database.runMigrations.mockImplementation(() => {
+          migrationOrder.push('combined');
+          return Promise.resolve();
+        });
+        mocks.database.runForkMigrations.mockImplementation(() => {
+          migrationOrder.push('fork');
+          return Promise.resolve();
+        });
 
-      await sut.restoreDatabaseBackup('development-filename.sql');
+        await sut.restoreDatabaseBackup('development-filename.sql');
 
-      expect(mocks.database.detectMigrationMode).toHaveBeenCalledOnce();
-      expect(migrationOrder).toEqual(['combined', 'fork']);
-      expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
-    });
+        expect(mocks.database.detectMigrationMode).toHaveBeenCalledOnce();
+        expect(migrationOrder).toEqual(['combined', 'fork']);
+        expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
+      },
+    );
 
-    it.each(['fresh', 'isolated', 'official-origin'] as const)(
+    it.each(['isolated', 'official-origin'] as const)(
       'runs official then fork migrations when restoring a %s database',
       async (mode) => {
         const migrationOrder: string[] = [];
