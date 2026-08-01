@@ -539,7 +539,9 @@ jobs:
         run: mise //mobile:install:ci
 
       - name: Perform codegen
-        run: mise run --force //mobile:codegen
+        run: |
+          mise //mobile:codegen
+          mise run --force //mobile:codegen:dart
 
       - name: Run tests
         run: mise //mobile:test
