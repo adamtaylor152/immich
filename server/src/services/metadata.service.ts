@@ -1115,7 +1115,7 @@ export class MetadataService extends BaseService {
       // `numericTags` doesn't parse values like '12 12 12'
     ].map((tag) => (typeof tag === 'string' ? Number.parseInt(tag) : tag));
 
-    let bitsPerSample = bitDepthTags.find((tag) => typeof tag === 'number' && !Number.isNaN(tag)) ?? null;
+    let bitsPerSample = validate(bitDepthTags.find((tag) => typeof tag === 'number' && !Number.isNaN(tag)));
     if (bitsPerSample && bitsPerSample >= 24 && bitsPerSample % 3 === 0) {
       bitsPerSample /= 3; // converts per-pixel bit depth to per-channel
     }
