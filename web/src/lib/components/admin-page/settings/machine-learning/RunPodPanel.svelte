@@ -39,7 +39,7 @@
     if (!response.ok) {
       // Surface the actual server error message (e.g. "Cannot start backfill
       // while RunPod is serverless-ready") instead of a generic status code.
-      let detail = `${response.status}`;
+      let detail = String(response.status);
       try {
         const body = (await response.json()) as { message?: string };
         if (body.message) {
@@ -262,8 +262,8 @@
       const dto: RunPodProvisionDto = {
         gpuTypeId: selectedGpu,
         acknowledgeDataPrivacy: true,
-        ...(imageOverride.trim() ? { imageName: imageOverride.trim() } : {}),
-        ...(maxHoursOverride ? { maxRuntimeHours: maxHoursOverride } : {}),
+        ...(imageOverride.trim() && { imageName: imageOverride.trim() }),
+        ...(maxHoursOverride && { maxRuntimeHours: maxHoursOverride }),
       };
       podState = await provisionRunPodPod({ runPodProvisionDto: dto });
       toastManager.info($t('admin.machine_learning_runpod_launching_toast'));
@@ -578,7 +578,7 @@
     </div>
   {/if}
 
-  {#if enabled && isServerlessMode && (status === 'idle' || status === 'error' || status === 'serverless-provisioning')}
+  {#if enabled && isServerlessMode && ['idle', 'error', 'serverless-provisioning'].includes(status)}
     <fieldset class="flex flex-col gap-3 rounded-sm border border-immich-gray/30 p-3" disabled={!apiKeyConfigured}>
       <legend class="px-1 text-sm font-semibold">
         {$t('admin.machine_learning_runpod_serverless_endpoint_legend')}

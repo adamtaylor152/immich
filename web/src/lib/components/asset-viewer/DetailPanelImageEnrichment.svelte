@@ -108,14 +108,15 @@
         assetImageEnrichmentActionRequestDto: { action },
       });
 
-      if (
-        action === AssetImageEnrichmentAction.ClearGeneratedDescription ||
-        action === AssetImageEnrichmentAction.ClearGeneratedTags ||
-        action === AssetImageEnrichmentAction.RerunNsfwDetection ||
-        action === AssetImageEnrichmentAction.MarkSafe ||
-        action === AssetImageEnrichmentAction.MarkNsfw ||
-        action === AssetImageEnrichmentAction.AcceptNsfwResult
-      ) {
+      const refreshActions: AssetImageEnrichmentAction[] = [
+        AssetImageEnrichmentAction.ClearGeneratedDescription,
+        AssetImageEnrichmentAction.ClearGeneratedTags,
+        AssetImageEnrichmentAction.RerunNsfwDetection,
+        AssetImageEnrichmentAction.MarkSafe,
+        AssetImageEnrichmentAction.MarkNsfw,
+        AssetImageEnrichmentAction.AcceptNsfwResult,
+      ];
+      if (refreshActions.includes(action)) {
         await refreshVisibleAsset(action);
       }
 

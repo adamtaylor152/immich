@@ -66,7 +66,9 @@
       size="small"
       shape="round"
       leadingIcon={mdiPlus}
-      onclick={() => workingConfig.urls.push('')}
+      onclick={() => {
+        workingConfig.urls.push('');
+      }}
       disabled={disabled || !workingConfig.enabled}>{$t('add_url')}</Button
     >
   </div>

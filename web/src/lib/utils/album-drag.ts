@@ -40,10 +40,12 @@ export function getAlbumSubtreeIds(albums: AlbumResponseDto[], rootId: string): 
   while (added) {
     added = false;
     for (const album of albums) {
-      if (album.parentId && blocked.has(album.parentId) && !blocked.has(album.id)) {
-        blocked.add(album.id);
-        added = true;
+      if (!(album.parentId && blocked.has(album.parentId)) || blocked.has(album.id)) {
+        continue;
       }
+
+      blocked.add(album.id);
+      added = true;
     }
   }
   return blocked;

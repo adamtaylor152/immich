@@ -195,7 +195,7 @@
             {disabled}
             subtitle={$t('admin.physical_deduplication_description')}
             bind:checked={physicalDeduplication.enabled}
-            isEdited={!(physicalDeduplication.enabled === savedPhysicalDeduplication.enabled)}
+            isEdited={physicalDeduplication.enabled !== savedPhysicalDeduplication.enabled}
             onToggle={() => (physicalDeduplicationDryRunQueued = false)}
           />
 

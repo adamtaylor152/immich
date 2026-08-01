@@ -273,8 +273,8 @@
           break;
         }
         case 'mirror': {
-          mirrorHorizontal = mirrorHorizontal || parameters.axis === 'horizontal';
-          mirrorVertical = mirrorVertical || parameters.axis === 'vertical';
+          mirrorHorizontal ||= parameters.axis === 'horizontal';
+          mirrorVertical ||= parameters.axis === 'vertical';
           break;
         }
         case 'trim': {
@@ -514,13 +514,13 @@
       startCrop: getCropBox(),
       rect: cropStageElement.getBoundingClientRect(),
     };
-    globalThis.addEventListener('pointermove', handleCropPointerMove);
-    globalThis.addEventListener('pointerup', stopCropInteraction);
+    addEventListener('pointermove', handleCropPointerMove);
+    addEventListener('pointerup', stopCropInteraction);
   }
 
   function stopCropInteraction() {
-    globalThis.removeEventListener('pointermove', handleCropPointerMove);
-    globalThis.removeEventListener('pointerup', stopCropInteraction);
+    removeEventListener('pointermove', handleCropPointerMove);
+    removeEventListener('pointerup', stopCropInteraction);
     cropInteraction = null;
   }
 
@@ -676,13 +676,13 @@
     event.stopPropagation();
     timelineDrag = { target, segmentId, rect: (event.currentTarget as HTMLElement).getBoundingClientRect() };
     handleTimelinePointerMove(event);
-    globalThis.addEventListener('pointermove', handleTimelinePointerMove);
-    globalThis.addEventListener('pointerup', stopTimelineDrag);
+    addEventListener('pointermove', handleTimelinePointerMove);
+    addEventListener('pointerup', stopTimelineDrag);
   }
 
   function stopTimelineDrag() {
-    globalThis.removeEventListener('pointermove', handleTimelinePointerMove);
-    globalThis.removeEventListener('pointerup', stopTimelineDrag);
+    removeEventListener('pointermove', handleTimelinePointerMove);
+    removeEventListener('pointerup', stopTimelineDrag);
     timelineDrag = null;
   }
 
@@ -867,13 +867,13 @@
     event.stopPropagation();
     textDrag = { rect: stage.getBoundingClientRect() };
     updateTextPosition(event);
-    globalThis.addEventListener('pointermove', updateTextPosition);
-    globalThis.addEventListener('pointerup', stopTextDrag);
+    addEventListener('pointermove', updateTextPosition);
+    addEventListener('pointerup', stopTextDrag);
   }
 
   function stopTextDrag() {
-    globalThis.removeEventListener('pointermove', updateTextPosition);
-    globalThis.removeEventListener('pointerup', stopTextDrag);
+    removeEventListener('pointermove', updateTextPosition);
+    removeEventListener('pointerup', stopTextDrag);
     textDrag = null;
   }
 

@@ -28,10 +28,12 @@
     while (added) {
       added = false;
       for (const album of list) {
-        if (album.parentId && blocked.has(album.parentId) && !blocked.has(album.id)) {
-          blocked.add(album.id);
-          added = true;
+        if (!(album.parentId && blocked.has(album.parentId)) || blocked.has(album.id)) {
+          continue;
         }
+
+        blocked.add(album.id);
+        added = true;
       }
     }
     return blocked;
@@ -66,7 +68,7 @@
         bind:value={search}
       />
 
-      <div class="overflow-y-auto immich-scrollbar">
+      <div class="immich-scrollbar overflow-y-auto">
         {#if loading}
           <p class="px-5 py-3 text-sm">{$t('loading')}</p>
         {:else}

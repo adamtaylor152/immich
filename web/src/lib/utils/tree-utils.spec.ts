@@ -27,9 +27,11 @@ describe('TreeNode.fromAlbums', () => {
     const root = TreeNode.fromAlbums([trips, disney, iceland]);
 
     expect(root.children.map((n) => n.id)).toEqual(['trips']);
-    expect(root.children[0].children.map((n) => n.id).sort()).toEqual(['disney', 'iceland']);
-    expect(root.children[0].path).toBe('trips');
-    expect(root.children[0].children[0].path).toBe('trips/disney');
+    const [tripsNode] = root.children;
+    const [firstChild] = tripsNode.children;
+    expect(tripsNode.children.map((n) => n.id).sort((a, b) => a.localeCompare(b))).toEqual(['disney', 'iceland']);
+    expect(tripsNode.path).toBe('trips');
+    expect(firstChild.path).toBe('trips/disney');
   });
 
   it('builds correct paths when a child is listed before its parent', () => {
@@ -39,16 +41,19 @@ describe('TreeNode.fromAlbums', () => {
     const root = TreeNode.fromAlbums([disney, trips]);
 
     expect(root.children.map((n) => n.id)).toEqual(['trips']);
-    expect(root.children[0].path).toBe('trips');
-    expect(root.children[0].children[0].id).toBe('disney');
-    expect(root.children[0].children[0].path).toBe('trips/disney');
+    const [tripsNode] = root.children;
+    const [disneyNode] = tripsNode.children;
+    expect(tripsNode.path).toBe('trips');
+    expect(disneyNode.id).toBe('disney');
+    expect(disneyNode.path).toBe('trips/disney');
   });
 
   it('promotes albums whose parent is missing to the root', () => {
     const orphan = albumLike({ id: 'orphan', albumName: 'Orphan', parentId: 'ghost' });
     const root = TreeNode.fromAlbums([orphan]);
     expect(root.children.map((n) => n.id)).toEqual(['orphan']);
-    expect(root.children[0].path).toBe('orphan');
+    const [orphanNode] = root.children;
+    expect(orphanNode.path).toBe('orphan');
   });
 
   it('handles deep nesting', () => {
@@ -58,7 +63,10 @@ describe('TreeNode.fromAlbums', () => {
     const d = albumLike({ id: 'd', albumName: 'D', parentId: 'c' });
 
     const root = TreeNode.fromAlbums([a, b, c, d]);
-    const leaf = root.children[0].children[0].children[0].children[0];
+    const [nodeA] = root.children;
+    const [nodeB] = nodeA.children;
+    const [nodeC] = nodeB.children;
+    const [leaf] = nodeC.children;
     expect(leaf.id).toBe('d');
     expect(leaf.path).toBe('a/b/c/d');
     expect(leaf.value).toBe('D');

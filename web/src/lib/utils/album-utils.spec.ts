@@ -29,6 +29,6 @@ describe('matchesAlbumSearch', () => {
   it('treats a blank query as a match', () => {
     const album = albumFactory.build({ albumName: 'Disneyland', description: '' });
 
-    expect(matchesAlbumSearch(album, '   ')).toBe(true);
+    expect(matchesAlbumSearch(album, ' '.repeat(3))).toBe(true);
   });
 });
