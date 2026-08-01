@@ -172,6 +172,7 @@ export class IntegrityRepository {
       .select([
         'asset.originalPath',
         'asset.checksum',
+        'asset.checksumAlgorithm',
         'asset.createdAt',
         'asset.id as assetId',
         'integrity_report.id as reportId',
@@ -199,7 +200,9 @@ export class IntegrityRepository {
       .select(['integrity_report.id as reportId', 'integrity_report.path'])
       .where('integrity_report.type', '=', type)
       .$if(type === IntegrityReport.ChecksumFail, (eb) =>
-        eb.leftJoin('asset', 'integrity_report.path', 'asset.originalPath').select('asset.checksum'),
+        eb
+          .leftJoin('asset', 'integrity_report.path', 'asset.originalPath')
+          .select(['asset.checksum', 'asset.checksumAlgorithm']),
       )
       .stream();
   }

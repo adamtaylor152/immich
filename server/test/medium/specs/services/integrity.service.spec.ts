@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
 import { StorageCore } from 'src/cores/storage.core';
-import { AssetFileType, IntegrityReport, JobName, JobStatus, SystemMetadataKey } from 'src/enum';
+import { AssetFileType, ChecksumAlgorithm, IntegrityReport, JobName, JobStatus, SystemMetadataKey } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
@@ -588,7 +588,7 @@ describe(IntegrityService.name, () => {
       expect(job.queue).toHaveBeenCalledWith({
         name: JobName.IntegrityChecksumFilesRefresh,
         data: {
-          items: [{ reportId, path: '/path/to/file1', checksum: '61' }],
+          items: [{ reportId, path: '/path/to/file1', checksum: '61', checksumAlgorithm: ChecksumAlgorithm.sha1File }],
         },
       });
     });

@@ -369,7 +369,7 @@ export interface IIntegrityPathWithReportJob {
 }
 
 export interface IIntegrityPathWithChecksumJob {
-  items: { path: string; reportId: string | null; checksum?: string | null }[];
+  items: { path: string; reportId: string | null; checksum?: string | null; checksumAlgorithm?: string | null }[];
 }
 
 export interface JobCounts {
