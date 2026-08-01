@@ -223,6 +223,19 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     }
 
     expect(stableSnapshots).toBe(5);
+
+    // The microservices boot force-re-imports the bundled core plugin
+    // (onPluginSync), rewriting plugin/plugin_method rows the api-only seed
+    // phase captured. Rebaseline the evidence here so the cutover assertion
+    // certifies what it intends: cutover itself preserves every workflow row
+    // digest. Stable across later restarts — each re-import writes identical
+    // values from the same image.
+    const converged = await workflowEvidence();
+    expect(converged.rows.plugin).toHaveLength(1);
+    expect(converged.rows.plugin[0]).toMatchObject({ name: 'immich-plugin-core', version: '2.0.1' });
+    expect(converged.rows.plugin_method).toHaveLength(12);
+    const fullState = await loadState<Record<string, unknown>>(lane);
+    await saveState(lane, { ...fullState, evidence: converged });
   }, 120_000);
 });
 
