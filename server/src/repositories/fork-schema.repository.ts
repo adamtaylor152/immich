@@ -478,10 +478,103 @@ export class ForkSchemaRepository {
     return this.claimBatchForMode(kind, size, 'inactive');
   }
 
+  async claimOfficialHandoffBatch(kind: BackfillKind, size: number): Promise<BackfillClaim | null> {
+    return this.claimBatchForMode(kind, size, 'ready');
+  }
+
+  async beginOrResumeOfficialHandoffPreparation(): Promise<void> {
+    await this.db
+      .transaction()
+      .setIsolationLevel('serializable')
+      .execute(async (trx) => {
+        const lockedState = await sql<{ active: boolean; phase: ForkSchemaPhase }>`
+          SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR UPDATE
+        `.execute(trx);
+        const state = lockedState.rows[0];
+        if (!state || state.active || state.phase !== 'ready') {
+          throw new Error('Official handoff preparation requires the ready phase');
+        }
+        const auditResult = await sql<{ id: string; status: string }>`
+          SELECT id::text AS id, status
+          FROM immich_fork.migration_audit
+          WHERE name = 'official-handoff-preparation'
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE
+        `.execute(trx);
+        const audit = auditResult.rows[0];
+        if (audit?.status === 'running') {
+          return;
+        }
+        if (audit && audit.status !== 'applied' && audit.status !== 'failed') {
+          throw new Error(`Unsupported official handoff preparation audit status: ${audit.status}`);
+        }
+        // Steady-state backfills preserved deduplication; the handoff needs a
+        // fresh destructive pass, so reset the storage evidence rows and run
+        // the storage and checksum handlers again with handoff authority.
+        await sql`
+          UPDATE immich_fork.backfill_progress
+          SET
+            cursor = NULL,
+            processed = 0,
+            remaining = (SELECT count(*) FROM public.asset),
+            digest = NULL,
+            "lastError" = NULL,
+            "claimToken" = NULL,
+            "claimedCursor" = NULL,
+            "claimedIds" = '{}',
+            "claimExpiresAt" = NULL,
+            "updatedAt" = now()
+          WHERE kind IN ('storage', 'checksum')
+        `.execute(trx);
+        await sql`
+          INSERT INTO immich_fork.migration_audit (name, phase, status, details)
+          VALUES (
+            'official-handoff-preparation',
+            'ready',
+            'running',
+            jsonb_build_object('backfillKinds', ${['storage', 'checksum']}::text[])
+          )
+        `.execute(trx);
+      });
+  }
+
+  async completeOfficialHandoffPreparation(): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      const audit = await sql<{ id: string }>`
+        SELECT id::text AS id
+        FROM immich_fork.migration_audit
+        WHERE name = 'official-handoff-preparation' AND phase = 'ready' AND status = 'running'
+        ORDER BY id DESC LIMIT 1 FOR UPDATE
+      `.execute(trx);
+      if (!audit.rows[0]) {
+        throw new Error('Official handoff preparation completion requires a running audit');
+      }
+      const progress = await sql<{ kind: string }>`
+        SELECT kind FROM immich_fork.backfill_progress
+        WHERE kind IN ('storage', 'checksum')
+          AND remaining = 0
+          AND cursor IS NULL
+          AND "lastError" IS NULL
+          AND "claimToken" IS NULL
+          AND digest ~ '^[0-9a-f]{64}$'
+        FOR UPDATE
+      `.execute(trx);
+      if (progress.rows.length !== 2) {
+        throw new Error('Official handoff preparation storage evidence is incomplete');
+      }
+      await sql`
+        UPDATE immich_fork.migration_audit
+        SET status = 'applied', "completedAt" = now()
+        WHERE id = ${audit.rows[0].id}::bigint
+      `.execute(trx);
+    });
+  }
+
   private async claimBatchForMode(
     kind: BackfillKind,
     size: number,
-    mode: 'dual-write' | 'inactive',
+    mode: 'dual-write' | 'inactive' | 'ready',
   ): Promise<BackfillClaim | null> {
     if (!Number.isSafeInteger(size) || size <= 0) {
       throw new Error('Backfill batch size must be a positive integer');
@@ -499,7 +592,9 @@ export class ForkSchemaRepository {
         throw new Error(
           mode === 'inactive'
             ? 'Fork return reconciliation claims require inactive phase'
-            : 'Fork schema backfills can only run in dual-write phase',
+            : mode === 'ready'
+              ? 'Official handoff preparation claims require ready phase'
+              : 'Fork schema backfills can only run in dual-write phase',
         );
       }
       if (mode === 'inactive') {
@@ -512,6 +607,18 @@ export class ForkSchemaRepository {
         `.execute(trx);
         if (!audit.rows[0]?.running) {
           throw new Error('Fork return batch claims require a running return reconciliation audit');
+        }
+      }
+      if (mode === 'ready') {
+        const audit = await sql<{ running: boolean }>`
+          SELECT EXISTS (
+            SELECT 1
+            FROM immich_fork.migration_audit
+            WHERE name = 'official-handoff-preparation' AND phase = 'ready' AND status = 'running'
+          ) AS running
+        `.execute(trx);
+        if (!audit.rows[0]?.running) {
+          throw new Error('Official handoff batch claims require a running handoff preparation audit');
         }
       }
 

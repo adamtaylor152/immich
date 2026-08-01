@@ -3915,7 +3915,8 @@
     "0000000000020-EnrichmentAndAutomation",
     "0000000000030-DerivedResults",
     "0000000000040-ChecksumsAndStorage",
-    "0000000000050-CutoverVerification"
+    "0000000000050-CutoverVerification",
+    "0000000000060-SharedUpstreamPaths"
   ],
   "functions": [
     {
@@ -5073,8 +5074,8 @@
       "identity": "immich_fork.asset_physical_file.asset_physical_file_pkey"
     },
     {
-      "definition": "CREATE UNIQUE INDEX asset_physical_file_upstream_path_uq ON immich_fork.asset_physical_file USING btree (\"upstreamPath\")",
-      "identity": "immich_fork.asset_physical_file.asset_physical_file_upstream_path_uq"
+      "definition": "CREATE INDEX asset_physical_file_upstream_path_idx ON immich_fork.asset_physical_file USING btree (\"upstreamPath\")",
+      "identity": "immich_fork.asset_physical_file.asset_physical_file_upstream_path_idx"
     },
     {
       "definition": "CREATE INDEX asset_privacy_is_nsfw_idx ON immich_fork.asset_privacy USING btree (\"isNsfw\") WHERE (\"isNsfw\" = true)",

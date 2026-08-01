@@ -1,6 +1,6 @@
 import { Kysely, sql } from 'kysely';
 import { createHash, randomUUID } from 'node:crypto';
-import { link, lstat, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
@@ -193,7 +193,7 @@ describe('checksum and physical-storage normalization', () => {
     expect(foreignKeys.rows[0]?.count).toBe(0);
   });
 
-  it('preserves SHA-256, restores upstream SHA-1, and gives every shared asset an independently removable path', async () => {
+  it('preserves SHA-256, the shared deduplicated path, and physical links during steady-state normalization', async () => {
     const bytes = Buffer.from('isolated test media bytes');
     const canonicalPath = join(temporaryRoot, `${randomUUID()}.jpg`);
     await writeFile(canonicalPath, bytes);
@@ -262,15 +262,18 @@ describe('checksum and physical-storage normalization', () => {
         ),
       ),
     );
-    expect(new Set(normalized.map(({ originalPath }) => originalPath))).toHaveLength(2);
+    // steady-state normalization records evidence without un-deduplicating:
+    // both assets keep the shared canonical path, their physical link, and
+    // their original SHA-256 checksum
+    expect(new Set(normalized.map(({ originalPath }) => originalPath))).toEqual(new Set([canonicalPath]));
     expect(normalized).toEqual(
       expect.arrayContaining(
         assets.map(({ id }) =>
           expect.objectContaining({
             id,
-            checksum: sha('sha1', bytes),
-            checksumAlgorithm: ChecksumAlgorithm.sha1File,
-            physicalOriginalFileId: null,
+            checksum: sha('sha256', bytes),
+            checksumAlgorithm: ChecksumAlgorithm.sha256File,
+            physicalOriginalFileId: physical.id,
           }),
         ),
       ),
@@ -281,17 +284,14 @@ describe('checksum and physical-storage normalization', () => {
       ),
     );
 
-    const [firstPath, secondPath] = normalized.map(({ originalPath }) => originalPath);
-    const [firstStats, secondStats] = await Promise.all([stat(firstPath), stat(secondPath)]);
-    expect(firstStats.ino).toBe(secondStats.ino);
+    // repeat runs use the committed evidence and stay idempotent
     await expect(
       Promise.all([normalization.normalizeAsset(assets[1].id!), normalization.normalizeAsset(assets[1].id!)]),
     ).resolves.toHaveLength(2);
-    await unlink(firstPath);
-    await expect(readFile(secondPath)).resolves.toEqual(bytes);
-    await link(secondPath, firstPath);
-    await unlink(secondPath);
-    await expect(readFile(firstPath)).resolves.toEqual(bytes);
+    await expect(readFile(canonicalPath)).resolves.toEqual(bytes);
+    // no per-asset copies were materialized
+    await expect(lstat(join(temporaryRoot, `${assets[0].id}.jpg`))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(join(temporaryRoot, `${assets[1].id}.jpg`))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects symlink sources and paths outside approved storage roots', async () => {
@@ -369,22 +369,19 @@ describe('checksum and physical-storage normalization', () => {
       .where('id', 'in', [assets[0].id!, duplicate.id!])
       .execute();
 
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(
-      /owned by another public asset/,
-    );
+    // steady-state normalization targets the shared canonical path, so the
+    // independently owned per-asset file is never considered — and never touched
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).resolves.toMatchObject({
+      assetId: duplicate.id,
+    });
     await expect(readFile(targetPath)).resolves.toEqual(bytes);
-
-    await db.deleteFrom('asset').where('id', '=', assets[2].id!).execute();
-    await rm(targetPath);
-    await symlink(canonicalPath, targetPath);
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(/non-symlink/);
-    await sql`DELETE FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${duplicate.id}::uuid`.execute(db);
-    await rm(targetPath);
-    await writeFile(targetPath, bytes);
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(duplicate.id!)).rejects.toThrow(/inode proof/);
+    const mapping = await sql<{ upstreamPath: string }>`
+      SELECT "upstreamPath" FROM immich_fork.asset_physical_file WHERE "assetId" = ${duplicate.id}::uuid
+    `.execute(db);
+    expect(mapping.rows[0]?.upstreamPath).toBe(canonicalPath);
   });
 
-  it('recovers a published final authorized by a durable same-asset reservation', async () => {
+  it('recovers a stale always-split reservation by re-reserving the shared canonical path', async () => {
     const bytes = Buffer.from('published crash recovery');
     const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
     const assetId = assets[1].id!;
@@ -400,62 +397,110 @@ describe('checksum and physical-storage normalization', () => {
     await link(temporaryPath, upstreamPath);
 
     await expect(new ForkStorageNormalizationService(db).normalizeAsset(assetId)).resolves.toMatchObject({ assetId });
-    const state = await sql<{ mapping: number; reservations: number }>`
+    const state = await sql<{ mapping: number; upstreamPath: string | null; reservations: number }>`
       SELECT
         (SELECT count(*)::int FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS mapping,
+        (SELECT "upstreamPath" FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS "upstreamPath",
         (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
     `.execute(db);
-    expect(state.rows[0]).toEqual({ mapping: 1, reservations: 0 });
+    // the stale split target is abandoned; the mapping points at the shared path
+    expect(state.rows[0]).toEqual({ mapping: 1, upstreamPath: canonicalPath, reservations: 0 });
+    // the previously published split final is a hardlink of the canonical file and is left as-is
     await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
     await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects a durable reservation whose matching final has a different inode', async () => {
-    const bytes = Buffer.from('different inode is not ownership');
-    const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
-    const assetId = assets[1].id!;
-    const upstreamPath = join(temporaryRoot, `${assetId}.jpg`);
-    const token = randomUUID();
-    const temporaryPath = join(temporaryRoot, `.${assetId}.jpg.${token}.normalize`);
-    await sql`
-      INSERT INTO immich_fork.asset_storage_reservation
-        ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
-      VALUES (${assetId}::uuid, ${token}::uuid, ${canonicalPath}, ${upstreamPath}, ${temporaryPath}, 'reserved')
-    `.execute(db);
-    await link(canonicalPath, temporaryPath);
-    await writeFile(upstreamPath, bytes);
-
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
-    await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
-    await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
-    const state = await sql<{ mappings: number; reservations: number }>`
-      SELECT
-        (SELECT count(*)::int FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS mappings,
-        (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
-    `.execute(db);
-    expect(state.rows[0]).toEqual({ mappings: 0, reservations: 0 });
-  });
-
-  it('repeatedly rejects an untracked matching final without creating a mapping', async () => {
+  it('ignores an unrelated matching final at the old split path during steady-state normalization', async () => {
     const bytes = Buffer.from('matching final without proof');
-    const { assets } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
     const assetId = assets[1].id!;
     const upstreamPath = join(temporaryRoot, `${assetId}.jpg`);
     await writeFile(upstreamPath, bytes);
     const normalization = new ForkStorageNormalizationService(db);
 
-    await expect(normalization.normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
-    await expect(normalization.normalizeAsset(assetId)).rejects.toThrow(/inode proof/);
-    const state = await sql<{ mappings: number; reservations: number }>`
+    await expect(normalization.normalizeAsset(assetId)).resolves.toMatchObject({ assetId });
+    const state = await sql<{ mappings: number; upstreamPath: string | null; reservations: number }>`
       SELECT
         (SELECT count(*)::int FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS mappings,
+        (SELECT "upstreamPath" FROM immich_fork.asset_physical_file WHERE "assetId" = ${assetId}::uuid) AS "upstreamPath",
         (SELECT count(*)::int FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid) AS reservations
     `.execute(db);
-    expect(state.rows[0]).toEqual({ mappings: 0, reservations: 0 });
+    expect(state.rows[0]).toEqual({ mappings: 1, upstreamPath: canonicalPath, reservations: 0 });
     await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
   });
 
-  it('fails closed instead of taking over another asset reservation', async () => {
+  it('converts preserved deduplication to the destructive official form during handoff preparation', async () => {
+    const bytes = Buffer.from('official handoff preparation bytes');
+    const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
+    // force the canonical-path keeper to be processed first (batches claim in
+    // id order): its sharers' steady-state mappings still reference the
+    // canonical path at that point, which must not read as a takeover
+    const [firstId] = assets.map(({ id }) => id!).toSorted();
+    await db.updateTable('physical_file').set({ canonicalAssetId: firstId }).execute();
+    const { sut } = newTestService(ForkSchemaMigrationService);
+    (sut as unknown as { db: Kysely<DB> }).db = db;
+    (sut as unknown as { forkSchemaRepository: ForkSchemaRepository }).forkSchemaRepository = new ForkSchemaRepository(
+      db,
+    );
+    sut.onModuleInit();
+    StorageCore.setMediaLocation(temporaryRoot);
+    await sql`DELETE FROM immich_fork.migration_audit WHERE name = 'official-handoff-preparation'`.execute(db);
+
+    // steady-state backfills first: deduplication is preserved
+    await sql`UPDATE immich_fork.state SET phase = 'dual-write', active = false WHERE id = 1`.execute(db);
+    await expect(Promise.all([sut.runBatch('storage', 10), sut.runBatch('checksum', 10)])).resolves.toEqual([
+      JobStatus.Success,
+      JobStatus.Success,
+    ]);
+    const preserved = await db
+      .selectFrom('asset')
+      .select(['originalPath', 'physicalOriginalFileId'])
+      .where('id', '=', assets[1].id!)
+      .executeTakeFirstOrThrow();
+    expect(preserved.originalPath).toBe(canonicalPath);
+    expect(preserved.physicalOriginalFileId).not.toBeNull();
+
+    // handoff preparation requires the ready phase and converts destructively
+    await expect(sut.prepareOfficialHandoff(10)).rejects.toThrow(/requires the ready phase/);
+    await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
+    await sut.prepareOfficialHandoff(10);
+
+    const converted = await db
+      .selectFrom('asset')
+      .select(['id', 'checksum', 'checksumAlgorithm', 'originalPath', 'physicalOriginalFileId'])
+      .where(
+        'id',
+        'in',
+        assets.map(({ id }) => id!),
+      )
+      .execute();
+    expect(new Set(converted.map(({ originalPath }) => originalPath)).size).toBe(2);
+    for (const asset of converted) {
+      expect(asset.checksum).toEqual(sha('sha1', bytes));
+      expect(asset.checksumAlgorithm).toBe(ChecksumAlgorithm.sha1File);
+      expect(asset.physicalOriginalFileId).toBeNull();
+      await expect(readFile(asset.originalPath)).resolves.toEqual(bytes);
+      const mapping = await sql<{ upstreamPath: string }>`
+        SELECT "upstreamPath" FROM immich_fork.asset_physical_file WHERE "assetId" = ${asset.id}::uuid
+      `.execute(db);
+      expect(mapping.rows[0]?.upstreamPath).toBe(asset.originalPath);
+    }
+    const audit = await sql<{ status: string }>`
+      SELECT status FROM immich_fork.migration_audit
+      WHERE name = 'official-handoff-preparation' ORDER BY id DESC LIMIT 1
+    `.execute(db);
+    expect(audit.rows[0]?.status).toBe('applied');
+    const progress = await sql<{ kind: string; remaining: number; digest: string | null }>`
+      SELECT kind, remaining::int AS remaining, digest FROM immich_fork.backfill_progress
+      WHERE kind IN ('storage', 'checksum') ORDER BY kind
+    `.execute(db);
+    expect(progress.rows).toEqual([
+      { kind: 'checksum', remaining: 0, digest: expect.stringMatching(/^[0-9a-f]{64}$/) },
+      { kind: 'storage', remaining: 0, digest: expect.stringMatching(/^[0-9a-f]{64}$/) },
+    ]);
+  });
+
+  it('does not conflict with another asset reservation on the old split path', async () => {
     const bytes = Buffer.from('cross owner reservation');
     const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
     const targetAssetId = assets[1].id!;
@@ -474,9 +519,11 @@ describe('checksum and physical-storage normalization', () => {
       )
     `.execute(db);
 
-    await expect(new ForkStorageNormalizationService(db).normalizeAsset(targetAssetId)).rejects.toThrow(
-      /reserved by another asset/,
-    );
+    // the other asset's stale split reservation blocks its own re-run recovery,
+    // not this asset's steady-state normalization of the shared canonical path
+    await expect(new ForkStorageNormalizationService(db).normalizeAsset(targetAssetId)).resolves.toMatchObject({
+      assetId: targetAssetId,
+    });
     const reservation = await sql<{ assetId: string }>`
       SELECT "assetId" FROM immich_fork.asset_storage_reservation WHERE "upstreamPath" = ${upstreamPath}
     `.execute(db);
@@ -502,7 +549,9 @@ describe('checksum and physical-storage normalization', () => {
     await expect(new ForkStorageNormalizationService(db).normalizeAsset(assetId)).resolves.toMatchObject({ assetId });
     await expect(lstat(temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readFile(unrelatedTemp)).resolves.toEqual(bytes);
-    await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
+    // the stale split final was never published; the shared canonical path is the target
+    await expect(lstat(upstreamPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(canonicalPath)).resolves.toEqual(bytes);
   });
 
   it('deletion consumes a durable reservation and returns only its per-asset target and temp paths', async () => {
@@ -650,10 +699,11 @@ describe('checksum and physical-storage normalization', () => {
       const result = await deleting;
       const removed = Array.isArray(result) ? result[0] : result;
 
-      expect(removed?.originalPath).toBe(join(temporaryRoot, `${assets[1].id}.jpg`));
-      await rm(removed!.originalPath, { force: true });
-      await expect(lstat(removed!.originalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      // steady-state normalization keeps the shared canonical path, so the
+      // removed asset reports it and the shared file survives the deletion
+      expect(removed?.originalPath).toBe(canonicalPath);
       await expect(readFile(canonicalPath)).resolves.toEqual(bytes);
+      await expect(lstat(join(temporaryRoot, `${assets[1].id}.jpg`))).rejects.toMatchObject({ code: 'ENOENT' });
     },
   );
 
@@ -721,8 +771,9 @@ describe('checksum and physical-storage normalization', () => {
       .select(['originalPath', 'physicalOriginalFileId'])
       .where('id', '=', assets[1].id!)
       .executeTakeFirstOrThrow();
-    expect(duplicate.originalPath).toBe(join(temporaryRoot, `${assets[1].id}.jpg`));
-    expect(duplicate.physicalOriginalFileId).toBeNull();
+    // steady-state normalization preserves the physical deduplication link
+    expect(duplicate.originalPath).not.toBe(join(temporaryRoot, `${assets[1].id}.jpg`));
+    expect(duplicate.physicalOriginalFileId).not.toBeNull();
   });
 
   it('lets a waiting handler use committed evidence while the first handler still owns temp cleanup', async () => {
@@ -770,13 +821,14 @@ describe('checksum and physical-storage normalization', () => {
       `.execute(db);
       throw new Error(`Storage failed before commit: ${failed.rows[0]?.lastError}`);
     }
-    const residue = await sql<{ temporaryPath: string }>`
-      SELECT "temporaryPath" FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
+    // steady-state normalization is in-place: no durable reservation row and
+    // no temp file exist even between commit and release
+    const residue = await sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
     `.execute(db);
-    const temporaryPath = residue.rows[0]!.temporaryPath;
+    expect(residue.rows[0]?.count).toBe(0);
     const checksum = sut.runBatch('checksum', 1);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    await rm(temporaryPath, { force: true });
     releaseFirst();
 
     await expect(Promise.all([storage, checksum])).resolves.toEqual([JobStatus.Success, JobStatus.Success]);
@@ -810,10 +862,14 @@ describe('checksum and physical-storage normalization', () => {
       assetId,
     );
     await committed;
-    const residue = await sql<{ temporaryPath: string }>`
-      SELECT "temporaryPath" FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
+    // steady-state normalization is in-place: a crash after commit leaves no
+    // reservation row and no temp file behind
+    const residue = await sql<{ count: number }>`
+      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
     `.execute(db);
-    await expect(lstat(residue.rows[0]!.temporaryPath)).resolves.toMatchObject({ nlink: expect.any(Number) });
+    expect(residue.rows[0]?.count).toBe(0);
+    const leftovers = await readdir(temporaryRoot);
+    expect(leftovers.filter((path) => path.endsWith('.normalize'))).toEqual([]);
 
     const retryRepository = new PhysicalFileRepository(db);
     vi.spyOn(retryRepository, 'withLockedNormalizationAsset').mockRejectedValue(
@@ -822,11 +878,6 @@ describe('checksum and physical-storage normalization', () => {
     await expect(
       new ForkStorageNormalizationService(db, new CryptoRepository(), retryRepository).normalizeAsset(assetId),
     ).resolves.toMatchObject({ assetId });
-    await expect(lstat(residue.rows[0]!.temporaryPath)).rejects.toMatchObject({ code: 'ENOENT' });
-    const reservations = await sql<{ count: number }>`
-      SELECT count(*)::int AS count FROM immich_fork.asset_storage_reservation WHERE "assetId" = ${assetId}::uuid
-    `.execute(db);
-    expect(reservations.rows[0]?.count).toBe(0);
 
     releaseFirst();
     await expect(interrupted).resolves.toMatchObject({ assetId });

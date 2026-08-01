@@ -56,10 +56,19 @@ export class ForkStorageNormalizationService {
     assetId: string,
     claim?: ReturnNormalizationClaim,
   ): Promise<NormalizationResult> {
-    const selectPath = (asset: PhysicalNormalizationAsset) => this.getUpstreamPath(asset);
-    const prepared = claim
+    const selectPath = (asset: PhysicalNormalizationAsset) => this.getUpstreamPath(asset, claim);
+    let prepared = claim
       ? await this.physicalFileRepository.createReturnNormalizationReservation(assetId, selectPath, claim)
       : await this.physicalFileRepository.createNormalizationReservation(assetId, selectPath);
+    if (prepared.status === 'reserved' && prepared.stale) {
+      // Reservation left behind by the old always-split behavior: remove its
+      // temp file and release it, then reserve the shared steady-state target.
+      // A previously published split final is a hardlink of the canonical file,
+      // so leaving it on disk costs nothing and stays byte-identical.
+      await this.removeReservationTemp(prepared.asset, prepared.reservation.temporaryPath);
+      await this.releaseReservation(assetId, prepared.reservation.token, claim);
+      prepared = await this.physicalFileRepository.createNormalizationReservation(assetId, selectPath);
+    }
     if (prepared.status === 'completed') {
       return this.verifyCompletedNormalization(prepared.asset, prepared.completed, prepared.reservation, claim);
     }
@@ -77,14 +86,23 @@ export class ForkStorageNormalizationService {
       }) => {
         const sourcePath = asset.originalPath;
         const upstreamPath = reservation.upstreamPath;
-        if (upstreamPath !== this.getUpstreamPath(asset)) {
+        if (upstreamPath !== this.getUpstreamPath(asset, claim)) {
           throw new Error(`Asset ${assetId} durable storage reservation target is stale`);
         }
         await this.assertSafePaths(asset, sourcePath, upstreamPath);
         const source = await this.cryptoRepository.hashFileDigests(sourcePath);
         this.verifyExpectedContent(asset, source);
-        await this.ensureReservationTemp(asset, sourcePath, reservation.temporaryPath, upstreamPath, source);
-        createdPath = await this.publishOrAdoptReservationTemp(asset, reservation.temporaryPath, upstreamPath, source);
+        // In-place (steady-state) normalization verifies the file where it
+        // already lives — staging a temp copy of itself would be a no-op.
+        if (upstreamPath !== sourcePath) {
+          await this.ensureReservationTemp(asset, sourcePath, reservation.temporaryPath, upstreamPath, source);
+          createdPath = await this.publishOrAdoptReservationTemp(
+            asset,
+            reservation.temporaryPath,
+            upstreamPath,
+            source,
+          );
+        }
 
         await this.assertRegularFile(upstreamPath, 'normalization target');
         const target = await this.cryptoRepository.hashFileDigests(upstreamPath);
@@ -256,7 +274,15 @@ export class ForkStorageNormalizationService {
     }
   }
 
-  private getUpstreamPath(asset: PhysicalNormalizationAsset): string {
+  private getUpstreamPath(asset: PhysicalNormalizationAsset, claim?: ReturnNormalizationClaim): string {
+    // Physical deduplication is a core fork feature: shared files are only
+    // materialized into per-asset copies during the explicit return-to-upstream
+    // flow (claim present). Steady-state fork normalization keeps the shared
+    // canonical path so dedup links are preserved.
+    if (!claim) {
+      return asset.originalPath;
+    }
+
     const sharedForkPath = asset.sharedPathCount > 1;
     const ownsCanonicalPath = asset.physicalCanonicalAssetId === asset.id;
     if (!sharedForkPath || ownsCanonicalPath) {

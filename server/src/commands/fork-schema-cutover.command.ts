@@ -1,6 +1,8 @@
 import { Command, CommandRunner, Option, SubCommand } from 'nest-commander';
 import { ForkCutoverVerificationCommand } from 'src/commands/fork-cutover-verification.command';
+import { formatForkSchemaStatus } from 'src/commands/fork-schema.command';
 import { canonicalCutoverJson, ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
+import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
 
 type CheckpointOptions = { databaseBackupId?: string; mediaSnapshotId?: string };
 type ApplyOptions = CheckpointOptions & { reportDigest?: string };
@@ -26,6 +28,32 @@ abstract class ForkSchemaCheckpointCommand extends CommandRunner {
   @Option({ flags: '--media-snapshot-id <id>', description: 'Immutable media snapshot identifier' })
   parseMediaSnapshotId(value: string): string {
     return value;
+  }
+}
+
+@SubCommand({
+  name: 'prepare',
+  description: 'Convert storage to the destructive official form required by the cutover evidence',
+})
+export class ForkSchemaCutoverPrepareCommand extends CommandRunner {
+  constructor(private migration: ForkSchemaMigrationService) {
+    super();
+  }
+
+  @Option({ flags: '--batch-size <count>', description: 'Number of assets to normalize atomically', defaultValue: 250 })
+  parseBatchSize(value: string): number {
+    const batchSize = Number(value);
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+      throw new Error('Batch size must be a positive integer');
+    }
+    return batchSize;
+  }
+
+  async run(passedParams: string[], options: { batchSize?: number } = {}): Promise<void> {
+    if (passedParams.length > 0) {
+      throw new Error('Prepare accepts named options only');
+    }
+    console.log(formatForkSchemaStatus(await this.migration.prepareOfficialHandoff(options.batchSize ?? 250)));
   }
 }
 
@@ -85,7 +113,12 @@ export class ForkSchemaCutoverApplyCommand extends ForkSchemaCheckpointCommand {
 @Command({
   name: 'fork-schema-cutover',
   description: 'Perform the locked legacy migration-ledger cutover',
-  subCommands: [ForkSchemaCutoverPreflightCommand, ForkSchemaCutoverApplyCommand, ForkCutoverVerificationCommand],
+  subCommands: [
+    ForkSchemaCutoverPrepareCommand,
+    ForkSchemaCutoverPreflightCommand,
+    ForkSchemaCutoverApplyCommand,
+    ForkCutoverVerificationCommand,
+  ],
 })
 export class ForkSchemaCutoverCommand extends CommandRunner {
   run(): Promise<void> {

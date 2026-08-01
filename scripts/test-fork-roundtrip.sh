@@ -287,6 +287,12 @@ for _ in {1..120}; do
   sleep 1
 done
 grep -q 'Verified: yes' <<<"${status:-}" || { echo 'Backfill did not verify' >&2; exit 1; }
+# Steady-state backfills preserve physical deduplication; convert storage to
+# the destructive official form the cutover evidence requires.
+prepare_output="$(admin fork-schema-cutover prepare --batch-size 32 2>&1)"
+echo "$prepare_output"
+grep -q '^Error:' <<<"$prepare_output" && exit 1
+grep -q 'Verified: yes' <<<"$prepare_output" || { echo 'Official handoff preparation did not verify' >&2; exit 1; }
 admin fork-schema-cutover verify-storage start --database-backup-id "$BACKUP_ID" --media-snapshot-id "$SNAPSHOT_ID"
 storage_status="$(admin fork-schema-cutover verify-storage resume --database-backup-id "$BACKUP_ID" --media-snapshot-id "$SNAPSHOT_ID" --batch-size 1)"
 jq -e '.status == "running" and .verifiedCount > 0 and .verifiedCount < .applicableAssetCount' <<<"$storage_status" >/dev/null || exit 1

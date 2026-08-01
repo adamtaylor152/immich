@@ -68,6 +68,7 @@ export type PhysicalNormalizationPreparation =
       asset: PhysicalNormalizationAsset;
       reservation: PhysicalNormalizationReservation;
       recovered: boolean;
+      stale?: boolean;
     };
 
 export type ReturnNormalizationClaim = {
@@ -234,9 +235,15 @@ export class PhysicalFileRepository {
         LEFT JOIN immich_fork.asset_storage_reservation reservation ON reservation."assetId" = asset.id
         WHERE asset.id = ${assetId}::uuid
           AND asset."originalPath" = mapping."upstreamPath"
+          ${
+            claim
+              ? sql`
           AND asset.checksum = checksum.sha1
           AND asset."checksumAlgorithm" = ${ChecksumAlgorithm.sha1File}::asset_checksum_algorithm_enum
-          AND asset."physicalOriginalFileId" IS NULL
+          AND asset."physicalOriginalFileId" IS NULL`
+              : sql`
+          AND (asset.checksum = checksum.sha1 OR asset.checksum = checksum.sha256)`
+          }
       `.execute(trx);
       const committed = completed.rows[0];
       if (committed) {
@@ -283,22 +290,59 @@ export class PhysicalFileRepository {
         const reservationMatchesCommittedMapping =
           asset.originalPath === reservation.upstreamPath && asset.mappedUpstreamPath === reservation.upstreamPath;
         if (!reservationMatchesSource && !reservationMatchesCommittedMapping) {
+          // A reservation created by the old always-split behavior (same source,
+          // different target) is stale in steady-state mode; surface it so the
+          // caller can clean it up and re-reserve instead of failing forever.
+          if (!claim && reservation.sourcePath === asset.originalPath) {
+            return { status: 'reserved', asset, reservation, recovered: true, stale: true };
+          }
           throw new Error(`Asset ${assetId} has a conflicting durable storage reservation`);
         }
         return { status: 'reserved', asset, reservation, recovered: true };
       }
 
-      const conflictingReservation = await sql<{ assetId: string }>`
-        SELECT "assetId" FROM immich_fork.asset_storage_reservation WHERE "upstreamPath" = ${upstreamPath}
-      `.execute(trx);
-      if (conflictingReservation.rows[0]) {
-        throw new Error(`Normalization target is reserved by another asset: ${upstreamPath}`);
+      // In steady-state fork mode (no claim) the target IS the asset's own
+      // (possibly shared, deduplicated) path: no file is ever created or
+      // moved, so no durable reservation is needed — and the unique
+      // upstreamPath constraint would forbid concurrent sharers anyway. Use an
+      // ephemeral reservation instead of inserting a row.
+      const sharedSteadyStateTarget = !claim && upstreamPath === asset.originalPath;
+      if (sharedSteadyStateTarget) {
+        const token = randomUUID();
+        return {
+          status: 'reserved',
+          asset,
+          reservation: {
+            assetId: asset.id,
+            token,
+            sourcePath: asset.originalPath,
+            upstreamPath,
+            temporaryPath: this.getNormalizationTemporaryPath(upstreamPath, token),
+          },
+          recovered: false,
+        };
       }
-      const existingMapping = await sql<{ assetId: string }>`
-        SELECT "assetId" FROM immich_fork.asset_physical_file WHERE "upstreamPath" = ${upstreamPath}
-      `.execute(trx);
-      if (existingMapping.rows[0] && existingMapping.rows[0].assetId !== asset.id) {
-        throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
+      {
+        const conflictingReservation = await sql<{ assetId: string }>`
+          SELECT "assetId" FROM immich_fork.asset_storage_reservation WHERE "upstreamPath" = ${upstreamPath}
+        `.execute(trx);
+        if (conflictingReservation.rows[0]) {
+          throw new Error(`Normalization target is reserved by another asset: ${upstreamPath}`);
+        }
+      }
+      // Exclusive fork-mapping ownership only applies to foreign targets. When
+      // the target is the asset's own current path, other sharers' steady-state
+      // mappings may still reference it until their own destructive pass
+      // re-points them — that is expected, not a takeover.
+      if (upstreamPath !== asset.originalPath) {
+        const existingMapping = await sql<{ assetId: string }>`
+          SELECT "assetId" FROM immich_fork.asset_physical_file
+          WHERE "upstreamPath" = ${upstreamPath} AND "assetId" <> ${asset.id}::uuid
+          LIMIT 1
+        `.execute(trx);
+        if (existingMapping.rows[0]) {
+          throw new Error(`Normalization target is owned by another fork asset: ${upstreamPath}`);
+        }
       }
       if (upstreamPath !== asset.originalPath) {
         const publicOwner = await sql<{ id: string }>`
@@ -310,7 +354,7 @@ export class PhysicalFileRepository {
       }
 
       const token = randomUUID();
-      const temporaryPath = join(dirname(upstreamPath), `.${parse(upstreamPath).base}.${token}.normalize`);
+      const temporaryPath = this.getNormalizationTemporaryPath(upstreamPath, token);
       const inserted = await sql<PhysicalNormalizationReservation>`
         INSERT INTO immich_fork.asset_storage_reservation
           ("assetId", token, "sourcePath", "upstreamPath", "temporaryPath", status)
@@ -319,6 +363,10 @@ export class PhysicalFileRepository {
       `.execute(trx);
       return { status: 'reserved', asset, reservation: inserted.rows[0]!, recovered: false };
     });
+  }
+
+  private getNormalizationTemporaryPath(upstreamPath: string, token: string): string {
+    return join(dirname(upstreamPath), `.${parse(upstreamPath).base}.${token}.normalize`);
   }
 
   async releaseNormalizationReservation(assetId: string, token: string): Promise<void> {
@@ -398,7 +446,19 @@ export class PhysicalFileRepository {
         WHERE "assetId" = ${assetId}::uuid AND token = ${token}::uuid
         FOR UPDATE
       `.execute(trx);
-      const reservation = reservations.rows[0];
+      // Steady-state reservations are ephemeral (never inserted) — reconstruct
+      // one from the token when the target is the asset's own path.
+      const reservation: PhysicalNormalizationReservation | undefined =
+        reservations.rows[0] ??
+        (claim
+          ? undefined
+          : {
+              assetId: asset.id,
+              token,
+              sourcePath: asset.originalPath,
+              upstreamPath: asset.originalPath,
+              temporaryPath: this.getNormalizationTemporaryPath(asset.originalPath, token),
+            });
       const reservationMatchesSource = reservation?.sourcePath === asset.originalPath;
       const reservationMatchesCommittedMapping =
         reservation &&
@@ -411,7 +471,7 @@ export class PhysicalFileRepository {
         asset,
         reservation,
         commit: async (input) => {
-          await this.commitNormalization(trx, { ...input, asset });
+          await this.commitNormalization(trx, { ...input, asset }, claim);
         },
       });
     });
@@ -435,9 +495,15 @@ export class PhysicalFileRepository {
     const state = await sql<{ active: boolean; phase: string }>`
       SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR SHARE
     `.execute(trx);
+    // A destructive (upstream-form) claim is honored under exactly two
+    // audited authorities: return reconciliation (inactive phase) and
+    // official handoff preparation (ready phase).
     const audit = await sql<{ id: string }>`
       SELECT id::text AS id FROM immich_fork.migration_audit
-      WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+      WHERE (name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          AND ${state.rows[0]?.phase ?? ''} = 'inactive')
+         OR (name = 'official-handoff-preparation' AND phase = 'ready' AND status = 'running'
+          AND ${state.rows[0]?.phase ?? ''} = 'ready')
       ORDER BY id DESC LIMIT 1 FOR SHARE
     `.execute(trx);
     const progress = await sql<{ claimToken: string | null; claimedIds: string[] }>`
@@ -449,7 +515,7 @@ export class PhysicalFileRepository {
       progressRow?.claimedIds.length === claim.claimedIds.length &&
       progressRow.claimedIds.every((id, index) => id === claim.claimedIds[index]);
     if (
-      state.rows[0]?.phase !== 'inactive' ||
+      (state.rows[0]?.phase !== 'inactive' && state.rows[0]?.phase !== 'ready') ||
       state.rows[0]?.active !== false ||
       !audit.rows[0] ||
       progressRow?.claimToken !== claim.claimToken ||
@@ -464,6 +530,7 @@ export class PhysicalFileRepository {
   private async commitNormalization(
     db: Kysely<DB> | Transaction<DB>,
     input: PhysicalNormalizationCommit,
+    claim?: ReturnNormalizationClaim,
   ): Promise<void> {
     const { asset, evidence, linkCount, sha1, sha256, sizeInBytes, upstreamPath, verifiedPaths } = input;
     if (asset.physicalFileId && asset.physicalPath && asset.physicalChecksum && asset.physicalType) {
@@ -524,7 +591,13 @@ export class PhysicalFileRepository {
           "verifiedAt" = excluded."verifiedAt",
           "updatedAt" = excluded."updatedAt"
       `.execute(db);
-    await sql`
+    // Rewriting public.asset to upstream-compatible form (SHA-1 checksum,
+    // per-asset path, no physical dedup link) is destructive to the fork's
+    // physical deduplication feature. Only the explicit return-to-upstream
+    // flow may do it; steady-state fork normalization records evidence in the
+    // immich_fork tables above and leaves public.asset untouched.
+    if (claim) {
+      await sql`
         UPDATE public.asset
         SET
           checksum = ${sha1},
@@ -534,6 +607,7 @@ export class PhysicalFileRepository {
           "updatedAt" = now()
         WHERE id = ${asset.id}::uuid
       `.execute(db);
+    }
   }
 
   async upsertPhysicalFile(input: PhysicalFileInput): Promise<PhysicalFile> {

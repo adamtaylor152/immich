@@ -89,10 +89,12 @@ describe(SharedLinkService.name, () => {
 
     const { user } = await ctx.newUser();
 
+    // distinct fileCreatedAt values: the shared-link payload orders assets by
+    // fileCreatedAt asc, and identical timestamps make the order flaky
     const assets = await Promise.all([
-      ctx.newAsset({ ownerId: user.id }),
-      ctx.newAsset({ ownerId: user.id }),
-      ctx.newAsset({ ownerId: user.id }),
+      ctx.newAsset({ ownerId: user.id, fileCreatedAt: new Date('2024-01-01T00:00:00Z') }),
+      ctx.newAsset({ ownerId: user.id, fileCreatedAt: new Date('2024-01-02T00:00:00Z') }),
+      ctx.newAsset({ ownerId: user.id, fileCreatedAt: new Date('2024-01-03T00:00:00Z') }),
     ]);
 
     for (const { asset } of assets) {
