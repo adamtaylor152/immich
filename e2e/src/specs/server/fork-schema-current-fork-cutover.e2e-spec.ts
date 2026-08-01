@@ -10,6 +10,7 @@ import {
   OFFICIAL_WORKFLOW_MIGRATION,
   phase,
   saveState,
+  stripPluginAudit,
   uploadAsset,
   withDatabase,
   workflowEvidence,
@@ -266,6 +267,9 @@ describe.runIf(phase === 'current-fork-cutover')(`${lane}: locked cutover`, () =
       expect.objectContaining({ name: OFFICIAL_WORKFLOW_MIGRATION, timestamp: legacyTimestamp }),
     );
     expect(after.ledger).not.toContainEqual(expect.objectContaining({ name: LEGACY_WORKFLOW_MIGRATION }));
+    // Row-level comparison first: on mismatch this yields a self-explaining
+    // field diff instead of an opaque digest inequality.
+    expect(stripPluginAudit(after.rows.plugin)).toEqual(stripPluginAudit(before.evidence.rows.plugin));
     expect(after.rowDigests).toEqual(before.evidence.rowDigests);
     expect(after.schemaDigest).toBe(before.evidence.schemaDigest);
     expect(progress).toHaveLength(7);

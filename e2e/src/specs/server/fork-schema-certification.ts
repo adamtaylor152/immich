@@ -55,6 +55,12 @@ export const digest = (value: unknown): string =>
     .update(JSON.stringify(canonical(value)))
     .digest('hex');
 
+// The core-plugin re-import rewrites the plugin row with identical values
+// except audit timestamps. Strip them so legitimate re-imports between
+// captures don't masquerade as cutover mutations.
+export const stripPluginAudit = (rows: unknown[]): unknown[] =>
+  rows.map((row: any) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'updatedAt')));
+
 export const workflowEvidence = () =>
   withDatabase(async (client) => {
     const tables = ['plugin', 'plugin_method', 'workflow', 'workflow_step'] as const;
@@ -85,13 +91,7 @@ export const workflowEvidence = () =>
           // rewriting the plugin row with identical values except updatedAt.
           // Exclude that audit column so legitimate re-imports between
           // captures don't masquerade as cutover mutations.
-          digest(
-            table === 'plugin'
-              ? rows[table]!.map((row: any) =>
-                  Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'updatedAt')),
-                )
-              : rows[table],
-          ),
+          digest(table === 'plugin' ? stripPluginAudit(rows[table]!) : rows[table]),
         ]),
       ),
       rowIds: Object.fromEntries(
