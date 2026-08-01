@@ -188,16 +188,15 @@ if [[ "$selected_lane" == all || "$selected_lane" == current-fork-to-official-v3
 echo 'Lane: current-fork-to-official-v3.0.3'
 reset_lane
 export FORK_DB_SKIP_MIGRATIONS=false FORK_IMMICH_ENV=development FORK_WORKERS_INCLUDE=api
-# A blank database is intentionally classified as an official origin, so the
-# first boot establishes the last bundled upstream schema. Prime the simplest
-# legacy migration exactly, discard the still-empty isolated schema, and boot
-# again: the real unordered legacy provider then applies every other legacy
-# migration, including the colliding workflow origin.
+# A blank database is classified as a fresh install, and fresh installs run
+# the full combined legacy provider (see DatabaseService.onBootstrap), so a
+# single boot establishes the complete current-fork state: the certified
+# upstream schema plus every legacy fork migration — including the colliding
+# workflow origin — after which the isolated fork schema classifies the
+# database as a legacy installation. Priming any legacy ledger row by hand
+# would duplicate what the migrator already recorded, so only assert.
 start_fork
-stop_fork
 psql_sql -v ON_ERROR_STOP=1 <<'SQL'
-DROP SCHEMA immich_fork CASCADE;
-ALTER TYPE "asset_checksum_algorithm_enum" ADD VALUE IF NOT EXISTS 'sha256';
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -208,12 +207,20 @@ BEGIN
   ) THEN
     RAISE EXCEPTION '2100000000030 schema effect is absent';
   END IF;
+  IF (SELECT count(*) FROM public.kysely_migrations
+      WHERE name = '2100000000030-AddSha256ChecksumAlgorithm') <> 1 THEN
+    RAISE EXCEPTION '2100000000030 must appear exactly once in the official ledger';
+  END IF;
+  IF (SELECT count(*) FROM public.kysely_migrations
+      WHERE name = '1779400000000-UpdateWorkflowTables') <> 1 THEN
+    RAISE EXCEPTION 'legacy workflow origin is absent from the official ledger';
+  END IF;
+  IF (SELECT phase FROM immich_fork.state WHERE id = 1) IS DISTINCT FROM 'legacy' THEN
+    RAISE EXCEPTION 'fresh fork boot did not classify the database as a legacy installation';
+  END IF;
 END
 $$;
-INSERT INTO public.kysely_migrations (name, timestamp)
-VALUES ('2100000000030-AddSha256ChecksumAlgorithm', to_char(clock_timestamp(), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
 SQL
-start_fork
 official_core_container="$(docker create "ghcr.io/immich-app/immich-server:$OFFICIAL_IMMICH_TAG")"
 docker cp "$official_core_container:/build/plugins/immich-plugin-core/dist/plugin.wasm" "$STATE_DIR/immich-plugin-core-v3.0.3.wasm"
 docker rm "$official_core_container" >/dev/null

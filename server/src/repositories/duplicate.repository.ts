@@ -289,10 +289,9 @@ export class DuplicateRepository {
       if (writesForkSidecar(phase)) {
         await lockForkAssetParent(trx, assetId);
       }
-      let stalePaths: string[] = [];
-      if (writesLegacy(phase)) {
-        stalePaths = await this.replaceFramesIn(trx.withSchema('public'), assetId, frames);
-      }
+      let stalePaths: string[] = writesLegacy(phase)
+        ? await this.replaceFramesIn(trx.withSchema('public'), assetId, frames)
+        : [];
       if (writesForkSidecar(phase)) {
         if (writesLegacy(phase)) {
           const exact = await trx

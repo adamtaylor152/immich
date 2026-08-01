@@ -27,7 +27,11 @@ describe('fork schema migration ledgers', () => {
   it('records official and fork migrations in separate ledgers', async () => {
     expect(await repository.detectMigrationMode()).toBe('fresh');
 
-    await repository.runOfficialMigrations();
+    // Fresh installs take the combined legacy provider (see
+    // DatabaseService.onBootstrap): the official-only provider cannot build the
+    // workflow tables because their creating migration is an audited provider
+    // gap, so a blank database becomes a complete current-fork installation.
+    await repository.runMigrations();
     await repository.runForkMigrations();
 
     const officialForkMigrations = await sql<{ name: string }>`
@@ -66,32 +70,36 @@ describe('fork schema migration ledgers', () => {
       'migration_audit',
       'state',
     ]);
+    // A fresh install runs the legacy fork migrations, so the fork baseline
+    // classifies the database as a certified current-fork (legacy) source.
     expect(state.rows).toEqual([
-      { id: 1, active: false, schemaVersion: '1', upstreamVersion: '3.0.3', phase: 'inactive' },
+      { id: 1, active: false, schemaVersion: '1', upstreamVersion: '3.0.3', phase: 'legacy' },
     ]);
-  });
+  }, 120_000);
 
-  it('initializes a certified current-fork source in the legacy phase', async () => {
+  it('initializes an official-origin source in the inactive phase', async () => {
     await sql`DROP SCHEMA immich_fork CASCADE`.execute(db);
-    await sql`CREATE TABLE public.physical_file (id uuid PRIMARY KEY)`.execute(db);
-    await sql`
-      INSERT INTO kysely_migrations (name, timestamp)
-      VALUES ('1779400000000-UpdateWorkflowTables', ${new Date().toISOString()})
-    `.execute(db);
+    await sql`ALTER TABLE public.physical_file RENAME TO physical_file_hidden`.execute(db);
+    await sql`DELETE FROM kysely_migrations WHERE name = '1779400000000-UpdateWorkflowTables'`.execute(db);
 
     try {
       await repository.runForkMigrations();
 
       const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(db);
-      expect(state.rows).toEqual([{ phase: 'legacy' }]);
+      expect(state.rows).toEqual([{ phase: 'inactive' }]);
     } finally {
-      await sql`DROP TABLE public.physical_file`.execute(db);
-      await sql`DELETE FROM kysely_migrations WHERE name = '1779400000000-UpdateWorkflowTables'`.execute(db);
-      await sql`UPDATE immich_fork.state SET phase = 'inactive' WHERE id = 1`.execute(db);
+      await sql`ALTER TABLE public.physical_file_hidden RENAME TO physical_file`.execute(db);
+      await sql`
+        INSERT INTO kysely_migrations (name, timestamp)
+        VALUES ('1779400000000-UpdateWorkflowTables', ${new Date().toISOString()})
+      `.execute(db);
     }
   });
 
   it('distinguishes fresh, isolated, and legacy migration modes', async () => {
+    expect(await repository.detectMigrationMode()).toBe('legacy');
+
+    await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     expect(await repository.detectMigrationMode()).toBe('isolated');
 
     await sql`DROP SCHEMA immich_fork CASCADE`.execute(db);
@@ -108,7 +116,8 @@ describe('fork schema migration ledgers', () => {
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     const ledger = await sql<{ name: string }>`SELECT name FROM kysely_migrations`.execute(db);
     const applied = new Set(ledger.rows.map(({ name }) => name));
-    for (const name of supportedVersions.upstreamMigrations.filter((name) => !applied.has(name))) {
+    const missing = supportedVersions.upstreamMigrations.filter((name) => !applied.has(name));
+    for (const name of missing) {
       await sql`
         INSERT INTO kysely_migrations (name, timestamp)
         VALUES (${name}, ${name})

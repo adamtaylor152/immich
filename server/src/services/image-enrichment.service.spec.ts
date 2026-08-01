@@ -895,7 +895,7 @@ describe(ImageEnrichmentService.name, () => {
           sourceType: 'machine-learning' as never,
           updatedAt: new Date(),
           updateId: newUuid(),
-          person: { id: newUuid(), name: '   ', isHidden: false } as never,
+          person: { id: newUuid(), name: ' '.repeat(3), isHidden: false } as never,
         },
       ]);
 

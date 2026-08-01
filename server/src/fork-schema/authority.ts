@@ -1,9 +1,9 @@
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 
 export const isLegacyAuthoritative = (phase: ForkSchemaPhase): boolean =>
-  phase === 'legacy' || phase === 'dual-write' || phase === 'ready';
+  ['legacy', 'dual-write', 'ready'].includes(phase);
 
 export const isForkAuthoritative = (phase: ForkSchemaPhase): boolean => phase === 'active';
 
 export const isForkWriteEnabled = (phase: ForkSchemaPhase): boolean =>
-  phase === 'dual-write' || phase === 'ready' || phase === 'active';
+  ['dual-write', 'ready', 'active'].includes(phase);

@@ -12,7 +12,7 @@ import {
   SearchOrderField,
   SearchOrderFieldSchema,
 } from 'src/enum';
-import { emptyStringToNull, isoDatetimeToDate, nonEmptyPartial, stringToBool } from 'src/validation';
+import { isoDatetimeToDate, nonEmptyPartial, stringToBool } from 'src/validation';
 import z from 'zod';
 
 const BaseSearchSchema = z.object({

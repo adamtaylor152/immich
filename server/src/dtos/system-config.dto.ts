@@ -292,7 +292,7 @@ const SystemConfigRunPodSchema = z
 // and the smart-album evaluator. Cap to 256 chars and reject control characters
 // (CWE-117 log injection hardening + general defensive bound).
 // eslint-disable-next-line no-control-regex
-const SMART_ALBUM_STRING_CONTROL_PATTERN = /[\u0000-\u001F\u007F]/;
+const SMART_ALBUM_STRING_CONTROL_PATTERN = /[\u{0000}-\u{001F}\u{007F}]/u;
 const smartAlbumString = z
   .string()
   .max(256, { error: 'String must be 256 characters or fewer' })
@@ -346,8 +346,6 @@ const SystemConfigMapSchema = z
     darkStyle: z.url().describe('Dark map style URL'),
   })
   .meta({ id: 'SystemConfigMapDto' });
-
-export { ReleaseChannel };
 
 const ReleaseChannelSchema = z.enum(ReleaseChannel).describe('Release channel').meta({ id: 'ReleaseChannel' });
 
@@ -710,3 +708,5 @@ export function mapConfig(config: SystemConfig): SystemConfigDto {
     },
   };
 }
+
+export { ReleaseChannel } from 'src/enum';

@@ -516,7 +516,7 @@ export class PhysicalFileRepository {
       progressRow.claimedIds.every((id, index) => id === claim.claimedIds[index]);
     if (
       (state.rows[0]?.phase !== 'inactive' && state.rows[0]?.phase !== 'ready') ||
-      state.rows[0]?.active !== false ||
+      state.rows[0]?.active ||
       !audit.rows[0] ||
       progressRow?.claimToken !== claim.claimToken ||
       !exactIds ||

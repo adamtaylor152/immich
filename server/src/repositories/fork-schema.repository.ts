@@ -608,8 +608,7 @@ export class ForkSchemaRepository {
         if (!audit.rows[0]?.running) {
           throw new Error('Fork return batch claims require a running return reconciliation audit');
         }
-      }
-      if (mode === 'ready') {
+      } else if (mode === 'ready') {
         const audit = await sql<{ running: boolean }>`
           SELECT EXISTS (
             SELECT 1

@@ -21,7 +21,7 @@ describe('fork handoff CLI', () => {
     );
   });
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+  it.each([0, -1, 1.5, NaN, Infinity])(
     'rejects invalid batch size %s before invoking return preparation',
     async (batchSize) => {
       const service = { prepareFork: vi.fn() } as unknown as ForkHandoffService;

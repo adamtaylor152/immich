@@ -16,6 +16,12 @@
     "result": "local-synthetic-passed",
     "externalProductionGate": "required"
   },
+  "postCertifiedUpstreamMigrations": [
+    "1784647658615-AddOAuthBearerTokenToSession",
+    "1784836013770-MinFacePreferenceMigration",
+    "1784986754473-ConvertUserPasswordEmptyStringToNull",
+    "1784986754474-AlbumDescriptionNullable"
+  ],
   "upstreamMigrations": [
     "1744910873969-InitialMigration",
     "1744991379464-AddNotificationsTable",

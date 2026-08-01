@@ -94,17 +94,22 @@ describe('storage cutover verification', () => {
     const bytes = Buffer.from('original');
     const { path } = await seed(bytes);
     const started = await service.start('backup-2', `snapshot-${kind}`);
-    if (kind === 'missing') {
-      await unlink(path);
-    }
-    if (kind === 'changed') {
-      await writeFile(path, Buffer.from('changed'));
-    }
-    if (kind === 'symlink') {
-      const outside = join(tmpdir(), `${randomUUID()}.jpg`);
-      await writeFile(outside, bytes);
-      await unlink(path);
-      await symlink(outside, path);
+    switch (kind) {
+      case 'missing': {
+        await unlink(path);
+        break;
+      }
+      case 'changed': {
+        await writeFile(path, Buffer.from('changed'));
+        break;
+      }
+      case 'symlink': {
+        const outside = join(tmpdir(), `${randomUUID()}.jpg`);
+        await writeFile(outside, bytes);
+        await unlink(path);
+        await symlink(outside, path);
+        break;
+      }
     }
 
     await expect(service.resume(started.id, 10)).rejects.toThrow();

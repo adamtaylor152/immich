@@ -48,7 +48,7 @@ import { checkFaceVisibility, checkOcrVisibility } from 'src/utils/editor';
 import { BaseConfig, ThumbnailConfig } from 'src/utils/media';
 import { isUnsupportedRawDecodeError } from 'src/utils/media-health';
 import { mimeTypes } from 'src/utils/mime-types';
-import { clamp, isFaceImportEnabled, isFacialRecognitionEnabled } from 'src/utils/misc';
+import { clamp } from 'src/utils/misc';
 import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 import { getOutputDimensions } from 'src/utils/transform';
 
@@ -406,7 +406,7 @@ export class MediaService extends BaseService {
   private async extractOriginalImage(asset: ThumbnailAsset, image: SystemConfig['image'], useEdits = false) {
     const isRaw = mimeTypes.isRaw(asset.originalFileName);
     const extractEmbedded = image.extractEmbedded && isRaw;
-    const enhancedRawEnabled = image.enhancedRaw?.enabled !== false;
+    const enhancedRawEnabled = image.enhancedRaw?.enabled;
     let extracted = extractEmbedded ? await this.extractImage(asset.originalPath, image.preview.size) : null;
     let renderedRaw = false;
     let rawRenderError: unknown;
@@ -749,7 +749,7 @@ export class MediaService extends BaseService {
     }
 
     let selected = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestScore = -Infinity;
     const candidates: string[] = [];
 
     try {
@@ -1253,7 +1253,8 @@ export class MediaService extends BaseService {
       videoFilters.push(`rotate=${this.roundFilterNumber(straighten.parameters.angle)}*PI/180:fillcolor=black`);
     }
 
-    for (const mirror of edits.filter((edit) => edit.action === AssetEditAction.Mirror)) {
+    const mirrors = edits.filter((edit) => edit.action === AssetEditAction.Mirror);
+    for (const mirror of mirrors) {
       videoFilters.push(mirror.parameters.axis === 'horizontal' ? 'hflip' : 'vflip');
     }
 
@@ -1270,16 +1271,18 @@ export class MediaService extends BaseService {
       videoFilters.push(...this.getAdjustmentFilters(adjust.parameters));
     }
 
-    for (const look of edits.filter(
+    const looks = edits.filter(
       (edit) => edit.action === AssetEditAction.Filter || edit.action === AssetEditAction.Effect,
-    )) {
+    );
+    for (const look of looks) {
       const filter = this.getLookFilter(look.parameters.name, look.parameters.intensity);
       if (filter) {
         videoFilters.push(filter);
       }
     }
 
-    for (const overlay of edits.filter((edit) => edit.action === AssetEditAction.TextOverlay)) {
+    const overlays = edits.filter((edit) => edit.action === AssetEditAction.TextOverlay);
+    for (const overlay of overlays) {
       videoFilters.push(this.getTextOverlayFilter(overlay.parameters, timeline));
     }
 
@@ -1566,10 +1569,10 @@ export class MediaService extends BaseService {
   private escapeFfmpegText(value: string) {
     const escape = String.fromCodePoint(92);
     return value
-      .replaceAll(escape, escape + escape)
-      .replaceAll(':', `${escape}:`)
-      .replaceAll("'", `${escape}'`)
-      .replaceAll(',', `${escape},`);
+      .replaceAll(escape, () => escape + escape)
+      .replaceAll(':', () => `${escape}:`)
+      .replaceAll("'", () => `${escape}'`)
+      .replaceAll(',', () => `${escape},`);
   }
 
   private msToSeconds(milliseconds: number) {

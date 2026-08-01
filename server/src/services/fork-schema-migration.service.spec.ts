@@ -66,12 +66,7 @@ const progress = (kind: BackfillKind, overrides: Partial<BackfillProgress> = {})
 });
 
 const deferred = <T>() => {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
+  const { promise, resolve, reject } = Promise.withResolvers<T>();
   return { promise, reject, resolve };
 };
 
@@ -400,7 +395,7 @@ describe(ForkSchemaMigrationService.name, () => {
       }
       mocks.forkSchema.claimReturnBatch.mockImplementation((kind) =>
         Promise.resolve(
-          handlers.get(kind) && (handlers.get(kind) as ReturnType<typeof vi.fn>).mock.calls.length === 0
+          handlers.has(kind) && (handlers.get(kind) as ReturnType<typeof vi.fn>).mock.calls.length === 0
             ? { ids: [`${kind}-id`], cursor: `${kind}-claim` }
             : null,
         ),

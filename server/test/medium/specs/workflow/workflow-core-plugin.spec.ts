@@ -2,7 +2,7 @@ import { WorkflowStepConfig, WorkflowTrigger } from '@immich/plugin-sdk';
 import { Kysely } from 'kysely';
 import { existsSync, readFileSync } from 'node:fs';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
-import { AssetMetadataKey, AssetType, AssetVisibility, LogLevel } from 'src/enum';
+import { AssetMetadataKey, AssetType, AssetVisibility, JobStatus, LogLevel } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
@@ -239,7 +239,9 @@ describe('core plugin', () => {
         steps: [{ method: 'immich-plugin-core#assetLock', config: { inverse: true } }],
       });
 
-      await expect(ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset.id })).resolves.toBeUndefined();
+      await expect(ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset.id })).resolves.toBe(
+        JobStatus.Skipped,
+      );
 
       await expect(ctx.get(AssetRepository).getById(asset.id)).resolves.toMatchObject({
         visibility: AssetVisibility.Locked,
@@ -282,7 +284,7 @@ describe('core plugin', () => {
   describeIfPluginBuilt('assetAddToAlbums', () => {
     it('should create an album by name', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, isFavorite: true });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -306,7 +308,7 @@ describe('core plugin', () => {
 
     it('should not use the name when there is an albumId', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, isFavorite: true });
       const { album } = await ctx.newAlbum({ ownerId: user.id });
 
       const workflow = await createWorkflow({
@@ -383,7 +385,7 @@ describe('core plugin', () => {
   describe('assetLocationFilter', () => {
     it('should favorite an asset within a given radius', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
       await ctx.newExif({ assetId: asset.id, latitude: 49.27335322114536, longitude: -123.10387144078764 });
 
       const workflow = await createWorkflow({
@@ -406,7 +408,7 @@ describe('core plugin', () => {
 
     it('should not favorite asset outside a given radius', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
       await ctx.newExif({ assetId: asset.id, latitude: 49.26126605257035, longitude: -123.24895939078196 });
 
       const workflow = await createWorkflow({
@@ -429,7 +431,7 @@ describe('core plugin', () => {
 
     it('should favorite asset by location name', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
       await ctx.newExif({ assetId: asset.id, city: 'Vancouver' });
 
       const workflow = await createWorkflow({
@@ -454,7 +456,7 @@ describe('core plugin', () => {
   describe('assetTypeFilter', () => {
     it('should favorite asset if it is a video', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id, type: AssetType.Video });
+      const { asset } = await newEligibleAsset({ ownerId: user.id, type: AssetType.Video });
 
       const workflow = await createWorkflow({
         ownerId: user.id,
@@ -479,9 +481,9 @@ describe('core plugin', () => {
     it('should favorite assets created during the first 7 days of a specific year and month', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }, { asset: asset3 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2000-04-01') }),
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2000-04-07T23:59:59Z') }),
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2000-04-08T00:00:00Z') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('2000-04-01') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('2000-04-07T23:59:59Z') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('2000-04-08T00:00:00Z') }),
       ]);
 
       const workflow = await createWorkflow({
@@ -515,9 +517,9 @@ describe('core plugin', () => {
     it('should match recurring dates regardless of the year', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }, { asset: asset3 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2026-03-01') }),
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('1998-12-21') }),
-        ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2000-04-08T00:00:00Z') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('2026-03-01') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('1998-12-21') }),
+        newEligibleAsset({ ownerId: user.id, localDateTime: new Date('2000-04-08T00:00:00Z') }),
       ]);
       await ctx.newAsset({ ownerId: user.id, localDateTime: new Date('2010-06-15') });
 
@@ -553,7 +555,7 @@ describe('core plugin', () => {
   describe('webhook', () => {
     it('should trigger a webhook on asset upload', async () => {
       const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset } = await newEligibleAsset({ ownerId: user.id });
 
       const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') }));
       vi.stubGlobal('fetch', fetchMock);

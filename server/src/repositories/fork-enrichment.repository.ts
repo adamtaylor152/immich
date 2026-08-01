@@ -116,9 +116,10 @@ export class ForkEnrichmentRepository {
     );
     for (const row of legacy.rows) {
       const generated = this.generatedFields(row.provenance);
-      const textGeneratedDescriptions = [
-        ...row.description.matchAll(/(?:^|\n\n)AI description: ([\s\S]*?)(?=\n\n|$)/g),
-      ].map((match) => match[1] ?? '');
+      const textGeneratedDescriptions = row.description
+        .matchAll(/(?:^|\n\n)AI description: ([\s\S]*?)(?=\n\n|$)/g)
+        .map((match) => match[1] ?? '')
+        .toArray();
       const sidecarDescription =
         generated.description ?? (textGeneratedDescriptions.length > 0 ? textGeneratedDescriptions.join('\n\n') : null);
       const block = generated.description == null ? null : `${prefix}${generated.description}`;

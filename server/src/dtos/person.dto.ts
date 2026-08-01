@@ -17,7 +17,7 @@ import z from 'zod';
 // characters / newlines so a malicious user cannot inject a multi-thousand-char
 // prompt-injection payload via `Person.name`. Also closes a log-noise vector.
 // eslint-disable-next-line no-control-regex
-const PERSON_NAME_CONTROL_PATTERN = /[\u0000-\u001F]/;
+const PERSON_NAME_CONTROL_PATTERN = /[\u{0000}-\u{001F}]/u;
 const personNameSchema = z
   .string()
   .max(256, { error: 'Person name must be 256 characters or fewer' })

@@ -442,7 +442,7 @@ export class ForkStorageNormalizationService {
     const roots = [StorageCore.getMediaLocation(), ...asset.libraryImportPaths];
     const resolvedRoots = await Promise.all(roots.map((root) => realpath(root).catch(() => {})));
     const resolvedSource = await realpath(sourcePath);
-    if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedSource))) {
+    if (resolvedRoots.every((root) => !(root && this.isWithin(root, resolvedSource)))) {
       throw new Error(`Normalization source is outside approved storage roots: ${sourcePath}`);
     }
     await this.assertSafeParent(asset, targetPath, 'normalization target');
@@ -452,7 +452,7 @@ export class ForkStorageNormalizationService {
     const roots = [StorageCore.getMediaLocation(), ...asset.libraryImportPaths];
     const resolvedRoots = await Promise.all(roots.map((root) => realpath(root).catch(() => {})));
     const resolvedTargetParent = await realpath(dirname(path));
-    if (!resolvedRoots.some((root) => root && this.isWithin(root, resolvedTargetParent))) {
+    if (resolvedRoots.every((root) => !(root && this.isWithin(root, resolvedTargetParent)))) {
       throw new Error(`${label} is outside approved storage roots: ${path}`);
     }
   }

@@ -243,7 +243,7 @@ export class PluginRepository {
       ) AS "exists"
     `
       .execute(this.db)
-      .then(({ rows }) => rows[0]?.exists === true));
+      .then(({ rows }) => rows[0]?.exists));
   }
 
   async load({ key, label, wasmBytes }: PluginLoad, { runInWorker, functions }: PluginLoadOptions) {
@@ -281,7 +281,7 @@ export class PluginRepository {
       // host does not provide), so surface the first creation error instead of hanging.
       await new Promise<void>((resolve, reject) => {
         pool.once('factoryCreateError', reject);
-        pool.ready().then(resolve, reject);
+        pool.ready().then(resolve).catch(reject);
       });
       this.pluginMap.set(key, { pool, label });
     } catch (error: any) {

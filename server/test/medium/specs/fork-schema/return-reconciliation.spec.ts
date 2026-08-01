@@ -27,7 +27,7 @@ const deferred = <T = void>() => {
 
 const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
-  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', () => `/${database.rows[0]!.name}`);
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
 };
 

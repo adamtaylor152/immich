@@ -691,14 +691,14 @@ export class AssetService extends BaseService {
       const trimStartMs = trimEdit?.parameters.startMs ?? 0;
       const trimEndMs = trimEdit?.parameters.endMs ?? durationMs;
       const speedEdits = edits.filter((edit) => edit.action === AssetEditAction.Speed);
-      const globalSpeedEdit = speedEdits.find(
+      const hasGlobalSpeedEdit = speedEdits.some(
         (edit) => edit.parameters.startMs === undefined && edit.parameters.endMs === undefined,
       );
       const speedSegments = speedEdits
         .filter((edit) => edit.parameters.startMs !== undefined && edit.parameters.endMs !== undefined)
         .sort((a, b) => a.parameters.startMs! - b.parameters.startMs!);
 
-      if (globalSpeedEdit && speedSegments.length > 0) {
+      if (hasGlobalSpeedEdit && speedSegments.length > 0) {
         throw new BadRequestException('Global and segment speed edits cannot be combined');
       }
 

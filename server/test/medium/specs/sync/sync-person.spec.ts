@@ -22,7 +22,7 @@ const nsfwMetadata = (isNsfw: boolean, review?: { action: string; isNsfw: boolea
   nsfwDetection: {
     status: 'success',
     result: { isNsfw, score: 0.99, labels: { explicit: 0.99 } },
-    ...(review ? { review } : {}),
+    ...(review && { review }),
   },
 });
 

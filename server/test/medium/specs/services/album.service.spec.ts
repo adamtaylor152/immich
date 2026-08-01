@@ -4,6 +4,7 @@ import { AssetMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { EventRepository } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MapRepository } from 'src/repositories/map.repository';
 import { TagRepository } from 'src/repositories/tag.repository';
@@ -18,18 +19,20 @@ import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 let defaultDatabase: Kysely<DB>;
 
 const setup = (db?: Kysely<DB>) => {
-  return newMediumService(AlbumService, {
+  const services = newMediumService(AlbumService, {
     database: db || defaultDatabase,
     real: [AccessRepository, AlbumRepository, AssetRepository, MapRepository, TagRepository],
-    mock: [LoggingRepository],
+    mock: [EventRepository, LoggingRepository],
   });
+  services.ctx.getMock(EventRepository).emit.mockResolvedValue();
+  return services;
 };
 
 const nsfwMetadata = (isNsfw: boolean, review?: { action: string; isNsfw: boolean }) => ({
   nsfwDetection: {
     status: 'success',
     result: { isNsfw, score: isNsfw ? 0.95 : 0.05, labels: { explicit: isNsfw ? 0.95 : 0.05 } },
-    ...(review ? { review } : {}),
+    ...(review && { review }),
   },
 });
 

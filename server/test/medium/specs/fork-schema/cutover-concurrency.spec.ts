@@ -4,7 +4,7 @@ import {
   up as createCutoverVerification,
   down as rollbackCutoverVerification,
 } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
-import { OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
+import { LEGACY_WORKFLOW_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { BACKFILL_KINDS } from 'src/repositories/fork-schema.repository';
@@ -26,7 +26,7 @@ class NoOfficialMigrationRepository extends DatabaseRepository {
 
 const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
-  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', () => `/${database.rows[0]!.name}`);
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
 };
 
@@ -114,12 +114,20 @@ const writerCases = [
 
 describe('fork schema cutover concurrency', () => {
   let db: Kysely<DB>;
+  // The official workflow marker is the sole audited provider gap, so it must
+  // occupy the ledger slot the legacy workflow migration was applied in for the
+  // ledger to stay an exact ordered prefix of the certified official set.
+  let workflowMarkerTimestamp: string;
 
   beforeAll(async () => {
     db = await getKyselyDB('cutover_concurrency');
     const repository = new NoOfficialMigrationRepository(db, LoggingRepository.create(), new ConfigRepository());
     await repository.runForkMigrations();
     await alignCertifiedGeodataCatalog(db);
+    const legacyWorkflowRow = await sql<{ timestamp: string }>`
+      SELECT timestamp::text AS timestamp FROM public.kysely_migrations WHERE name = ${LEGACY_WORKFLOW_MIGRATION}
+    `.execute(db);
+    workflowMarkerTimestamp = legacyWorkflowRow.rows[0]!.timestamp;
   });
 
   afterAll(async () => db.destroy());
@@ -128,8 +136,8 @@ describe('fork schema cutover concurrency', () => {
     await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     await sql`
       INSERT INTO public.kysely_migrations (name, timestamp)
-      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2099-07-15T00:00:00.000Z')
-      ON CONFLICT (name) DO NOTHING
+      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, ${workflowMarkerTimestamp})
+      ON CONFLICT (name) DO UPDATE SET timestamp = EXCLUDED.timestamp
     `.execute(db);
     await sql`
       UPDATE immich_fork.state

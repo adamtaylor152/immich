@@ -227,8 +227,8 @@ export class MachineLearningRepository {
   private getOrderedUrls(): ManagedUrlEntry[] {
     const fromConfig: ManagedUrlEntry[] = this.config.urls.map((url) => ({ url }));
     const sortedConfig = [...fromConfig].sort((a, b) => {
-      const healthyA = this.healthyMap[a.url] === false ? 0 : 1;
-      const healthyB = this.healthyMap[b.url] === false ? 0 : 1;
+      const healthyA = this.healthyMap[a.url] ? 1 : 0;
+      const healthyB = this.healthyMap[b.url] ? 1 : 0;
       return healthyB - healthyA;
     });
     const managed = this.managed;
@@ -356,10 +356,10 @@ export class MachineLearningRepository {
     // Redact assembled prompt text to avoid leaking identity hints and admin-configured
     // vocabulary into logs, while preserving model name and acceleration for debugging.
     const sanitizedConfig = JSON.parse(JSON.stringify(config));
-    for (const taskKey of Object.keys(sanitizedConfig)) {
-      for (const typeKey of Object.keys(sanitizedConfig[taskKey] ?? {})) {
-        if (sanitizedConfig[taskKey][typeKey]?.options?.external_prompt !== undefined) {
-          sanitizedConfig[taskKey][typeKey].options.external_prompt = '[redacted]';
+    for (const task of Object.values<any>(sanitizedConfig)) {
+      for (const entry of Object.values<any>(task ?? {})) {
+        if (entry?.options?.external_prompt !== undefined) {
+          entry.options.external_prompt = '[redacted]';
         }
       }
     }
@@ -491,10 +491,10 @@ export class MachineLearningRepository {
     }
 
     const sanitizedConfig = JSON.parse(JSON.stringify(buildRequest(modelName)));
-    for (const taskKey of Object.keys(sanitizedConfig)) {
-      for (const typeKey of Object.keys(sanitizedConfig[taskKey] ?? {})) {
-        if (sanitizedConfig[taskKey][typeKey]?.options?.external_prompt !== undefined) {
-          sanitizedConfig[taskKey][typeKey].options.external_prompt = '[redacted]';
+    for (const task of Object.values<any>(sanitizedConfig)) {
+      for (const entry of Object.values<any>(task ?? {})) {
+        if (entry?.options?.external_prompt !== undefined) {
+          entry.options.external_prompt = '[redacted]';
         }
       }
     }

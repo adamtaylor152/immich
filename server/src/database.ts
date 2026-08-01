@@ -407,7 +407,9 @@ export const columns = {
     'plugin_method.types',
     'plugin_method.schema',
     'plugin_method.hostFunctions',
-    'plugin_method.allowedHosts',
+    // NOTE: allowedHosts is intentionally omitted — PluginRepository selects it
+    // through its hasAllowedHostsColumn compatibility shim so pre-migration
+    // schemas keep working.
     'plugin_method.uiHints',
   ],
   syncAsset: [

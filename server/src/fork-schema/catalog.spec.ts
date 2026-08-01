@@ -89,7 +89,7 @@ describe('catalog manifests', () => {
     expect(getCatalogTableLocks(originalOfficial)).toEqual(
       [...official.tables, ...forkTables].map(({ identity }) => identity).toSorted(),
     );
-    expect(getCatalogTableLocks(fork)).toHaveLength(100);
+    expect(getCatalogTableLocks(fork)).toHaveLength(102);
     expect(getCatalogTableLocks(originalOfficial)).toHaveLength(91);
   });
 

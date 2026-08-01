@@ -22,7 +22,7 @@ const tagTriggerCache = new WeakMap<SystemConfig['smartAlbums']['builtIn'], Map<
  */
 const sanitizeForLog = (value: string): string =>
   // eslint-disable-next-line no-control-regex
-  value.replaceAll(/[\u0000-\u001F\u007F]/g, '?').slice(0, 64);
+  value.replaceAll(/[\u{0000}-\u{001F}\u{007F}]/gu, '?').slice(0, 64);
 
 const getTagTriggerSet = (builtIn: SystemConfig['smartAlbums']['builtIn'], kind: BuiltInKind): Set<string> => {
   let perConfig = tagTriggerCache.get(builtIn);

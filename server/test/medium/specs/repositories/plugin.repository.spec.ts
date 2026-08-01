@@ -21,8 +21,9 @@ const seedPlugin = async (database: Kysely<DB>, allowedHostsColumn: boolean) => 
   const methodId = randomUUID();
   await sql`
     INSERT INTO public.plugin
-      (id, enabled, name, version, title, description, author, "wasmBytes")
-    VALUES (${pluginId}::uuid, true, ${`plugin-${pluginId}`}, '1.0.0', 'Plugin', 'Fixture', 'Immich', decode('00', 'hex'))
+      (id, enabled, name, version, title, description, author, "wasmBytes", templates, "sha256hash")
+    VALUES (${pluginId}::uuid, true, ${`plugin-${pluginId}`}, '1.0.0', 'Plugin', 'Fixture', 'Immich',
+      decode('00', 'hex'), '[]'::jsonb, sha256(decode('00', 'hex')))
   `.execute(database);
   const insertMethod = allowedHostsColumn
     ? sql`
@@ -44,6 +45,8 @@ const seedPlugin = async (database: Kysely<DB>, allowedHostsColumn: boolean) => 
 describe(PluginRepository.name, () => {
   it('returns an empty allowedHosts list from plugin and method searches on the legacy schema', async () => {
     const database = await getKyselyDB();
+    // The migrated template already owns the column; recreate the legacy shape.
+    await sql`ALTER TABLE public.plugin_method DROP COLUMN "allowedHosts"`.execute(database);
     const sut = setup(database);
     const { methodId, pluginId } = await seedPlugin(database, false);
 
@@ -55,11 +58,8 @@ describe(PluginRepository.name, () => {
   });
 
   it('returns official allowedHosts from plugin and method searches after the upstream migration', async () => {
+    // The migrated template already reflects the upstream migration.
     const database = await getKyselyDB();
-    await sql`
-      ALTER TABLE public.plugin_method
-      ADD COLUMN "allowedHosts" varchar[] NOT NULL DEFAULT '{}'
-    `.execute(database);
     const sut = setup(database);
     const { methodId, pluginId } = await seedPlugin(database, true);
 

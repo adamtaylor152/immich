@@ -9,7 +9,7 @@ const makeContext = (userAgent?: string, optInHeader?: string): ExecutionContext
       getRequest: () => ({
         headers: {
           'user-agent': userAgent,
-          ...(optInHeader === undefined ? {} : { 'x-immich-go-compat': optInHeader }),
+          ...(optInHeader !== undefined && { 'x-immich-go-compat': optInHeader }),
         },
       }),
     }),

@@ -346,7 +346,7 @@ describe(DatabaseService.name, () => {
 
       expect(mocks.database.assertCertifiedReturnLedger).toHaveBeenCalledOnce();
       expect(mocks.database.assertCertifiedReturnLedger.mock.invocationCallOrder[0]).toBeLessThan(
-        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Infinity,
       );
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
       expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();

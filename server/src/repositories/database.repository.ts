@@ -28,9 +28,9 @@ import {
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
 import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
 import {
+  CERTIFIED_TAG_MIGRATIONS,
   classifyMigration,
   GENERIC_LEGACY_FORK_MIGRATIONS,
-  SUPPORTED_UPSTREAM_MIGRATIONS,
 } from 'src/fork-schema/migration-manifest';
 import {
   createCertifiedLedgerMigrationProvider,
@@ -706,7 +706,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     }
     const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
     const workflowCompatibility = classifyWorkflowCompatibility(await getWorkflowCompatibilityEvidence(runner));
-    const installationClass = classificationResult.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+    const installationClass = classificationResult.rows[0]?.currentFork ? 'current-fork' : 'original-official';
     const officialNames = Object.keys(officialMigrations).toSorted();
     if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
       throw new Error('Official migration provider exposed a non-upstream migration');
@@ -827,11 +827,13 @@ export class DatabaseRepository extends ForkHandoffRepository {
     const actualCatalog = await getCatalogEvidence(runner);
     const expectedCatalog = expectedCatalogFor(installationClass);
     const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
+    // An original-official installation is a byte-exact certified-tag database,
+    // so it must match the exact v3.0.3 ledger — which does not contain the
+    // post-certified upstream migrations the fork bundles.
     const exactOriginalOfficialLedger =
-      ledger.length === SUPPORTED_UPSTREAM_MIGRATIONS.length &&
+      ledger.length === CERTIFIED_TAG_MIGRATIONS.length &&
       ledger.every(
-        ({ classification, name }, index) =>
-          classification === 'upstream' && name === SUPPORTED_UPSTREAM_MIGRATIONS[index],
+        ({ classification, name }, index) => classification === 'upstream' && name === CERTIFIED_TAG_MIGRATIONS[index],
       );
     const migrationOrderValid =
       installationClass === 'current-fork'
@@ -847,10 +849,10 @@ export class DatabaseRepository extends ForkHandoffRepository {
     const forkLedgerValid =
       forkMigrations.length === expectedCatalog.forkMigrations.length &&
       forkMigrations.every((name, index) => expectedCatalog.forkMigrations[index] === name) &&
-      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present === true);
+      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present);
     const tableEvidence: ForkSchemaCutoverEvidence['tableEvidence'] = [];
-    for (const table of expectedCatalog.tables.map(({ identity }) => identity)) {
-      const [schema, name] = table.split('.');
+    for (const { identity: table } of expectedCatalog.tables) {
+      const [schema, name] = table.split('.', 2);
       const identifier = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
       const result = await sql
         .raw<{ count: number; digest: string }>(
@@ -949,8 +951,9 @@ export class DatabaseRepository extends ForkHandoffRepository {
         const classification = await sql<{ currentFork: boolean }>`
           SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
         `.execute(transaction);
-        const installationClass: ForkSchemaCutoverEvidence['installationClass'] =
-          classification.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+        const installationClass: ForkSchemaCutoverEvidence['installationClass'] = classification.rows[0]?.currentFork
+          ? 'current-fork'
+          : 'original-official';
         const lockTables = getCatalogTableLocks(expectedCatalogFor(installationClass))
           .map((table) =>
             table
@@ -1273,8 +1276,12 @@ export class DatabaseRepository extends ForkHandoffRepository {
    * reorder churn that landed `1779400000000-UpdateWorkflowTables.ts`. See the
    * `2100000000010-AddAssetIsNsfwIndex.ts` migration for an example.
    *
-   * `allowUnorderedMigrations` is enabled in dev so reordering is forgiving;
-   * production migrations should still be timestamp-ordered for clarity.
+   * `allowUnorderedMigrations` must stay enabled for the combined provider:
+   * adopting an official-origin database (and upgrading an existing fork
+   * database across an upstream sync) applies migrations whose names sort
+   * before already-ledgered ones — e.g. `1779806699547-AddPluginTemplates`
+   * lands after `2100000000030-AddSha256ChecksumAlgorithm` was applied — and
+   * Kysely's ordered mode refuses those as "corrupted migrations".
    */
   private createMigrator(
     provider: MigrationProvider = createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
@@ -1282,7 +1289,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     return new Migrator({
       db: this.db,
       migrationLockTableName: 'kysely_migrations_lock',
-      allowUnorderedMigrations: this.configRepository.isDev(),
+      allowUnorderedMigrations: true,
       migrationTableName: 'kysely_migrations',
       provider,
     });
@@ -1294,9 +1301,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     for (const result of results ?? []) {
       if (result.status === 'Success') {
         this.logger.log(`${owner} migration "${result.migrationName}" succeeded`);
-      }
-
-      if (result.status === 'Error') {
+      } else if (result.status === 'Error') {
         this.logger.warn(`${owner} migration "${result.migrationName}" failed`);
       }
     }

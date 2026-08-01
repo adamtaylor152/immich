@@ -445,7 +445,7 @@ export class ForkHandoffRepository {
             )
         `.execute(kysely)
       : { rows: [{ count: 0 }] };
-    const completedAt = run?.completedAt?.getTime() ?? Number.NaN;
+    const completedAt = run?.completedAt?.getTime() ?? NaN;
     const age = Date.now() - completedAt;
     if (
       !run ||
@@ -636,7 +636,7 @@ export class ForkHandoffRepository {
         if (
           !Array.isArray(backfillKinds) ||
           backfillKinds.length !== BACKFILL_KINDS.length ||
-          !BACKFILL_KINDS.every((kind) => backfillKinds.includes(kind)) ||
+          BACKFILL_KINDS.some((kind) => !backfillKinds.includes(kind)) ||
           config?.count !== 2 ||
           !/^[0-9a-f]{64}$/.test(config.digest ?? '') ||
           (config.source !== 'database' && config.source !== 'file') ||

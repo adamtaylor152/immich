@@ -885,7 +885,7 @@
       "identity": "public.album.deletedAt"
     },
     {
-      "definition": "text|not null|''::text||",
+      "definition": "text|nullable|||",
       "identity": "public.album.description"
     },
     {
@@ -1562,6 +1562,18 @@
     },
     {
       "definition": "uuid|not null|||",
+      "identity": "public.asset_ocr_audit.assetId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|clock_timestamp()||",
+      "identity": "public.asset_ocr_audit.deletedAt"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.asset_ocr_audit.id"
+    },
+    {
+      "definition": "uuid|not null|||",
       "identity": "public.asset_ocr.assetId"
     },
     {
@@ -1583,6 +1595,10 @@
     {
       "definition": "real|not null|||",
       "identity": "public.asset_ocr.textScore"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.asset_ocr.updateId"
     },
     {
       "definition": "real|not null|||",
@@ -1883,6 +1899,30 @@
     {
       "definition": "character varying(200)|not null|||",
       "identity": "public.geodata_places.name"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "public.integrity_report.assetId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.integrity_report.createdAt"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "public.integrity_report.fileAssetId"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.integrity_report.id"
+    },
+    {
+      "definition": "character varying|not null|||",
+      "identity": "public.integrity_report.path"
+    },
+    {
+      "definition": "character varying|not null|||",
+      "identity": "public.integrity_report.type"
     },
     {
       "definition": "character varying(255)|not null|||",
@@ -2293,6 +2333,10 @@
       "identity": "public.physical_file.updateId"
     },
     {
+      "definition": "character varying[]|not null|'{}'::character varying[]||",
+      "identity": "public.plugin_method.allowedHosts"
+    },
+    {
       "definition": "character varying|not null|||",
       "identity": "public.plugin_method.description"
     },
@@ -2351,6 +2395,14 @@
     {
       "definition": "character varying|not null|||",
       "identity": "public.plugin.name"
+    },
+    {
+      "definition": "bytea|not null|||",
+      "identity": "public.plugin.sha256hash"
+    },
+    {
+      "definition": "jsonb|not null|||",
+      "identity": "public.plugin.templates"
     },
     {
       "definition": "character varying|not null|||",
@@ -2419,6 +2471,10 @@
     {
       "definition": "boolean|not null|false||",
       "identity": "public.session.isPendingSyncReset"
+    },
+    {
+      "definition": "character varying|nullable|||",
+      "identity": "public.session.oauthBearerToken"
     },
     {
       "definition": "character varying|nullable|||",
@@ -2745,7 +2801,7 @@
       "identity": "public.user.oauthId"
     },
     {
-      "definition": "character varying|not null|''::character varying||",
+      "definition": "character varying|nullable|||",
       "identity": "public.user.password"
     },
     {
@@ -3363,6 +3419,10 @@
       "identity": "public.asset_metadata.asset_metadata_pkey"
     },
     {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.asset_ocr_audit.asset_ocr_audit_pkey"
+    },
+    {
       "definition": "FOREIGN KEY (\"assetId\") REFERENCES asset(id) ON UPDATE CASCADE ON DELETE CASCADE",
       "identity": "public.asset_ocr.asset_ocr_assetId_fkey"
     },
@@ -3421,6 +3481,22 @@
     {
       "definition": "PRIMARY KEY (id)",
       "identity": "public.geodata_places.geodata_places_pkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"assetId\") REFERENCES asset(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.integrity_report.integrity_report_assetId_fkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"fileAssetId\") REFERENCES asset_file(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.integrity_report.integrity_report_fileAssetId_fkey"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.integrity_report.integrity_report_pkey"
+    },
+    {
+      "definition": "UNIQUE (type, path)",
+      "identity": "public.integrity_report.integrity_report_type_path_uq"
     },
     {
       "definition": "PRIMARY KEY (id)",
@@ -4122,6 +4198,10 @@
     {
       "definition": "CREATE OR REPLACE FUNCTION public.asset_metadata_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO asset_metadata_audit (\"assetId\", \"key\")\n      SELECT \"assetId\", \"key\"\n      FROM OLD;\n      RETURN NULL;\n    END\n  $function$",
       "identity": "public.asset_metadata_audit()"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.asset_ocr_delete_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO asset_ocr_audit (\"assetId\")\n      SELECT \"assetId\"\n      FROM OLD;\n      RETURN NULL;\n    END\n  $function$",
+      "identity": "public.asset_ocr_delete_audit()"
     },
     {
       "definition": "CREATE OR REPLACE FUNCTION public.binary_quantize(halfvec)\n RETURNS bit\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/vector', $function$halfvec_binary_quantize$function$",
@@ -5586,12 +5666,28 @@
       "identity": "public.asset_metadata.asset_metadata_updateId_idx"
     },
     {
+      "definition": "CREATE INDEX \"asset_ocr_audit_assetId_idx\" ON public.asset_ocr_audit USING btree (\"assetId\")",
+      "identity": "public.asset_ocr_audit.asset_ocr_audit_assetId_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"asset_ocr_audit_deletedAt_idx\" ON public.asset_ocr_audit USING btree (\"deletedAt\")",
+      "identity": "public.asset_ocr_audit.asset_ocr_audit_deletedAt_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX asset_ocr_audit_pkey ON public.asset_ocr_audit USING btree (id)",
+      "identity": "public.asset_ocr_audit.asset_ocr_audit_pkey"
+    },
+    {
       "definition": "CREATE INDEX \"asset_ocr_assetId_idx\" ON public.asset_ocr USING btree (\"assetId\")",
       "identity": "public.asset_ocr.asset_ocr_assetId_idx"
     },
     {
       "definition": "CREATE UNIQUE INDEX asset_ocr_pkey ON public.asset_ocr USING btree (id)",
       "identity": "public.asset_ocr.asset_ocr_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"asset_ocr_updateId_idx\" ON public.asset_ocr USING btree (\"updateId\")",
+      "identity": "public.asset_ocr.asset_ocr_updateId_idx"
     },
     {
       "definition": "CREATE INDEX \"asset_video_duplicate_frame_assetId_idx\" ON public.asset_video_duplicate_frame USING btree (\"assetId\")",
@@ -5608,6 +5704,10 @@
     {
       "definition": "CREATE INDEX asset_checksum_idx ON public.asset USING btree (checksum)",
       "identity": "public.asset.asset_checksum_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"asset_createdAt_idx\" ON public.asset USING btree (\"createdAt\")",
+      "identity": "public.asset.asset_createdAt_idx"
     },
     {
       "definition": "CREATE INDEX \"asset_duplicateId_idx\" ON public.asset USING btree (\"duplicateId\")",
@@ -5716,6 +5816,22 @@
     {
       "definition": "CREATE INDEX idx_geodata_places_name ON public.geodata_places USING gin (f_unaccent((name)::text) gin_trgm_ops)",
       "identity": "public.geodata_places.idx_geodata_places_name"
+    },
+    {
+      "definition": "CREATE INDEX \"integrity_report_assetId_idx\" ON public.integrity_report USING btree (\"assetId\")",
+      "identity": "public.integrity_report.integrity_report_assetId_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"integrity_report_fileAssetId_idx\" ON public.integrity_report USING btree (\"fileAssetId\")",
+      "identity": "public.integrity_report.integrity_report_fileAssetId_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX integrity_report_pkey ON public.integrity_report USING btree (id)",
+      "identity": "public.integrity_report.integrity_report_pkey"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX integrity_report_type_path_uq ON public.integrity_report USING btree (type, path)",
+      "identity": "public.integrity_report.integrity_report_type_path_uq"
     },
     {
       "definition": "CREATE UNIQUE INDEX kysely_migrations_lock_pkey ON public.kysely_migrations_lock USING btree (id)",
@@ -6273,6 +6389,7 @@
     "function_asset_edit_insert",
     "function_asset_face_audit",
     "function_asset_metadata_audit",
+    "function_asset_ocr_delete_audit",
     "function_f_concat_ws",
     "function_f_unaccent",
     "function_immich_uuid_v7",
@@ -6330,6 +6447,7 @@
     "trigger_asset_health_updatedAt",
     "trigger_asset_metadata_audit",
     "trigger_asset_metadata_updated_at",
+    "trigger_asset_ocr_delete_audit",
     "trigger_asset_updatedAt",
     "trigger_asset_video_duplicate_frame_updatedAt",
     "trigger_library_updatedAt",
@@ -6576,6 +6694,10 @@
     },
     {
       "definition": "table",
+      "identity": "public.asset_ocr_audit"
+    },
+    {
+      "definition": "table",
       "identity": "public.asset_video"
     },
     {
@@ -6589,6 +6711,10 @@
     {
       "definition": "table",
       "identity": "public.geodata_places"
+    },
+    {
+      "definition": "table",
+      "identity": "public.integrity_report"
     },
     {
       "definition": "table",
@@ -6867,6 +6993,10 @@
     {
       "definition": "CREATE TRIGGER asset_metadata_updated_at BEFORE UPDATE ON asset_metadata FOR EACH ROW EXECUTE FUNCTION updated_at()",
       "identity": "public.asset_metadata.asset_metadata_updated_at"
+    },
+    {
+      "definition": "CREATE TRIGGER asset_ocr_delete_audit AFTER DELETE ON asset_ocr REFERENCING OLD TABLE AS old FOR EACH STATEMENT WHEN (pg_trigger_depth() = 0) EXECUTE FUNCTION asset_ocr_delete_audit()",
+      "identity": "public.asset_ocr.asset_ocr_delete_audit"
     },
     {
       "definition": "CREATE TRIGGER \"asset_video_duplicate_frame_updatedAt\" BEFORE UPDATE ON asset_video_duplicate_frame FOR EACH ROW EXECUTE FUNCTION updated_at()",

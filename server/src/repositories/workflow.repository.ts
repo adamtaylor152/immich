@@ -106,7 +106,7 @@ export class WorkflowRepository {
       ) AS "exists"
     `
       .execute(this.db)
-      .then(({ rows }) => rows[0]?.exists === true));
+      .then(({ rows }) => rows[0]?.exists));
   }
 
   create(dto: Insertable<WorkflowTable>, steps?: WorkflowStepUpsert[]) {

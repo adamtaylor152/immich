@@ -110,6 +110,7 @@ const parseEmbedding = (raw: string | undefined | null): Float32Array | undefine
   const parts = trimmed.slice(1, -1).split(',');
   const out = new Float32Array(parts.length);
   for (let i = 0; i < parts.length; i++) {
+    // eslint-disable-next-line unicorn/prefer-number-coercion -- Number('') is 0, which would silently accept empty segments; parseFloat keeps them NaN so the guard below rejects malformed vectors.
     const value = Number.parseFloat(parts[i]);
     if (!Number.isFinite(value)) {
       return;

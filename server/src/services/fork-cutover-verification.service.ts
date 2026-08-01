@@ -103,7 +103,7 @@ export class ForkCutoverVerificationService {
       throw new Error(`Storage verification requires a regular non-symlink file: ${candidate.path}`);
     }
     const resolvedPath = await realpath(candidate.path);
-    if (!resolvedRoots.some((root) => isWithin(root, resolvedPath))) {
+    if (resolvedRoots.every((root) => !isWithin(root, resolvedPath))) {
       throw new Error(`Storage verification path is outside approved storage roots: ${candidate.path}`);
     }
 

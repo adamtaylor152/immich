@@ -136,7 +136,7 @@ export class MediaHealthService {
       buckets.set(timeBucket, bucket);
     }
 
-    return { buckets: [...buckets.values()], total: findings.length, run: run ? this.mapRun(run) : null };
+    return { buckets: buckets.values().toArray(), total: findings.length, run: run ? this.mapRun(run) : null };
   }
 
   async startMissingScan(force?: boolean): Promise<MediaHealthScanResponseDto> {
@@ -687,7 +687,7 @@ export class MediaHealthService {
   private async validateImage(asset: MediaHealthAsset): Promise<CandidateValidation | null> {
     const config = await this.getConfig();
     const isRaw = mimeTypes.isRaw(asset.originalFileName);
-    const enhancedRawEnabled = config.image.enhancedRaw?.enabled !== false;
+    const enhancedRawEnabled = config.image.enhancedRaw?.enabled;
     let firstError: unknown;
 
     try {

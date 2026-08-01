@@ -230,17 +230,17 @@ export class ImageDescriptionPromptAssembler {
     const vocabulary = config.customVocabulary.length > 0 ? this.vocabularyHint(config.customVocabulary) : '';
 
     let prompt = template
-      .replaceAll('{names}', names)
-      .replaceAll('{schema}', JSON_SCHEMA_BLOCK)
-      .replaceAll('{style_hint}', styleHint)
-      .replaceAll('{vocabulary}', vocabulary);
+      .replaceAll('{names}', () => names)
+      .replaceAll('{schema}', () => JSON_SCHEMA_BLOCK)
+      .replaceAll('{style_hint}', () => styleHint)
+      .replaceAll('{vocabulary}', () => vocabulary);
 
     if (videoContext) {
       prompt = `${videoContextHint(videoContext)}\n\n${prompt}`;
     }
 
     if (nsfw?.isNsfw) {
-      prompt = `${prompt}\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
+      prompt += `\n\n${this.nsfwReinforcement(config.nsfwIndicators)}`;
     }
 
     return { prompt, expectedSchemaVersion: SCHEMA_VERSION, warnings };
@@ -257,7 +257,7 @@ export class ImageDescriptionPromptAssembler {
     return (
       name
         // eslint-disable-next-line no-control-regex
-        .replaceAll(/[\u0000-\u001F\u007F]/g, ' ')
+        .replaceAll(/[\u{0000}-\u{001F}\u{007F}]/gu, ' ')
         .slice(0, 256)
         .trim()
     );
