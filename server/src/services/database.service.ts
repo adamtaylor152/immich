@@ -117,13 +117,13 @@ export class DatabaseService extends BaseService {
           await this.databaseRepository.assertCertifiedReturnLedger();
         }
         const migrationMode = await this.databaseRepository.detectMigrationMode();
-        if (migrationMode === 'legacy') {
-          await this.databaseRepository.runMigrations();
-          await this.databaseRepository.runForkMigrations();
-        } else {
-          await this.databaseRepository.runOfficialMigrations();
-          await this.databaseRepository.runForkMigrations();
-        }
+        // fresh installs need the legacy-fork public-schema migrations (e.g.
+        // plugin.wasmBytes); the official-only provider is for post-cutover
+        // isolated databases whose public schema must stay certified-upstream
+        await (migrationMode === 'isolated'
+          ? this.databaseRepository.runOfficialMigrations()
+          : this.databaseRepository.runMigrations());
+        await this.databaseRepository.runForkMigrations();
 
         this.logger.log('Checking for schema drift');
         const drift = await this.databaseRepository.getSchemaDrift();

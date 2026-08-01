@@ -301,9 +301,9 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runMigrations).not.toHaveBeenCalled();
     });
 
-    it('runs combined then isolated fork migrations in legacy mode', async () => {
+    it.each(['legacy', 'fresh'] as const)('runs combined then isolated fork migrations in %s mode', async (mode) => {
       const migrationOrder: string[] = [];
-      mocks.database.detectMigrationMode.mockResolvedValue('legacy');
+      mocks.database.detectMigrationMode.mockResolvedValue(mode);
       mocks.database.runMigrations.mockImplementation(() => {
         migrationOrder.push('combined');
         return Promise.resolve();
@@ -319,9 +319,9 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
     });
 
-    it.each(['fresh', 'isolated'] as const)('runs official then fork migrations in %s mode', async (mode) => {
+    it('runs official then fork migrations in isolated mode', async () => {
       const migrationOrder: string[] = [];
-      mocks.database.detectMigrationMode.mockResolvedValue(mode);
+      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
       mocks.database.runOfficialMigrations.mockImplementation(() => {
         migrationOrder.push('official');
         return Promise.resolve();
