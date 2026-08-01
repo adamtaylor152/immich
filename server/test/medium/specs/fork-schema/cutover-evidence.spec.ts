@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { ChecksumAlgorithm } from 'src/enum';
 import { getCatalogEvidence } from 'src/fork-schema/catalog';
+import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   up as createCutoverVerification,
   down as rollbackCutoverVerification,
@@ -416,5 +417,40 @@ describe('exact v3.1.0 public schema cutover evidence', () => {
     await expect(sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' })).rejects.toThrow(
       'Found workflow tables with no workflow migration marker',
     );
+  });
+});
+
+describe('official-origin adoption', () => {
+  let db: Kysely<DB>;
+
+  beforeAll(async () => {
+    db = await getKyselyDB('official_origin_adoption');
+    await restoreOfficialPublicSchema(db);
+  }, 120_000);
+
+  afterAll(async () => db.destroy());
+
+  it('adopts a certified official database without executing any legacy-fork migration', async () => {
+    const repository = new DatabaseRepository(db, LoggingRepository.create(), new ConfigRepository());
+    // The official v3.1.0 ledger is populated and holds no fork markers, so
+    // adoption is official-origin — NOT fresh: the legacy-fork migrations
+    // duplicate work upstream already applied (e.g. the workflow-table
+    // rewrite drops `workflow_action`, which no longer exists here).
+    await expect(repository.detectMigrationMode()).resolves.toBe('official-origin');
+
+    await repository.runOfficialMigrations();
+    await repository.runForkMigrations();
+
+    const ledger = await sql<{ name: string }>`SELECT name FROM public.kysely_migrations ORDER BY name`.execute(db);
+    const legacyNames = ledger.rows.map(({ name }) => name).filter((name) => LEGACY_FORK_MIGRATIONS.has(name));
+    expect(legacyNames).toEqual([]);
+    const legacyArtifacts = await sql<{ physicalFile: string | null; workflowAction: string | null }>`
+      SELECT to_regclass('public.physical_file')::text AS "physicalFile",
+             to_regclass('public.workflow_action')::text AS "workflowAction"
+    `.execute(db);
+    expect(legacyArtifacts.rows[0]).toEqual({ physicalFile: null, workflowAction: null });
+    const state = await sql<{ phase: string }>`SELECT phase FROM immich_fork.state WHERE id = 1`.execute(db);
+    expect(state.rows).toEqual([{ phase: 'inactive' }]);
+    await expect(repository.detectMigrationMode()).resolves.toBe('isolated');
   });
 });

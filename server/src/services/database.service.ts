@@ -117,10 +117,15 @@ export class DatabaseService extends BaseService {
           await this.databaseRepository.assertCertifiedReturnLedger();
         }
         const migrationMode = await this.databaseRepository.detectMigrationMode();
-        // fresh installs need the legacy-fork public-schema migrations (e.g.
-        // plugin.wasmBytes); the official-only provider is for post-cutover
-        // isolated databases whose public schema must stay certified-upstream
-        await (migrationMode === 'isolated'
+        // Blank fresh installs need the legacy-fork public-schema migrations
+        // (e.g. plugin.wasmBytes — its creating upstream migration is an
+        // audited provider gap), so they take the combined provider like
+        // legacy databases. Post-cutover isolated databases AND adopted
+        // official-origin databases must stay certified-upstream: their
+        // upstream migrations already produced that schema, and running the
+        // legacy-fork migrations would re-execute work upstream already
+        // applied (e.g. the workflow-table rewrite).
+        await (migrationMode === 'isolated' || migrationMode === 'official-origin'
           ? this.databaseRepository.runOfficialMigrations()
           : this.databaseRepository.runMigrations());
         await this.databaseRepository.runForkMigrations();

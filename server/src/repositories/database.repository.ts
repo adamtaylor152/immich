@@ -1138,7 +1138,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     await this.runMigrationSet(migrator, 'fork');
   }
 
-  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'fresh'> {
+  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'official-origin' | 'fresh'> {
     const {
       rows: [ledgers],
     } = await sql<{ forkLedger: string | null; officialLedger: string | null }>`
@@ -1148,10 +1148,12 @@ export class DatabaseRepository extends ForkHandoffRepository {
     `.execute(this.db);
 
     let hasLegacyMigrations = false;
+    let officialLedgerRows = 0;
     if (ledgers.officialLedger) {
       const { rows } = await sql<{ name: string }>`SELECT name FROM public.kysely_migrations ORDER BY name`.execute(
         this.db,
       );
+      officialLedgerRows = rows.length;
       for (const { name } of rows) {
         const owner = classifyMigration(name);
         if (owner === 'unknown') {
@@ -1165,7 +1167,18 @@ export class DatabaseRepository extends ForkHandoffRepository {
       return 'legacy';
     }
 
-    return ledgers.forkLedger ? 'isolated' : 'fresh';
+    if (ledgers.forkLedger) {
+      return 'isolated';
+    }
+
+    // A populated upstream-only ledger without a fork ledger is an official
+    // database being adopted by the fork. Its upstream migrations already
+    // produced the certified schema (including the workflow-table rewrite the
+    // fork carries as a legacy migration), so adoption must never execute the
+    // legacy-fork migrations — the official provider runs and the workflow
+    // ledger machinery aliases markers instead. Only a database with no
+    // ledgered migrations at all is a truly fresh install.
+    return officialLedgerRows > 0 ? 'official-origin' : 'fresh';
   }
 
   async migrateFilePaths(sourceFolder: string, targetFolder: string): Promise<void> {

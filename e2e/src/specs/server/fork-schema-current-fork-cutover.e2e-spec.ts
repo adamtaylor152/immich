@@ -177,7 +177,10 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
     expect(evidence.rows.workflow_step.length).toBeGreaterThan(0);
     expect(evidence.ledger).toContainEqual(expect.objectContaining({ name: LEGACY_WORKFLOW_MIGRATION }));
     expect(evidence.ledger).not.toContainEqual(expect.objectContaining({ name: OFFICIAL_WORKFLOW_MIGRATION }));
-    expect(evidence.ledger.map(({ name }) => name)).not.toEqual(expect.arrayContaining([...LATER_WORKFLOW_MIGRATIONS]));
+    // Post-sync, the later workflow migrations are bundled upstream migrations,
+    // so a current-fork origin ledgers them before cutover (aliasing only maps
+    // the legacy rewrite marker to its official name).
+    expect(evidence.ledger.map(({ name }) => name)).toEqual(expect.arrayContaining([...LATER_WORKFLOW_MIGRATIONS]));
     expect(evidence.columns).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ column_name: 'templates', table_name: 'plugin' }),

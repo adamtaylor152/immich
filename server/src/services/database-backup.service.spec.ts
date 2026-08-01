@@ -766,7 +766,7 @@ describe(DatabaseBackupService.name, () => {
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
     });
 
-    it.each(['fresh', 'isolated'] as const)(
+    it.each(['fresh', 'isolated', 'official-origin'] as const)(
       'runs official then fork migrations when restoring a %s database',
       async (mode) => {
         const migrationOrder: string[] = [];

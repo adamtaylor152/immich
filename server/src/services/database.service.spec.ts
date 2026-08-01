@@ -319,9 +319,9 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
     });
 
-    it('runs official then fork migrations in isolated mode', async () => {
+    it.each(['isolated', 'official-origin'] as const)('runs official then fork migrations in %s mode', async (mode) => {
       const migrationOrder: string[] = [];
-      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
+      mocks.database.detectMigrationMode.mockResolvedValue(mode);
       mocks.database.runOfficialMigrations.mockImplementation(() => {
         migrationOrder.push('official');
         return Promise.resolve();

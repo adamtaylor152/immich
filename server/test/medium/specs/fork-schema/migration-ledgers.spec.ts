@@ -96,14 +96,25 @@ describe('fork schema migration ledgers', () => {
     }
   });
 
-  it('distinguishes fresh, isolated, and legacy migration modes', async () => {
+  it('distinguishes fresh, official-origin, isolated, and legacy migration modes', async () => {
     expect(await repository.detectMigrationMode()).toBe('legacy');
 
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
     expect(await repository.detectMigrationMode()).toBe('isolated');
 
+    // A populated upstream-only ledger without a fork ledger is an adopted
+    // official database, not a fresh install.
     await sql`DROP SCHEMA immich_fork CASCADE`.execute(db);
+    expect(await repository.detectMigrationMode()).toBe('official-origin');
+
+    const officialLedger = await sql<{ name: string; timestamp: string }>`
+      SELECT name, timestamp FROM kysely_migrations
+    `.execute(db);
+    await sql`TRUNCATE kysely_migrations`.execute(db);
     expect(await repository.detectMigrationMode()).toBe('fresh');
+    for (const row of officialLedger.rows) {
+      await sql`INSERT INTO kysely_migrations (name, timestamp) VALUES (${row.name}, ${row.timestamp})`.execute(db);
+    }
 
     await sql`
       INSERT INTO kysely_migrations (name, timestamp)
