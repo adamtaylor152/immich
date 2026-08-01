@@ -133,7 +133,7 @@ export class NotificationService extends BaseService {
       ) {
         await this.emailRepository.verifySmtp(newConfig.notifications.smtp.transport);
       }
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Failed to validate SMTP configuration: ${error}`, error?.stack);
       throw new Error('Invalid SMTP configuration', { cause: error });
     }

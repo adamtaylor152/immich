@@ -66,7 +66,7 @@ export const sendFile = async (
     await access(file.path, constants.R_OK);
 
     return await _sendFile(file.path, { dotfiles: 'allow' });
-  } catch (error: Error | any) {
+  } catch (error: any) {
     // ignore client-closed connection
     if (isConnectionAborted(error) || res.headersSent) {
       return;

@@ -139,7 +139,7 @@ export class JobRepository {
   private async processJob(queueName: QueueName, job: Job): Promise<void> {
     try {
       await this.eventRepository.emit('JobRun', queueName, job as JobItem);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Unable to process job ${job.name} in queue ${queueName}: ${error}`, error?.stack);
       throw error;
     }

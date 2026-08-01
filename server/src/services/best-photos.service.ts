@@ -104,7 +104,7 @@ export class BestPhotosService {
     try {
       await this.bestPhotosRepository.upsertScore(await this.scoreAsset(asset));
       return JobStatus.Success;
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.warn(`Failed to score Best Photos asset ${id}: ${error.message || error}`);
       return JobStatus.Failed;
     }
