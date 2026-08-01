@@ -987,5 +987,8 @@ extension on api.AssetEditAction {
     api.AssetEditAction.crop => AssetEditAction.crop,
     api.AssetEditAction.rotate => AssetEditAction.rotate,
     api.AssetEditAction.mirror => AssetEditAction.mirror,
+    // Fork server-side edits (e.g. video trim) have no client-side rendering;
+    // `other` excludes them from local edit replay.
+    _ => AssetEditAction.other,
   };
 }

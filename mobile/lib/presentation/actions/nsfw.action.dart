@@ -54,7 +54,7 @@ class MarkNsfwAction extends AssetActionBuilder {
       // Three-way toast: full success, partial failure, or full failure.
       // Mirrors the web behavior in `MarkNsfwAction.svelte` so users see when
       // some assets in the selection failed to update while others succeeded.
-      _showEnrichmentToast(
+      await _showEnrichmentToast(
         toastService,
         result,
         success: context.t.mark_nsfw_action_prompt(count: result.succeeded.length),
@@ -103,7 +103,7 @@ class MarkSafeAction extends AssetActionBuilder {
         return;
       }
 
-      _showEnrichmentToast(
+      await _showEnrichmentToast(
         toastService,
         result,
         success: context.t.mark_safe_action_prompt(count: result.succeeded.length),
@@ -123,18 +123,18 @@ class MarkSafeAction extends AssetActionBuilder {
   }
 }
 
-void _showEnrichmentToast(
+Future<void> _showEnrichmentToast(
   ToastService toastService,
   AssetEnrichmentResult result, {
   required String success,
   required String partial,
   required String error,
-}) {
+}) async {
   if (result.allSucceeded) {
-    toastService.success(success);
+    await toastService.success(success);
   } else if (result.succeeded.isNotEmpty) {
-    toastService.info(partial);
+    await toastService.info(partial);
   } else {
-    toastService.error(error);
+    await toastService.error(error);
   }
 }

@@ -1,0 +1,11 @@
+--- a/advanced_prompt_config.dart
++++ b/advanced_prompt_config.dart
+@@ -14,7 +14,7 @@
+   /// Returns a new [AdvancedPromptConfig] instance.
+   AdvancedPromptConfig({
+     this.enabled = const Optional.present(false),
+-    this.placeholderValidation = const Optional.present(const AdvancedPromptConfigPlaceholderValidationEnum._('strict')),
++    this.placeholderValidation = const Optional.present(AdvancedPromptConfigPlaceholderValidationEnum.strict),
+     this.rawPromptTemplate = const Optional.present(''),
+   });
+ 
