@@ -59,7 +59,6 @@ select
           "plugin_method"."types",
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
-          "plugin_method"."allowedHosts",
           "plugin_method"."uiHints",
           "plugin_method"."allowedHosts" as "allowedHosts",
           "plugin"."name" as "pluginName"
@@ -97,7 +96,6 @@ select
           "plugin_method"."types",
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
-          "plugin_method"."allowedHosts",
           "plugin_method"."uiHints",
           "plugin_method"."allowedHosts" as "allowedHosts",
           "plugin"."name" as "pluginName"
@@ -135,7 +133,6 @@ select
           "plugin_method"."types",
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
-          "plugin_method"."allowedHosts",
           "plugin_method"."uiHints",
           "plugin_method"."allowedHosts" as "allowedHosts",
           "plugin"."name" as "pluginName"
@@ -173,7 +170,6 @@ select
           "plugin_method"."types",
           "plugin_method"."schema",
           "plugin_method"."hostFunctions",
-          "plugin_method"."allowedHosts",
           "plugin_method"."uiHints",
           "plugin_method"."allowedHosts" as "allowedHosts",
           "plugin"."name" as "pluginName"
@@ -209,7 +205,6 @@ select
   "plugin_method"."types",
   "plugin_method"."schema",
   "plugin_method"."hostFunctions",
-  "plugin_method"."allowedHosts",
   "plugin_method"."uiHints",
   "plugin_method"."allowedHosts" as "allowedHosts"
 from

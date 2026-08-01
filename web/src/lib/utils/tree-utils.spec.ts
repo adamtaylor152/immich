@@ -29,7 +29,7 @@ describe('TreeNode.fromAlbums', () => {
     expect(root.children.map((n) => n.id)).toEqual(['trips']);
     const [tripsNode] = root.children;
     const [firstChild] = tripsNode.children;
-    expect(tripsNode.children.map((n) => n.id).sort((a, b) => a.localeCompare(b))).toEqual(['disney', 'iceland']);
+    expect(tripsNode.children.map((n) => n.id).sort((a, b) => String(a).localeCompare(String(b)))).toEqual(['disney', 'iceland']);
     expect(tripsNode.path).toBe('trips');
     expect(firstChild.path).toBe('trips/disney');
   });
