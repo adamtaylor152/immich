@@ -491,9 +491,15 @@ export class PhysicalFileRepository {
     const state = await sql<{ active: boolean; phase: string }>`
       SELECT active, phase FROM immich_fork.state WHERE id = 1 FOR SHARE
     `.execute(trx);
+    // A destructive (upstream-form) claim is honored under exactly two
+    // audited authorities: return reconciliation (inactive phase) and
+    // official handoff preparation (ready phase).
     const audit = await sql<{ id: string }>`
       SELECT id::text AS id FROM immich_fork.migration_audit
-      WHERE name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+      WHERE (name = 'fork-return-reconciliation' AND phase = 'inactive' AND status = 'running'
+          AND ${state.rows[0]?.phase ?? ''} = 'inactive')
+         OR (name = 'official-handoff-preparation' AND phase = 'ready' AND status = 'running'
+          AND ${state.rows[0]?.phase ?? ''} = 'ready')
       ORDER BY id DESC LIMIT 1 FOR SHARE
     `.execute(trx);
     const progress = await sql<{ claimToken: string | null; claimedIds: string[] }>`
@@ -505,7 +511,7 @@ export class PhysicalFileRepository {
       progressRow?.claimedIds.length === claim.claimedIds.length &&
       progressRow.claimedIds.every((id, index) => id === claim.claimedIds[index]);
     if (
-      state.rows[0]?.phase !== 'inactive' ||
+      (state.rows[0]?.phase !== 'inactive' && state.rows[0]?.phase !== 'ready') ||
       state.rows[0]?.active !== false ||
       !audit.rows[0] ||
       progressRow?.claimToken !== claim.claimToken ||

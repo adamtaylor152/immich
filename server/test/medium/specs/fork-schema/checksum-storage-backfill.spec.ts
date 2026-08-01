@@ -429,6 +429,72 @@ describe('checksum and physical-storage normalization', () => {
     await expect(readFile(upstreamPath)).resolves.toEqual(bytes);
   });
 
+  it('converts preserved deduplication to the destructive official form during handoff preparation', async () => {
+    const bytes = Buffer.from('official handoff preparation bytes');
+    const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
+    const { sut } = newTestService(ForkSchemaMigrationService);
+    (sut as unknown as { db: Kysely<DB> }).db = db;
+    (sut as unknown as { forkSchemaRepository: ForkSchemaRepository }).forkSchemaRepository = new ForkSchemaRepository(
+      db,
+    );
+    sut.onModuleInit();
+    StorageCore.setMediaLocation(temporaryRoot);
+    await sql`DELETE FROM immich_fork.migration_audit WHERE name = 'official-handoff-preparation'`.execute(db);
+
+    // steady-state backfills first: deduplication is preserved
+    await sql`UPDATE immich_fork.state SET phase = 'dual-write', active = false WHERE id = 1`.execute(db);
+    await expect(Promise.all([sut.runBatch('storage', 10), sut.runBatch('checksum', 10)])).resolves.toEqual([
+      JobStatus.Success,
+      JobStatus.Success,
+    ]);
+    const preserved = await db
+      .selectFrom('asset')
+      .select(['originalPath', 'physicalOriginalFileId'])
+      .where('id', '=', assets[1].id!)
+      .executeTakeFirstOrThrow();
+    expect(preserved.originalPath).toBe(canonicalPath);
+    expect(preserved.physicalOriginalFileId).not.toBeNull();
+
+    // handoff preparation requires the ready phase and converts destructively
+    await expect(sut.prepareOfficialHandoff(10)).rejects.toThrow(/requires the ready phase/);
+    await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
+    await sut.prepareOfficialHandoff(10);
+
+    const converted = await db
+      .selectFrom('asset')
+      .select(['id', 'checksum', 'checksumAlgorithm', 'originalPath', 'physicalOriginalFileId'])
+      .where(
+        'id',
+        'in',
+        assets.map(({ id }) => id!),
+      )
+      .execute();
+    expect(new Set(converted.map(({ originalPath }) => originalPath)).size).toBe(2);
+    for (const asset of converted) {
+      expect(asset.checksum).toEqual(sha('sha1', bytes));
+      expect(asset.checksumAlgorithm).toBe(ChecksumAlgorithm.sha1File);
+      expect(asset.physicalOriginalFileId).toBeNull();
+      await expect(readFile(asset.originalPath)).resolves.toEqual(bytes);
+      const mapping = await sql<{ upstreamPath: string }>`
+        SELECT "upstreamPath" FROM immich_fork.asset_physical_file WHERE "assetId" = ${asset.id}::uuid
+      `.execute(db);
+      expect(mapping.rows[0]?.upstreamPath).toBe(asset.originalPath);
+    }
+    const audit = await sql<{ status: string }>`
+      SELECT status FROM immich_fork.migration_audit
+      WHERE name = 'official-handoff-preparation' ORDER BY id DESC LIMIT 1
+    `.execute(db);
+    expect(audit.rows[0]?.status).toBe('applied');
+    const progress = await sql<{ kind: string; remaining: number; digest: string | null }>`
+      SELECT kind, remaining::int AS remaining, digest FROM immich_fork.backfill_progress
+      WHERE kind IN ('storage', 'checksum') ORDER BY kind
+    `.execute(db);
+    expect(progress.rows).toEqual([
+      { kind: 'checksum', remaining: 0, digest: expect.stringMatching(/^[0-9a-f]{64}$/) },
+      { kind: 'storage', remaining: 0, digest: expect.stringMatching(/^[0-9a-f]{64}$/) },
+    ]);
+  });
+
   it('does not conflict with another asset reservation on the old split path', async () => {
     const bytes = Buffer.from('cross owner reservation');
     const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);

@@ -147,6 +147,40 @@ export class ForkSchemaMigrationService extends BaseService implements OnModuleI
     return this.status();
   }
 
+  async prepareOfficialHandoff(batchSize = DEFAULT_BATCH_SIZE): Promise<ForkSchemaMigrationStatus> {
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+      throw new Error('Backfill batch size must be a positive integer');
+    }
+    await this.forkSchemaRepository.beginOrResumeOfficialHandoffPreparation();
+    // Steady-state backfills preserve physical deduplication. Handing the
+    // library to the official image requires the destructive upstream form
+    // (per-asset files, SHA-1 checksums, no physical links), so re-run the
+    // storage and checksum handlers with handoff claim authority.
+    for (const kind of ['storage', 'checksum'] as const) {
+      while (true) {
+        const claim = await this.forkSchemaRepository.claimOfficialHandoffBatch(kind, batchSize);
+        if (!claim) {
+          break;
+        }
+        const handler = this.handlers.get(kind);
+        if (!handler) {
+          await this.forkSchemaRepository.failBatch(kind, claim.cursor, `No backfill handler registered for ${kind}`);
+          throw new Error(`No backfill handler registered for ${kind}`);
+        }
+        try {
+          const result = await handler(claim.ids, { kind, claimToken: claim.cursor, claimedIds: claim.ids });
+          await this.forkSchemaRepository.completeBatch(kind, claim.cursor, result.count, result.digest);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this.forkSchemaRepository.failBatch(kind, claim.cursor, message);
+          throw error;
+        }
+      }
+    }
+    await this.forkSchemaRepository.completeOfficialHandoffPreparation();
+    return this.status();
+  }
+
   async reconcileAfterOfficialReturn(
     batchSize = DEFAULT_BATCH_SIZE,
     hooks: ReturnReconciliationHooks = {},
