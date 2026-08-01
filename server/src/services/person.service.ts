@@ -250,7 +250,7 @@ export class PersonService extends BaseService {
           isFavorite: person.isFavorite,
         });
         results.push({ id: person.id, success: true });
-      } catch (error: Error | any) {
+      } catch (error: any) {
         this.logger.error(`Unable to update ${person.id} : ${error}`, error?.stack);
         results.push({ id: person.id, success: false, error: BulkIdErrorReason.UNKNOWN });
       }
@@ -620,7 +620,7 @@ export class PersonService extends BaseService {
 
         this.logger.log(`Merged ${mergeName} into ${primaryName}`);
         results.push({ id: mergeId, success: true });
-      } catch (error: Error | any) {
+      } catch (error: any) {
         this.logger.error(`Unable to merge ${mergeId} into ${id}: ${error}`, error?.stack);
         results.push({ id: mergeId, success: false, error: BulkIdErrorReason.UNKNOWN });
       }

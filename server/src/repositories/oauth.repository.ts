@@ -112,7 +112,7 @@ export class OAuthRepository {
       }
 
       return { profile, sid, idToken: tokens.id_token };
-    } catch (error: Error | any) {
+    } catch (error: any) {
       if (error.message.includes('unexpected JWT alg received')) {
         this.logger.warn(
           [
@@ -187,7 +187,7 @@ export class OAuthRepository {
         sub: payload.sub,
         sid: payload.sid as string | undefined,
       };
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Error validating JWT logout token: ${error.message}`);
       this.logger.error(error);
 
@@ -221,7 +221,7 @@ export class OAuthRepository {
           timeout,
         },
       );
-    } catch (error: any | AggregateError) {
+    } catch (error: any) {
       this.logger.error(`Error in OAuth discovery: ${error}`, error?.stack, error?.errors);
       throw new InternalServerErrorException(`Error in OAuth discovery: ${error}`, { cause: error });
     }

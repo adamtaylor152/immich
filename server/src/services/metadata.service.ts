@@ -167,7 +167,7 @@ export class MetadataService extends BaseService {
       await this.jobRepository.resume(QueueName.MetadataExtraction);
 
       this.logger.log(`Initialized local reverse geocoder`);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Unable to initialize reverse geocoding: ${error}`, error?.stack);
       throw new Error('Metadata service init failed', { cause: error });
     }
@@ -876,7 +876,7 @@ export class MetadataService extends BaseService {
       }
 
       this.logger.debug(`Finished motion photo video extraction for asset ${asset.id}: ${asset.originalPath}`);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to extract motion video for ${asset.id}: ${asset.originalPath}: ${error}`,
         error?.stack,
@@ -1136,7 +1136,7 @@ export class MetadataService extends BaseService {
       // `numericTags` doesn't parse values like '12 12 12'
     ].map((tag) => (typeof tag === 'string' ? Number.parseInt(tag) : tag));
 
-    let bitsPerSample = bitDepthTags.find((tag) => typeof tag === 'number' && !Number.isNaN(tag)) ?? null;
+    let bitsPerSample = validate(bitDepthTags.find((tag) => typeof tag === 'number' && !Number.isNaN(tag)));
     if (bitsPerSample && bitsPerSample >= 24 && bitsPerSample % 3 === 0) {
       bitsPerSample /= 3; // converts per-pixel bit depth to per-channel
     }

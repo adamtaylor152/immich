@@ -89,7 +89,7 @@ export class FileUploadInterceptor implements NestInterceptor {
   private fileFilter(request: AuthRequest, file: Express.Multer.File, callback: multer.FileFilterCallback) {
     try {
       callback(null, this.assetService.canUploadFile(asUploadRequest(request, file)));
-    } catch (error: Error | any) {
+    } catch (error: any) {
       callback(error);
     }
   }
@@ -152,7 +152,7 @@ export class FileUploadInterceptor implements NestInterceptor {
           checksum: hash?.digest(),
         });
       });
-    } catch (error: Error | any) {
+    } catch (error: any) {
       callback(error);
     }
   }

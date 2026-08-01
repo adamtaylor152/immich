@@ -14,6 +14,7 @@ describe(classifyMigration, () => {
   it('classifies known legacy fork migrations', () => {
     expect(classifyMigration('1778000000000-PhysicalDeduplication')).toBe('legacy-fork');
     expect(classifyMigration('2100000000030-AddSha256ChecksumAlgorithm')).toBe('legacy-fork');
+    expect(classifyMigration('2100000000040-ReconcileSmartAlbumDrift')).toBe('legacy-fork');
   });
 
   it('classifies migrations from a certified upstream tag', () => {

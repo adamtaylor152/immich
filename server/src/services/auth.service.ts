@@ -131,7 +131,7 @@ export class AuthService extends BaseService {
     let claims;
     try {
       claims = await this.oauthRepository.validateLogoutToken(oauth, dto.logout_token);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Error backchannel logout: ${error.message}`);
       this.logger.error(error);
 
@@ -449,7 +449,7 @@ export class AuthService extends BaseService {
       if (oldPath) {
         await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [oldPath] } });
       }
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.warn(`Unable to sync oauth profile picture: ${error}\n${error?.stack}`);
     }
   }

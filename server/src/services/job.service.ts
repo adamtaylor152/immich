@@ -109,7 +109,7 @@ export class JobService extends BaseService {
       if (shouldRunFollowUp) {
         await this.onDone(job);
       }
-    } catch (error: Error | any) {
+    } catch (error: any) {
       await this.eventRepository.emit('JobError', { job, error });
     } finally {
       await this.eventRepository.emit('JobComplete', queueName, job);

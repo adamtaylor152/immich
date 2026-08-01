@@ -71,8 +71,8 @@ export const updateConfig = async (repos: RepoDeps, newConfig: SystemConfig): Pr
 const loadFromFile = async ({ metadataRepo, logger }: RepoDeps, filepath: string) => {
   try {
     const file = await metadataRepo.readFile(filepath);
-    return loadYaml(file) as unknown;
-  } catch (error: Error | any) {
+    return loadYaml(file.toString()) as unknown;
+  } catch (error: any) {
     logger.error(`Unable to load configuration file: ${filepath}`);
     logger.error(error);
     throw error;

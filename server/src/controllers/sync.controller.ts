@@ -30,7 +30,7 @@ export class SyncController {
   async getSyncStream(@Auth() auth: AuthDto, @Req() req: Request, @Res() res: Response, @Body() dto: SyncStreamDto) {
     try {
       await this.service.stream(auth, res, dto);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       res.setHeader('Content-Type', 'application/json');
       this.errorService.handleError(req, res, error);
     }

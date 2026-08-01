@@ -2,7 +2,7 @@ import { WorkflowStepConfig, WorkflowTrigger } from '@immich/plugin-sdk';
 import { Kysely } from 'kysely';
 import { existsSync, readFileSync } from 'node:fs';
 import { PluginManifestDto } from 'src/dtos/plugin-manifest.dto';
-import { AssetMetadataKey, AssetType, AssetVisibility, LogLevel, WorkflowTrigger } from 'src/enum';
+import { AssetMetadataKey, AssetType, AssetVisibility, LogLevel } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';

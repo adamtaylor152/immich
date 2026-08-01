@@ -122,7 +122,7 @@ export class VersionService extends BaseService {
         this.logger.log(`Found ${releaseVersion}, released at ${new Date(publishedAt).toLocaleString()}`);
         this.websocketRepository.clientBroadcast('on_new_release', asNotification(newVersionCheck.channel, metadata));
       }
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.warn(`Unable to run version check: ${error}\n${error?.stack}`);
       return JobStatus.Failed;
     }

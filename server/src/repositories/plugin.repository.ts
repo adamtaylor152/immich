@@ -284,7 +284,7 @@ export class PluginRepository {
         pool.ready().then(resolve, reject);
       });
       this.pluginMap.set(key, { pool, label });
-    } catch (error: Error | any) {
+    } catch (error: any) {
       await pool.drain().catch(() => {});
       await pool.clear().catch(() => {});
       throw new Error(`Unable to instantiate plugin: ${key}`, { cause: error });
@@ -307,7 +307,7 @@ export class PluginRepository {
       } finally {
         await pool.release(plugin);
       }
-    } catch (error: Error | any) {
+    } catch (error: any) {
       throw new Error(`Plugin method call failed: ${label}#${methodName}`, { cause: error });
     }
   }

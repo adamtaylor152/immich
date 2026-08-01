@@ -181,7 +181,7 @@ export class WorkflowExecutionService extends BaseService {
         const response = await fn(authDto, context, args);
 
         return plugin.store(JSON.stringify({ success: true, response }));
-      } catch (error: Error | any) {
+      } catch (error: any) {
         if (error instanceof HttpException) {
           this.logger.error(`Plugin host exception: ${error}`);
           return plugin.store(

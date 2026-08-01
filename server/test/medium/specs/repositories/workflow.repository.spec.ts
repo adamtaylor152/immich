@@ -1,5 +1,5 @@
 import { Kysely, sql } from 'kysely';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AssetMetadataKey, AssetVisibility, WorkflowType } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
@@ -28,6 +28,8 @@ const pluginDto = (id: string) => ({
   author: 'Immich',
   version: '1.0.0',
   wasmBytes: Buffer.from('fixture'),
+  sha256hash: createHash('sha256').update('fixture').digest(),
+  templates: [],
 });
 const methodDto = (allowedHosts: string[]) => ({
   name: 'webhook',

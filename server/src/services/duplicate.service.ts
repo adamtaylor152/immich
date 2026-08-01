@@ -153,7 +153,7 @@ export class DuplicateService extends BaseService {
     for (const group of dto.groups) {
       try {
         results.push(await this.resolveGroup(auth, group));
-      } catch (error: Error | any) {
+      } catch (error: any) {
         this.logger.error(`Error resolving duplicate group ${group.duplicateId}: ${error}`, error?.stack);
         results.push({ id: group.duplicateId, success: false, error: BulkIdErrorReason.UNKNOWN });
       }
@@ -490,7 +490,7 @@ export class DuplicateService extends BaseService {
           path,
           embedding,
         });
-      } catch (error: Error | any) {
+      } catch (error: any) {
         // A single frame can fail to extract when its sampled start_time lands in
         // the sparse-keyframe dead zone near EOF (ffmpeg writes no packets and
         // exits non-zero). Skip just that frame instead of failing the whole job.

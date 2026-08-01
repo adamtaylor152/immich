@@ -91,7 +91,7 @@ export class WebsocketRepository implements OnGatewayConnection, OnGatewayDiscon
         await client.join(auth.session.id);
       }
       await this.eventRepository.emit('WebsocketConnect', { userId: auth.user.id });
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Websocket connection error: ${error}`, error?.stack);
       client.emit('error', 'unauthorized');
       client.disconnect();
