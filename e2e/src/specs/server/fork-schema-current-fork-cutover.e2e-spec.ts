@@ -111,11 +111,13 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       }
       await client.query(
         `INSERT INTO public.plugin
-          (id, enabled, name, version, title, description, author, "wasmBytes", "createdAt", "updatedAt")
+          (id, enabled, name, version, title, description, author, "wasmBytes", templates, "sha256hash",
+           "createdAt", "updatedAt")
          VALUES
           ('10000000-0000-4000-8000-000000000001', true, 'immich-plugin-core', '2.0.1', 'Immich Core Plugin',
            'Core workflow capabilities for Immich', 'Immich Team',
-           pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm'), now(), now())`,
+           pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm'), '[]'::jsonb,
+           sha256(pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm')), now(), now())`,
       );
       await client.query(
         `INSERT INTO public.plugin_method
