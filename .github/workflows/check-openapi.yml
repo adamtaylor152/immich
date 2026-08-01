@@ -2,6 +2,8 @@ name: Check OpenAPI
 on:
   workflow_dispatch:
   pull_request:
+    # labeled/unlabeled re-evaluate the api-breaking-approved gate below
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - 'open-api/**'
       - 'mobile/lib/utils/openapi_patching.dart'
