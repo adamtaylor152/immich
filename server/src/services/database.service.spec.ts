@@ -301,7 +301,7 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runMigrations).not.toHaveBeenCalled();
     });
 
-    it.each(['legacy', 'fresh'] as const)('runs combined then isolated fork migrations in %s mode', async (mode) => {
+    it.each(['legacy', 'fresh'] as const)('runs combined then fork migrations in %s mode', async (mode) => {
       const migrationOrder: string[] = [];
       mocks.database.detectMigrationMode.mockResolvedValue(mode);
       mocks.database.runMigrations.mockImplementation(() => {
