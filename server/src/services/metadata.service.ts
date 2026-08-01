@@ -169,7 +169,7 @@ export class MetadataService extends BaseService {
       await this.jobRepository.resume(QueueName.MetadataExtraction);
 
       this.logger.log(`Initialized local reverse geocoder`);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(`Unable to initialize reverse geocoding: ${error}`, error?.stack);
       throw new Error('Metadata service init failed', { cause: error });
     }
@@ -867,7 +867,7 @@ export class MetadataService extends BaseService {
       }
 
       this.logger.debug(`Finished motion photo video extraction for asset ${asset.id}: ${asset.originalPath}`);
-    } catch (error: Error | any) {
+    } catch (error: any) {
       this.logger.error(
         `Failed to extract motion video for ${asset.id}: ${asset.originalPath}: ${error}`,
         error?.stack,

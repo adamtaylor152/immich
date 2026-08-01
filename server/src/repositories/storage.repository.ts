@@ -189,7 +189,7 @@ export class StorageRepository {
       if (updated.length === 0) {
         try {
           await fs.rmdir(directory);
-        } catch (error: Error | any) {
+        } catch (error: any) {
           if (error.code !== 'ENOTEMPTY') {
             this.logger.warn(`Attempted to remove directory, but failed: ${error}`);
           }
