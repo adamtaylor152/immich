@@ -15,6 +15,10 @@ permissions: {}
 
 jobs:
   check-openapi:
+    # Breaking API changes can be acknowledged explicitly (e.g. upstream sync
+    # merges that inherit upstream's own deliberate breaking changes) by adding
+    # the `api-breaking-approved` label to the PR.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'api-breaking-approved') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

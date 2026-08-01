@@ -85,8 +85,9 @@ export class ServerClient {
   static async connect(url: string, key: string): Promise<{ client: ServerClient; user: UserAdminResponseDto }> {
     let baseUrl = url.replace(/\/+$/, '');
     try {
-      const wellKnown = await fetch(new URL('.well-known/immich', url)).then((r) => r.json());
-      baseUrl = new URL(wellKnown.api.endpoint, url).toString().replace(/\/+$/, '');
+      const wellKnownResponse = await fetch(new URL('.well-known/immich', url));
+      const wellKnown = await wellKnownResponse.json();
+      baseUrl = new URL(wellKnown.api.endpoint, url).href.replace(/\/+$/, '');
     } catch {
       // no well-known endpoint; use the URL as given
     }

@@ -15,9 +15,9 @@ describe('fork schema certification evidence', () => {
     expect(
       canonical([
         {
-          nested: [{ negativeInfinity: Number.NEGATIVE_INFINITY }],
+          nested: [{ negativeInfinity: -Infinity }],
           nullValue: null,
-          score: Number.NaN,
+          score: NaN,
         },
       ]),
     ).toEqual([
@@ -30,9 +30,9 @@ describe('fork schema certification evidence', () => {
 
     await saveState(lane, {
       finite: 0.91,
-      nested: [{ nan: Number.NaN, negativeInfinity: Number.NEGATIVE_INFINITY }],
+      nested: [{ nan: NaN, negativeInfinity: -Infinity }],
       nullValue: null,
-      positiveInfinity: Number.POSITIVE_INFINITY,
+      positiveInfinity: Infinity,
     });
 
     await expect(loadState(lane)).resolves.toEqual({
@@ -41,6 +41,6 @@ describe('fork schema certification evidence', () => {
       nullValue: null,
       positiveInfinity: '[non-finite:Infinity]',
     });
-    expect(digest({ score: Number.NaN })).not.toBe(digest({ score: null }));
+    expect(digest({ score: NaN })).not.toBe(digest({ score: null }));
   });
 });

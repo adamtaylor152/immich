@@ -79,7 +79,12 @@ export const workflowEvidence = () =>
       columns: columns.rows,
       ledger: ledger.rows,
       rowDigests: Object.fromEntries(tables.map((table) => [table, digest(rows[table])])),
-      rowIds: Object.fromEntries(tables.map((table) => [table, rows[table]!.map((row: any) => row.id).toSorted()])),
+      rowIds: Object.fromEntries(
+        tables.map((table) => [
+          table,
+          rows[table]!.map((row: any) => String(row.id)).toSorted((a: string, b: string) => a.localeCompare(b)),
+        ]),
+      ),
       rows,
       schemaDigest: digest(columns.rows),
     };

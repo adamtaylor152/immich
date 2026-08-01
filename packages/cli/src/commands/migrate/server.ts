@@ -54,7 +54,8 @@ const pct=(a,b)=>b>0?Math.round(a/b*100):0;
 const TOKEN=new URLSearchParams(location.search).get('t')||'';
 async function post(p){await fetch(p,{method:'POST',headers:{'x-migrate-token':TOKEN}});tick()}
 async function tick(){
-  let s;try{s=await(await fetch('/status')).json()}catch(e){return}
+  let s;try{s=await(await fetch('/status')).json()}catch(e){s=null}
+  if(!s) return;
   const c=s.counts||{};
   $('route').textContent=s.user+'  ·  '+s.from+'  →  '+s.to;
   $('phase').textContent=(s.dryRun?'[dry-run] ':'')+'Phase: '+s.phase;
@@ -100,11 +101,11 @@ export function startDashboard(
   ledger: Ledger,
   meta: { from: string; to: string; user: string },
   auditPath: string,
-  dryRun: boolean,
+  isDryRun: boolean,
 ): Promise<Dashboard> {
   const token = randomBytes(16).toString('hex');
   const server = createServer(async (req, res) => {
-    const url = (req.url || '/').split('?')[0];
+    const url = (req.url || '/').split('?', 1)[0];
     if (req.method === 'POST') {
       if (req.headers['x-migrate-token'] !== token) {
         res.writeHead(403).end();
@@ -140,7 +141,7 @@ export function startDashboard(
           from: meta.from,
           to: meta.to,
           user: meta.user,
-          dryRun,
+          dryRun: isDryRun,
           counts: ledger.counts(),
         }),
       );

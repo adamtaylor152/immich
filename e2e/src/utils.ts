@@ -195,7 +195,11 @@ export const utils = {
         client = nextClient;
         return nextClient;
       } catch (error) {
-        await nextClient.end().catch(() => {});
+        try {
+          await nextClient.end();
+        } catch {
+          // ignore teardown errors; we're already handling a connect failure
+        }
         client = null;
         if (attempt < maxRetries && isTransientDatabaseError(error)) {
           await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
@@ -210,11 +214,13 @@ export const utils = {
   },
 
   disconnectDatabase: async () => {
-    if (client) {
-      const activeClient = client;
-      client = null;
-      await activeClient.end();
+    if (!client) {
+      return;
     }
+
+    const activeClient = client;
+    client = null;
+    await activeClient.end();
   },
 
   resetDatabase: async (tables?: string[]) => {
@@ -258,7 +264,11 @@ export const utils = {
         await activeClient.query(query);
         return;
       } catch (error) {
-        await utils.disconnectDatabase().catch(() => {});
+        try {
+          await utils.disconnectDatabase();
+        } catch {
+          // ignore teardown errors; we're already handling a query failure
+        }
         client = null;
         if (attempt < maxRetries && isTransientDatabaseError(error)) {
           await new Promise((resolve) => setTimeout(resolve, 500 * attempt));

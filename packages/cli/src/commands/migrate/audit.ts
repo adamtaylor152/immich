@@ -46,7 +46,7 @@ export async function audit(
   };
 
   let checked = 0;
-  let interrupted = false;
+  let isInterrupted = false;
   let after = '';
   pages: for (;;) {
     const page = ledger.auditRows(after, PAGE);
@@ -69,7 +69,7 @@ export async function audit(
       if (controller.stopped) {
         // Bailing out leaves the remaining rows unverified. That must never be reported as
         // a clean audit, or a partially-checked run would read as "safe to decommission".
-        interrupted = true;
+        isInterrupted = true;
         break pages;
       }
       const res = await to.checkBulkUpload(part.map((r) => ({ id: r.aId, checksum: r.bChecksum! })));
@@ -90,9 +90,9 @@ export async function audit(
     from: meta.from,
     to: meta.to,
     user: meta.user,
-    complete: !interrupted,
+    complete: !isInterrupted,
     verified: checked,
-    ok: !interrupted && missingCount === 0 && counts.assetsFailed === 0,
+    ok: !isInterrupted && missingCount === 0 && counts.assetsFailed === 0,
     totals: {
       assets: counts.assetsTotal,
       uploaded: counts.assetsUploaded,

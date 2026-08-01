@@ -169,7 +169,7 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       albums: 256,
       assets: 256,
       hasSha256: true,
-      legacyLedger: [...LEGACY_FORK_MIGRATIONS].toSorted(),
+      legacyLedger: [...LEGACY_FORK_MIGRATIONS].toSorted((a, b) => a.localeCompare(b)),
     });
     expect(evidence.rows.workflow.length).toBeGreaterThan(0);
     expect(evidence.rows.workflow_step.length).toBeGreaterThan(0);
