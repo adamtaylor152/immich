@@ -330,7 +330,11 @@ export class PhysicalFileRepository {
           throw new Error(`Normalization target is reserved by another asset: ${upstreamPath}`);
         }
       }
-      {
+      // Exclusive fork-mapping ownership only applies to foreign targets. When
+      // the target is the asset's own current path, other sharers' steady-state
+      // mappings may still reference it until their own destructive pass
+      // re-points them — that is expected, not a takeover.
+      if (upstreamPath !== asset.originalPath) {
         const existingMapping = await sql<{ assetId: string }>`
           SELECT "assetId" FROM immich_fork.asset_physical_file
           WHERE "upstreamPath" = ${upstreamPath} AND "assetId" <> ${asset.id}::uuid

@@ -432,6 +432,11 @@ describe('checksum and physical-storage normalization', () => {
   it('converts preserved deduplication to the destructive official form during handoff preparation', async () => {
     const bytes = Buffer.from('official handoff preparation bytes');
     const { assets, canonicalPath } = await insertSharedAssets(db, temporaryRoot, bytes);
+    // force the canonical-path keeper to be processed first (batches claim in
+    // id order): its sharers' steady-state mappings still reference the
+    // canonical path at that point, which must not read as a takeover
+    const [firstId] = assets.map(({ id }) => id!).toSorted();
+    await db.updateTable('physical_file').set({ canonicalAssetId: firstId }).execute();
     const { sut } = newTestService(ForkSchemaMigrationService);
     (sut as unknown as { db: Kysely<DB> }).db = db;
     (sut as unknown as { forkSchemaRepository: ForkSchemaRepository }).forkSchemaRepository = new ForkSchemaRepository(
