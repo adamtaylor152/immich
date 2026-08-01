@@ -14,8 +14,8 @@ import {
   workflowEvidence,
 } from './fork-schema-certification';
 
-const lane = 'official-v3.0.3-to-fork-return';
-const originLane = 'origin-v3.0.3-to-fork';
+const lane = 'official-v3.1.0-to-fork-return';
+const originLane = 'origin-v3.1.0-to-fork';
 type OriginState = {
   admin: { accessToken: string; userId: string };
   albumCount: number;
@@ -70,7 +70,7 @@ describe.runIf(phase === 'official-operations-before-restart')(`${lane}: support
     const bytes = await downloadAsset(origin.admin.accessToken, officialAsset.id);
     expect(bytes.length).toBeGreaterThan(0);
     const edited = await api<{ description: string; id: string }>(`/assets/${officialAsset.id}`, {
-      body: JSON.stringify({ description: 'edited by official v3.0.3 certification' }),
+      body: JSON.stringify({ description: 'edited by official v3.1.0 certification' }),
       headers: { ...headers, 'content-type': 'application/json' },
       method: 'PUT',
     });
@@ -93,7 +93,7 @@ describe.runIf(phase === 'official-operations-before-restart')(`${lane}: support
 
     const createdWorkflow = await api<{ id: string }>('/workflows', {
       body: JSON.stringify({
-        description: 'Created by official v3.0.3 during certification',
+        description: 'Created by official v3.1.0 during certification',
         enabled: true,
         name: 'official-created-archive-workflow',
         steps: [{ config: { inverse: false }, enabled: true, method: 'immich-plugin-core#assetArchive' }],

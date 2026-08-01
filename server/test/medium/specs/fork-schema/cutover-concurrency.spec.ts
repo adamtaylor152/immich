@@ -4,6 +4,7 @@ import {
   up as createCutoverVerification,
   down as rollbackCutoverVerification,
 } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
+import { REVERSIBLE_POST_CERTIFIED_MIGRATIONS } from 'src/fork-schema/post-certified-residue';
 import { LEGACY_WORKFLOW_MIGRATION, OFFICIAL_WORKFLOW_MIGRATION } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -139,6 +140,16 @@ describe('fork schema cutover concurrency', () => {
       VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, ${workflowMarkerTimestamp})
       ON CONFLICT (name) DO UPDATE SET timestamp = EXCLUDED.timestamp
     `.execute(db);
+    // A successful cutover in an earlier test reverts and de-ledgers the
+    // post-certified upstream residue; restore the current-fork baseline.
+    for (const [name, { apply }] of REVERSIBLE_POST_CERTIFIED_MIGRATIONS) {
+      await apply(db);
+      await sql`
+        INSERT INTO public.kysely_migrations (name, timestamp)
+        VALUES (${name}, '9999-01-01T00:00:00.000Z')
+        ON CONFLICT (name) DO NOTHING
+      `.execute(db);
+    }
     await sql`
       UPDATE immich_fork.state
       SET phase = 'ready', active = false, "schemaVersion" = '1',

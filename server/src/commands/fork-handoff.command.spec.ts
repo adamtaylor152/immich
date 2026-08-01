@@ -6,7 +6,7 @@ describe('fork handoff CLI', () => {
 
   it('prints canonical one-line JSON for official preparation', async () => {
     const checkpoint = {
-      officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3',
+      officialImage: 'ghcr.io/immich-app/immich-server:v3.1.0',
       id: 'checkpoint-1',
     };
     const service = { prepareOfficial: vi.fn().mockResolvedValue(checkpoint) } as unknown as ForkHandoffService;
@@ -17,7 +17,7 @@ describe('fork handoff CLI', () => {
 
     expect(output).toHaveBeenCalledOnce();
     expect(output).toHaveBeenCalledWith(
-      '{"id":"checkpoint-1","officialImage":"ghcr.io/immich-app/immich-server:v3.0.3"}\n',
+      '{"id":"checkpoint-1","officialImage":"ghcr.io/immich-app/immich-server:v3.1.0"}\n',
     );
   });
 
@@ -41,7 +41,7 @@ describe('fork handoff CLI', () => {
   });
 
   it('passes the validated batch size and prints canonical one-line JSON', async () => {
-    const report = { supportedTag: 'v3.0.3', active: true, phase: 'active' };
+    const report = { supportedTag: 'v3.1.0', active: true, phase: 'active' };
     const service = { prepareFork: vi.fn().mockResolvedValue(report) } as unknown as ForkHandoffService;
     const command = new ForkHandoffPrepareForkCommand(service);
     const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -49,6 +49,6 @@ describe('fork handoff CLI', () => {
     await command.run([], { batchSize: 3 });
 
     expect(service.prepareFork).toHaveBeenCalledWith({ batchSize: 3 });
-    expect(output).toHaveBeenCalledWith('{"active":true,"phase":"active","supportedTag":"v3.0.3"}\n');
+    expect(output).toHaveBeenCalledWith('{"active":true,"phase":"active","supportedTag":"v3.1.0"}\n');
   });
 });

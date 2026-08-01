@@ -27,6 +27,9 @@ export class ForkHandoffService {
     }
 
     await this.databaseRepository.getReturnEvidence();
+    // The certified official provider excludes the post-certified upstream
+    // residue, so re-apply it before any fork-side reconciliation writes.
+    await this.databaseRepository.reapplyPostCertifiedResidue();
     const workflowSnapshot = await this.databaseRepository.getReturnWorkflowSnapshot();
     const orphanArchive = await this.databaseRepository.archiveAndDeleteOrphans();
     await this.migrationService.reconcileAfterOfficialReturn(options.batchSize);

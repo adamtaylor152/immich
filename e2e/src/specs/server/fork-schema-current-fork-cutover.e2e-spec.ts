@@ -15,7 +15,7 @@ import {
   workflowEvidence,
 } from './fork-schema-certification';
 
-const lane = 'current-fork-to-official-v3.0.3';
+const lane = 'current-fork-to-official-v3.1.0';
 const LEGACY_FORK_MIGRATIONS = [
   '1778000000000-PhysicalDeduplication',
   '1778255964846-PhysicalDeduplicationSchemaReconcile',
@@ -115,7 +115,7 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
          VALUES
           ('10000000-0000-4000-8000-000000000001', true, 'immich-plugin-core', '2.0.1', 'Immich Core Plugin',
            'Core workflow capabilities for Immich', 'Immich Team',
-           pg_read_binary_file('/tmp/immich-plugin-core-v3.0.3.wasm'), now(), now())`,
+           pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm'), now(), now())`,
       );
       await client.query(
         `INSERT INTO public.plugin_method

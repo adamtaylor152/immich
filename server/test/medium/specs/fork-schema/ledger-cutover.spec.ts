@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
-import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { LEGACY_FORK_MIGRATIONS, POST_CERTIFIED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   up as createCutoverVerification,
   down as rollbackCutoverVerification,
 } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
+import { REVERSIBLE_POST_CERTIFIED_MIGRATIONS } from 'src/fork-schema/post-certified-residue';
 import {
   getWorkflowCompatibilityEvidence,
   LEGACY_WORKFLOW_MIGRATION,
@@ -81,6 +82,7 @@ const CUTOVER_MUTATION_STAGES = [
   'legacy-ledger-audit',
   'legacy-ledger-delete',
   'legacy-artifact-shutdown',
+  'post-certified-residue',
   'state-transition',
   'checkpoint-audit',
 ] as const;
@@ -232,6 +234,18 @@ describe('fork schema ledger cutover', () => {
     }
     await sql`DELETE FROM kysely_migrations WHERE name = '9999999999999-CustomPatch'`.execute(db);
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
+    // A successful cutover in an earlier test reverts and de-ledgers the
+    // post-certified upstream residue; restore the current-fork baseline. The
+    // re-application is idempotent and the 9999 timestamp keeps the rows at the
+    // end of the official order.
+    for (const [name, { apply }] of REVERSIBLE_POST_CERTIFIED_MIGRATIONS) {
+      await apply(db);
+      await sql`
+        INSERT INTO kysely_migrations (name, timestamp)
+        VALUES (${name}, '9999-01-01T00:00:00.000Z')
+        ON CONFLICT (name) DO NOTHING
+      `.execute(db);
+    }
     await sql`
       INSERT INTO kysely_migrations (name, timestamp)
       VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, ${workflowMarkerTimestamp})
@@ -597,7 +611,7 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
     const officialBefore = await sql<{ name: string }>`
       SELECT name FROM kysely_migrations
-      WHERE name <> ${legacyName}
+      WHERE name <> ${legacyName} AND name <> ALL(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
       ORDER BY name
     `.execute(db);
     const forkBefore = await sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(db);
@@ -630,6 +644,34 @@ describe('fork schema ledger cutover', () => {
       },
     ]);
     expect(state.rows).toEqual([{ active: false, phase: 'inactive', schemaVersion: '2' }]);
+
+    // The post-certified upstream residue is audited, reverted, and removed so
+    // the handed-off ledger and schema are byte-compatible with the certified
+    // official tag.
+    const residueAudit = await sql<{ details: { classification: string }; name: string }>`
+      SELECT name, details FROM immich_fork.migration_audit
+      WHERE name = ANY(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
+      ORDER BY name
+    `.execute(db);
+    expect(residueAudit.rows.map(({ name }) => name)).toEqual([...POST_CERTIFIED_UPSTREAM_MIGRATIONS].toSorted());
+    for (const row of residueAudit.rows) {
+      expect(row.details).toMatchObject({ classification: 'post-certified-upstream', reportDigest: report.digest });
+    }
+    const revertedColumns = await sql<{ attname: string; attnotnull: boolean }>`
+      SELECT attribute.attname, attribute.attnotnull
+      FROM pg_catalog.pg_attribute attribute
+      JOIN pg_catalog.pg_class class ON class.oid = attribute.attrelid
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid = class.relnamespace
+      WHERE namespace.nspname = 'public'
+        AND ((class.relname = 'album' AND attribute.attname = 'description')
+          OR (class.relname = 'user' AND attribute.attname = 'password'))
+    `.execute(db);
+    expect(revertedColumns.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attname: 'description', attnotnull: true }),
+        expect.objectContaining({ attname: 'password', attnotnull: true }),
+      ]),
+    );
   });
 
   it('preserves the committed handoff without reverse ledger surgery when official migration fails', async () => {

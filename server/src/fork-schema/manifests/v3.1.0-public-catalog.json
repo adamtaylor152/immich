@@ -1454,6 +1454,10 @@
     },
     {
       "definition": "character varying|nullable|||",
+      "identity": "public.session.oauthBearerToken"
+    },
+    {
+      "definition": "character varying|nullable|||",
       "identity": "public.session.oauthSid"
     },
     {
@@ -4631,7 +4635,7 @@
       "identity": "public"
     }
   ],
-  "source": "v3.0.3",
+  "source": "v3.1.0",
   "tables": [
     {
       "definition": "table",

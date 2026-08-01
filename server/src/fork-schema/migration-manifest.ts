@@ -12,15 +12,16 @@ export const SUPPORTED_UPSTREAM_MIGRATIONS: readonly string[] = supportedVersion
 
 /**
  * Upstream-authored migrations the fork bundles and applies that landed AFTER
- * the certified official tag (exact tag v3.0.3 ships without them). They are
+ * the certified official tag (exact tag v3.1.0 ships without them). They are
  * part of the fork's official-provider order, but a database that is byte-exact
- * official v3.0.3 must NOT contain them.
+ * certified official must NOT contain them: cutover reverts their effects and
+ * removes their ledger rows, and the fork return re-applies them.
  */
 export const POST_CERTIFIED_UPSTREAM_MIGRATIONS: ReadonlySet<string> = new Set(
   supportedVersions.postCertifiedUpstreamMigrations,
 );
 
-/** The exact ledger of the certified official tag (v3.0.3). */
+/** The exact ledger of the certified official tag (v3.1.0). */
 export const CERTIFIED_TAG_MIGRATIONS: readonly string[] = SUPPORTED_UPSTREAM_MIGRATIONS.filter(
   (name) => !POST_CERTIFIED_UPSTREAM_MIGRATIONS.has(name),
 );

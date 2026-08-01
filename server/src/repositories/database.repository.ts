@@ -26,11 +26,12 @@ import {
   getCatalogTableLocks,
 } from 'src/fork-schema/catalog';
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
-import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.1.0-public-catalog.json';
 import {
   CERTIFIED_TAG_MIGRATIONS,
   classifyMigration,
   GENERIC_LEGACY_FORK_MIGRATIONS,
+  POST_CERTIFIED_UPSTREAM_MIGRATIONS,
 } from 'src/fork-schema/migration-manifest';
 import {
   createCertifiedLedgerMigrationProvider,
@@ -38,6 +39,10 @@ import {
   createLegacyMigrationProvider,
   createOfficialMigrationProvider,
 } from 'src/fork-schema/migration-provider';
+import {
+  irreversiblePostCertifiedMigrations,
+  REVERSIBLE_POST_CERTIFIED_MIGRATIONS,
+} from 'src/fork-schema/post-certified-residue';
 import {
   aliasLegacyWorkflowMigration,
   classifyWorkflowCompatibility,
@@ -87,7 +92,7 @@ const expectedCatalogFor = (installationClass: ForkSchemaCutoverEvidence['instal
     functions: [...OFFICIAL_CATALOG_MANIFEST.functions, ...forkEntries(FORK_CATALOG_MANIFEST.functions)],
     indexes: [...OFFICIAL_CATALOG_MANIFEST.indexes, ...forkEntries(FORK_CATALOG_MANIFEST.indexes)],
     schemas: [...OFFICIAL_CATALOG_MANIFEST.schemas, ...forkEntries(FORK_CATALOG_MANIFEST.schemas)],
-    source: 'v3.0.3+fork-v2',
+    source: 'v3.1.0+fork-v2',
     tables: [...OFFICIAL_CATALOG_MANIFEST.tables, ...forkEntries(FORK_CATALOG_MANIFEST.tables)],
     triggers: [...OFFICIAL_CATALOG_MANIFEST.triggers, ...forkEntries(FORK_CATALOG_MANIFEST.triggers)],
   };
@@ -120,6 +125,7 @@ export const FORK_SCHEMA_CUTOVER_MUTATION_STAGES = [
   'legacy-ledger-audit',
   'legacy-ledger-delete',
   'legacy-artifact-shutdown',
+  'post-certified-residue',
   'state-transition',
   'checkpoint-audit',
 ] as const;
@@ -245,7 +251,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     return super.isCertifiedReturnStartup(kysely);
   }
 
-  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.1.0'> {
     return super.assertCertifiedReturnLedger(kysely);
   }
 
@@ -828,7 +834,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     const expectedCatalog = expectedCatalogFor(installationClass);
     const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
     // An original-official installation is a byte-exact certified-tag database,
-    // so it must match the exact v3.0.3 ledger — which does not contain the
+    // so it must match the exact certified-tag ledger — which does not contain the
     // post-certified upstream migrations the fork bundles.
     const exactOriginalOfficialLedger =
       ledger.length === CERTIFIED_TAG_MIGRATIONS.length &&
@@ -1022,6 +1028,45 @@ export class DatabaseRepository extends ForkHandoffRepository {
           ...LEGACY_MIGRATION_OVERRIDE_NAMES,
         ]})`.execute(transaction);
         await this.afterForkSchemaCutoverStage(transaction, 'legacy-artifact-shutdown');
+
+        // Post-certified upstream residue: migrations the fork applied on top
+        // of the certified official tag. Their ledger rows would crash the
+        // certified container's migrator and their effects drift from the
+        // certified catalog, so revert each one exactly (registered reversal),
+        // audit it, and remove its ledger row. The fork return re-applies them
+        // through the normal official provider. Fail closed on any residue
+        // without a registered reversal.
+        const residue = await sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp
+          FROM public.kysely_migrations
+          WHERE name = ANY(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
+          ORDER BY name
+        `.execute(transaction);
+        const irreversible = irreversiblePostCertifiedMigrations(residue.rows.map(({ name }) => name));
+        if (irreversible.length > 0) {
+          throw new Error(`Fork schema cutover cannot revert post-certified migration(s): ${irreversible.join(', ')}`);
+        }
+        for (const row of residue.rows.toReversed()) {
+          await REVERSIBLE_POST_CERTIFIED_MIGRATIONS.get(row.name)!.revert(transaction);
+          await sql`
+            INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+            VALUES (
+              ${row.name},
+              'ledger-cutover',
+              'applied',
+              jsonb_build_object(
+                'classification', 'post-certified-upstream',
+                'originalTimestamp', ${row.timestamp}::text,
+                'reportDigest', ${reportDigest}::text
+              ),
+              now()
+            )
+          `.execute(transaction);
+        }
+        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[
+          ...POST_CERTIFIED_UPSTREAM_MIGRATIONS,
+        ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'post-certified-residue');
 
         const committedAt = new Date().toISOString();
         const state = await sql<{ id: number }>`

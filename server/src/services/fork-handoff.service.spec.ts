@@ -8,7 +8,7 @@ const checkpoint = {
   databaseBackupId: 'backup-1',
   id: 'checkpoint-1',
   mediaSnapshotId: 'snapshot-1',
-  officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3' as const,
+  officialImage: 'ghcr.io/immich-app/immich-server:v3.1.0' as const,
   reportDigest: 'a'.repeat(64),
   storageVerificationAssetCount: 0,
   storageVerificationDigest: 'b'.repeat(64),
@@ -23,7 +23,7 @@ const returnEvidence = {
   phase: 'inactive' as const,
   reconciliationStatus: 'not-started' as const,
   schemaVersion: '2',
-  supportedTag: 'v3.0.3' as const,
+  supportedTag: 'v3.1.0' as const,
 };
 
 const activeReport = {
@@ -44,6 +44,7 @@ const setup = () => {
     prepareOfficialHandoffCheckpoint: vi.fn().mockResolvedValue(checkpoint),
     getReturnEvidence: vi.fn().mockResolvedValue(returnEvidence),
     getReturnWorkflowSnapshot: vi.fn().mockResolvedValue({ rowDigests: [], schemaDigest: 'd'.repeat(64) }),
+    reapplyPostCertifiedResidue: vi.fn().mockResolvedValue([]),
     sealEmptyReturnBackfillDigests: vi.fn(),
     withLock: vi.fn().mockImplementation((_lock, callback) => callback()),
   };
@@ -84,13 +85,17 @@ describe(ForkHandoffService.name, () => {
     expect(databaseMocks.getReturnEvidence.mock.invocationCallOrder[0]).toBeLessThan(
       databaseMocks.archiveAndDeleteOrphans.mock.invocationCallOrder[0],
     );
+    expect(databaseMocks.reapplyPostCertifiedResidue).toHaveBeenCalledOnce();
+    expect(databaseMocks.reapplyPostCertifiedResidue.mock.invocationCallOrder[0]).toBeLessThan(
+      databaseMocks.archiveAndDeleteOrphans.mock.invocationCallOrder[0],
+    );
   });
 
   it('fails an unsupported ledger before any reconciliation provider runs', async () => {
     const { databaseMocks, migrationMocks, sut } = setup();
-    databaseMocks.getReturnEvidence.mockRejectedValue(new Error('exact certified v3.0.3 ledger'));
+    databaseMocks.getReturnEvidence.mockRejectedValue(new Error('exact certified v3.1.0 ledger'));
 
-    await expect(sut.prepareFork({ batchSize: 1 })).rejects.toThrow('exact certified v3.0.3 ledger');
+    await expect(sut.prepareFork({ batchSize: 1 })).rejects.toThrow('exact certified v3.1.0 ledger');
 
     expect(databaseMocks.archiveAndDeleteOrphans).not.toHaveBeenCalled();
     expect(migrationMocks.reconcileAfterOfficialReturn).not.toHaveBeenCalled();

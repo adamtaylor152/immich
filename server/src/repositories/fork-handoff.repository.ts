@@ -4,6 +4,8 @@ import { InjectKysely } from 'nestjs-kysely';
 import { createHash } from 'node:crypto';
 import { StorageCore } from 'src/cores/storage.core';
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
+import { CERTIFIED_TAG_MIGRATIONS, POST_CERTIFIED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { REVERSIBLE_POST_CERTIFIED_MIGRATIONS } from 'src/fork-schema/post-certified-residue';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
 import { getWorkflowCompatibilityEvidence, WorkflowRowDigest } from 'src/fork-schema/workflow-compatibility';
 import {
@@ -27,7 +29,7 @@ export type ForkReturnEvidence = {
   maintenanceMode: boolean;
   phase: ForkSchemaPhase;
   schemaVersion: string;
-  supportedTag: 'v3.0.3';
+  supportedTag: 'v3.1.0';
   officialLedgerDigest: string;
   reconciliationStatus: 'not-started' | 'running' | 'failed' | 'complete';
 };
@@ -37,7 +39,7 @@ export type OfficialHandoffCheckpoint = {
   databaseBackupId: string | null;
   id: string;
   mediaSnapshotId: string | null;
-  officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3';
+  officialImage: 'ghcr.io/immich-app/immich-server:v3.1.0';
   reportDigest: string;
   storageVerificationAssetCount: number | null;
   storageVerificationDigest: string | null;
@@ -66,13 +68,26 @@ type CheckpointDetails = {
   storageVerificationRunId?: string | null;
 };
 
-const CERTIFIED_TAG = 'v3.0.3' as const;
-const OFFICIAL_IMAGE = 'ghcr.io/immich-app/immich-server:v3.0.3' as const;
+const CERTIFIED_TAG = 'v3.1.0' as const;
+const OFFICIAL_IMAGE = 'ghcr.io/immich-app/immich-server:v3.1.0' as const;
 const OFFICIAL_WORKFLOW_MIGRATION = '1778614946174-UpdateWorkflowTables';
 
-export const assertExactCertifiedReturnLedger = (actual: readonly string[], expected: readonly string[]): 'v3.0.3' => {
-  if (actual.length !== expected.length || actual.some((name, index) => name !== expected[index])) {
-    throw new Error('Fork return requires the exact certified v3.0.3 ledger');
+/**
+ * A returning database must hold the exact certified official ledger. The
+ * fork's own official provider re-applies the post-certified upstream residue
+ * during the first return boot, so the ledger may additionally hold an ordered
+ * suffix of exactly those residue names (and nothing else) — otherwise a
+ * restart between the first boot and `prepare-fork` would fail closed.
+ */
+export const assertExactCertifiedReturnLedger = (actual: readonly string[], expected: readonly string[]): 'v3.1.0' => {
+  const residue = supportedVersions.postCertifiedUpstreamMigrations;
+  const allowed = [...expected, ...residue];
+  const isCertifiedPrefix =
+    actual.length >= expected.length &&
+    actual.length <= allowed.length &&
+    actual.every((name, index) => name === allowed[index]);
+  if (!isCertifiedPrefix) {
+    throw new Error(`Fork return requires the exact certified ${CERTIFIED_TAG} ledger`);
   }
   return CERTIFIED_TAG;
 };
@@ -80,7 +95,7 @@ export const assertExactCertifiedReturnLedger = (actual: readonly string[], expe
 export const assertCertifiedOfficialHandoffLedger = (
   actual: readonly string[],
   expected: readonly string[],
-): 'v3.0.3' => {
+): 'v3.1.0' => {
   const workflowIndex = expected.indexOf(OFFICIAL_WORKFLOW_MIGRATION);
   if (
     workflowIndex === -1 ||
@@ -88,7 +103,7 @@ export const assertCertifiedOfficialHandoffLedger = (
     actual.length > expected.length ||
     actual.some((name, index) => name !== expected[index])
   ) {
-    throw new Error('Official handoff requires an exact certified v3.0.3 prefix through 177861');
+    throw new Error(`Official handoff requires an exact certified ${CERTIFIED_TAG} prefix through 177861`);
   }
   return CERTIFIED_TAG;
 };
@@ -255,7 +270,43 @@ export class ForkHandoffRepository {
     return state.rows[0]?.phase === 'inactive' && state.rows[0]?.schemaVersion === '2';
   }
 
-  async assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+  /**
+   * Re-apply the post-certified upstream residue after a certified official
+   * return. The certified official provider intentionally excludes these
+   * migrations (a post-cutover database must stay byte-exact with the
+   * certified tag), so the fork return reconciliation applies them explicitly
+   * before any fork-side writes occur. Idempotent per migration: a name that
+   * is already ledgered is skipped.
+   */
+  async reapplyPostCertifiedResidue(): Promise<string[]> {
+    const applied: string[] = [];
+    for (const name of [...POST_CERTIFIED_UPSTREAM_MIGRATIONS].toSorted()) {
+      const registered = REVERSIBLE_POST_CERTIFIED_MIGRATIONS.get(name);
+      if (!registered) {
+        throw new Error(`No registered re-application for post-certified migration ${name}`);
+      }
+      const appliedName = await this.db.transaction().execute(async (transaction) => {
+        const existing = await sql`
+          SELECT 1 FROM public.kysely_migrations WHERE name = ${name}
+        `.execute(transaction);
+        if (existing.rows.length > 0) {
+          return false;
+        }
+        await registered.apply(transaction);
+        await sql`
+          INSERT INTO public.kysely_migrations (name, timestamp)
+          VALUES (${name}, ${new Date().toISOString()})
+        `.execute(transaction);
+        return true;
+      });
+      if (appliedName) {
+        applied.push(name);
+      }
+    }
+    return applied;
+  }
+
+  async assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.1.0'> {
     await this.getReturnEvidence(kysely);
     return CERTIFIED_TAG;
   }
@@ -289,7 +340,7 @@ export class ForkHandoffRepository {
       SELECT name FROM public.kysely_migrations ORDER BY timestamp, name
     `.execute(kysely);
     const names = ledgerResult.rows.map(({ name }) => name);
-    assertExactCertifiedReturnLedger(names, supportedVersions.upstreamMigrations);
+    assertExactCertifiedReturnLedger(names, CERTIFIED_TAG_MIGRATIONS);
 
     const reconciliationResult = await sql<{ status: string }>`
       SELECT status
@@ -355,7 +406,7 @@ export class ForkHandoffRepository {
       });
   }
 
-  async assertOfficialHandoffReady(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+  async assertOfficialHandoffReady(kysely: Kysely<DB> = this.db): Promise<'v3.1.0'> {
     const stateResult = await sql<{
       active: boolean;
       maintenanceMode: boolean;
@@ -384,7 +435,7 @@ export class ForkHandoffRepository {
     `.execute(kysely);
     return assertCertifiedOfficialHandoffLedger(
       ledger.rows.map(({ name }) => name),
-      supportedVersions.upstreamMigrations,
+      CERTIFIED_TAG_MIGRATIONS,
     );
   }
 
