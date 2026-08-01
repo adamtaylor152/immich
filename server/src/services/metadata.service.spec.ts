@@ -1061,6 +1061,18 @@ describe(MetadataService.name, () => {
       expect(mocks.user.updateUsage).not.toHaveBeenCalled();
     });
 
+    it('should discard a bit depth that exceeds the postgres integer range', async () => {
+      const asset = AssetFactory.create();
+
+      mocks.assetJob.getForMetadataExtraction.mockResolvedValue(getForMetadataExtraction(asset));
+      mockReadTags({ BitsPerSample: 46_209_544_973 });
+
+      await sut.handleMetadataExtraction({ id: asset.id });
+      expect(mocks.asset.upsertExif).toHaveBeenCalledWith(
+        expect.objectContaining({ exif: expect.objectContaining({ bitsPerSample: null }) }),
+      );
+    });
+
     it('should save all metadata', async () => {
       const dateForTest = new Date('1970-01-01T00:00:00.000-11:30');
       const asset = AssetFactory.create();
