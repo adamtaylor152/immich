@@ -27,7 +27,10 @@ export class PluginMethodTable {
   @Column({ type: 'boolean', default: false })
   hostFunctions!: Generated<boolean>;
 
-  @Column({ type: 'character varying', default: [], array: true })
+  // Fork-native databases stay at the post-update workflow schema stage and do not
+  // have this column; plugin.repository detects it at runtime. synchronize: false
+  // keeps it out of schema-drift comparison while preserving the Kysely types.
+  @Column({ type: 'character varying', default: [], array: true, synchronize: false })
   allowedHosts!: Generated<string[]>;
 
   @Column({ type: 'jsonb', nullable: true })

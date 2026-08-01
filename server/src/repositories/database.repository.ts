@@ -459,6 +459,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
       columns: { ignoreExtra: true },
       functions: { ignoreExtra: false },
       parameters: { ignoreExtra: true },
+      extensions: { ignoreExtra: true },
     });
 
     return drift;
