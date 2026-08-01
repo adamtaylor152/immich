@@ -14,6 +14,7 @@ import {
 import {
   AssetStatus,
   CacheControl,
+  ChecksumAlgorithm,
   DatabaseLock,
   ImmichWorker,
   IntegrityReport,
@@ -454,10 +455,11 @@ export class IntegrityService extends BaseService {
       await this.jobRepository.queue({
         name: JobName.IntegrityChecksumFilesRefresh,
         data: {
-          items: batchReports.map(({ path, reportId, checksum }) => ({
+          items: batchReports.map(({ path, reportId, checksum, checksumAlgorithm }) => ({
             path,
             reportId,
             checksum: checksum?.toString('hex'),
+            checksumAlgorithm,
           })),
         },
       });
@@ -469,13 +471,37 @@ export class IntegrityService extends BaseService {
     this.logger.log('Refresh complete.');
   }
 
+  /**
+   * The fork writes sha256 checksums for new server uploads and keeps sha1 for
+   * legacy rows (see ChecksumAlgorithm), so integrity verification must hash
+   * with the algorithm the row was written under. `sha1Path` checksums cover a
+   * path string rather than file contents and cannot be verified from disk.
+   */
+  private hashForAlgorithm(checksumAlgorithm?: string | null) {
+    switch (checksumAlgorithm) {
+      case ChecksumAlgorithm.sha256File: {
+        return createHash('sha256');
+      }
+      case ChecksumAlgorithm.sha1Path: {
+        return null;
+      }
+      default: {
+        return createHash('sha1');
+      }
+    }
+  }
+
   private async checkAssetChecksum(
     originalPath: string,
     checksum: Buffer<ArrayBufferLike>,
+    checksumAlgorithm: string | null,
     assetId: string,
     reportId: string | null,
   ) {
-    const hash = createHash('sha1');
+    const hash = this.hashForAlgorithm(checksumAlgorithm);
+    if (!hash) {
+      return;
+    }
 
     try {
       await pipeline([
@@ -555,8 +581,8 @@ export class IntegrityService extends BaseService {
 
     const assets = this.integrityRepository.streamAssetChecksums(startMarker);
 
-    for await (const { originalPath, checksum, createdAt, assetId, reportId } of assets) {
-      await this.checkAssetChecksum(originalPath, checksum, assetId, reportId);
+    for await (const { originalPath, checksum, checksumAlgorithm, createdAt, assetId, reportId } of assets) {
+      await this.checkAssetChecksum(originalPath, checksum, checksumAlgorithm, assetId, reportId);
 
       processed++;
 
@@ -591,12 +617,15 @@ export class IntegrityService extends BaseService {
     this.logger.log(`Processing batch of ${paths.length} reports to check if they are out of date.`);
 
     const results = await Promise.all(
-      paths.map(async ({ reportId, path, checksum }) => {
+      paths.map(async ({ reportId, path, checksum, checksumAlgorithm }) => {
         if (!checksum) {
           return reportId;
         }
 
-        const hash = createHash('sha1');
+        const hash = this.hashForAlgorithm(checksumAlgorithm);
+        if (!hash) {
+          return reportId;
+        }
 
         try {
           await pipeline([

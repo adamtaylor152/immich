@@ -120,6 +120,7 @@ from
 select
   "asset"."originalPath",
   "asset"."checksum",
+  "asset"."checksumAlgorithm",
   "asset"."createdAt",
   "asset"."id" as "assetId",
   "integrity_report"."id" as "reportId"
