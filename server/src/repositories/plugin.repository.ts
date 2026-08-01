@@ -83,6 +83,7 @@ export class PluginRepository {
       'plugin.version',
       'plugin.createdAt',
       'plugin.updatedAt',
+      'plugin.templates',
       jsonArrayFrom(
         eb
           .selectFrom('plugin_method')
@@ -109,6 +110,12 @@ export class PluginRepository {
       .$if(!!dto.version, (qb) => qb.where('plugin.version', '=', dto.version!))
       .orderBy('plugin.name')
       .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.STRING] })
+  async getByHash(hash: Buffer) {
+    const query = await this.queryBuilder();
+    return query.where('plugin.sha256hash', '=', hash).executeTakeFirst();
   }
 
   @GenerateSql({ params: [DummyValue.STRING] })
@@ -179,6 +186,8 @@ export class PluginRepository {
             author: eb.ref('excluded.author'),
             version: eb.ref('excluded.version'),
             wasmBytes: eb.ref('excluded.wasmBytes'),
+            templates: eb.ref('excluded.templates'),
+            sha256hash: eb.ref('excluded.sha256hash'),
           })),
         )
         .returning(['id', 'name'])
@@ -259,6 +268,7 @@ export class PluginRepository {
                 error: (message) => logger.error(message),
               } as Console,
               logLevel: asExtismLogLevel(logger.getLogLevel()),
+              enableWasiOutput: true,
             },
           ),
         destroy: (plugin) => plugin.close(),

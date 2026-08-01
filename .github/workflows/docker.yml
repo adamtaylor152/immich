@@ -53,7 +53,7 @@ jobs:
         suffix: ['', '-cuda', '-cuda-runpod', '-openvino', '-armnn', '-rknn']
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -86,7 +86,7 @@ jobs:
         suffix: ['']
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -149,32 +149,9 @@ jobs:
       platforms: ${{ matrix.platforms }}
       suffixes: ${{ matrix.suffixes }}
       target: ${{ matrix.target }}
-      dockerhub-push: ${{ github.event_name == 'release' }}
+      dockerhub-push: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
       build-args: |
         DEVICE=${{ matrix.device }}
-
-  machine-learning-rocm:
-    name: Build and Push ML (rocm)
-    needs: pre-job
-    if: ${{ fromJSON(needs.pre-job.outputs.should_run).machine-learning == true && github.repository == 'immich-app/immich' }}
-    uses: ./.github/workflows/local-multi-runner-build.yml
-    permissions:
-      contents: read
-      actions: read
-      packages: write
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-    with:
-      image: immich-machine-learning
-      context: machine-learning
-      dockerfile: machine-learning/Dockerfile
-      platforms: linux/amd64
-      runner-mapping: '{"linux/amd64": "pokedex-large"}'
-      suffixes: '-rocm'
-      dockerhub-push: ${{ github.event_name == 'release' }}
-      build-args: |
-        DEVICE=rocm
 
   server:
     name: Build and Push Server
@@ -194,7 +171,7 @@ jobs:
       image: immich-server
       context: .
       dockerfile: server/Dockerfile
-      dockerhub-push: ${{ github.event_name == 'release' }}
+      dockerhub-push: ${{ github.event_name == 'release' && !github.event.release.prerelease }}
       build-args: |
         DEVICE=cpu
 
@@ -259,7 +236,7 @@ jobs:
 
   success-check-ml:
     name: Docker Build & Push ML Success
-    needs: [machine-learning, machine-learning-rocm, retag_ml, latest-ml]
+    needs: [machine-learning, retag_ml, latest-ml]
     permissions: {}
     runs-on: ubuntu-latest
     if: always()

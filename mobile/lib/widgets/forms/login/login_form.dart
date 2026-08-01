@@ -15,15 +15,19 @@ import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
+import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
+import 'package:immich_mobile/providers/feature_message.provider.dart';
 import 'package:immich_mobile/providers/gallery_permission.provider.dart';
 import 'package:immich_mobile/providers/oauth.provider.dart';
 import 'package:immich_mobile/providers/server_info.provider.dart';
+import 'package:immich_mobile/providers/view_intent/view_intent_handler.provider.dart';
 import 'package:immich_mobile/providers/websocket.provider.dart';
-import 'package:immich_mobile/repositories/local_files_manager.repository.dart';
+import 'package:immich_mobile/repositories/permission.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/utils/provider_utils.dart';
+import 'package:immich_mobile/utils/semver.dart';
 import 'package:immich_mobile/utils/url_helper.dart';
 import 'package:immich_mobile/utils/version_compatibility.dart';
 import 'package:immich_mobile/widgets/common/immich_logo.dart';
@@ -39,18 +43,7 @@ class LoginForm extends HookConsumerWidget {
 
   final log = Logger('LoginForm');
 
-  String? _validateUrl(String? url) {
-    if (url == null || url.isEmpty) {
-      return null;
-    }
-
-    final parsedUrl = Uri.tryParse(url);
-    if (parsedUrl == null || !parsedUrl.isAbsolute || !parsedUrl.scheme.startsWith("http") || parsedUrl.host.isEmpty) {
-      return 'login_form_err_invalid_url'.tr();
-    }
-
-    return null;
-  }
+  String? _validateUrl(String? url) => normalizeAndValidateServerUrl(url) ? null : 'login_form_err_invalid_url'.tr();
 
   String? _validateEmail(String? email) {
     if (email == null || email == '') {
@@ -77,27 +70,19 @@ class LoginForm extends HookConsumerWidget {
     final isOauthEnable = useState<bool>(false);
     final isPasswordLoginEnable = useState<bool>(false);
     final oAuthButtonLabel = useState<String>('OAuth');
-    final logoAnimationController = useAnimationController(duration: const Duration(seconds: 60))..repeat();
+    final logoAnimationController = useAnimationController(duration: const Duration(seconds: 60));
+    unawaited(logoAnimationController.repeat());
     final serverInfo = ref.watch(serverInfoProvider);
     final warningMessage = useState<String?>(null);
     final loginFormKey = GlobalKey<FormState>();
     final ValueNotifier<String?> serverEndpoint = useState<String?>(null);
 
-    checkVersionMismatch() async {
+    Future<void> checkVersionMismatch() async {
       try {
         final packageInfo = await PackageInfo.fromPlatform();
-        final appVersion = packageInfo.version;
-        final appMajorVersion = int.parse(appVersion.split('.')[0]);
-        final appMinorVersion = int.parse(appVersion.split('.')[1]);
-        final serverMajorVersion = serverInfo.serverVersion.major;
-        final serverMinorVersion = serverInfo.serverVersion.minor;
-
-        warningMessage.value = getVersionCompatibilityMessage(
-          appMajorVersion,
-          appMinorVersion,
-          serverMajorVersion,
-          serverMinorVersion,
-        );
+        final appSemVer = SemVer.fromString(packageInfo.version);
+        final serverSemVer = serverInfo.serverVersion;
+        warningMessage.value = getVersionCompatibilityMessage(serverVersion: serverSemVer, appVersion: appSemVer);
       } catch (error) {
         warningMessage.value = 'Error checking version compatibility';
       }
@@ -106,7 +91,7 @@ class LoginForm extends HookConsumerWidget {
     /// Fetch the server login credential and enables oAuth login if necessary
     /// Returns true if successful, false otherwise
     Future<void> getServerAuthSettings() async {
-      final sanitizeServerUrl = sanitizeUrl(serverEndpointController.text);
+      final sanitizeServerUrl = normalizeServerUrl(serverEndpointController.text);
       final serverUrl = punycodeEncodeUrl(sanitizeServerUrl);
 
       // Guard empty URL
@@ -130,6 +115,10 @@ class LoginForm extends HookConsumerWidget {
 
         serverEndpoint.value = endpoint;
       } on ApiException catch (e) {
+        if (!context.mounted) {
+          return;
+        }
+
         ImmichToast.show(
           context: context,
           msg: e.message ?? 'login_form_api_exception'.tr(),
@@ -139,6 +128,10 @@ class LoginForm extends HookConsumerWidget {
         isOauthEnable.value = false;
         isPasswordLoginEnable.value = true;
       } on HandshakeException {
+        if (!context.mounted) {
+          return;
+        }
+
         ImmichToast.show(
           context: context,
           msg: 'login_form_handshake_exception'.tr(),
@@ -148,6 +141,10 @@ class LoginForm extends HookConsumerWidget {
         isOauthEnable.value = false;
         isPasswordLoginEnable.value = true;
       } catch (e) {
+        if (!context.mounted) {
+          return;
+        }
+
         ImmichToast.show(
           context: context,
           msg: 'login_form_server_error'.tr(),
@@ -167,13 +164,13 @@ class LoginForm extends HookConsumerWidget {
       return null;
     }, []);
 
-    populateTestLoginInfo() {
+    void populateTestLoginInfo() {
       emailController.text = 'demo@immich.app';
       passwordController.text = 'demo';
       serverEndpointController.text = 'https://demo.immich.app';
     }
 
-    populateTestLoginInfo1() {
+    void populateTestLoginInfo1() {
       emailController.text = 'testuser@email.com';
       passwordController.text = 'password';
       serverEndpointController.text = 'http://10.1.15.216:2283/api';
@@ -181,18 +178,24 @@ class LoginForm extends HookConsumerWidget {
 
     Future<void> handleSyncFlow() async {
       final backgroundManager = ref.read(backgroundSyncProvider);
+      final viewIntentHandler = ref.read(viewIntentHandlerProvider);
 
       await backgroundManager.syncLocal(full: true);
       await backgroundManager.syncRemote();
+      await viewIntentHandler.flushDeferredViewIntent();
       await backgroundManager.hashAssets();
 
-      if (Store.get(StoreKey.syncAlbums, false)) {
+      if (SettingsRepository.instance.appConfig.backup.syncAlbums) {
         await backgroundManager.syncLinkedAlbum();
       }
     }
 
-    getManageMediaPermission() async {
-      final hasPermission = await ref.read(localFilesManagerRepositoryProvider).hasManageMediaPermission();
+    Future<void> getManageMediaPermission() async {
+      final hasPermission = await ref.read(permissionRepositoryProvider).hasManageMediaPermission();
+      if (!context.mounted) {
+        return;
+      }
+
       if (!hasPermission) {
         await showDialog(
           context: context,
@@ -223,7 +226,7 @@ class LoginForm extends HookConsumerWidget {
                 ),
                 TextButton(
                   onPressed: () {
-                    ref.read(localFilesManagerRepositoryProvider).requestManageMediaPermission();
+                    unawaited(ref.read(permissionRepositoryProvider).requestManageMediaPermission());
                     Navigator.of(context).pop();
                   },
                   child: Text(
@@ -240,7 +243,7 @@ class LoginForm extends HookConsumerWidget {
 
     bool isSyncRemoteDeletionsMode() => Platform.isAndroid && Store.get(StoreKey.manageLocalMediaAndroid, false);
 
-    login() async {
+    Future<void> login() async {
       TextInput.finishAutofillContext();
 
       // Invalidate all api repository provider instance to take into account new access token
@@ -248,6 +251,10 @@ class LoginForm extends HookConsumerWidget {
 
       try {
         final result = await ref.read(authProvider.notifier).login(emailController.text, passwordController.text);
+
+        if (!context.mounted) {
+          return;
+        }
 
         if (result.shouldChangePassword && !result.isAdmin) {
           unawaited(context.pushRoute(const ChangePasswordRoute()));
@@ -258,10 +265,19 @@ class LoginForm extends HookConsumerWidget {
           }
           unawaited(handleSyncFlow());
           ref.read(websocketProvider.notifier).connect();
-          unawaited(context.replaceRoute(const TabShellRoute()));
+          unawaited(ref.read(featureMessageServiceProvider).markSeen());
+          if (!context.mounted) {
+            return;
+          }
+
+          unawaited(context.router.replaceAll([const TabShellRoute()]));
           return;
         }
       } catch (error) {
+        if (!context.mounted) {
+          return;
+        }
+
         ImmichToast.show(
           context: context,
           msg: "login_form_failed_login".tr(),
@@ -290,13 +306,13 @@ class LoginForm extends HookConsumerWidget {
     }
 
     Future<String> generatePKCECodeChallenge(String codeVerifier) async {
-      var bytes = utf8.encode(codeVerifier);
-      var digest = sha256.convert(bytes);
+      final bytes = utf8.encode(codeVerifier);
+      final digest = sha256.convert(bytes);
       return base64Url.encode(digest.bytes).replaceAll('=', '');
     }
 
-    oAuthLogin() async {
-      var oAuthService = ref.watch(oAuthServiceProvider);
+    Future<void> oAuthLogin() async {
+      final oAuthService = ref.watch(oAuthServiceProvider);
       String? oAuthServerUrl;
 
       final state = generateRandomString(32);
@@ -306,7 +322,7 @@ class LoginForm extends HookConsumerWidget {
 
       try {
         oAuthServerUrl = await oAuthService.getOAuthServerUrl(
-          sanitizeUrl(serverEndpointController.text),
+          normalizeServerUrl(serverEndpointController.text),
           state,
           codeChallenge,
         );
@@ -315,6 +331,10 @@ class LoginForm extends HookConsumerWidget {
         invalidateAllApiRepositoryProviders(ref);
       } catch (error, stack) {
         log.severe('Error getting OAuth server Url: $error', stack);
+
+        if (!context.mounted) {
+          return;
+        }
 
         ImmichToast.show(
           context: context,
@@ -345,11 +365,20 @@ class LoginForm extends HookConsumerWidget {
               await getManageMediaPermission();
             }
             unawaited(handleSyncFlow());
-            unawaited(context.replaceRoute(const TabShellRoute()));
+            unawaited(ref.read(featureMessageServiceProvider).markSeen());
+            if (!context.mounted) {
+              return;
+            }
+
+            unawaited(context.router.replaceAll([const TabShellRoute()]));
             return;
           }
         } catch (error, stack) {
           log.severe('Error logging in with OAuth: $error', stack);
+
+          if (!context.mounted) {
+            return;
+          }
 
           ImmichToast.show(
             context: context,
@@ -359,6 +388,10 @@ class LoginForm extends HookConsumerWidget {
           );
         } finally {}
       } else {
+        if (!context.mounted) {
+          return;
+        }
+
         ImmichToast.show(
           context: context,
           msg: "login_form_failed_get_oauth_server_disable".tr(),
@@ -369,8 +402,8 @@ class LoginForm extends HookConsumerWidget {
       }
     }
 
-    buildVersionCompatWarning() {
-      checkVersionMismatch();
+    SingleChildRenderObjectWidget buildVersionCompatWarning() {
+      unawaited(checkVersionMismatch());
 
       if (warningMessage.value == null) {
         return const SizedBox.shrink();
@@ -381,11 +414,21 @@ class LoginForm extends HookConsumerWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: context.isDarkTheme ? Colors.red.shade700 : Colors.red.shade100,
-            borderRadius: const BorderRadius.all(Radius.circular(8)),
-            border: Border.all(color: context.isDarkTheme ? Colors.red.shade900 : Colors.red[200]!),
+            color: context.isDarkTheme ? Colors.amber.shade700 : Colors.amber.shade100,
+            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            border: Border.all(color: context.isDarkTheme ? Colors.amber.shade800 : Colors.amber[200]!, width: 2),
           ),
-          child: Text(warningMessage.value!, textAlign: TextAlign.center),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Padding(padding: const EdgeInsets.only(top: 2), child: Text(warningMessage.value!)),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -427,7 +470,7 @@ class LoginForm extends HookConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: ImmichSpacing.md),
                   child: Text(
-                    sanitizeUrl(serverEndpointController.text),
+                    normalizeServerUrl(serverEndpointController.text),
                     style: context.textTheme.displaySmall,
                     textAlign: TextAlign.center,
                   ),

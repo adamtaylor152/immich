@@ -288,6 +288,19 @@ export const asset_edit_audit = registerFunction({
     END`,
 });
 
+export const asset_ocr_delete_audit = registerFunction({
+  name: 'asset_ocr_delete_audit',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      INSERT INTO asset_ocr_audit ("assetId")
+      SELECT "assetId"
+      FROM OLD;
+      RETURN NULL;
+    END`,
+});
+
 // Cycle guard for the album closure tree. Rejects any parentId write that would
 // make an album its own ancestor. Defense-in-depth behind the app-level check in
 // AlbumService.validateAndReparent. Created by migration 2100000000020; declared

@@ -25,6 +25,8 @@ select
           inner join "plugin" on "plugin"."id" = "plugin_method"."pluginId"
         where
           "workflow"."id" = "workflow_step"."workflowId"
+        order by
+          "workflow_step"."order" asc
       ) as agg
   ) as "steps"
 from
@@ -57,6 +59,8 @@ select
           inner join "plugin" on "plugin"."id" = "plugin_method"."pluginId"
         where
           "workflow"."id" = "workflow_step"."workflowId"
+        order by
+          "workflow_step"."order" asc
       ) as agg
   ) as "steps"
 from
@@ -92,7 +96,7 @@ select
           "plugin_method"."name" as "methodName",
           "plugin_method"."types" as "types",
           "plugin_method"."hostFunctions",
-          ARRAY[]::character varying[] as "allowedHosts"
+          "plugin_method"."allowedHosts" as "allowedHosts"
         from
           "workflow_step"
           inner join "plugin_method" on "plugin_method"."id" = "workflow_step"."pluginMethodId"

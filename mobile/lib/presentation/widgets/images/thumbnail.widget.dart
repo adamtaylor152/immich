@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -130,9 +131,9 @@ class _ThumbnailState extends State<Thumbnail> with SingleTickerProviderStateMix
         if ((synchronousCall && _providerImage == null) || !_isVisible()) {
           _fadeController.value = 1.0;
         } else if (_fadeController.isAnimating) {
-          _fadeController.forward();
+          unawaited(_fadeController.forward());
         } else {
-          _fadeController.forward(from: 0.0);
+          unawaited(_fadeController.forward(from: 0.0));
         }
 
         setState(() {
@@ -296,16 +297,12 @@ class _ThumbnailRenderBox extends RenderBox {
   bool isRepaintBoundary = true;
 
   _ThumbnailRenderBox({
-    required ui.Image? image,
-    required ui.Image? previousImage,
-    required double fadeValue,
-    required BoxFit fit,
-    required Gradient placeholderGradient,
-  }) : _image = image,
-       _previousImage = previousImage,
-       _fadeValue = fadeValue,
-       _fit = fit,
-       _placeholderGradient = placeholderGradient;
+    required this._image,
+    required this._previousImage,
+    required this._fadeValue,
+    required this._fit,
+    required this._placeholderGradient,
+  });
 
   @override
   void paint(PaintingContext context, Offset offset) {

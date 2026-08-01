@@ -78,6 +78,7 @@
   let mouseOver = $state(false);
   let loaded = $state(false);
   let thumbError = $state(false);
+  let skipFade = $state(false);
 
   let width = $derived(thumbnailSize || thumbnailWidth || 235);
   let height = $derived(thumbnailSize || thumbnailHeight || 235);
@@ -166,7 +167,7 @@
       e.preventDefault();
     };
     element.addEventListener('click', click);
-    element.addEventListener('pointerdown', start, true);
+    element.addEventListener('pointerdown', start, { capture: true });
     element.addEventListener('pointerup', clearLongPressTimer, { capture: true, passive: true });
     return {
       destroy: () => {
@@ -205,11 +206,7 @@
 </script>
 
 <div
-  class={[
-    'group flex overflow-hidden transition-[background-color,border-radius] focus-visible:outline-none',
-    backgroundColorClass,
-    { 'rounded-xl': selected },
-  ]}
+  class={['group flex overflow-hidden focus-visible:outline-none', backgroundColorClass, { 'rounded-xl': selected }]}
   style:width="{width}px"
   style:height="{height}px"
   onmouseenter={onMouseEnter}
@@ -218,8 +215,7 @@
   onkeydown={(evt) => {
     if (evt.key === 'Enter') {
       callClickHandlers();
-    }
-    if (evt.key === 'x') {
+    } else if (evt.key === 'x') {
       onSelect?.(asset);
     }
     if (document.activeElement === element && evt.key === 'Escape') {
@@ -249,22 +245,19 @@
       ]}
     >
       <ImageThumbnail
-        class={[
-          'absolute transition-[border-radius] group-focus-visible:rounded-lg',
-          { 'rounded-xl': selected },
-          imageClass,
-        ]}
-        brokenAssetClass={[
-          'z-1 absolute group-focus-visible:rounded-lg transition-[border-radius]',
-          { 'rounded-xl': selected },
-          brokenAssetClass,
-        ]}
+        class={['absolute group-focus-visible:rounded-lg', { 'rounded-xl': selected }, imageClass]}
+        brokenAssetClass={['z-1 absolute group-focus-visible:rounded-lg', selected && 'rounded-2xl', brokenAssetClass]}
         url={getAssetMediaUrl({ id: asset.id, size: AssetMediaSize.Thumbnail, cacheKey: asset.thumbhash })}
         altText={$getAltText(asset)}
         widthStyle="{width}px"
         heightStyle="{height}px"
         curve={selected}
-        onComplete={(errored) => ((loaded = true), (thumbError = errored))}
+        onComplete={(errored) => {
+          const rect = element?.getBoundingClientRect();
+          skipFade = !rect || rect.bottom < 0 || rect.top > window.innerHeight;
+          loaded = true;
+          thumbError = errored;
+        }}
       />
       {#if asset.isVideo}
         <div class="pointer-events-none absolute size-full group-focus-visible:rounded-lg">
@@ -309,7 +302,10 @@
         <Thumbhash
           base64ThumbHash={asset.thumbhash}
           data-testid="thumbhash"
-          class={['absolute top-0 object-cover group-focus-visible:rounded-lg', { 'rounded-xl': selected }]}
+          class={[
+            'absolute top-0 object-cover group-focus-visible:rounded-lg',
+            { 'rounded-xl': selected, hidden: skipFade },
+          ]}
           style="width: {width}px; height: {height}px"
           draggable="false"
           fadeOut
@@ -345,7 +341,7 @@
 
         {#if !!assetOwner}
           <div class="absolute inset-e-2 bottom-1 z-2 max-w-[50%]">
-            <p class="max-w-full truncate text-xs font-medium text-white drop-shadow-lg">
+            <p class="text-white-shadow max-w-full truncate p-1 text-xs font-medium text-white">
               {assetOwner.name}
             </p>
           </div>

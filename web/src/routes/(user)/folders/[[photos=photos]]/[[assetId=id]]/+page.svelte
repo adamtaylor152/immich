@@ -1,6 +1,7 @@
 <script lang="ts">
   import { afterNavigate, goto, invalidateAll } from '$app/navigation';
   import ActionMenuItem from '$lib/components/ActionMenuItem.svelte';
+  import OnEvents from '$lib/components/OnEvents.svelte';
   import UserPageLayout, { headerId } from '$lib/components/layouts/UserPageLayout.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import GalleryViewer from '$lib/components/shared-components/gallery-viewer/GalleryViewer.svelte';
@@ -93,9 +94,11 @@
     </Sidebar>
   {/snippet}
 
+  <OnEvents onAssetsDelete={invalidateAll} />
+
   <Breadcrumbs node={data.tree} icon={mdiFolderHome} title={$t('folders')} getLink={getLinkForPath} />
 
-  <section class="mt-2 h-[calc(100%-(--spacing(25)))] overflow-auto immich-scrollbar">
+  <section class="mt-2 h-[calc(100%-(--spacing(25)))] immich-scrollbar overflow-auto">
     <TreeItemThumbnails items={data.tree.children} icon={mdiFolder} onClick={handleNavigateToFolder} />
 
     <!-- Assets -->

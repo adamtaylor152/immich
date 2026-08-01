@@ -22,7 +22,15 @@ class DriftAlbumApiRepository extends ApiRepository {
     String? description,
   }) async {
     final responseDto = await checkNull(
-      _api.createAlbum(CreateAlbumDto(albumName: name, description: description, assetIds: assetIds.toList())),
+      _api.createAlbum(
+        CreateAlbumDto(
+          albumName: name,
+          description: description == null
+              ? const Optional.absent()
+              : Optional.present(description.isEmpty ? null : description),
+          assetIds: Optional.present(assetIds.toList()),
+        ),
+      ),
     );
 
     return responseDto.toRemoteAlbum(owner);
@@ -30,7 +38,8 @@ class DriftAlbumApiRepository extends ApiRepository {
 
   Future<({List<String> removed, List<String> failed})> removeAssets(String albumId, Iterable<String> assetIds) async {
     final response = await checkNull(_api.removeAssetFromAlbum(albumId, BulkIdsDto(ids: assetIds.toList())));
-    final List<String> removed = [], failed = [];
+    final List<String> removed = [];
+    final List<String> failed = [];
     for (final dto in response) {
       if (dto.success) {
         removed.add(dto.id);
@@ -41,13 +50,20 @@ class DriftAlbumApiRepository extends ApiRepository {
     return (removed: removed, failed: failed);
   }
 
-  Future<({List<String> added, List<String> failed})> addAssets(String albumId, Iterable<String> assetIds) async {
-    final response = await checkNull(_api.addAssetsToAlbum(albumId, BulkIdsDto(ids: assetIds.toList())));
-    final List<String> added = [], failed = [];
+  Future<({List<String> added, List<String> failed})> addAssets(
+    String albumId,
+    Iterable<String> assetIds, {
+    Future<void>? abortTrigger,
+  }) async {
+    final response = await checkNull(
+      _api.addAssetsToAlbum(albumId, BulkIdsDto(ids: assetIds.toList()), abortTrigger: abortTrigger),
+    );
+    final List<String> added = [];
+    final List<String> failed = [];
     for (final dto in response) {
       if (dto.success) {
         added.add(dto.id);
-      } else {
+      } else if (dto.error.orElse(null) != BulkIdErrorReason.duplicate) {
         failed.add(dto.id);
       }
     }
@@ -73,11 +89,15 @@ class DriftAlbumApiRepository extends ApiRepository {
       _api.updateAlbumInfo(
         albumId,
         UpdateAlbumDto(
-          albumName: name,
-          description: description,
-          albumThumbnailAssetId: thumbnailAssetId,
-          isActivityEnabled: isActivityEnabled,
-          order: apiOrder,
+          albumName: name == null ? const Optional.absent() : Optional.present(name),
+          description: description == null
+              ? const Optional.absent()
+              : Optional.present(description.isEmpty ? null : description),
+          albumThumbnailAssetId: thumbnailAssetId == null
+              ? const Optional.absent()
+              : Optional.present(thumbnailAssetId),
+          isActivityEnabled: isActivityEnabled == null ? const Optional.absent() : Optional.present(isActivityEnabled),
+          order: apiOrder == null ? const Optional.absent() : Optional.present(apiOrder),
         ),
       ),
     );
@@ -99,7 +119,9 @@ class DriftAlbumApiRepository extends ApiRepository {
   }
 
   Future<bool> setActivityStatus(String albumId, bool isEnabled) async {
-    final response = await checkNull(_api.updateAlbumInfo(albumId, UpdateAlbumDto(isActivityEnabled: isEnabled)));
+    final response = await checkNull(
+      _api.updateAlbumInfo(albumId, UpdateAlbumDto(isActivityEnabled: Optional.present(isEnabled))),
+    );
     return response.isActivityEnabled;
   }
 }
@@ -116,7 +138,7 @@ extension on AlbumResponseDto {
       updatedAt: updatedAt,
       thumbnailAssetId: albumThumbnailAssetId,
       isActivityEnabled: isActivityEnabled,
-      order: order == AssetOrder.asc ? AlbumAssetOrder.asc : AlbumAssetOrder.desc,
+      order: order.orElse(null) == AssetOrder.asc ? AlbumAssetOrder.asc : AlbumAssetOrder.desc,
       assetCount: assetCount,
       isShared: albumUsers.length > 2,
     );

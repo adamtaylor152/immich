@@ -1,3 +1,4 @@
+import { WorkflowTrigger } from '@immich/plugin-sdk';
 import { ShallowDehydrateObject } from 'kysely';
 import { SystemConfig } from 'src/config';
 import { VECTOR_EXTENSIONS } from 'src/constants';
@@ -20,6 +21,7 @@ import {
   H264Profile,
   HevcProfile,
   ImageFormat,
+  IntegrityReport,
   JobName,
   MemoryType,
   QueueName,
@@ -28,8 +30,6 @@ import {
   SystemMetadataKey,
   TranscodeTarget,
   UserMetadataKey,
-  VideoCodec,
-  WorkflowTrigger,
   WorkflowType,
 } from 'src/enum';
 import type { BackfillKind } from 'src/repositories/fork-schema.repository';
@@ -164,6 +164,25 @@ export interface TranscodeCommand {
   };
 }
 
+export interface VideoTuning {
+  strictGop: boolean;
+  lowLatency: boolean;
+}
+
+export interface HlsCommandOptions {
+  initFilename: string;
+  inputPath: string;
+  packetCount: number;
+  playlistFilename: string;
+  seekSeconds?: number;
+  segmentDuration: number;
+  segmentFilename: string;
+  startSegment: number;
+  target: TranscodeTarget;
+  timeBase: number;
+  totalDuration: number;
+}
+
 export interface BitrateDistribution {
   max: number;
   target: number;
@@ -179,14 +198,11 @@ export interface ImageBuffer {
 export interface VideoCodecSWConfig {
   getCommand(
     target: TranscodeTarget,
-    videoStream: VideoStreamInfo,
-    audioStream?: AudioStreamInfo,
+    video: VideoStreamInfo,
+    audio?: AudioStreamInfo,
     format?: VideoFormat,
   ): TranscodeCommand;
-}
-
-export interface VideoCodecHWConfig extends VideoCodecSWConfig {
-  getSupportedCodecs(): Array<VideoCodec>;
+  getHlsCommand(options: HlsCommandOptions, video: VideoStreamInfo, audio?: AudioStreamInfo): string[];
 }
 
 export interface ProbeOptions {
@@ -320,6 +336,42 @@ export type IWorkflowJob<T extends WorkflowType = WorkflowType> = {
   type: T;
 };
 
+export interface IIntegrityJob {
+  refreshOnly?: boolean;
+}
+
+export interface IIntegrityDeleteReportTypeJob {
+  type?: IntegrityReport;
+}
+
+export interface IIntegrityDeleteReportsJob {
+  reports: {
+    id: string;
+    assetId: string | null;
+    fileAssetId: string | null;
+    path: string;
+  }[];
+}
+
+export interface IIntegrityUntrackedFilesJob {
+  type: 'asset' | 'asset_file';
+  paths: string[];
+}
+
+export interface IIntegrityMissingFilesJob {
+  items: ({ path: string; reportId: string | null } & (
+    { assetId: string; fileAssetId: null } | { assetId: null; fileAssetId: string }
+  ))[];
+}
+
+export interface IIntegrityPathWithReportJob {
+  items: { path: string; reportId: string | null }[];
+}
+
+export interface IIntegrityPathWithChecksumJob {
+  items: { path: string; reportId: string | null; checksum?: string | null }[];
+}
+
 export interface JobCounts {
   active: number;
   completed: number;
@@ -413,6 +465,7 @@ export type JobItem =
 
   // Cleanup
   | { name: JobName.SessionCleanup; data?: IBaseJob }
+  | { name: JobName.HlsSessionCleanup; data?: IBaseJob }
 
   // Tags
   | { name: JobName.TagCleanup; data?: IBaseJob }
@@ -460,7 +513,19 @@ export type JobItem =
     }
 
   // Workflow
-  | { name: JobName.WorkflowAssetCreate; data: { workflowId: string; assetId: string } }
+  | { name: JobName.WorkflowAssetTrigger; data: { workflowId: string; assetId: string } }
+
+  // Integrity
+  | { name: JobName.IntegrityUntrackedFilesQueueAll; data?: IIntegrityJob }
+  | { name: JobName.IntegrityUntrackedFiles; data: IIntegrityUntrackedFilesJob }
+  | { name: JobName.IntegrityUntrackedFilesRefresh; data: IIntegrityPathWithReportJob }
+  | { name: JobName.IntegrityMissingFilesQueueAll; data?: IIntegrityJob }
+  | { name: JobName.IntegrityMissingFiles; data: IIntegrityPathWithReportJob }
+  | { name: JobName.IntegrityMissingFilesRefresh; data: IIntegrityPathWithReportJob }
+  | { name: JobName.IntegrityChecksumFiles; data?: IIntegrityJob }
+  | { name: JobName.IntegrityChecksumFilesRefresh; data?: IIntegrityPathWithChecksumJob }
+  | { name: JobName.IntegrityDeleteReportType; data: IIntegrityDeleteReportTypeJob }
+  | { name: JobName.IntegrityDeleteReports; data: IIntegrityDeleteReportsJob }
 
   // Editor
   | { name: JobName.AssetEditThumbnailGeneration; data: IEntityJob };
@@ -556,8 +621,7 @@ export type PhysicalDeduplicationMigrationState = {
   samples: string[];
 };
 export type MaintenanceModeState =
-  | { isMaintenanceMode: true; secret: string; action?: SetMaintenanceModeDto }
-  | { isMaintenanceMode: false };
+  { isMaintenanceMode: true; secret: string; action?: SetMaintenanceModeDto } | { isMaintenanceMode: false };
 export type MemoriesState = {
   /** memories have already been created through this date */
   lastOnThisDayDate: string;
@@ -658,6 +722,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.MemoriesState]: MemoriesState;
   [SystemMetadataKey.RunPodState]: RunPodPersistedState;
   [SystemMetadataKey.RunPodOrphans]: { orphanTemplateIds: string[] };
+  [SystemMetadataKey.IntegrityChecksumCheckpoint]: { date?: string };
 }
 
 export type UserPreferences = {
@@ -675,6 +740,7 @@ export type UserPreferences = {
   people: {
     enabled: boolean;
     sidebarWeb: boolean;
+    minimumFaces: number;
   };
   ratings: {
     enabled: boolean;
@@ -705,6 +771,9 @@ export type UserPreferences = {
   };
   privacy: {
     suppression: SuppressionPreferences;
+  };
+  recentlyAdded: {
+    sidebarWeb: boolean;
   };
 };
 

@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import { extname } from 'node:path';
 import sanitize from 'sanitize-filename';
 import { StorageCore } from 'src/cores/storage.core';
 import { AuthSharedLink } from 'src/database';
@@ -96,8 +95,7 @@ export class AssetMediaService extends BaseService {
   getUploadFilename({ auth, fieldName, file, body }: UploadRequest): string {
     requireUploadAccess(auth);
 
-    const extension = extname(body.filename || file.originalName);
-
+    const extension = getFilenameExtension(body.filename || file.originalName);
     const lookup = {
       [UploadFieldName.ASSET_DATA]: extension,
       [UploadFieldName.SIDECAR_DATA]: '.xmp',
@@ -150,17 +148,104 @@ export class AssetMediaService extends BaseService {
           { userId: auth.user.id, livePhotoVideoId: dto.livePhotoVideoId },
         );
       }
-      const asset = await this.create(auth.user.id, dto, file, sidecarFile);
+
+      const physicalDeduplication = await this.getPhysicalDeduplicationCandidate(auth.user.id, file);
+      const asset = await this.assetRepository.create({
+        ownerId: auth.user.id,
+        libraryId: null,
+
+        checksum: file.checksum,
+        checksumAlgorithm: ChecksumAlgorithm.sha256File,
+        originalPath: file.originalPath,
+
+        fileCreatedAt: dto.fileCreatedAt,
+        fileModifiedAt: dto.fileModifiedAt,
+        localDateTime: dto.fileCreatedAt,
+
+        type: mimeTypes.assetType(file.originalPath),
+        isFavorite: dto.isFavorite,
+        duration: dto.duration || null,
+        visibility: dto.visibility ?? AssetVisibility.Timeline,
+        livePhotoVideoId: dto.livePhotoVideoId,
+        originalFileName: dto.filename || file.originalName,
+      });
+
+      if (dto.metadata?.length) {
+        await this.assetRepository.upsertMetadata(asset.id, dto.metadata);
+      }
+
+      if (sidecarFile) {
+        await this.assetRepository.upsertFile({
+          assetId: asset.id,
+          path: sidecarFile.originalPath,
+          type: AssetFileType.Sidecar,
+        });
+        await this.storageRepository.utimes(sidecarFile.originalPath, new Date(), new Date(dto.fileModifiedAt));
+      }
+      await this.storageRepository.utimes(file.originalPath, new Date(), new Date(dto.fileModifiedAt));
+      await this.assetRepository.upsertExif({
+        exif: { assetId: asset.id, fileSizeInByte: file.size },
+        lockedPropertiesBehavior: 'override',
+      });
+
+      if (physicalDeduplication) {
+        await this.physicalFileRepository.linkAssetToOriginalPhysicalFile(asset.id, physicalDeduplication);
+        await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [file.originalPath] } });
+        asset.originalPath = physicalDeduplication.path;
+        asset.physicalOriginalFileId = physicalDeduplication.id;
+      } else {
+        const masterPhysicalFile = await this.ensureMasterPhysicalOriginal(auth.user.id, asset.id);
+        if (masterPhysicalFile) {
+          asset.physicalOriginalFileId = masterPhysicalFile.id;
+        }
+      }
+
+      await this.jobRepository.queue({ name: JobName.AssetExtractMetadata, data: { id: asset.id, source: 'upload' } });
 
       if (auth.sharedLink) {
         await this.addToSharedLink(auth.sharedLink, asset.id);
       }
 
-      await this.userRepository.updateUsage(auth.user.id, file.size);
+      await this.eventRepository.emit('AssetCreate', { asset, file });
 
       return { id: asset.id, status: AssetMediaStatus.CREATED };
     } catch (error: any) {
-      return this.handleUploadError(error, auth, file, sidecarFile);
+      // clean up files
+      await this.jobRepository.queue({
+        name: JobName.FileDelete,
+        data: { files: [file.originalPath, sidecarFile?.originalPath] },
+      });
+
+      // handle duplicates with a success response
+      if (isAssetChecksumConstraint(error)) {
+        const duplicateOptions = this.getDuplicateCheckOptions(auth);
+        const duplicateId = duplicateOptions
+          ? await this.assetRepository.getUploadAssetIdByChecksum(auth.user.id, file.checksum, duplicateOptions)
+          : await this.assetRepository.getUploadAssetIdByChecksum(auth.user.id, file.checksum);
+        if (!duplicateId) {
+          if (auth.hideNsfwAssets) {
+            this.logger.debug('Duplicate asset upload rejected while existing asset is hidden by NSFW privacy mode');
+            // Return a nil UUID rather than an empty string so clients that
+            // strictly type the asset id (e.g. immich-go's AssetResponse.ID)
+            // don't crash. The real duplicate id is still withheld, preserving
+            // the NSFW privacy guarantee.
+            return { status: AssetMediaStatus.DUPLICATE, id: '00000000-0000-0000-0000-000000000000' };
+          }
+
+          this.logger.error(`Error locating duplicate for checksum constraint`);
+          throw new InternalServerErrorException();
+        }
+
+        if (auth.sharedLink) {
+          await this.addToSharedLink(auth.sharedLink, duplicateId);
+        }
+
+        this.logger.debug(`Duplicate asset upload rejected: existing asset ${duplicateId}`);
+        return { status: AssetMediaStatus.DUPLICATE, id: duplicateId };
+      }
+
+      this.logger.error(`Error uploading file ${error}`, error?.stack);
+      throw error;
     }
   }
 
@@ -287,116 +372,27 @@ export class AssetMediaService extends BaseService {
   }
 
   private async addToSharedLink(sharedLink: AuthSharedLink, assetId: string) {
-    await (sharedLink.albumId
-      ? this.albumRepository.addAssetIds(sharedLink.albumId, [assetId])
-      : this.sharedLinkRepository.addAssets(sharedLink.id, [assetId]));
-  }
-
-  private async handleUploadError(
-    error: any,
-    auth: AuthDto,
-    file: UploadFile,
-    sidecarFile?: UploadFile,
-  ): Promise<AssetMediaResponseDto> {
-    // clean up files
-    await this.jobRepository.queue({
-      name: JobName.FileDelete,
-      data: { files: [file.originalPath, sidecarFile?.originalPath] },
-    });
-
-    // handle duplicates with a success response
-    if (isAssetChecksumConstraint(error)) {
-      const duplicateOptions = this.getDuplicateCheckOptions(auth);
-      const duplicateId = duplicateOptions
-        ? await this.assetRepository.getUploadAssetIdByChecksum(auth.user.id, file.checksum, duplicateOptions)
-        : await this.assetRepository.getUploadAssetIdByChecksum(auth.user.id, file.checksum);
-      if (!duplicateId) {
-        if (auth.hideNsfwAssets) {
-          this.logger.debug('Duplicate asset upload rejected while existing asset is hidden by NSFW privacy mode');
-          // Return a nil UUID rather than an empty string so clients that
-          // strictly type the asset id (e.g. immich-go's AssetResponse.ID)
-          // don't crash. The real duplicate id is still withheld, preserving
-          // the NSFW privacy guarantee.
-          return { status: AssetMediaStatus.DUPLICATE, id: '00000000-0000-0000-0000-000000000000' };
-        }
-
-        this.logger.error(`Error locating duplicate for checksum constraint`);
-        throw new InternalServerErrorException();
-      }
-
-      if (auth.sharedLink) {
-        await this.addToSharedLink(auth.sharedLink, duplicateId);
-      }
-
-      this.logger.debug(`Duplicate asset upload rejected: existing asset ${duplicateId}`);
-      return { status: AssetMediaStatus.DUPLICATE, id: duplicateId };
+    if (!sharedLink.albumId) {
+      await this.sharedLinkRepository.addAssets(sharedLink.id, [assetId]);
+      return;
     }
 
-    this.logger.error(`Error uploading file ${error}`, error?.stack);
-    throw error;
+    const album = await this.albumRepository.getById(sharedLink.albumId, { withAssets: false });
+    if (!album) {
+      return;
+    }
+
+    await this.albumRepository.addAssetIds(album.id, [assetId]);
+    const userIds = album.albumUsers.map(({ user }) => user.id);
+    await this.eventRepository.emit('AlbumUpdate', {
+      id: album.id,
+      userIds,
+      recipientIds: userIds,
+    });
   }
 
   private getDuplicateCheckOptions(auth: AuthDto) {
     return auth.hideNsfwAssets ? getHiddenContentQueryOptions(auth) : undefined;
-  }
-
-  private async create(ownerId: string, dto: AssetMediaCreateDto, file: UploadFile, sidecarFile?: UploadFile) {
-    const physicalDeduplication = await this.getPhysicalDeduplicationCandidate(ownerId, file);
-    const asset = await this.assetRepository.create({
-      ownerId,
-      libraryId: null,
-
-      checksum: file.checksum,
-      checksumAlgorithm: ChecksumAlgorithm.sha256File,
-      originalPath: file.originalPath,
-
-      fileCreatedAt: dto.fileCreatedAt,
-      fileModifiedAt: dto.fileModifiedAt,
-      localDateTime: dto.fileCreatedAt,
-
-      type: mimeTypes.assetType(file.originalPath),
-      isFavorite: dto.isFavorite,
-      duration: dto.duration || null,
-      visibility: dto.visibility ?? AssetVisibility.Timeline,
-      livePhotoVideoId: dto.livePhotoVideoId,
-      originalFileName: dto.filename || file.originalName,
-    });
-
-    if (dto.metadata?.length) {
-      await this.assetRepository.upsertMetadata(asset.id, dto.metadata);
-    }
-
-    if (sidecarFile) {
-      await this.assetRepository.upsertFile({
-        assetId: asset.id,
-        path: sidecarFile.originalPath,
-        type: AssetFileType.Sidecar,
-      });
-      await this.storageRepository.utimes(sidecarFile.originalPath, new Date(), new Date(dto.fileModifiedAt));
-    }
-    await this.storageRepository.utimes(file.originalPath, new Date(), new Date(dto.fileModifiedAt));
-    await this.assetRepository.upsertExif({
-      exif: { assetId: asset.id, fileSizeInByte: file.size },
-      lockedPropertiesBehavior: 'override',
-    });
-
-    if (physicalDeduplication) {
-      await this.physicalFileRepository.linkAssetToOriginalPhysicalFile(asset.id, physicalDeduplication);
-      await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [file.originalPath] } });
-      asset.originalPath = physicalDeduplication.path;
-      asset.physicalOriginalFileId = physicalDeduplication.id;
-    } else {
-      const masterPhysicalFile = await this.ensureMasterPhysicalOriginal(ownerId, asset.id);
-      if (masterPhysicalFile) {
-        asset.physicalOriginalFileId = masterPhysicalFile.id;
-      }
-    }
-
-    await this.eventRepository.emit('AssetCreate', { asset });
-
-    await this.jobRepository.queue({ name: JobName.AssetExtractMetadata, data: { id: asset.id, source: 'upload' } });
-
-    return asset;
   }
 
   private async getPhysicalDeduplicationCandidate(ownerId: string, file: UploadFile) {

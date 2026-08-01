@@ -69,6 +69,7 @@ export const SYNC_TYPES_ORDER = [
   SyncRequestType.AlbumToAssetsV1,
   SyncRequestType.AssetExifsV1,
   SyncRequestType.AlbumAssetExifsV1,
+  SyncRequestType.AssetOcrV1,
   SyncRequestType.PartnerAssetExifsV1,
   SyncRequestType.MemoriesV1,
   SyncRequestType.MemoryToAssetsV1,
@@ -189,9 +190,14 @@ export class SyncService extends BaseService {
       [SyncRequestType.PeopleV1]: () => this.syncPeopleV1(options, response, checkpointMap),
       [SyncRequestType.AssetFacesV2]: () => this.syncAssetFacesV2(options, response, checkpointMap),
       [SyncRequestType.UserMetadataV1]: () => this.syncUserMetadataV1(options, response, checkpointMap),
+      [SyncRequestType.AssetOcrV1]: () => this.syncAssetOcrV1(options, response, checkpointMap, auth),
     } as const;
 
-    for (const type of SYNC_TYPES_ORDER.filter((type) => dto.types.includes(type))) {
+    for (const type of SYNC_TYPES_ORDER) {
+      if (!dto.types.includes(type)) {
+        continue;
+      }
+
       const handler = handlers[type as keyof typeof handlers];
       await handler();
     }
@@ -219,6 +225,7 @@ export class SyncService extends BaseService {
     await this.syncRepository.stack.cleanupAuditTable(pruneThreshold);
     await this.syncRepository.user.cleanupAuditTable(pruneThreshold);
     await this.syncRepository.userMetadata.cleanupAuditTable(pruneThreshold);
+    await this.syncRepository.assetOcr.cleanupAuditTable(pruneThreshold);
   }
 
   private needsFullSync(checkpointMap: CheckpointMap) {
@@ -440,7 +447,12 @@ export class SyncService extends BaseService {
     const upserts = this.syncRepository.album.getUpserts({ ...options, ack: checkpointMap[upsertType] });
     for await (const { updateId, ...data } of upserts) {
       const albumUsers = await this.syncRepository.album.getAlbumUsers(data.id);
-      send(response, { type: upsertType, ids: [updateId], data: syncAlbumV2ToV1(data, albumUsers) });
+      send(response, {
+        type: upsertType,
+        ids: [updateId],
+        // TODO: return null instead of '' in v4
+        data: syncAlbumV2ToV1({ ...data, description: data.description ?? '' }, albumUsers),
+      });
     }
   }
 
@@ -454,7 +466,8 @@ export class SyncService extends BaseService {
     const upsertType = SyncEntityType.AlbumV2;
     const upserts = this.syncRepository.album.getUpserts({ ...options, ack: checkpointMap[upsertType] });
     for await (const { updateId, ...data } of upserts) {
-      send(response, { type: upsertType, ids: [updateId], data });
+      // TODO: return null instead of '' in v4
+      send(response, { type: upsertType, ids: [updateId], data: { ...data, description: data.description ?? '' } });
     }
   }
 
@@ -548,6 +561,7 @@ export class SyncService extends BaseService {
         const backfill = this.syncRepository.albumAsset.getBackfill(
           { ...options, afterUpdateId: startId, beforeUpdateId: endId },
           album.id,
+          options.userId,
         );
 
         for await (const { updateId, ...data } of backfill) {
@@ -575,16 +589,16 @@ export class SyncService extends BaseService {
     }
 
     const creates = this.syncRepository.albumAsset.getCreates({ ...options, ack: createCheckpoint });
-    let first = true;
+    let isFirst = true;
     for await (const { updateId, ...data } of creates) {
-      if (first) {
+      if (isFirst) {
         send(response, {
           type: SyncEntityType.SyncAckV1,
           data: {},
           ackType: SyncEntityType.AlbumAssetUpdateV2,
           ids: [options.nowId],
         });
-        first = false;
+        isFirst = false;
       }
       send(response, { type: createType, ids: [updateId], data: mapSyncAssetV2(data) });
     }
@@ -646,16 +660,16 @@ export class SyncService extends BaseService {
     }
 
     const creates = this.syncRepository.albumAssetExif.getCreates({ ...options, ack: createCheckpoint });
-    let first = true;
+    let isFirst = true;
     for await (const { updateId, ...data } of creates) {
-      if (first) {
+      if (isFirst) {
         send(response, {
           type: SyncEntityType.SyncAckV1,
           data: {},
           ackType: SyncEntityType.AlbumAssetExifUpdateV1,
           ids: [options.nowId],
         });
-        first = false;
+        isFirst = false;
       }
       send(response, { type: createType, ids: [updateId], data });
     }
@@ -885,6 +899,33 @@ export class SyncService extends BaseService {
 
     const upsertType = SyncEntityType.AssetMetadataV1;
     const upserts = this.syncRepository.assetMetadata.getUpserts(
+      { ...options, ack: checkpointMap[upsertType] },
+      auth.user.id,
+    );
+
+    for await (const { updateId, ...data } of upserts) {
+      send(response, { type: upsertType, ids: [updateId], data });
+    }
+  }
+
+  private async syncAssetOcrV1(
+    options: SyncQueryOptions,
+    response: Writable,
+    checkpointMap: CheckpointMap,
+    auth: AuthDto,
+  ) {
+    const deleteType = SyncEntityType.AssetOcrDeleteV1;
+    const deletes = this.syncRepository.assetOcr.getDeletes(
+      { ...options, ack: checkpointMap[deleteType] },
+      auth.user.id,
+    );
+
+    for await (const row of deletes) {
+      send(response, { type: deleteType, ids: [row.id], data: row });
+    }
+
+    const upsertType = SyncEntityType.AssetOcrV1;
+    const upserts = this.syncRepository.assetOcr.getUpserts(
       { ...options, ack: checkpointMap[upsertType] },
       auth.user.id,
     );

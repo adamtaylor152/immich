@@ -285,7 +285,7 @@ describe(SearchService.name, () => {
       );
       expect(mocks.search.searchSmart).toHaveBeenCalledWith(
         { page: 1, size: 100 },
-        { query: 'test', embedding: '[1, 2, 3]', userIds: [authStub.user1.user.id] },
+        { query: 'test', embedding: '[1, 2, 3]', userIds: [authStub.user1.user.id], visibility: 'not-locked' },
       );
     });
 
@@ -296,7 +296,7 @@ describe(SearchService.name, () => {
 
       expect(mocks.search.searchSmart).toHaveBeenCalledWith(
         { page: 1, size: 100 },
-        { query: 'test', embedding: '[1, 2, 3]', userIds: [auth.user.id], excludeNsfw: true },
+        { query: 'test', embedding: '[1, 2, 3]', userIds: [auth.user.id], excludeNsfw: true, visibility: 'not-locked' },
       );
     });
 

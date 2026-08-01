@@ -1,10 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { defaults, SystemConfig } from 'src/config';
-import { mapConfig } from 'src/dtos/system-config.dto';
+import { mapConfig, ReleaseChannel } from 'src/dtos/system-config.dto';
 import {
   AudioCodec,
   Colorspace,
   CQMode,
+  HlsVideoResolution,
   ImageFormat,
   LogLevel,
   MachineLearningHardwareAcceleration,
@@ -48,6 +49,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     [QueueName.ImageDescription]: { concurrency: 2 },
     [QueueName.NsfwDetection]: { concurrency: 2 },
     [QueueName.Workflow]: { concurrency: 5 },
+    [QueueName.IntegrityCheck]: { concurrency: 1 },
     [QueueName.Editor]: { concurrency: 2 },
   },
   backup: {
@@ -89,6 +91,27 @@ const updatedConfig = Object.freeze<SystemConfig>({
     accel: TranscodeHardwareAcceleration.Disabled,
     accelDecode: true,
     tonemap: ToneMapping.Hable,
+    realtime: {
+      enabled: false,
+      videoCodecs: [VideoCodec.H264, VideoCodec.Hevc],
+      resolutions: [HlsVideoResolution.p480, HlsVideoResolution.p720, HlsVideoResolution.p1080],
+    },
+  },
+  integrityChecks: {
+    untrackedFiles: {
+      enabled: true,
+      cronExpression: '0 03 * * *',
+    },
+    missingFiles: {
+      enabled: true,
+      cronExpression: '0 03 * * *',
+    },
+    checksumFiles: {
+      enabled: true,
+      cronExpression: '0 03 * * *',
+      timeLimit: 60 * 60 * 1000,
+      percentageLimit: 1,
+    },
   },
   logging: {
     enabled: true,
@@ -311,6 +334,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
   },
   newVersionCheck: {
     enabled: true,
+    channel: ReleaseChannel.Stable,
   },
   trash: {
     enabled: true,
@@ -471,14 +495,14 @@ describe(SystemConfigService.name, () => {
     it('should accept valid cron expressions', async () => {
       mocks.config.getEnv.mockReturnValue(mockEnvData({ configFile: 'immich-config.json' }));
       mocks.systemMetadata.readFile.mockResolvedValue(
-        JSON.stringify({ library: { scan: { cronExpression: '0 0 * * *' } } }),
+        JSON.stringify({ library: { scan: { cronExpression: '0 0 */3 * *' } } }),
       );
 
       await expect(sut.getSystemConfig()).resolves.toMatchObject({
         library: {
           scan: {
             enabled: true,
-            cronExpression: '0 0 * * *',
+            cronExpression: '0 0 */3 * *',
           },
         },
       });
@@ -511,7 +535,7 @@ describe(SystemConfigService.name, () => {
       expect(mocks.logger.error).toHaveBeenCalledTimes(2);
       expect(mocks.logger.error.mock.calls[0][0]).toEqual('Unable to load configuration file: immich-config.json');
       expect(mocks.logger.error.mock.calls[1][0].toString()).toEqual(
-        expect.stringContaining('YAMLException: duplicated mapping key (1:20)'),
+        expect.stringContaining('YAMLException: duplicated mapping key (1:21)'),
       );
     });
 

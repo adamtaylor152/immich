@@ -81,7 +81,7 @@ export class ServerService extends BaseService {
     serverInfo.diskAvailableRaw = diskInfo.available;
     serverInfo.diskSizeRaw = diskInfo.total;
     serverInfo.diskUseRaw = diskInfo.total - diskInfo.free;
-    serverInfo.diskUsagePercentage = Number.parseFloat(usagePercentage);
+    serverInfo.diskUsagePercentage = Number(usagePercentage);
     return serverInfo;
   }
 
@@ -100,6 +100,7 @@ export class ServerService extends BaseService {
       passwordLogin,
       notifications,
       physicalDeduplication,
+      ffmpeg,
     } = await this.getConfig({ withCache: false });
     const { configFile } = this.configRepository.getEnv();
 
@@ -123,13 +124,13 @@ export class ServerService extends BaseService {
       nsfwDetection: isNsfwDetectionEnabled(machineLearning),
       nsfwHiding: isNsfwHidingEnabled(machineLearning),
       physicalDeduplication: physicalDeduplication.enabled,
+      realtimeTranscoding: ffmpeg.realtime.enabled,
     };
   }
 
   async getSystemConfig(): Promise<ServerConfigDto> {
-    const { setup } = this.configRepository.getEnv();
     const config = await this.getConfig({ withCache: false });
-    const isInitialized = !setup.allow || (await this.userRepository.hasAdmin());
+    const isInitialized = !(await this.isSetupAvailable());
     const onboarding = await this.systemMetadataRepository.get(SystemMetadataKey.AdminOnboarding);
 
     return {
@@ -145,6 +146,7 @@ export class ServerService extends BaseService {
       mapLightStyleUrl: config.map.lightStyle,
       maintenanceMode: false,
       defaultImageDescriptionRawPromptTemplate: DEFAULT_RAW_PROMPT_TEMPLATE,
+      minFaces: config.machineLearning.facialRecognition.minFaces,
     };
   }
 
@@ -206,8 +208,12 @@ export class ServerService extends BaseService {
       throw new BadRequestException('Invalid license key');
     }
     const { licensePublicKey } = this.configRepository.getEnv();
-    const licenseValid = this.cryptoRepository.verifySha256(dto.licenseKey, dto.activationKey, licensePublicKey.server);
-    if (!licenseValid) {
+    const isLicenseValid = this.cryptoRepository.verifySha256(
+      dto.licenseKey,
+      dto.activationKey,
+      licensePublicKey.server,
+    );
+    if (!isLicenseValid) {
       throw new BadRequestException('Invalid license key');
     }
 

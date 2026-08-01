@@ -43,6 +43,12 @@ enum StoreKey<T> {
   legacyForkUseWifiForUploadPhotos<bool>._(1005),
 
   // Legacy keys that have been migrated to the new metadata store
+  legacyBackupRequireCharging<bool>._(7),
+  legacyBackupTriggerDelay<int>._(8),
+  legacySyncAlbums<bool>._(131),
+  legacyEnableBackup<bool>._(1003),
+  legacyUseWifiForUploadVideos<bool>._(1004),
+  legacyUseWifiForUploadPhotos<bool>._(1005),
   legacySelectedAlbumSortOrder<int>._(113),
   legacySelectedAlbumSortReverse<bool>._(123),
   legacyAlbumGridView<bool>._(140),

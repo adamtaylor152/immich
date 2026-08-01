@@ -51,4 +51,7 @@ export const preferencesFactory = Sync.makeFactory<UserPreferencesResponseDto>({
     enabled: false,
     sidebarWeb: false,
   },
+  recentlyAdded: {
+    sidebarWeb: false,
+  },
 });

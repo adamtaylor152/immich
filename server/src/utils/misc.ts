@@ -1,16 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import {
+  ApiBodyOptions,
   DocumentBuilder,
   OpenAPIObject,
   SwaggerCustomOptions,
   SwaggerDocumentOptions,
   SwaggerModule,
 } from '@nestjs/swagger';
-import {
-  OperationObject,
-  ReferenceObject,
-  SchemaObject,
-} from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import _ from 'lodash';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { writeFileSync } from 'node:fs';
@@ -19,9 +15,14 @@ import picomatch from 'picomatch';
 import parse from 'picomatch/lib/parse';
 import { SystemConfig } from 'src/config';
 import { CLIP_MODEL_INFO, endpointTags, serverVersion } from 'src/constants';
-import { extraSyncModels } from 'src/dtos/sync.dto';
+import { extraModels } from 'src/decorators';
 import { ApiCustomExtension, ImmichCookie, ImmichHeader, MetadataKey } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+
+type OperationObject = NonNullable<OpenAPIObject['paths'][string]['get']>;
+type ReferenceOrSchemaObject = Extract<ApiBodyOptions, { schema: unknown }>['schema'];
+type ReferenceObject = Extract<ReferenceOrSchemaObject, { $ref: unknown }>;
+type SchemaObject = Exclude<ReferenceOrSchemaObject, ReferenceObject>;
 
 export class ImmichStartupError extends Error {}
 export const isStartUpError = (error: unknown): error is ImmichStartupError => error instanceof ImmichStartupError;
@@ -157,11 +158,7 @@ export const routeToErrorMessage = (methodName: string) =>
   'Failed to ' + methodName.replaceAll(/[A-Z]+/g, (letter) => ` ${letter.toLowerCase()}`);
 
 const isSchema = (schema: string | ReferenceObject | SchemaObject): schema is SchemaObject => {
-  if (typeof schema === 'string' || '$ref' in schema) {
-    return false;
-  }
-
-  return true;
+  return !(typeof schema === 'string' || '$ref' in schema);
 };
 
 const patchOpenAPI = (document: OpenAPIObject) => {
@@ -200,20 +197,22 @@ const patchOpenAPI = (document: OpenAPIObject) => {
     document.components.schemas = sortKeys(schemas);
 
     for (const [schemaName, schema] of Object.entries(schemas)) {
-      if (schema.properties) {
-        schema.properties = sortKeys(schema.properties);
-
-        for (const [key, value] of Object.entries(schema.properties)) {
-          if (typeof value === 'string') {
-            continue;
-          }
-
-          if (isSchema(value) && value.type === 'number' && value.format === 'float') {
-            throw new Error(`Invalid number format: ${schemaName}.${key}=float (use double instead). `);
-          }
-        }
-        schema.required?.sort();
+      if (!schema.properties) {
+        continue;
       }
+
+      schema.properties = sortKeys(schema.properties);
+
+      for (const [key, value] of Object.entries(schema.properties)) {
+        if (typeof value === 'string') {
+          continue;
+        }
+
+        if (isSchema(value) && value.type === 'number' && value.format === 'float') {
+          throw new Error(`Invalid number format: ${schemaName}.${key}=float (use double instead). `);
+        }
+      }
+      schema.required?.sort();
     }
   }
 
@@ -294,7 +293,7 @@ export const useSwagger = (app: INestApplication, { write }: { write: boolean })
 
   const options: SwaggerDocumentOptions = {
     operationIdFactory: (controllerKey: string, methodKey: string) => methodKey,
-    extraModels: extraSyncModels,
+    extraModels,
     ignoreGlobalPrefix: true,
   };
 

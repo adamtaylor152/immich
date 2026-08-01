@@ -168,7 +168,7 @@
         title={$t('admin.storage_template_enable_description')}
         {disabled}
         bind:checked={configToEdit.storageTemplate.enabled}
-        isEdited={!(configToEdit.storageTemplate.enabled === config.storageTemplate.enabled)}
+        isEdited={configToEdit.storageTemplate.enabled !== config.storageTemplate.enabled}
       />
 
       {#if !minified}
@@ -177,9 +177,8 @@
           {disabled}
           subtitle={$t('admin.storage_template_hash_verification_enabled_description')}
           bind:checked={configToEdit.storageTemplate.hashVerificationEnabled}
-          isEdited={!(
-            configToEdit.storageTemplate.hashVerificationEnabled === config.storageTemplate.hashVerificationEnabled
-          )}
+          isEdited={configToEdit.storageTemplate.hashVerificationEnabled !==
+            config.storageTemplate.hashVerificationEnabled}
         />
       {/if}
 
@@ -349,7 +348,7 @@
                 required
                 inputType={SettingInputFieldType.TEXT}
                 bind:value={configToEdit.storageTemplate.template}
-                isEdited={!(configToEdit.storageTemplate.template === config.storageTemplate.template)}
+                isEdited={configToEdit.storageTemplate.template !== config.storageTemplate.template}
               />
 
               <div class="flex-0">

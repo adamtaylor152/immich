@@ -23,6 +23,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
+import { IntegrityRepository } from 'src/repositories/integrity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -86,6 +87,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   EmailRepository,
   EventRepository,
   ForkSchemaRepository,
+  IntegrityRepository,
   JobRepository,
   LibraryRepository,
   MachineLearningRepository,
@@ -149,6 +151,7 @@ export class BaseService {
     protected emailRepository: EmailRepository,
     protected eventRepository: EventRepository,
     protected forkSchemaRepository: ForkSchemaRepository,
+    protected integrityRepository: IntegrityRepository,
     protected jobRepository: JobRepository,
     protected libraryRepository: LibraryRepository,
     protected machineLearningRepository: MachineLearningRepository,
@@ -221,6 +224,7 @@ export class BaseService {
       ctx.emailRepository,
       ctx.eventRepository,
       ctx.forkSchemaRepository,
+      ctx.integrityRepository,
       ctx.jobRepository,
       ctx.libraryRepository,
       ctx.machineLearningRepository,
@@ -260,7 +264,7 @@ export class BaseService {
       ctx.workflowRepository,
     );
 
-    service.logger.setContext(this.name);
+    service.logger.setContext(BaseService.name);
 
     return service as T;
   }
@@ -292,6 +296,17 @@ export class BaseService {
 
   checkAccess(request: AccessRequest) {
     return checkAccess(this.accessRepository, request);
+  }
+
+  async isSetupAvailable(): Promise<boolean> {
+    const { setup } = this.configRepository.getEnv();
+    return setup.allow && !(await this.userRepository.hasAdmin());
+  }
+
+  async requireSetupAvailable(): Promise<void> {
+    if (!(await this.isSetupAvailable())) {
+      throw new BadRequestException('Admin setup is not available');
+    }
   }
 
   async createUser(dto: Insertable<UserTable> & { email: string }): Promise<UserAdmin> {

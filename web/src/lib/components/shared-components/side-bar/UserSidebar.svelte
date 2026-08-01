@@ -39,6 +39,7 @@
     mdiToolboxOutline,
     mdiTrashCan,
     mdiTrashCanOutline,
+    mdiUploadOutline,
   } from '@mdi/js';
   import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -122,6 +123,14 @@
 
   {#if authManager.preferences.tags.enabled && authManager.preferences.tags.sidebarWeb}
     <NavbarItem title={$t('tags')} href={Route.tags()} icon={{ icon: mdiTagMultipleOutline, flipped: true }} />
+  {/if}
+
+  {#if authManager.preferences.recentlyAdded.sidebarWeb}
+    <NavbarItem
+      title={$t('recently_added')}
+      href={Route.recentlyAdded()}
+      icon={{ icon: mdiUploadOutline, flipped: true }}
+    />
   {/if}
 
   {#if authManager.preferences.folders.enabled && authManager.preferences.folders.sidebarWeb}

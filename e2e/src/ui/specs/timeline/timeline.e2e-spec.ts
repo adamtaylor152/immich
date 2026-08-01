@@ -49,7 +49,7 @@ test.describe('Timeline', () => {
       assets.push(...timeBucket);
     }
     for (const yearMonth of timelineRestData.buckets.keys()) {
-      const [year, month] = yearMonth.split('-');
+      const [year, month] = yearMonth.split('-', 2);
       yearMonths.push(`${year}-${Number(month)}`);
     }
   });
@@ -536,7 +536,7 @@ test.describe('Timeline', () => {
         force: false,
         ids: [assetToTrash.id],
       });
-      await page.locator('#asset-selection-app-bar').getByLabel('Close').click();
+      await page.locator('#control-bar').getByLabel('Close').click();
       await page.getByText('Trash', { exact: true }).click();
       await timelineUtils.waitForTimelineLoad(page);
       await thumbnailUtils.expectInViewport(page, assetToTrash.id);
@@ -676,7 +676,7 @@ test.describe('Timeline', () => {
         ids: [assetToArchive.id],
       });
       await thumbnailUtils.expectThumbnailIsArchive(page, assetToArchive.id);
-      await page.locator('#asset-selection-app-bar').getByLabel('Close').click();
+      await page.locator('#control-bar').getByLabel('Close').click();
       await page.getByRole('link').getByText('Archive').click();
       await timelineUtils.waitForTimelineLoad(page);
       await thumbnailUtils.expectInViewport(page, assetToArchive.id);
@@ -823,7 +823,7 @@ test.describe('Timeline', () => {
       });
       // ensure thumbnail still exists and has favorite icon
       await thumbnailUtils.expectThumbnailIsFavorite(page, assetToFavorite.id);
-      await page.locator('#asset-selection-app-bar').getByLabel('Close').click();
+      await page.locator('#control-bar').getByLabel('Close').click();
       await page.getByRole('link').getByText('Favorites').click();
       await timelineUtils.waitForTimelineLoad(page);
       await pageUtils.goToAsset(page, assetToFavorite.fileCreatedAt);

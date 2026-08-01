@@ -5,16 +5,17 @@ import '../../utils.dart';
 class LocalAssetFactory {
   const LocalAssetFactory();
 
-  static LocalAsset create({String? id, String? name}) {
+  static LocalAsset create({String? id, String? name, String? remoteId}) {
     id = TestUtils.uuid(id);
 
     return LocalAsset(
       id: id,
       name: name ?? 'local_$id.jpg',
+      remoteId: remoteId,
       type: AssetType.image,
       createdAt: TestUtils.yesterday(),
       updatedAt: TestUtils.now(),
-      playbackStyle: AssetPlaybackStyle.image,
+      playbackStyle: .image,
       isEdited: false,
     );
   }

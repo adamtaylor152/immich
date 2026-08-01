@@ -45,15 +45,7 @@
   };
   type EditParameters = Record<string, unknown>;
   type CropHandle =
-    | 'move'
-    | 'top'
-    | 'right'
-    | 'bottom'
-    | 'left'
-    | 'top-left'
-    | 'top-right'
-    | 'bottom-right'
-    | 'bottom-left';
+    'move' | 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left';
   type TimeDragTarget = 'trim-start' | 'trim-end' | 'text-start' | 'text-end' | 'speed-start' | 'speed-end';
   type AdjustmentKey =
     | 'brightness'

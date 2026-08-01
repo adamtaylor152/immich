@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -5,7 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/models/auth/auxilary_endpoint.model.dart';
-import 'package:immich_mobile/providers/infrastructure/metadata.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/network.provider.dart';
 import 'package:immich_mobile/utils/url_helper.dart';
 import 'package:immich_mobile/widgets/settings/networking_settings/external_network_preference.dart';
@@ -19,9 +21,9 @@ class NetworkingSettings extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentEndpoint = getServerUrl();
-    final featureEnabled = useState(ref.read(systemConfigProvider).network.autoEndpointSwitching);
+    final featureEnabled = useState(ref.read(appConfigProvider).network.autoEndpointSwitching);
     useValueChanged<bool, void>(featureEnabled.value, (_, __) {
-      ref.read(metadataProvider).write(.networkAutoEndpointSwitching, featureEnabled.value);
+      unawaited(ref.read(settingsProvider).write(.networkAutoEndpointSwitching, featureEnabled.value));
     });
 
     Future<void> checkWifiReadPermission() async {
@@ -44,6 +46,10 @@ class NetworkingSettings extends HookConsumerWidget {
                   onPressed: () async {
                     final isGrant = await ref.read(networkProvider.notifier).requestWifiReadPermission();
 
+                    if (!context.mounted) {
+                      return;
+                    }
+
                     Navigator.pop(context, isGrant);
                   },
                   child: Text("grant_permission".tr()),
@@ -52,6 +58,10 @@ class NetworkingSettings extends HookConsumerWidget {
             );
           },
         );
+      }
+
+      if (!context.mounted) {
+        return;
       }
 
       if (!hasLocationAlways) {
@@ -65,6 +75,10 @@ class NetworkingSettings extends HookConsumerWidget {
                 TextButton(
                   onPressed: () async {
                     final isGrant = await ref.read(networkProvider.notifier).requestWifiReadBackgroundPermission();
+
+                    if (!context.mounted) {
+                      return;
+                    }
 
                     Navigator.pop(context, isGrant);
                   },
@@ -83,7 +97,7 @@ class NetworkingSettings extends HookConsumerWidget {
 
     useEffect(() {
       if (featureEnabled.value == true) {
-        checkWifiReadPermission();
+        unawaited(checkWifiReadPermission());
       }
       return null;
     }, [featureEnabled.value]);

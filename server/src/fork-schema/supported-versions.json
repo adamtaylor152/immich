@@ -102,6 +102,10 @@
     "1780592071031-AssetOcrSync",
     "1781089983296-CreateIntegrityReportTable",
     "1782414436633-AddPluginMethodAllowedHosts",
-    "1782500000000-RestoreLivePhotoStillVisibility"
+    "1782500000000-RestoreLivePhotoStillVisibility",
+    "1784647658615-AddOAuthBearerTokenToSession",
+    "1784836013770-MinFacePreferenceMigration",
+    "1784986754473-ConvertUserPasswordEmptyStringToNull",
+    "1784986754474-AlbumDescriptionNullable"
   ]
 }

@@ -10,6 +10,14 @@ import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import VideoNativeViewer from './VideoNativeViewer.svelte';
 
+vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
+  featureFlagsManager: {
+    init: vi.fn(),
+    loadFeatureFlags: vi.fn(),
+    value: { realtimeTranscoding: false },
+  } as never,
+}));
+
 vi.mock('media-chrome/media-control-bar', () => ({}));
 vi.mock('media-chrome/media-controller', () => ({}));
 vi.mock('media-chrome/media-fullscreen-button', () => ({}));
@@ -17,7 +25,12 @@ vi.mock('media-chrome/media-mute-button', () => ({}));
 vi.mock('media-chrome/media-play-button', () => ({}));
 vi.mock('media-chrome/media-playback-rate-button', () => ({}));
 vi.mock('media-chrome/media-time-display', () => ({}));
-vi.mock('media-chrome/media-time-range', () => ({}));
+vi.mock('media-chrome/media-time-range', () => ({
+  default: class extends HTMLElement {
+    connectedCallback() {}
+    disconnectedCallback() {}
+  },
+}));
 vi.mock('media-chrome/media-volume-range', () => ({}));
 vi.mock('media-chrome/menu/media-playback-rate-menu', () => ({}));
 vi.mock('media-chrome/menu/media-settings-menu', () => ({}));

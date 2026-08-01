@@ -49,7 +49,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { UserRepository } from 'src/repositories/user.repository';
 import { JobOf } from 'src/types';
 import { getConfig } from 'src/utils/config';
-import { asDateString } from 'src/utils/date';
+import { asDateTimeString } from 'src/utils/date';
 import { classifyImageDecodeFailure, getErrorMessage } from 'src/utils/media-health';
 import { mimeTypes } from 'src/utils/mime-types';
 import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
@@ -117,9 +117,9 @@ export class MediaHealthService {
         originalFileName: finding.originalFileName,
         evidence: finding.evidence,
         resolution: finding.resolution,
-        checkedAt: asDateString(finding.checkedAt),
-        dismissedAt: finding.dismissedAt ? asDateString(finding.dismissedAt) : null,
-        resolvedAt: finding.resolvedAt ? asDateString(finding.resolvedAt) : null,
+        checkedAt: asDateTimeString(finding.checkedAt),
+        dismissedAt: finding.dismissedAt ? asDateTimeString(finding.dismissedAt) : null,
+        resolvedAt: finding.resolvedAt ? asDateTimeString(finding.resolvedAt) : null,
         asset: mapAsset(asset, { auth }),
         candidates: (candidatesByHealthId.get(finding.id) ?? []).map((candidate) => ({
           id: candidate.id,
@@ -129,7 +129,7 @@ export class MediaHealthService {
           visualMatchScore: candidate.visualMatchScore,
           evidence: candidate.evidence,
           resolution: candidate.resolution,
-          checkedAt: asDateString(candidate.checkedAt),
+          checkedAt: asDateTimeString(candidate.checkedAt),
         })),
       });
       bucket.count = bucket.items.length;
@@ -526,8 +526,8 @@ export class MediaHealthService {
       id: run.id,
       category: run.category,
       status: run.status,
-      startedAt: asDateString(run.startedAt),
-      finishedAt: run.finishedAt ? asDateString(run.finishedAt) : null,
+      startedAt: asDateTimeString(run.startedAt),
+      finishedAt: run.finishedAt ? asDateTimeString(run.finishedAt) : null,
       totalAssets: run.totalAssets,
       checkedAssets: run.checkedAssets,
       foundAssets: run.foundAssets,

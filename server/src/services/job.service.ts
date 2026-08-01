@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { OnEvent } from 'src/decorators';
 import { mapAsset } from 'src/dtos/asset-response.dto';
 import { JobCreateDto } from 'src/dtos/job.dto';
-import { AssetType, AssetVisibility, JobName, JobStatus, ManualJobName } from 'src/enum';
+import { AssetType, AssetVisibility, IntegrityReport, JobName, JobStatus, ManualJobName } from 'src/enum';
 import { ArgsOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem } from 'src/types';
@@ -45,6 +45,42 @@ const asJobItem = (dto: JobCreateDto): JobItem => {
 
     case ManualJobName.PhysicalDeduplicationApply: {
       return { name: JobName.PhysicalDeduplicationMigrationApply };
+    }
+
+    case ManualJobName.IntegrityMissingFiles: {
+      return { name: JobName.IntegrityMissingFilesQueueAll };
+    }
+
+    case ManualJobName.IntegrityUntrackedFiles: {
+      return { name: JobName.IntegrityUntrackedFilesQueueAll };
+    }
+
+    case ManualJobName.IntegrityChecksumFiles: {
+      return { name: JobName.IntegrityChecksumFiles };
+    }
+
+    case ManualJobName.IntegrityMissingFilesRefresh: {
+      return { name: JobName.IntegrityMissingFilesQueueAll, data: { refreshOnly: true } };
+    }
+
+    case ManualJobName.IntegrityUntrackedFilesRefresh: {
+      return { name: JobName.IntegrityUntrackedFilesQueueAll, data: { refreshOnly: true } };
+    }
+
+    case ManualJobName.IntegrityChecksumFilesRefresh: {
+      return { name: JobName.IntegrityChecksumFiles, data: { refreshOnly: true } };
+    }
+
+    case ManualJobName.IntegrityMissingFilesDeleteAll: {
+      return { name: JobName.IntegrityDeleteReportType, data: { type: IntegrityReport.MissingFile } };
+    }
+
+    case ManualJobName.IntegrityUntrackedFilesDeleteAll: {
+      return { name: JobName.IntegrityDeleteReportType, data: { type: IntegrityReport.UntrackedFile } };
+    }
+
+    case ManualJobName.IntegrityChecksumFilesDeleteAll: {
+      return { name: JobName.IntegrityDeleteReportType, data: { type: IntegrityReport.ChecksumFail } };
     }
 
     default: {
@@ -307,6 +343,8 @@ export class JobService extends BaseService {
         await this.jobRepository.queue({ name: JobName.AssetDetectDuplicates, data: item.data });
         break;
       }
+
+      // no default
     }
   }
 }

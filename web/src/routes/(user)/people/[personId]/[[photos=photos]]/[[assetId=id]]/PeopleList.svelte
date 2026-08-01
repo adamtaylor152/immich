@@ -20,8 +20,8 @@
   let name = $state('');
 
   const showPeople = $derived(
-    (name ? searchedPeopleLocal : people).filter(
-      (person) => !peopleToNotShow.some((unselectedPerson) => unselectedPerson.id === person.id),
+    (name ? searchedPeopleLocal : people).filter((person) =>
+      peopleToNotShow.every((unselectedPerson) => unselectedPerson.id !== person.id),
     ),
   );
 </script>
@@ -47,7 +47,7 @@
 </div>
 
 <div
-  class="mt-6 overflow-y-auto rounded-3xl bg-gray-200 p-10 immich-scrollbar dark:bg-immich-dark-gray"
+  class="mt-6 immich-scrollbar overflow-y-auto rounded-3xl bg-gray-200 p-10 dark:bg-immich-dark-gray"
   style:max-height={screenHeight - 400 + 'px'}
 >
   <div class="grid-col-2 grid gap-8 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10">

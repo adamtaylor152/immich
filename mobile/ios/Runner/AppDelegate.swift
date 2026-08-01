@@ -46,6 +46,7 @@ import native_video_player
     engine: FlutterEngine? = nil
   ) {
     NativeSyncApiImpl.register(with: registry.registrar(forPlugin: NativeSyncApiImpl.name)!)
+    PermissionApiSetup.setUp(binaryMessenger: messenger, api: PermissionApiImpl())
     LocalImageApiSetup.setUp(binaryMessenger: messenger, api: LocalImageApiImpl())
     RemoteImageApiSetup.setUp(binaryMessenger: messenger, api: RemoteImageApiImpl())
     BackgroundWorkerFgHostApiSetup.setUp(binaryMessenger: messenger, api: BackgroundWorkerApiImpl())

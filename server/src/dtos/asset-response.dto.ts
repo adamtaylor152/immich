@@ -18,13 +18,13 @@ import {
 } from 'src/enum';
 import { MaybeDehydrated } from 'src/types';
 import { hexOrBufferToBase64 } from 'src/utils/bytes';
-import { asDateString } from 'src/utils/date';
+import { asDateTimeString } from 'src/utils/date';
 import { mimeTypes } from 'src/utils/mime-types';
 import z from 'zod';
 
 const SanitizedAssetResponseSchema = z
   .object({
-    id: z.string().describe('Asset ID'),
+    id: z.uuidv4().describe('Asset ID'),
     type: AssetTypeSchema,
     thumbhash: z
       .string()
@@ -52,8 +52,8 @@ export class SanitizedAssetResponseDto extends createZodDto(SanitizedAssetRespon
 
 const AssetStackResponseSchema = z
   .object({
-    id: z.string().describe('Stack ID'),
-    primaryAssetId: z.string().describe('Primary asset ID'),
+    id: z.uuidv4().describe('Stack ID'),
+    primaryAssetId: z.uuidv4().describe('Primary asset ID'),
     assetCount: z.int().min(0).describe('Number of assets in stack'),
   })
   .meta({ id: 'AssetStackResponseDto' });
@@ -65,7 +65,7 @@ export const AssetResponseSchema = SanitizedAssetResponseSchema.extend(
       .string()
       .meta({ format: 'date-time' })
       .describe('The UTC timestamp when the asset was originally uploaded to Immich.'),
-    ownerId: z.string().describe('Owner user ID'),
+    ownerId: z.uuidv4().describe('Owner user ID'),
     owner: UserResponseSchema.optional(),
     libraryId: z
       .uuidv4()
@@ -107,7 +107,7 @@ export const AssetResponseSchema = SanitizedAssetResponseSchema.extend(
         'Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.',
       ),
     stack: AssetStackResponseSchema.nullish(),
-    duplicateId: z.string().nullish().describe('Duplicate group ID'),
+    duplicateId: z.uuidv4().nullish().describe('Duplicate group ID'),
     resized: z
       .boolean()
       .optional()
@@ -179,7 +179,7 @@ const peopleFromFaces = (faces?: MaybeDehydrated<AssetFace>[]): PersonResponseDt
     }
   }
 
-  return [...peopleMap.values()];
+  return peopleMap.values().toArray();
 };
 
 const mapStack = (entity: { stack?: Stack | null }) => {
@@ -203,7 +203,7 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
       type: entity.type,
       originalMimeType: mimeTypes.lookup(entity.originalFileName),
       thumbhash: entity.thumbhash ? hexOrBufferToBase64(entity.thumbhash) : null,
-      localDateTime: asDateString(entity.localDateTime),
+      localDateTime: asDateTimeString(entity.localDateTime),
       duration: entity.duration,
       livePhotoVideoId: entity.livePhotoVideoId,
       hasMetadata: false,
@@ -215,7 +215,7 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
 
   return {
     id: entity.id,
-    createdAt: asDateString(entity.createdAt),
+    createdAt: asDateTimeString(entity.createdAt),
     ownerId: entity.ownerId,
     owner: entity.owner ? mapUser(entity.owner) : undefined,
     libraryId: entity.libraryId,
@@ -224,10 +224,10 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
     originalFileName: entity.originalFileName,
     originalMimeType: mimeTypes.lookup(entity.originalFileName),
     thumbhash: entity.thumbhash ? hexOrBufferToBase64(entity.thumbhash) : null,
-    fileCreatedAt: asDateString(entity.fileCreatedAt),
-    fileModifiedAt: asDateString(entity.fileModifiedAt),
-    localDateTime: asDateString(entity.localDateTime),
-    updatedAt: asDateString(entity.updatedAt),
+    fileCreatedAt: asDateTimeString(entity.fileCreatedAt),
+    fileModifiedAt: asDateTimeString(entity.fileModifiedAt),
+    localDateTime: asDateTimeString(entity.localDateTime),
+    updatedAt: asDateTimeString(entity.updatedAt),
     isFavorite: options.auth?.user.id === entity.ownerId && entity.isFavorite,
     isArchived: entity.visibility === AssetVisibility.Archive,
     isTrashed: !!entity.deletedAt,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
@@ -5,6 +7,7 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/album/pending_album_uploads.provider.dart';
+import 'package:immich_mobile/providers/backup/asset_upload_progress.provider.dart';
 
 /// Pinned banner sliver that surfaces in-flight album uploads directly under
 /// the album app bar. Renders nothing while the queue is empty. Tapping the
@@ -44,8 +47,8 @@ class PendingUploadsBanner extends ConsumerWidget {
     );
   }
 
-  static void _openSheet(BuildContext context, String albumId) {
-    showModalBottomSheet(
+  static Future<void> _openSheet(BuildContext context, String albumId) {
+    return showModalBottomSheet(
       context: context,
       showDragHandle: true,
       builder: (_) => _PendingUploadsSheet(albumId: albumId),
@@ -96,7 +99,7 @@ class _PendingUploadsBannerContent extends StatelessWidget {
     return Material(
       color: hasFailures ? context.colorScheme.errorContainer : context.colorScheme.surfaceContainerHigh,
       child: InkWell(
-        onTap: () => PendingUploadsBanner._openSheet(context, albumId),
+        onTap: () => unawaited(PendingUploadsBanner._openSheet(context, albumId)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -165,6 +168,8 @@ class _PendingUploadsSheet extends ConsumerWidget {
     }
 
     final failedCount = pending.where((p) => p.failed).length;
+    final inFlightCount = pending.length - failedCount;
+    final canAbort = inFlightCount > 0 && ref.watch(manualUploadCancelTokenProvider) != null;
 
     return SafeArea(
       child: Padding(
@@ -183,7 +188,21 @@ class _PendingUploadsSheet extends ConsumerWidget {
                       style: context.textTheme.titleMedium,
                     ),
                   ),
-                  if (failedCount > 0)
+                  if (canAbort)
+                    TextButton.icon(
+                      onPressed: () {
+                        final cancelToken = ref.read(manualUploadCancelTokenProvider);
+                        if (cancelToken != null && !cancelToken.isCompleted) {
+                          cancelToken.complete();
+                        }
+                        ref.read(manualUploadCancelTokenProvider.notifier).state = null;
+                        ref.read(pendingAlbumUploadsProvider(albumId).notifier).clear();
+                      },
+                      icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                      label: Text('cancel'.t(context: context)),
+                      style: TextButton.styleFrom(foregroundColor: context.colorScheme.error),
+                    )
+                  else if (failedCount > 0)
                     TextButton.icon(
                       onPressed: () => ref.read(pendingAlbumUploadsProvider(albumId).notifier).clearFailed(),
                       icon: const Icon(Icons.clear_rounded, size: 18),

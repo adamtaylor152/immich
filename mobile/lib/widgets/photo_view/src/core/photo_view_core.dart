@@ -1,15 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:immich_mobile/widgets/photo_view/photo_view.dart'
     show
-        PhotoViewScaleState,
         PhotoViewHeroAttributes,
-        PhotoViewImageTapDownCallback,
-        PhotoViewImageTapUpCallback,
-        PhotoViewImageScaleEndCallback,
         PhotoViewImageDragEndCallback,
         PhotoViewImageDragStartCallback,
         PhotoViewImageDragUpdateCallback,
         PhotoViewImageLongPressStartCallback,
+        PhotoViewImageScaleEndCallback,
+        PhotoViewImageTapDownCallback,
+        PhotoViewImageTapUpCallback,
+        PhotoViewScaleState,
         ScaleStateCycle;
 import 'package:immich_mobile/widgets/photo_view/src/controller/photo_view_controller.dart';
 import 'package:immich_mobile/widgets/photo_view/src/controller/photo_view_controller_delegate.dart';
@@ -139,8 +141,6 @@ class PhotoViewCoreState extends State<PhotoViewCore>
 
   PhotoViewHeroAttributes? get heroAttributes => widget.heroAttributes;
 
-  late ScaleBoundaries cachedScaleBoundaries = widget.scaleBoundaries;
-
   void handleScaleAnimation() {
     scale = _scaleAnimation!.value;
   }
@@ -242,9 +242,8 @@ class PhotoViewCoreState extends State<PhotoViewCore>
       return;
     }
     _scaleAnimation = Tween<double>(begin: from, end: to).animate(_scaleAnimationController);
-    _scaleAnimationController
-      ..value = 0.0
-      ..fling(velocity: 0.4);
+    _scaleAnimationController.value = 0.0;
+    unawaited(_scaleAnimationController.fling(velocity: 0.4));
   }
 
   void animatePosition(Offset from, Offset to) {
@@ -252,9 +251,8 @@ class PhotoViewCoreState extends State<PhotoViewCore>
       return;
     }
     _positionAnimation = Tween<Offset>(begin: from, end: to).animate(_positionAnimationController);
-    _positionAnimationController
-      ..value = 0.0
-      ..fling(velocity: 0.4);
+    _positionAnimationController.value = 0.0;
+    unawaited(_positionAnimationController.fling(velocity: 0.4));
   }
 
   void animateRotation(double from, double to) {
@@ -262,9 +260,8 @@ class PhotoViewCoreState extends State<PhotoViewCore>
       return;
     }
     _rotationAnimation = Tween<double>(begin: from, end: to).animate(_rotationAnimationController);
-    _rotationAnimationController
-      ..value = 0.0
-      ..fling(velocity: 0.4);
+    _rotationAnimationController.value = 0.0;
+    unawaited(_rotationAnimationController.fling(velocity: 0.4));
   }
 
   void onAnimationStatus(AnimationStatus status) {
@@ -303,7 +300,7 @@ class PhotoViewCoreState extends State<PhotoViewCore>
     controller.scaleAnimationBuilder(_animateControllerScale);
     controller.rotationAnimationBuilder(_animateControllerRotation);
 
-    cachedScaleBoundaries = widget.scaleBoundaries;
+    _updateScaleBoundaries();
 
     _scaleAnimationController = AnimationController(vsync: this)
       ..addListener(handleScaleAnimation)
@@ -345,44 +342,53 @@ class PhotoViewCoreState extends State<PhotoViewCore>
   // See: ScaleBoundaries (photo_view_utils.dart), setScaleInvisibly.
   static const double _scaleExtremeEpsilon = 1e-6;
 
-  @override
-  Widget build(BuildContext context) {
-    // Check if we need a recalc on the scale
-    if (widget.scaleBoundaries != cachedScaleBoundaries) {
-      // Preserve user-applied zoom across a scaleBoundaries change (e.g.
-      // resize / rotation / image swap) by scaling the current value by the
-      // ratio of new-to-old initialScale. Falls back to a full recalc if we
-      // don't have enough information to scale proportionally. The scaled
-      // value is clamped into the new bounds so the user doesn't briefly
-      // see an over-zoom that snaps back on the next gesture.
-      final prev = cachedScaleBoundaries;
-      final newBounds = widget.scaleBoundaries;
-      final currentScale = controller.scale;
-      if (currentScale != null && prev.initialScale > 0) {
-        // If the user was sitting exactly at one of the previous extremes
-        // (min or initial), preserve that semantic by snapping to the new
-        // extreme rather than scaling by ratio — avoids drift on repeated
-        // resizes when the user never zoomed. Compared with an epsilon
-        // tolerance rather than `==`; see `_scaleExtremeEpsilon` doc.
-        final double targetScale;
-        if ((currentScale - prev.initialScale).abs() < _scaleExtremeEpsilon) {
-          targetScale = newBounds.initialScale;
-        } else if ((currentScale - prev.minScale).abs() < _scaleExtremeEpsilon) {
-          targetScale = newBounds.minScale;
-        } else {
-          final ratio = newBounds.initialScale / prev.initialScale;
-          targetScale = currentScale * ratio;
-        }
-        // Clamp into the new bounds so the rendered transform never exceeds
-        // [minScale, maxScale] for the new layout.
-        final clamped = targetScale.clamp(newBounds.minScale, newBounds.maxScale);
-        controller.setScaleInvisibly(clamped);
-      } else {
-        markNeedsScaleRecalc = true;
-      }
-      cachedScaleBoundaries = newBounds;
+  void _updateScaleBoundaries() {
+    final prev = controller.scaleBoundaries;
+    if (prev == widget.scaleBoundaries) {
+      return;
     }
 
+    // Preserve user-applied zoom across a scaleBoundaries change (e.g.
+    // resize / rotation / image swap) by scaling the current value by the
+    // ratio of new-to-old initialScale. Falls back to a full recalc if we
+    // don't have enough information to scale proportionally. The scaled
+    // value is clamped into the new bounds so the user doesn't briefly
+    // see an over-zoom that snaps back on the next gesture.
+    final newBounds = widget.scaleBoundaries;
+    final currentScale = controller.scale;
+    if (prev != null && currentScale != null && prev.initialScale > 0) {
+      // If the user was sitting exactly at one of the previous extremes
+      // (min or initial), preserve that semantic by snapping to the new
+      // extreme rather than scaling by ratio — avoids drift on repeated
+      // resizes when the user never zoomed. Compared with an epsilon
+      // tolerance rather than `==`; see `_scaleExtremeEpsilon` doc.
+      final double targetScale;
+      if ((currentScale - prev.initialScale).abs() < _scaleExtremeEpsilon) {
+        targetScale = newBounds.initialScale;
+      } else if ((currentScale - prev.minScale).abs() < _scaleExtremeEpsilon) {
+        targetScale = newBounds.minScale;
+      } else {
+        final ratio = newBounds.initialScale / prev.initialScale;
+        targetScale = currentScale * ratio;
+      }
+      // Clamp into the new bounds so the rendered transform never exceeds
+      // [minScale, maxScale] for the new layout.
+      final clamped = targetScale.clamp(newBounds.minScale, newBounds.maxScale);
+      controller.setScaleInvisibly(clamped);
+    } else {
+      markNeedsScaleRecalc = true;
+    }
+    controller.scaleBoundaries = newBounds;
+  }
+
+  @override
+  void didUpdateWidget(PhotoViewCore oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateScaleBoundaries();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder(
       stream: controller.outputStateStream,
       initialData: controller.prevValue,
@@ -464,7 +470,7 @@ class PhotoViewCoreState extends State<PhotoViewCore>
         ? SizedBox(
             width: scaleBoundaries.childSize.width * scale,
             height: scaleBoundaries.childSize.height * scale,
-            child: widget.customChild!,
+            child: widget.customChild,
           )
         : Image(
             key: widget.heroAttributes?.tag != null ? ObjectKey(widget.heroAttributes!.tag) : null,

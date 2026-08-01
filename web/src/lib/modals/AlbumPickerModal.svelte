@@ -105,6 +105,7 @@
         }
         break;
       }
+      // no default
     }
 
     selectedRowIndex = -1;
@@ -136,6 +137,7 @@
         break;
       }
       case 'Control': {
+        // eslint-disable-next-line unicorn/no-late-event-control
         e.preventDefault();
         handleMultiSelect();
         break;
@@ -172,7 +174,7 @@
           bind:value={search}
           use:initInput
         />
-        <div class="overflow-y-auto immich-scrollbar">
+        <div class="immich-scrollbar overflow-y-auto">
           <!-- eslint-disable-next-line svelte/require-each-key -->
           {#each albumModalRows as row}
             {#if row.type === AlbumModalRowType.NEW_ALBUM}

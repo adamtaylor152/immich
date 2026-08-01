@@ -5,7 +5,7 @@ import { Job, JobsOptions, Queue, Worker, type WorkerOptions } from 'bullmq';
 import { setTimeout } from 'node:timers/promises';
 import { JobConfig } from 'src/decorators';
 import { QueueJobResponseDto, QueueJobSearchDto } from 'src/dtos/queue.dto';
-import { JobName, JobStatus, MetadataKey, QueueCleanType, QueueJobStatus, QueueName } from 'src/enum';
+import { ImmichWorker, JobName, JobStatus, MetadataKey, QueueCleanType, QueueJobStatus, QueueName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -33,11 +33,14 @@ const DATABASE_BACKUP_LOCK_DURATION = 30 * 60_000;
  * reflected in the estimate within a few minutes of activity.
  */
 const ROLLING_AVG_BUFFER_SIZE = 100;
+const WORKER_WATCH_INTERVAL_MS = 30_000;
 
 @Injectable()
 export class JobRepository {
   private workers: Partial<Record<QueueName, Worker>> = {};
   private handlers: Partial<Record<JobName, JobMapItem>> = {};
+  private workerWatcher?: ReturnType<typeof setInterval>;
+  private microservicesPresent = true;
 
   /**
    * In-memory ring buffer of per-job-name completion durations (ms).
@@ -79,11 +82,11 @@ export class JobRepository {
         const label = `${Service.name}.${handler.name}`;
 
         // one handler per job
-        if (this.handlers[jobName]) {
+        if (Object.hasOwn(this.handlers, jobName)) {
           const jobKey = getKeyByValue(JobName, jobName);
           const errorMessage = `Failed to add job handler for ${label}`;
           this.logger.error(
-            `${errorMessage}. JobName.${jobKey} is already handled by ${this.handlers[jobName].label}.`,
+            `${errorMessage}. JobName.${jobKey} is already handled by ${this.handlers[jobName]!.label}.`,
           );
           throw new ImmichStartupError(errorMessage);
         }
@@ -126,7 +129,7 @@ export class JobRepository {
   }
 
   private getWorkerOptions(queueName: QueueName, bullConfig: WorkerOptions): WorkerOptions {
-    const workerOptions: WorkerOptions = { ...bullConfig, concurrency: 1 };
+    const workerOptions: WorkerOptions = { ...bullConfig, concurrency: 1, name: ImmichWorker.Microservices };
 
     if (queueName === QueueName.BackupDatabase) {
       workerOptions.lockDuration = DATABASE_BACKUP_LOCK_DURATION;
@@ -204,6 +207,41 @@ export class JobRepository {
       sum += sample;
     }
     return sum / buffer.length;
+  }
+
+  watchWorkers() {
+    this.workerWatcher ??= setInterval(() => void this.checkWorkers(), WORKER_WATCH_INTERVAL_MS);
+  }
+
+  teardown() {
+    if (!this.workerWatcher) {
+      return;
+    }
+
+    clearInterval(this.workerWatcher);
+    this.workerWatcher = undefined;
+  }
+
+  private async checkWorkers() {
+    let isPresent: boolean;
+    try {
+      const suffix = `:w:${ImmichWorker.Microservices}`;
+      const workers = await this.getQueue(QueueName.BackgroundTask).getWorkers();
+      isPresent = workers.some((worker) => worker.rawname?.endsWith(suffix));
+    } catch {
+      return;
+    }
+
+    if (this.microservicesPresent !== isPresent) {
+      if (isPresent) {
+        this.logger.log('Microservices worker connected.');
+      } else {
+        this.logger.warn(
+          'No microservices worker is connected. Background jobs will not be processed until one is running.',
+        );
+      }
+    }
+    this.microservicesPresent = isPresent;
   }
 
   async run({ name, data }: JobItem) {
@@ -297,7 +335,7 @@ export class JobRepository {
         // need to use add() instead of addBulk() for jobId/deduplication to take effect
         promises.push(this.getQueue(queueName).add(item.name, item.data, job.options));
       } else {
-        itemsByQueue[queueName] = itemsByQueue[queueName] || [];
+        itemsByQueue[queueName] ||= [];
         itemsByQueue[queueName].push(job);
       }
     }

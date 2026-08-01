@@ -41,7 +41,7 @@ export class StackService extends BaseService {
   async update(auth: AuthDto, id: string, dto: StackUpdateDto): Promise<StackResponseDto> {
     await this.requireAccess({ auth, permission: Permission.StackUpdate, ids: [id] });
     const stack = await this.findOrFail(id, this.nsfwOptions(auth));
-    if (dto.primaryAssetId && !stack.assets.some(({ id }) => id === dto.primaryAssetId)) {
+    if (dto.primaryAssetId && stack.assets.every(({ id }) => id !== dto.primaryAssetId)) {
       throw new BadRequestException('Primary asset must be in the stack');
     }
 

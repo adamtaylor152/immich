@@ -15,14 +15,14 @@ extension DTOToAsset on api.AssetResponseDto {
       ownerId: ownerId,
       visibility: visibility.toAssetVisibility(),
       durationMs: duration,
-      height: height?.toInt(),
-      width: width?.toInt(),
+      height: height,
+      width: width,
       isFavorite: isFavorite,
-      livePhotoVideoId: livePhotoVideoId,
+      livePhotoVideoId: livePhotoVideoId.orElse(null),
       thumbHash: thumbhash,
       localId: null,
       type: type.toAssetType(),
-      stackId: stack?.id,
+      stackId: stack.orElse(null)?.id,
       isEdited: isEdited,
     );
   }
@@ -38,16 +38,16 @@ extension DTOToAsset on api.AssetResponseDto {
       ownerId: ownerId,
       visibility: visibility.toAssetVisibility(),
       durationMs: duration,
-      height: height?.toInt(),
-      width: width?.toInt(),
+      height: height,
+      width: width,
       isFavorite: isFavorite,
-      livePhotoVideoId: livePhotoVideoId,
+      livePhotoVideoId: livePhotoVideoId.orElse(null),
       thumbHash: thumbhash,
       localId: null,
       type: type.toAssetType(),
-      stackId: stack?.id,
+      stackId: stack.orElse(null)?.id,
       isEdited: isEdited,
-      exifInfo: exifInfo != null ? ExifDtoConverter.fromDto(exifInfo!) : const ExifInfo(),
+      exifInfo: exifInfo.orElse(null) != null ? ExifDtoConverter.fromDto(exifInfo.orElse(null)!) : const ExifInfo(),
     );
   }
 }
@@ -58,7 +58,6 @@ extension on api.AssetVisibility {
     api.AssetVisibility.hidden => AssetVisibility.hidden,
     api.AssetVisibility.archive => AssetVisibility.archive,
     api.AssetVisibility.locked => AssetVisibility.locked,
-    _ => AssetVisibility.timeline,
   };
 }
 
@@ -68,6 +67,5 @@ extension on api.AssetTypeEnum {
     api.AssetTypeEnum.VIDEO => AssetType.video,
     api.AssetTypeEnum.AUDIO => AssetType.audio,
     api.AssetTypeEnum.OTHER => AssetType.other,
-    _ => throw Exception('Unknown AssetType value: $this'),
   };
 }

@@ -45,6 +45,7 @@ const PeopleUpdateSchema = z
   .object({
     enabled: z.boolean().optional().describe('Whether people are enabled'),
     sidebarWeb: z.boolean().optional().describe('Whether people appear in web sidebar'),
+    minimumFaces: z.int().min(1).optional().describe('People face threshold'),
   })
   .optional()
   .meta({ id: 'PeopleUpdate' });
@@ -117,6 +118,12 @@ const PrivacyUpdateSchema = z
   .optional()
   .describe('Privacy preferences')
   .meta({ id: 'PrivacyUpdate' });
+const RecentlyAddedUpdateSchema = z
+  .object({
+    sidebarWeb: z.boolean().optional().describe('Whether the recently added page appears in the web sidebar'),
+  })
+  .optional()
+  .meta({ id: 'RecentlyAddedUpdate' });
 
 const UserPreferencesUpdateSchema = z
   .object({
@@ -133,6 +140,7 @@ const UserPreferencesUpdateSchema = z
     ratings: RatingsUpdateSchema,
     sharedLinks: SharedLinksUpdateSchema,
     tags: TagsUpdateSchema,
+    recentlyAdded: RecentlyAddedUpdateSchema,
   })
   .meta({ id: 'UserPreferencesUpdateDto' });
 
@@ -160,6 +168,7 @@ const PeopleResponseSchema = z
   .object({
     enabled: z.boolean().describe('Whether people are enabled'),
     sidebarWeb: z.boolean().describe('Whether people appear in web sidebar'),
+    minimumFaces: z.int().min(1).optional().describe('People face threshold'),
   })
   .meta({ id: 'PeopleResponse' });
 
@@ -225,6 +234,11 @@ const PrivacyResponseSchema = z
   })
   .describe('Privacy preferences')
   .meta({ id: 'PrivacyResponse' });
+const RecentlyAddedResponseSchema = z
+  .object({
+    sidebarWeb: z.boolean().describe('Whether the recently added page appears in the web sidebar'),
+  })
+  .meta({ id: 'RecentlyAddedResponse' });
 
 const UserPreferencesResponseSchema = z
   .object({
@@ -240,6 +254,7 @@ const UserPreferencesResponseSchema = z
     download: DownloadResponseSchema,
     purchase: PurchaseResponseSchema,
     cast: CastResponseSchema,
+    recentlyAdded: RecentlyAddedResponseSchema,
   })
   .meta({ id: 'UserPreferencesResponseDto' });
 

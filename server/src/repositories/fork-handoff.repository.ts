@@ -620,11 +620,9 @@ export class ForkHandoffRepository {
           throw new Error('Fork return activation requires the exact backfill evidence set');
         }
         const config = audit.details.configReconciliation as
-          | { count?: number; digest?: string; source?: string }
-          | undefined;
+          { count?: number; digest?: string; source?: string } | undefined;
         const automation = audit.details.automationReconciliation as
-          | { configDigest?: string; digest?: string; rawDigest?: string | null }
-          | undefined;
+          { configDigest?: string; digest?: string; rawDigest?: string | null } | undefined;
         const backfillKinds = audit.details.backfillKinds;
         const automationProgress = progress.find(({ kind }) => kind === 'automation');
         const automationBackfill = backfillEvidence.automation!;

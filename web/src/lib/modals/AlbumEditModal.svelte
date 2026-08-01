@@ -22,7 +22,7 @@
   const iconPath = $derived(albumIconPath(iconKey));
 
   const onSubmit = async () => {
-    const success = await handleUpdateAlbum(album, { albumName, description, icon: iconKey });
+    const success = await handleUpdateAlbum(album, { albumName, description: description || null, icon: iconKey });
     if (success) {
       onClose();
     }

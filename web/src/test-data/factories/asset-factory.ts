@@ -33,7 +33,7 @@ export const assetFactory = Sync.makeFactory<AssetResponseDto>({
 
 export const timelineAssetFactory = Sync.makeFactory<TimelineAsset>({
   id: Sync.each(() => faker.string.uuid()),
-  ratio: Sync.each((i) => 0.2 + ((i * 0.618_034) % 3.8)), // deterministic random float between 0.2 and 4.0
+  ratio: Sync.each((i) => 0.2 + ((i * 0.618034) % 3.8)), // deterministic random float between 0.2 and 4.0
   ownerId: Sync.each(() => faker.string.uuid()),
   tags: [],
   thumbhash: Sync.each(() => faker.string.alphanumeric(28)),
@@ -75,8 +75,8 @@ export const toResponseDto = (...timelineAsset: TimelineAsset[]) => {
   };
   for (const asset of timelineAsset) {
     const fileCreatedAt = fromTimelinePlainDateTime(asset.fileCreatedAt).toISO();
-    bucketAssets.city.push(asset.city);
-    bucketAssets.country.push(asset.country);
+    bucketAssets.city?.push(asset.city);
+    bucketAssets.country?.push(asset.country);
     bucketAssets.duration.push(asset.duration!);
     bucketAssets.id.push(asset.id);
     bucketAssets.visibility.push(asset.visibility);
