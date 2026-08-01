@@ -78,7 +78,18 @@ export const workflowEvidence = () =>
     return {
       columns: columns.rows,
       ledger: ledger.rows,
-      rowDigests: Object.fromEntries(tables.map((table) => [table, digest(rows[table])])),
+      rowDigests: Object.fromEntries(
+        tables.map((table) => [
+          table,
+          // The microservices boot force-re-imports the bundled core plugin,
+          // rewriting the plugin row with identical values except updatedAt.
+          // Exclude that audit column so legitimate re-imports between
+          // captures don't masquerade as cutover mutations.
+          digest(
+            table === 'plugin' ? rows[table]!.map(({ updatedAt: _updatedAt, ...rest }: any) => rest) : rows[table],
+          ),
+        ]),
+      ),
       rowIds: Object.fromEntries(
         tables.map((table) => [
           table,
