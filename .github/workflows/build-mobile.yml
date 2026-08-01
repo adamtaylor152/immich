@@ -116,7 +116,7 @@ jobs:
         run: mise //mobile:install:ci
 
       - name: Perform codegen
-        run: mise //mobile:codegen
+        run: mise run --force //mobile:codegen
 
       - name: Build Android App Bundle
         working-directory: ./mobile
@@ -203,7 +203,7 @@ jobs:
         run: mise //mobile:install:ci
 
       - name: Perform codegen
-        run: mise //mobile:codegen
+        run: mise run --force //mobile:codegen
 
       - name: Resolve iOS Swift Packages
         working-directory: ./mobile

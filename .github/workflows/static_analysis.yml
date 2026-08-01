@@ -63,7 +63,7 @@ jobs:
         working-directory: ./mobile/packages/ui
 
       - name: Perform codegen
-        run: mise //mobile:codegen
+        run: mise run --force //mobile:codegen
 
       - name: Run analyze
         env:
