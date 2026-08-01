@@ -86,7 +86,11 @@ export const workflowEvidence = () =>
           // Exclude that audit column so legitimate re-imports between
           // captures don't masquerade as cutover mutations.
           digest(
-            table === 'plugin' ? rows[table]!.map(({ updatedAt: _updatedAt, ...rest }: any) => rest) : rows[table],
+            table === 'plugin'
+              ? rows[table]!.map((row: any) =>
+                  Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'updatedAt')),
+                )
+              : rows[table],
           ),
         ]),
       ),
