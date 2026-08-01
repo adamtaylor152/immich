@@ -319,9 +319,9 @@ describe(DatabaseService.name, () => {
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
     });
 
-    it('runs official then fork migrations in isolated mode', async () => {
+    it.each(['isolated', 'official-origin'] as const)('runs official then fork migrations in %s mode', async (mode) => {
       const migrationOrder: string[] = [];
-      mocks.database.detectMigrationMode.mockResolvedValue('isolated');
+      mocks.database.detectMigrationMode.mockResolvedValue(mode);
       mocks.database.runOfficialMigrations.mockImplementation(() => {
         migrationOrder.push('official');
         return Promise.resolve();
@@ -346,7 +346,7 @@ describe(DatabaseService.name, () => {
 
       expect(mocks.database.assertCertifiedReturnLedger).toHaveBeenCalledOnce();
       expect(mocks.database.assertCertifiedReturnLedger.mock.invocationCallOrder[0]).toBeLessThan(
-        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+        mocks.database.detectMigrationMode.mock.invocationCallOrder[0] ?? Infinity,
       );
       expect(mocks.database.runOfficialMigrations).not.toHaveBeenCalled();
       expect(mocks.database.runForkMigrations).not.toHaveBeenCalled();

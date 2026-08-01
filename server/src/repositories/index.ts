@@ -23,6 +23,7 @@ import { ForkEnrichmentRepository } from 'src/repositories/fork-enrichment.repos
 import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
 import { ForkPrivacyRepository } from 'src/repositories/fork-privacy.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
+import { IntegrityRepository } from 'src/repositories/integrity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LivePhotoRepository } from 'src/repositories/live-photo.repository';
@@ -90,6 +91,7 @@ export const repositories = [
   ForkHandoffRepository,
   ForkPrivacyRepository,
   ForkSchemaRepository,
+  IntegrityRepository,
   JobRepository,
   LibraryRepository,
   LoggingRepository,

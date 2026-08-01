@@ -1,9 +1,11 @@
-@@ -61,7 +61,7 @@ class AdvancedPromptConfig {
-
-       return AdvancedPromptConfig(
-         enabled: mapValueOfType<bool>(json, r'enabled') ?? false,
--        placeholderValidation: AdvancedPromptConfigPlaceholderValidationEnum.fromJson(json[r'placeholderValidation']) ?? 'strict',
-+        placeholderValidation: AdvancedPromptConfigPlaceholderValidationEnum.fromJson(json[r'placeholderValidation']) ?? AdvancedPromptConfigPlaceholderValidationEnum.strict,
-         rawPromptTemplate: mapValueOfType<String>(json, r'rawPromptTemplate') ?? '',
-       );
-     }
+--- a/advanced_prompt_config.dart
++++ b/advanced_prompt_config.dart
+@@ -14,7 +14,7 @@
+   /// Returns a new [AdvancedPromptConfig] instance.
+   AdvancedPromptConfig({
+     this.enabled = const Optional.present(false),
+-    this.placeholderValidation = const Optional.present(const AdvancedPromptConfigPlaceholderValidationEnum._('strict')),
++    this.placeholderValidation = const Optional.present(AdvancedPromptConfigPlaceholderValidationEnum.strict),
+     this.rawPromptTemplate = const Optional.present(''),
+   });
+ 

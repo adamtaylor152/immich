@@ -1891,12 +1891,17 @@ describe(MediaService.name, () => {
   });
 
   describe('handleGeneratePersonThumbnail', () => {
-    it('should skip if machine learning is disabled', async () => {
+    it('should generate a thumbnail even if machine learning is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue(systemConfigStub.machineLearningDisabled);
+      mocks.person.getDataForThumbnailGenerationJob.mockResolvedValue(personThumbnailStub.newThumbnailMiddle);
+      mocks.media.generateThumbnail.mockResolvedValue();
+      mocks.media.decodeImage.mockResolvedValue({
+        data: Buffer.from(''),
+        info: { width: 1000, height: 1000 } as OutputInfo,
+      });
 
-      await expect(sut.handleGeneratePersonThumbnail({ id: 'person-1' })).resolves.toBe(JobStatus.Skipped);
-      expect(mocks.asset.getByIds).not.toHaveBeenCalled();
-      expect(mocks.systemMetadata.get).toHaveBeenCalled();
+      await expect(sut.handleGeneratePersonThumbnail({ id: 'person-1' })).resolves.toBe(JobStatus.Success);
+      expect(mocks.media.generateThumbnail).toHaveBeenCalled();
     });
 
     it('should skip a person not found', async () => {
@@ -2820,6 +2825,26 @@ describe(MediaService.name, () => {
       );
     });
 
+    it('should include hevc tag when target is hevc and using hwa', async () => {
+      mocks.assetJob.getForVideoConversion.mockResolvedValue({ ...asset, ...probeStub.videoStreamHDR10 });
+      mocks.systemMetadata.get.mockResolvedValue({
+        ffmpeg: {
+          targetVideoCodec: VideoCodec.Hevc,
+          accel: TranscodeHardwareAcceleration.Nvenc,
+        },
+      });
+      await sut.handleVideoConversion({ id: 'video-id' });
+      expect(mocks.media.transcode).toHaveBeenCalledWith(
+        '/original/path.ext',
+        expect.any(String),
+        expect.objectContaining({
+          inputOptions: expect.any(Array),
+          outputOptions: expect.arrayContaining(['-c:v', 'hevc_nvenc', '-tag:v', 'hvc1']),
+          twoPass: false,
+        }),
+      );
+    });
+
     it('should copy audio stream when audio matches target', async () => {
       mocks.assetJob.getForVideoConversion.mockResolvedValue({ ...asset, ...probeStub.audioStreamAac });
       mocks.systemMetadata.get.mockResolvedValue({ ffmpeg: { transcode: TranscodePolicy.Optimal } });
@@ -3527,6 +3552,8 @@ describe(MediaService.name, () => {
             '7',
             '-global_quality:v',
             '23',
+            '-b:v',
+            '6897k',
             '-maxrate',
             '10000k',
             '-bufsize',

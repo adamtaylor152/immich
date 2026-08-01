@@ -72,16 +72,17 @@ jobs:
     runs-on: mich
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
           token: ${{ github.token }}
 
       - name: Setup Mise
-        uses: immich-app/devtools/actions/use-mise@cf6e190bacde3d7bda59372a786b36ac7d01536a # use-mise-action-v2.0.1
+        uses: immich-app/devtools/actions/use-mise@4d97fb30d9edd3ff0d735f411f607a35204eea79 # use-mise-action-v3.2.0
         with:
           github_token: ${{ github.token }}
+          working_directory: ./mobile
 
       - name: Create the Keystore
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -90,14 +91,14 @@ jobs:
         working-directory: ./mobile
         run: printf "%s" $KEY_JKS | base64 -d > android/key.jks
 
-      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: 'zulu'
           java-version: '17'
 
       - name: Restore Gradle Cache
         id: cache-gradle-restore
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -111,16 +112,13 @@ jobs:
         with:
           packages: ''
 
-      - name: Get Packages
-        working-directory: ./mobile
-        run: flutter pub get
+      - name: Install dependencies
+        run: mise //mobile:install:ci
 
-      - name: Generate translation file
-        run: mise //mobile:codegen:translation
-
-      - name: Generate platform APIs
-        run: mise //mobile:codegen:pigeon
-        working-directory: ./mobile
+      - name: Perform codegen
+        run: |
+          mise //mobile:codegen
+          mise run --force //mobile:codegen:dart
 
       - name: Build Android App Bundle
         working-directory: ./mobile
@@ -147,14 +145,14 @@ jobs:
 
       - name: Comment APK download link on PR
         if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
-        uses: mshick/add-pr-comment@8e4927817251f1ff60c001f04568532b38e0b4a0 # v3.11.0
+        uses: immich-app/devtools/actions/sticky-comment@0135acd12ad9f3369b94a2aa3c0ae8c835a4e926 # sticky-comment-action-v1.0.0
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           APK_URL: ${{ steps.upload-apk.outputs.artifact-url }}
         with:
-          github-token: ${{ github.token }}
-          message-id: 'mobile-android-apk'
-          message: |
+          id: mobile-android-apk
+          token: ${{ github.token }}
+          body: |
             📱 **Android release APK (universal)** — `${{ env.HEAD_SHA }}`
 
             Download: ${{ env.APK_URL }}
@@ -168,7 +166,7 @@ jobs:
 
       - name: Save Gradle Cache
         id: cache-gradle-save
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: github.ref == 'refs/heads/main'
         with:
           path: |
@@ -185,35 +183,38 @@ jobs:
       contents: read
     # Run on main branch or workflow_dispatch, or on PRs/other branches (build only, no upload)
     if: ${{ !github.event.pull_request.head.repo.fork && fromJSON(needs.pre-job.outputs.should_run).mobile == true }}
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - name: Select Xcode 26
         run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
       - name: Setup Mise
-        uses: immich-app/devtools/actions/use-mise@cf6e190bacde3d7bda59372a786b36ac7d01536a # use-mise-action-v2.0.1
+        uses: immich-app/devtools/actions/use-mise@4d97fb30d9edd3ff0d735f411f607a35204eea79 # use-mise-action-v3.2.0
         with:
           github_token: ${{ github.token }}
+          working_directory: ./mobile
 
-      - name: Install Flutter dependencies
+      - name: Install dependencies
+        run: mise //mobile:install:ci
+
+      - name: Perform codegen
+        run: |
+          mise //mobile:codegen
+          mise run --force //mobile:codegen:dart
+
+      - name: Resolve iOS Swift Packages
         working-directory: ./mobile
-        run: flutter pub get
-
-      - name: Generate translation files
-        run: mise //mobile:codegen:translation
-
-      - name: Generate platform APIs
-        run: mise //mobile:codegen:pigeon
+        run: flutter build ios --config-only --no-codesign
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@c4e5b1316158f92e3d49443a9d58b31d25ac0f8f # v1.306.0
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -270,7 +271,6 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
           ENVIRONMENT: ${{ inputs.environment || 'development' }}
-          BUNDLE_ID_SUFFIX: ${{ inputs.environment == 'production' && '' || 'development' }}
           GITHUB_REF: ${{ github.ref }}
           FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 120
           FASTLANE_XCODEBUILD_SETTINGS_RETRIES: 6

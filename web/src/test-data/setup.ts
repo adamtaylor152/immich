@@ -9,9 +9,11 @@ beforeAll(async () => {
 });
 
 if (!('part' in HTMLElement.prototype)) {
-  Object.defineProperty(HTMLElement.prototype, 'part', {
-    configurable: true,
-    get(this: HTMLElement) {
+  class PartShim {
+    declare getAttribute: HTMLElement['getAttribute'];
+    declare setAttribute: HTMLElement['setAttribute'];
+
+    get part() {
       const getParts = () => new Set((this.getAttribute('part') ?? '').split(/\s+/).filter(Boolean));
       const setParts = (parts: Set<string>) => this.setAttribute('part', [...parts].join(' '));
 
@@ -32,8 +34,13 @@ if (!('part' in HTMLElement.prototype)) {
         },
         contains: (token: string) => getParts().has(token),
       };
-    },
-  });
+    }
+  }
+
+  const partDescriptor = Object.getOwnPropertyDescriptor(PartShim.prototype, 'part');
+  if (partDescriptor) {
+    Object.defineProperty(HTMLElement.prototype, 'part', { configurable: true, get: partDescriptor.get });
+  }
 }
 
 Object.defineProperty(globalThis, 'matchMedia', {

@@ -17,8 +17,7 @@ const currentForkLedger = [
   ...GENERIC_LEGACY_FORK_MIGRATIONS,
 ].map((name, index) => ({
   classification: (SUPPORTED_UPSTREAM_MIGRATIONS.includes(name) ? 'upstream' : 'legacy-fork') as
-    | 'legacy-fork'
-    | 'upstream',
+    'legacy-fork' | 'upstream',
   name,
   timestamp: new Date(Date.UTC(2026, 6, 15, 0, 0, index)).toISOString(),
 }));

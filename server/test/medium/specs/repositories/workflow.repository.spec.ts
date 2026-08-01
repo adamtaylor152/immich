@@ -1,5 +1,5 @@
 import { Kysely, sql } from 'kysely';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AssetMetadataKey, AssetVisibility, WorkflowType } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
@@ -28,6 +28,8 @@ const pluginDto = (id: string) => ({
   author: 'Immich',
   version: '1.0.0',
   wasmBytes: Buffer.from('fixture'),
+  sha256hash: createHash('sha256').update('fixture').digest(),
+  templates: [],
 });
 const methodDto = (allowedHosts: string[]) => ({
   name: 'webhook',
@@ -44,6 +46,8 @@ beforeAll(async () => {
 describe(WorkflowRepository.name, () => {
   it('upserts plugin methods on the legacy no-column schema before handoff', async () => {
     const database = await getKyselyDB();
+    // The migrated template already owns the column; recreate the legacy shape.
+    await sql`ALTER TABLE public.plugin_method DROP COLUMN "allowedHosts"`.execute(database);
     const sut = new PluginRepository(database, { setContext: vi.fn() } as never);
 
     await expect(sut.upsert(pluginDto(randomUUID()), [methodDto(['hooks.example.test'])])).resolves.toEqual(
@@ -52,11 +56,8 @@ describe(WorkflowRepository.name, () => {
   });
 
   it('updates allowedHosts after the official upstream migration owns the column', async () => {
+    // The migrated template already reflects the upstream migration.
     const database = await getKyselyDB();
-    await sql`
-      ALTER TABLE public.plugin_method
-      ADD COLUMN "allowedHosts" varchar[] NOT NULL DEFAULT '{}'
-    `.execute(database);
     const sut = new PluginRepository(database, { setContext: vi.fn() } as never);
     const dto = pluginDto(randomUUID());
     await sut.upsert(dto, [methodDto(['first.example.test'])]);
@@ -69,6 +70,9 @@ describe(WorkflowRepository.name, () => {
 
   it('returns legacy defaults before handoff and official allowedHosts after the upstream migration', async () => {
     const database = await getKyselyDB();
+    // The migrated template already owns the column; recreate the legacy shape
+    // so the test can walk through the upstream migration itself.
+    await sql`ALTER TABLE public.plugin_method DROP COLUMN "allowedHosts"`.execute(database);
     const { ctx, sut } = setup(database);
     const { user } = await ctx.newUser();
     const pluginId = randomUUID();
@@ -76,9 +80,9 @@ describe(WorkflowRepository.name, () => {
     const workflowId = randomUUID();
     await sql`
       INSERT INTO public.plugin
-        (id, enabled, name, version, title, description, author, "wasmBytes")
+        (id, enabled, name, version, title, description, author, "wasmBytes", templates, "sha256hash")
       VALUES (${pluginId}::uuid, true, ${`allowed-hosts-${pluginId}`}, '1.0.0', 'Allowed hosts',
-        'Allowed hosts fixture', 'Immich', decode('00', 'hex'))
+        'Allowed hosts fixture', 'Immich', decode('00', 'hex'), '[]'::jsonb, sha256(decode('00', 'hex')))
     `.execute(database);
     await sql`
       INSERT INTO public.plugin_method

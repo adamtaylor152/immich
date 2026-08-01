@@ -41,7 +41,9 @@ export class Controller {
   /** Resolves immediately unless paused; while paused, blocks until resume()/stop(). */
   async gate(): Promise<void> {
     while (this.paused && !this.stopped) {
-      await new Promise<void>((resolve) => this.waiters.push(resolve));
+      await new Promise<void>((resolve) => {
+        this.waiters.push(resolve);
+      });
     }
   }
 }

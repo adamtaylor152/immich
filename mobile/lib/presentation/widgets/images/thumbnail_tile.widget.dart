@@ -9,7 +9,7 @@ import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart'
 import 'package:immich_mobile/presentation/widgets/timeline/constants.dart';
 import 'package:immich_mobile/providers/asset_viewer/asset_viewer.provider.dart';
 import 'package:immich_mobile/providers/backup/asset_upload_progress.provider.dart';
-import 'package:immich_mobile/providers/infrastructure/metadata.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 
 class ThumbnailTile extends ConsumerStatefulWidget {
@@ -285,7 +285,7 @@ class _TileOverlayIcon extends StatelessWidget {
       icon,
       color: Colors.white,
       size: 16,
-      shadows: [const Shadow(blurRadius: 5.0, color: Color.fromRGBO(0, 0, 0, 0.6), offset: Offset(0.0, 0.0))],
+      shadows: const [Shadow(blurRadius: 5.0, color: Color.fromRGBO(0, 0, 0, 0.6), offset: Offset.zero)],
     );
   }
 }
@@ -297,8 +297,7 @@ class _AssetTypeIcons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final remoteAsset = asset is RemoteAsset ? asset as RemoteAsset : null;
-    final isLivePhoto = remoteAsset?.livePhotoVideoId != null;
+    final isLivePhoto = asset.isMotionPhoto;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -347,7 +346,7 @@ class _UploadProgressOverlay extends StatelessWidget {
     final percentage = isError ? 0 : (progress * 100).toInt();
 
     return Positioned.fill(
-      child: Container(
+      child: ColoredBox(
         color: isError ? Colors.red.withValues(alpha: 0.6) : Colors.black54,
         child: Center(
           child: Column(

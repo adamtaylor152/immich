@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { defaults } from 'src/config';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
+import { CERTIFIED_TAG_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import supportedVersions from 'src/fork-schema/supported-versions.json';
 import { getWorkflowCompatibilityEvidence } from 'src/fork-schema/workflow-compatibility';
 import { ForkHandoffRepository } from 'src/repositories/fork-handoff.repository';
@@ -27,7 +28,7 @@ const deferred = <T = void>() => {
 
 const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
-  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', () => `/${database.rows[0]!.name}`);
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
 };
 
@@ -199,9 +200,9 @@ describe('certified fork return evidence', () => {
     async (mutation) => {
       switch (mutation) {
         case 'missing': {
-          await sql`DELETE FROM public.kysely_migrations WHERE name = ${supportedVersions.upstreamMigrations.at(-1)!}`.execute(
-            db,
-          );
+          // Must remove a CERTIFIED name: dropping a post-certified residue
+          // name from the suffix is an accepted pre-reapplication state.
+          await sql`DELETE FROM public.kysely_migrations WHERE name = ${CERTIFIED_TAG_MIGRATIONS.at(-1)!}`.execute(db);
           break;
         }
         case 'extra': {
@@ -231,17 +232,17 @@ describe('certified fork return evidence', () => {
         }
       }
 
-      await expect(repository.assertCertifiedReturnLedger()).rejects.toThrow(/exact certified v3\.0\.3 ledger/);
+      await expect(repository.assertCertifiedReturnLedger()).rejects.toThrow(/exact certified v3\.1\.0 ledger/);
     },
   );
 
-  it('accepts exact v3.0.3 only while inactive at schema version 2 in maintenance mode', async () => {
+  it('accepts exact v3.1.0 only while inactive at schema version 2 in maintenance mode', async () => {
     await expect(repository.getReturnEvidence()).resolves.toMatchObject({
       active: false,
       maintenanceMode: true,
       phase: 'inactive',
       schemaVersion: '2',
-      supportedTag: 'v3.0.3',
+      supportedTag: 'v3.1.0',
       reconciliationStatus: 'not-started',
       appliedCheckpointId: expect.any(String),
       officialLedgerDigest: expect.stringMatching(/^[\da-f]{64}$/),
@@ -318,7 +319,7 @@ describe('certified fork return evidence', () => {
       }
 
       const service = new ForkHandoffService(repository as never, {} as ForkSchemaMigrationService);
-      await expect(service.prepareOfficial()).rejects.toThrow('exact certified v3.0.3 prefix through 177861');
+      await expect(service.prepareOfficial()).rejects.toThrow('exact certified v3.1.0 prefix through 177861');
     },
   );
 
@@ -348,7 +349,7 @@ describe('certified fork return evidence', () => {
     await expect(service.prepareOfficial()).resolves.toMatchObject({
       databaseBackupId: 'backup-1',
       mediaSnapshotId: 'snapshot-1',
-      officialImage: 'ghcr.io/immich-app/immich-server:v3.0.3',
+      officialImage: 'ghcr.io/immich-app/immich-server:v3.1.0',
       storageVerificationDigest: emptyDigest,
       storageVerificationAssetCount: 0,
       storageVerificationRunId: runId,
@@ -407,6 +408,8 @@ describe('certified fork return evidence', () => {
   });
 
   it('rejects official preparation without a fresh bound storage checkpoint', async () => {
+    // A handoff-ready ledger no longer carries the post-certified residue.
+    await seedOfficialHandoffPrefix();
     const service = new ForkHandoffService(repository as never, {} as ForkSchemaMigrationService);
 
     await expect(service.prepareOfficial()).rejects.toThrow('bound storage verification checkpoint');
@@ -1185,7 +1188,7 @@ describe('certified fork return evidence', () => {
 
     const report = await service.prepareFork({ batchSize: 1 });
 
-    expect(report).toMatchObject({ active: true, phase: 'active', supportedTag: 'v3.0.3' });
+    expect(report).toMatchObject({ active: true, phase: 'active', supportedTag: 'v3.1.0' });
     await expect(forkSchemaRepository.getState()).resolves.toMatchObject({ active: true, phase: 'active' });
   });
 

@@ -105,10 +105,8 @@ class RemoteAlbumService {
       switch (filterMode) {
         case QuickFilterMode.myAlbums:
           filtered = filtered.where((album) => album.ownerId == userId).toList();
-          break;
         case QuickFilterMode.sharedWithMe:
           filtered = filtered.where((album) => album.ownerId != userId).toList();
-          break;
         case QuickFilterMode.all:
           break;
       }
@@ -159,8 +157,8 @@ class RemoteAlbumService {
     return updatedAlbum;
   }
 
-  FutureOr<(DateTime, DateTime)> getDateRange(String albumId) {
-    return _repository.getDateRange(albumId);
+  Stream<(DateTime, DateTime)> watchDateRange(String albumId) {
+    return _repository.watchDateRange(albumId);
   }
 
   Future<List<UserDto>> getSharedUsers(String albumId) {
@@ -175,12 +173,12 @@ class RemoteAlbumService {
     return _repository.getAssets(albumId);
   }
 
-  Future<int> addAssets({required String albumId, required List<String> assetIds}) async {
+  Future<({int added, int failed})> addAssets({required String albumId, required List<String> assetIds}) async {
     final album = await _albumApiRepository.addAssets(albumId, assetIds);
 
     await _repository.addAssets(albumId, album.added);
 
-    return album.added.length;
+    return (added: album.added.length, failed: album.failed.length);
   }
 
   /// !TODO The name here is not clear as we have addAssets method above,
@@ -192,36 +190,22 @@ class RemoteAlbumService {
     required UserDto uploader,
     required AlbumAssetCandidates candidates,
     UploadCallbacks uploadCallbacks = const UploadCallbacks(),
+    Completer<void>? cancelToken,
   }) async {
     int addedCount = 0;
     if (candidates.remoteAssetIds.isNotEmpty) {
-      addedCount += await addAssets(albumId: albumId, assetIds: candidates.remoteAssetIds);
+      addedCount += (await addAssets(albumId: albumId, assetIds: candidates.remoteAssetIds)).added;
     }
     if (candidates.localAssetsToUpload.isNotEmpty) {
-      addedCount += await _uploadAndAddLocals(albumId, uploader, candidates.localAssetsToUpload, uploadCallbacks);
+      addedCount += await _uploadAndAddLocals(
+        albumId,
+        uploader,
+        candidates.localAssetsToUpload,
+        uploadCallbacks,
+        cancelToken,
+      );
     }
     return addedCount;
-  }
-
-  /// Creates an album, seeding it with already-remote asset IDs, then uploads
-  /// local-only assets and links each one as it finishes.
-  Future<RemoteAlbum> createAlbumWithAssets({
-    required String title,
-    required UserDto owner,
-    String? description,
-    AlbumAssetCandidates candidates = const AlbumAssetCandidates(remoteAssetIds: [], localAssetsToUpload: []),
-    UploadCallbacks uploadCallbacks = const UploadCallbacks(),
-  }) async {
-    final album = await createAlbum(
-      title: title,
-      owner: owner,
-      description: description,
-      assetIds: candidates.remoteAssetIds,
-    );
-    if (candidates.localAssetsToUpload.isNotEmpty) {
-      await _uploadAndAddLocals(album.id, owner, candidates.localAssetsToUpload, uploadCallbacks);
-    }
-    return album;
   }
 
   Future<int> _uploadAndAddLocals(
@@ -229,6 +213,7 @@ class RemoteAlbumService {
     UserDto uploader,
     List<LocalAsset> localAssets,
     UploadCallbacks userCallbacks,
+    Completer<void>? cancelToken,
   ) async {
     int addedCount = 0;
     final pendingAdds = <Future<void>>[];
@@ -258,7 +243,7 @@ class RemoteAlbumService {
           return;
         }
         pendingAdds.add(
-          _linkUploadedAssetToAlbum(albumId, remoteId, uploader, source)
+          linkUploadedAssetToAlbum(albumId, remoteId, uploader, source)
               .then<void>((added) {
                 addedCount += added;
               })
@@ -269,7 +254,7 @@ class RemoteAlbumService {
       },
     );
 
-    await _uploadService.uploadManual(localAssets, callbacks: wrappedCallbacks);
+    await _uploadService.uploadManual(localAssets, callbacks: wrappedCallbacks, cancelToken: cancelToken);
     await Future.wait(pendingAdds);
     return addedCount;
   }
@@ -288,7 +273,7 @@ class RemoteAlbumService {
   /// `remote_asset_entity` row from the local source so the FK-protected
   /// junction insert succeeds. Sync overwrites the placeholder later with
   /// the authoritative server data.
-  Future<int> _linkUploadedAssetToAlbum(String albumId, String remoteId, UserDto uploader, LocalAsset source) async {
+  Future<int> linkUploadedAssetToAlbum(String albumId, String remoteId, UserDto uploader, LocalAsset source) async {
     final result = await _albumApiRepository.addAssets(albumId, [remoteId]);
     if (result.added.isEmpty) {
       return 0;
@@ -353,5 +338,11 @@ class RemoteAlbumService {
     }
 
     return sortedAlbums;
+  }
+
+  Future<int> removeAssets({required String albumId, required List<String> assetIds}) async {
+    final result = await _albumApiRepository.removeAssets(albumId, assetIds);
+    await _repository.removeAssets(albumId, result.removed);
+    return result.removed.length;
   }
 }

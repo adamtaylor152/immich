@@ -230,6 +230,12 @@ export class ImageEnrichmentService extends BaseService {
           // below performs the deletion and persists the result.
           break;
         }
+        case AssetImageEnrichmentAction.RerunImageDescription:
+        case AssetImageEnrichmentAction.RerunNsfwDetection: {
+          // Unreachable: queue-only actions return early above, before the
+          // metadata lock is taken. Listed to keep the switch exhaustive.
+          break;
+        }
       }
 
       await this.saveEnrichmentMetadata(id, m, trx);
@@ -547,7 +553,7 @@ export class ImageEnrichmentService extends BaseService {
           updatedAt: new Date().toISOString(),
           result,
           configHash: promptConfigHash(machineLearning.imageDescription.prompt),
-          ...(identityFlags ? { identityFlags } : {}),
+          ...(identityFlags && { identityFlags }),
         };
         await this.saveEnrichmentMetadata(id, m, trx);
         return { metadata: m, previousDescription, previousTagValues };
@@ -951,7 +957,7 @@ export class ImageEnrichmentService extends BaseService {
         modelName: 'privacy-sidecar',
         updatedAt: suppression?.reviewedAt ?? new Date(0).toISOString(),
         result: { isNsfw: privacy.isNsfw, score: privacy.isNsfw ? 1 : 0, labels: {} },
-        ...(suppression ? { review: suppression } : {}),
+        ...(suppression && { review: suppression }),
       },
     };
   }

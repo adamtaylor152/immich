@@ -48,7 +48,7 @@ import { checkFaceVisibility, checkOcrVisibility } from 'src/utils/editor';
 import { BaseConfig, ThumbnailConfig } from 'src/utils/media';
 import { isUnsupportedRawDecodeError } from 'src/utils/media-health';
 import { mimeTypes } from 'src/utils/mime-types';
-import { clamp, isFaceImportEnabled, isFacialRecognitionEnabled } from 'src/utils/misc';
+import { clamp } from 'src/utils/misc';
 import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 import { getOutputDimensions } from 'src/utils/transform';
 
@@ -141,8 +141,11 @@ export class MediaService extends BaseService {
       jobs = [];
     };
 
-    const fullsizeEnabled = config.image.fullsize.enabled;
-    for await (const asset of this.assetJobRepository.streamForThumbnailJob({ force, fullsizeEnabled })) {
+    const isFullsizeEnabled = config.image.fullsize.enabled;
+    for await (const asset of this.assetJobRepository.streamForThumbnailJob({
+      force,
+      fullsizeEnabled: isFullsizeEnabled,
+    })) {
       if (force || !asset.isEdited) {
         jobs.push({ name: JobName.AssetGenerateThumbnails, data: { id: asset.id } });
       }
@@ -403,7 +406,7 @@ export class MediaService extends BaseService {
   private async extractOriginalImage(asset: ThumbnailAsset, image: SystemConfig['image'], useEdits = false) {
     const isRaw = mimeTypes.isRaw(asset.originalFileName);
     const extractEmbedded = image.extractEmbedded && isRaw;
-    const enhancedRawEnabled = image.enhancedRaw?.enabled !== false;
+    const enhancedRawEnabled = image.enhancedRaw?.enabled;
     let extracted = extractEmbedded ? await this.extractImage(asset.originalPath, image.preview.size) : null;
     let renderedRaw = false;
     let rawRenderError: unknown;
@@ -576,11 +579,7 @@ export class MediaService extends BaseService {
 
   @OnJob({ name: JobName.PersonGenerateThumbnail, queue: QueueName.ThumbnailGeneration })
   async handleGeneratePersonThumbnail({ id }: JobOf<JobName.PersonGenerateThumbnail>): Promise<JobStatus> {
-    const { machineLearning, metadata, image } = await this.getConfig({ withCache: true });
-    if (!isFacialRecognitionEnabled(machineLearning) && !isFaceImportEnabled(metadata)) {
-      return JobStatus.Skipped;
-    }
-
+    const { image } = await this.getConfig({ withCache: true });
     const data = await this.personRepository.getDataForThumbnailGenerationJob(id);
     if (!data) {
       this.logger.error(`Could not generate person thumbnail for ${id}: missing data`);
@@ -750,7 +749,7 @@ export class MediaService extends BaseService {
     }
 
     let selected = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestScore = -Infinity;
     const candidates: string[] = [];
 
     try {
@@ -920,20 +919,20 @@ export class MediaService extends BaseService {
         return JobStatus.Failed;
       }
 
-      let partialFallbackSuccess = false;
+      let isPartialFallbackSuccess = false;
       if (ffmpeg.accelDecode) {
         try {
           this.logger.error(`Retrying with ${ffmpeg.accel.toUpperCase()}-accelerated encoding and software decoding`);
           ffmpeg = { ...ffmpeg, accelDecode: false };
           const command = BaseConfig.create(ffmpeg, this.videoInterfaces).getCommand(target, videoStream, audioStream);
           await this.mediaRepository.transcode(input, output, command);
-          partialFallbackSuccess = true;
+          isPartialFallbackSuccess = true;
         } catch (error: any) {
           this.logger.error(`Error occurred during transcoding: ${error.message}`);
         }
       }
 
-      if (!partialFallbackSuccess) {
+      if (!isPartialFallbackSuccess) {
         this.logger.error(`Retrying with ${ffmpeg.accel.toUpperCase()} acceleration disabled`);
         ffmpeg = { ...ffmpeg, accel: TranscodeHardwareAcceleration.Disabled };
         const command = BaseConfig.create(ffmpeg, this.videoInterfaces).getCommand(target, videoStream, audioStream);
@@ -1254,7 +1253,8 @@ export class MediaService extends BaseService {
       videoFilters.push(`rotate=${this.roundFilterNumber(straighten.parameters.angle)}*PI/180:fillcolor=black`);
     }
 
-    for (const mirror of edits.filter((edit) => edit.action === AssetEditAction.Mirror)) {
+    const mirrors = edits.filter((edit) => edit.action === AssetEditAction.Mirror);
+    for (const mirror of mirrors) {
       videoFilters.push(mirror.parameters.axis === 'horizontal' ? 'hflip' : 'vflip');
     }
 
@@ -1271,16 +1271,18 @@ export class MediaService extends BaseService {
       videoFilters.push(...this.getAdjustmentFilters(adjust.parameters));
     }
 
-    for (const look of edits.filter(
+    const looks = edits.filter(
       (edit) => edit.action === AssetEditAction.Filter || edit.action === AssetEditAction.Effect,
-    )) {
+    );
+    for (const look of looks) {
       const filter = this.getLookFilter(look.parameters.name, look.parameters.intensity);
       if (filter) {
         videoFilters.push(filter);
       }
     }
 
-    for (const overlay of edits.filter((edit) => edit.action === AssetEditAction.TextOverlay)) {
+    const overlays = edits.filter((edit) => edit.action === AssetEditAction.TextOverlay);
+    for (const overlay of overlays) {
       videoFilters.push(this.getTextOverlayFilter(overlay.parameters, timeline));
     }
 
@@ -1567,10 +1569,10 @@ export class MediaService extends BaseService {
   private escapeFfmpegText(value: string) {
     const escape = String.fromCodePoint(92);
     return value
-      .replaceAll(escape, escape + escape)
-      .replaceAll(':', `${escape}:`)
-      .replaceAll("'", `${escape}'`)
-      .replaceAll(',', `${escape},`);
+      .replaceAll(escape, () => escape + escape)
+      .replaceAll(':', () => `${escape}:`)
+      .replaceAll("'", () => `${escape}'`)
+      .replaceAll(',', () => `${escape},`);
   }
 
   private msToSeconds(milliseconds: number) {
@@ -1632,9 +1634,9 @@ export class MediaService extends BaseService {
   }
 
   private isVideoTranscodeRequired(ffmpegConfig: SystemConfigFFmpegDto, stream: VideoStreamInfo): boolean {
-    const scalingEnabled = ffmpegConfig.targetResolution !== 'original';
+    const isScalingEnabled = ffmpegConfig.targetResolution !== 'original';
     const targetRes = Number.parseInt(ffmpegConfig.targetResolution);
-    const isLargerThanTargetRes = scalingEnabled && Math.min(stream.height, stream.width) > targetRes;
+    const isLargerThanTargetRes = isScalingEnabled && Math.min(stream.height, stream.width) > targetRes;
     const maxBitrate = this.parseBitrateToBps(ffmpegConfig.maxBitrate);
     const isLargerThanTargetBitrate = maxBitrate > 0 && stream.bitrate > maxBitrate;
 
@@ -1689,13 +1691,13 @@ export class MediaService extends BaseService {
   }): boolean {
     if (colorspace || profileDescription) {
       return [colorspace, profileDescription].some((s) => s?.toLowerCase().includes('srgb'));
-    } else if (bitsPerSample) {
+    }
+    if (bitsPerSample) {
       // assume sRGB for 8-bit images with no color profile or colorspace metadata
       return bitsPerSample === 8;
-    } else {
-      // assume sRGB for images with no relevant metadata
-      return true;
     }
+    // assume sRGB for images with no relevant metadata
+    return true;
   }
 
   private parseBitrateToBps(bitrateString: string) {
@@ -1708,11 +1710,11 @@ export class MediaService extends BaseService {
 
     if (bitrateString.toLowerCase().endsWith('k')) {
       return bitrateValue * 1000; // Kilobits per second to bits per second
-    } else if (bitrateString.toLowerCase().endsWith('m')) {
-      return bitrateValue * 1_000_000; // Megabits per second to bits per second
-    } else {
-      return bitrateValue;
     }
+    if (bitrateString.toLowerCase().endsWith('m')) {
+      return bitrateValue * 1_000_000; // Megabits per second to bits per second
+    }
+    return bitrateValue;
   }
 
   private async shouldUseExtractedImage(extractedPathOrBuffer: string | Buffer, targetSize: number) {

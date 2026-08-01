@@ -120,7 +120,15 @@ export class TimelineManager extends VirtualScrollManager {
 
     this.#unsubscribes.push(
       eventManager.on({
-        AssetUpdate: (asset: AssetResponseDto) => this.#updateAssets([toTimelineAsset(asset)]),
+        AssetUpdate: (asset: AssetResponseDto) => {
+          const timelineAsset = toTimelineAsset(asset);
+          if (this.#options.albumId || this.#options.personId) {
+            this.#updateAssets([timelineAsset]);
+          } else {
+            this.upsertAssets([timelineAsset]);
+          }
+        },
+        AssetsUnarchive: (assets) => this.upsertAssets(assets),
         AssetsMarkNsfw: (ids: string[]) => this.#handleMarkNsfw(ids),
         SessionAccessChanged: () => void this.refresh(),
       }),
@@ -222,6 +230,11 @@ export class TimelineManager extends VirtualScrollManager {
 
     for (const month of this.months) {
       updateTimelineMonthViewportProximity(this, month);
+      if (month.isInOrNearViewport && month.isLoaded) {
+        for (const day of month.timelineDays) {
+          day.updateAssetBoundaries();
+        }
+      }
     }
 
     const month = this.months.find((month) => month.isInViewport);
@@ -371,10 +384,7 @@ export class TimelineManager extends VirtualScrollManager {
   }
 
   async loadTimelineMonth(yearMonth: TimelineYearMonth, options?: { cancelable: boolean }): Promise<void> {
-    let cancelable = true;
-    if (options) {
-      cancelable = options.cancelable;
-    }
+    const cancelable = options?.cancelable ?? true;
     const timelineMonth = getTimelineMonthByDate(this, yearMonth);
     if (!timelineMonth) {
       return;
@@ -544,10 +554,7 @@ export class TimelineManager extends VirtualScrollManager {
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const idsToUpdate = new Set(cache.keys());
     const result = this.#runAssetCallback(idsToUpdate, (asset) => void updateObject(asset, cache.get(asset.id)));
-    const notUpdated: TimelineAsset[] = [];
-    for (const assetId of result.notUpdated) {
-      notUpdated.push(cache.get(assetId)!);
-    }
+    const notUpdated: TimelineAsset[] = Array.from(result.notUpdated, (assetId) => cache.get(assetId)!);
     return notUpdated;
   }
 

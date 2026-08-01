@@ -34,8 +34,8 @@ export async function enumerate(from: ServerClient, ledger: Ledger, options: Mig
     if (ledger.getCursor(`enum:${visibility}:done`)) {
       continue;
     }
-    let page = Number(ledger.getCursor(`enum:${visibility}`) ?? '1');
-    for (;;) {
+    let page: number | null = Number(ledger.getCursor(`enum:${visibility}`) ?? '1');
+    while (page !== null) {
       await controller.gate();
       if (controller.stopped) {
         return;
@@ -50,11 +50,10 @@ export async function enumerate(from: ServerClient, ledger: Ledger, options: Mig
       ledger.upsertAssets(res.assets.items.map((asset) => toRecord(asset))); // persist this page atomically
       count += res.assets.items.length;
       controller.log(`enumerating ${visibility}: ${count} assets`);
-      const next = res.assets.nextPage ? Number(res.assets.nextPage) : null;
-      if (next === null) {
-        break;
+      const next: number | null = res.assets.nextPage ? Number(res.assets.nextPage) : null;
+      if (next !== null) {
+        ledger.setCursor(`enum:${visibility}`, String(next)); // advance only after the page is durable
       }
-      ledger.setCursor(`enum:${visibility}`, String(next)); // advance only after the page is durable
       page = next;
     }
     ledger.setCursor(`enum:${visibility}:done`, '1');

@@ -46,7 +46,7 @@ const normalize = (raw: MigrateRawOptions): MigrateOptions => ({
   dryRun: !!raw.dryRun,
   includeTrashed: !!raw.includeTrashed,
   retryFailed: !!raw.retryFailed,
-  faces: raw.faces !== false,
+  faces: raw.faces,
   serve: !!raw.serve,
   port: Number(raw.port) || 2285,
 });

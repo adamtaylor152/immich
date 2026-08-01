@@ -55,6 +55,12 @@ export const digest = (value: unknown): string =>
     .update(JSON.stringify(canonical(value)))
     .digest('hex');
 
+// The core-plugin re-import rewrites the plugin row with identical values
+// except audit timestamps. Strip them so legitimate re-imports between
+// captures don't masquerade as cutover mutations.
+export const stripPluginAudit = (rows: unknown[]): unknown[] =>
+  rows.map((row: any) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'updatedAt')));
+
 export const workflowEvidence = () =>
   withDatabase(async (client) => {
     const tables = ['plugin', 'plugin_method', 'workflow', 'workflow_step'] as const;
@@ -78,8 +84,22 @@ export const workflowEvidence = () =>
     return {
       columns: columns.rows,
       ledger: ledger.rows,
-      rowDigests: Object.fromEntries(tables.map((table) => [table, digest(rows[table])])),
-      rowIds: Object.fromEntries(tables.map((table) => [table, rows[table]!.map((row: any) => row.id).toSorted()])),
+      rowDigests: Object.fromEntries(
+        tables.map((table) => [
+          table,
+          // The microservices boot force-re-imports the bundled core plugin,
+          // rewriting the plugin row with identical values except updatedAt.
+          // Exclude that audit column so legitimate re-imports between
+          // captures don't masquerade as cutover mutations.
+          digest(table === 'plugin' ? stripPluginAudit(rows[table]!) : rows[table]),
+        ]),
+      ),
+      rowIds: Object.fromEntries(
+        tables.map((table) => [
+          table,
+          rows[table]!.map((row: any) => String(row.id)).toSorted((a: string, b: string) => a.localeCompare(b)),
+        ]),
+      ),
       rows,
       schemaDigest: digest(columns.rows),
     };

@@ -14,7 +14,7 @@ import {
   workflowEvidence,
 } from './fork-schema-certification';
 
-const lane = 'origin-v3.0.3-to-fork';
+const lane = 'origin-v3.1.0-to-fork';
 const backfillFixtureCount = 256;
 
 describe.runIf(phase === 'origin-seed')(`${lane}: exact official origin`, () => {

@@ -8,7 +8,7 @@ import type { MigrateOptions } from 'src/commands/migrate/types';
 
 // Identity of an album as a user sees it: its name within its parent. Joined with a NUL,
 // which (unlike a space) cannot occur in a name, so "A" / "B C" can't collide with "A B" / "C".
-const albumKey = (parentId: string | null | undefined, name: string) => `${parentId ?? ''}\u0000${name}`;
+const albumKey = (parentId: string | null | undefined, name: string) => `${parentId ?? ''}\u{0}${name}`;
 
 /**
  * Phase 6: recreate albums (the top priority) — nested parents first — then link each

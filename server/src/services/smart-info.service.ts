@@ -56,12 +56,12 @@ export class SmartInfoService extends BaseService {
 
       const modelChange =
         oldConfig && oldConfig.machineLearning.clip.modelName !== newConfig.machineLearning.clip.modelName;
-      const dimSizeChange = smartSearchDimSize !== dimSize || videoDuplicateFrameDimSize !== dimSize;
-      if (!modelChange && !dimSizeChange) {
+      const isDimSizeChange = smartSearchDimSize !== dimSize || videoDuplicateFrameDimSize !== dimSize;
+      if (!modelChange && !isDimSizeChange) {
         return;
       }
 
-      if (dimSizeChange) {
+      if (isDimSizeChange) {
         this.logger.log(
           `Dimension size of model ${newConfig.machineLearning.clip.modelName} is ${dimSize}, but database dimensions are smart_search=${smartSearchDimSize}, asset_video_duplicate_frame=${videoDuplicateFrameDimSize}.`,
         );

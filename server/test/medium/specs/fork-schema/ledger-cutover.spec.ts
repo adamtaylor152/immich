@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StorageCore } from 'src/cores/storage.core';
 import { ChecksumAlgorithm } from 'src/enum';
-import { LEGACY_FORK_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import { LEGACY_FORK_MIGRATIONS, POST_CERTIFIED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
 import {
   up as createCutoverVerification,
   down as rollbackCutoverVerification,
 } from 'src/fork-schema/migrations/0000000000050-CutoverVerification';
+import { REVERSIBLE_POST_CERTIFIED_MIGRATIONS } from 'src/fork-schema/post-certified-residue';
 import {
   getWorkflowCompatibilityEvidence,
   LEGACY_WORKFLOW_MIGRATION,
@@ -28,13 +29,6 @@ import { mediumFactory } from 'test/medium.factory';
 import { alignCertifiedGeodataCatalog } from 'test/medium/specs/fork-schema/certified-geodata-fixture';
 import { getKyselyDB, newTestService } from 'test/utils';
 
-const NON_WORKFLOW_PROVIDER_GAPS = [
-  '1780435471692-DeleteMismatchedAssetFaces',
-  '1780592070031-ConvertNegativeRatingToNull',
-  '1780592071031-AssetOcrSync',
-  '1781089983296-CreateIntegrityReportTable',
-  '1782500000000-RestoreLivePhotoStillVisibility',
-] as const;
 const EMPTY_STORAGE_DIGEST = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const LEGACY_OVERRIDE_NAMES = [
   'function_album_parent_cycle_check',
@@ -88,6 +82,7 @@ const CUTOVER_MUTATION_STAGES = [
   'legacy-ledger-audit',
   'legacy-ledger-delete',
   'legacy-artifact-shutdown',
+  'post-certified-residue',
   'state-transition',
   'checkpoint-audit',
 ] as const;
@@ -124,7 +119,7 @@ class DriftBeforeInnerVerificationRepository extends TaskOneCutoverRepository {
 
 const connectToSameDatabase = async (db: Kysely<DB>): Promise<Kysely<DB>> => {
   const database = await sql<{ name: string }>`SELECT current_database() AS name`.execute(db);
-  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', `/${database.rows[0]!.name}`);
+  const url = process.env.IMMICH_TEST_POSTGRES_URL!.replace('/mich', () => `/${database.rows[0]!.name}`);
   return new Kysely<DB>(getKyselyConfig({ connectionType: 'url', url }));
 };
 
@@ -203,11 +198,19 @@ describe('fork schema ledger cutover', () => {
   let db: Kysely<DB>;
   let repository: DatabaseRepository;
   let legacyOverrides: Array<{ name: string; value: unknown }>;
+  // The official workflow marker is the sole audited provider gap, so it must
+  // occupy the ledger slot the legacy workflow migration was applied in for the
+  // ledger to stay an exact ordered prefix of the certified official set.
+  let workflowMarkerTimestamp: string;
 
   beforeAll(async () => {
     db = await getKyselyDB('ledger_cutover');
     repository = new TaskOneCutoverRepository(db, LoggingRepository.create(), new ConfigRepository());
     await repository.runForkMigrations();
+    const legacyWorkflowRow = await sql<{ timestamp: string }>`
+      SELECT timestamp::text AS timestamp FROM public.kysely_migrations WHERE name = ${LEGACY_WORKFLOW_MIGRATION}
+    `.execute(db);
+    workflowMarkerTimestamp = legacyWorkflowRow.rows[0]!.timestamp;
     await alignCertifiedGeodataCatalog(db);
     const overrides = await sql<{ name: string; value: unknown }>`
       SELECT name, value FROM public.migration_overrides WHERE name = ANY(${[...LEGACY_OVERRIDE_NAMES]}) ORDER BY name
@@ -229,15 +232,24 @@ describe('fork schema ledger cutover', () => {
     for (const [table, trigger] of LEGACY_TRIGGERS) {
       await sql.raw(`ALTER TABLE ${table} ENABLE TRIGGER "${trigger}"`).execute(db);
     }
-    await sql`
-      DELETE FROM kysely_migrations
-      WHERE name = '9999999999999-CustomPatch' OR name = ANY(${[...NON_WORKFLOW_PROVIDER_GAPS]})
-    `.execute(db);
+    await sql`DELETE FROM kysely_migrations WHERE name = '9999999999999-CustomPatch'`.execute(db);
     await sql`DELETE FROM kysely_migrations WHERE name = ANY(${[...LEGACY_FORK_MIGRATIONS]})`.execute(db);
+    // A successful cutover in an earlier test reverts and de-ledgers the
+    // post-certified upstream residue; restore the current-fork baseline. The
+    // re-application is idempotent and the 9999 timestamp keeps the rows at the
+    // end of the official order.
+    for (const [name, { apply }] of REVERSIBLE_POST_CERTIFIED_MIGRATIONS) {
+      await apply(db);
+      await sql`
+        INSERT INTO kysely_migrations (name, timestamp)
+        VALUES (${name}, '9999-01-01T00:00:00.000Z')
+        ON CONFLICT (name) DO NOTHING
+      `.execute(db);
+    }
     await sql`
       INSERT INTO kysely_migrations (name, timestamp)
-      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2099-07-15T00:00:00.000Z')
-      ON CONFLICT (name) DO NOTHING
+      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, ${workflowMarkerTimestamp})
+      ON CONFLICT (name) DO UPDATE SET timestamp = EXCLUDED.timestamp
     `.execute(db);
     await sql`DROP TABLE IF EXISTS physical_file_unexpected`.execute(db);
     await sql`UPDATE immich_fork.state SET phase = 'ready', active = false, "schemaVersion" = '1' WHERE id = 1`.execute(
@@ -251,10 +263,12 @@ describe('fork schema ledger cutover', () => {
     await db.insertInto('user').values(workflowOwner).execute();
     await sql`
       INSERT INTO public.plugin
-        (id, enabled, name, version, title, description, author, "wasmBytes", "createdAt", "updatedAt")
+        (id, enabled, name, version, title, description, author, "wasmBytes", templates, "sha256hash",
+         "createdAt", "updatedAt")
       VALUES
         ('10000000-0000-4000-8000-000000000001', true, 'cutover.plugin', '1.0.0', 'Cutover',
-         'complete cutover fixture', 'Immich', decode('00ff1020', 'hex'),
+         'complete cutover fixture', 'Immich', decode('00ff1020', 'hex'), '[]'::jsonb,
+         sha256(decode('00ff1020', 'hex')),
          '2026-07-15T01:02:03.000Z', '2026-07-15T01:02:04.000Z')
     `.execute(db);
     await sql`
@@ -306,8 +320,8 @@ describe('fork schema ledger cutover', () => {
       await sql`
         INSERT INTO public.kysely_migrations (name, timestamp)
         VALUES
-          (${genericLegacy}, '2099-07-15T00:00:00.000Z'),
-          (${LEGACY_WORKFLOW_MIGRATION}, '2099-07-15T00:00:01.000Z')
+          (${genericLegacy}, ${workflowMarkerTimestamp}),
+          (${LEGACY_WORKFLOW_MIGRATION}, ${workflowMarkerTimestamp})
       `.execute(db);
       const failingRepository = new StageFailingCutoverRepository(
         db,
@@ -597,7 +611,7 @@ describe('fork schema ledger cutover', () => {
     `.execute(db);
     const officialBefore = await sql<{ name: string }>`
       SELECT name FROM kysely_migrations
-      WHERE name <> ${legacyName}
+      WHERE name <> ${legacyName} AND name <> ALL(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
       ORDER BY name
     `.execute(db);
     const forkBefore = await sql<{ name: string }>`SELECT name FROM immich_fork.migrations ORDER BY name`.execute(db);
@@ -630,6 +644,34 @@ describe('fork schema ledger cutover', () => {
       },
     ]);
     expect(state.rows).toEqual([{ active: false, phase: 'inactive', schemaVersion: '2' }]);
+
+    // The post-certified upstream residue is audited, reverted, and removed so
+    // the handed-off ledger and schema are byte-compatible with the certified
+    // official tag.
+    const residueAudit = await sql<{ details: { classification: string }; name: string }>`
+      SELECT name, details FROM immich_fork.migration_audit
+      WHERE name = ANY(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
+      ORDER BY name
+    `.execute(db);
+    expect(residueAudit.rows.map(({ name }) => name)).toEqual([...POST_CERTIFIED_UPSTREAM_MIGRATIONS].toSorted());
+    for (const row of residueAudit.rows) {
+      expect(row.details).toMatchObject({ classification: 'post-certified-upstream', reportDigest: report.digest });
+    }
+    const revertedColumns = await sql<{ attname: string; attnotnull: boolean }>`
+      SELECT attribute.attname, attribute.attnotnull
+      FROM pg_catalog.pg_attribute attribute
+      JOIN pg_catalog.pg_class class ON class.oid = attribute.attrelid
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid = class.relnamespace
+      WHERE namespace.nspname = 'public'
+        AND ((class.relname = 'album' AND attribute.attname = 'description')
+          OR (class.relname = 'user' AND attribute.attname = 'password'))
+    `.execute(db);
+    expect(revertedColumns.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attname: 'description', attnotnull: true }),
+        expect.objectContaining({ attname: 'password', attnotnull: true }),
+      ]),
+    );
   });
 
   it('preserves the committed handoff without reverse ledger surgery when official migration fails', async () => {
@@ -686,23 +728,21 @@ describe('fork schema ledger cutover', () => {
     expect(state.rows[0]?.phase).toBe('ready');
   });
 
-  it.each(NON_WORKFLOW_PROVIDER_GAPS)(
-    'rejects provider-absent non-workflow migration %s on a current-fork installation',
-    async (name) => {
-      await sql`
+  it('rejects the audited workflow provider gap when its marker is recorded out of official order', async () => {
+    await sql`DELETE FROM kysely_migrations WHERE name = ${OFFICIAL_WORKFLOW_MIGRATION}`.execute(db);
+    await sql`
       INSERT INTO kysely_migrations (name, timestamp)
-      VALUES (${name}, '2026-07-15T00:00:01.000Z')
+      VALUES (${OFFICIAL_WORKFLOW_MIGRATION}, '2099-07-15T00:00:01.000Z')
     `.execute(db);
-      const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
+    const { sut } = newTestService(ForkSchemaCutoverService, { database: repository });
 
-      const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
+    const report = await sut.preflight({ databaseBackupId: 'backup-1', mediaSnapshotId: 'snapshot-1' });
 
-      expect(report.migrationOrderValid).toBe(false);
-      expect(report.blockers).toContain(
-        'Official migration ledger is not an exact ordered prefix of the bundled provider',
-      );
-    },
-  );
+    expect(report.migrationOrderValid).toBe(false);
+    expect(report.blockers).toContain(
+      'Official migration ledger is not an exact ordered prefix of the bundled provider',
+    );
+  });
 
   it('rolls back pre-commit DDL, ledger surgery, audit, and phase together', async () => {
     const failingRepository = new FailingPreCommitRepository(db, LoggingRepository.create(), new ConfigRepository());

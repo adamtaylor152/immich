@@ -10,7 +10,7 @@ const VISIBILITIES = [AssetVisibility.Timeline, AssetVisibility.Archive];
 export async function* searchAllAssets(
   client: ServerClient,
   baseDto: MetadataSearchDto,
-  includeTrashed: boolean,
+  shouldIncludeTrashed: boolean,
 ): AsyncGenerator<AssetResponseDto> {
   for (const visibility of VISIBILITIES) {
     let page: number | null = 1;
@@ -18,7 +18,7 @@ export async function* searchAllAssets(
       const res = await client.searchAssets({
         ...baseDto,
         visibility,
-        withDeleted: includeTrashed,
+        withDeleted: shouldIncludeTrashed,
         withExif: true,
         size: 1000,
         page,
@@ -35,10 +35,10 @@ export async function* searchAllAssets(
 export async function collectAssetIds(
   client: ServerClient,
   filter: MetadataSearchDto,
-  includeTrashed: boolean,
+  shouldIncludeTrashed: boolean,
 ): Promise<string[]> {
   const ids: string[] = [];
-  for await (const asset of searchAllAssets(client, filter, includeTrashed)) {
+  for await (const asset of searchAllAssets(client, filter, shouldIncludeTrashed)) {
     ids.push(asset.id);
   }
   return ids;

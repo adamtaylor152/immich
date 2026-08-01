@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart' hide Store;
@@ -18,20 +20,20 @@ class AppBarServerInfo extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(localeProvider);
-    ServerInfo serverInfoState = ref.watch(serverInfoProvider);
+    final ServerInfo serverInfoState = ref.watch(serverInfoProvider);
     final user = ref.watch(currentUserProvider);
     final bool showVersionWarning = ref.watch(versionWarningPresentProvider(user));
 
     final appInfo = useState({});
 
-    getPackageInfo() async {
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
+    Future<void> getPackageInfo() async {
+      final PackageInfo packageInfo = await PackageInfo.fromPlatform();
 
       appInfo.value = {"version": packageInfo.version, "buildNumber": packageInfo.buildNumber};
     }
 
     useEffect(() {
-      getPackageInfo();
+      unawaited(getPackageInfo());
       return null;
     }, []);
 
@@ -50,9 +52,7 @@ class AppBarServerInfo extends HookConsumerWidget {
           divider,
           _ServerInfoItem(
             label: "server_version".tr(),
-            text: serverInfoState.serverVersion.major > 0
-                ? "${serverInfoState.serverVersion.major}.${serverInfoState.serverVersion.minor}.${serverInfoState.serverVersion.patch}"
-                : "--",
+            text: serverInfoState.serverVersion.major > 0 ? "${serverInfoState.serverVersion}" : "--",
           ),
           divider,
           _ServerInfoItem(label: "server_info_box_server_url".tr(), text: getServerUrl() ?? '--', tooltip: true),
@@ -60,9 +60,7 @@ class AppBarServerInfo extends HookConsumerWidget {
             divider,
             _ServerInfoItem(
               label: "latest_version".tr(),
-              text: serverInfoState.latestVersion!.major > 0
-                  ? "${serverInfoState.latestVersion!.major}.${serverInfoState.latestVersion!.minor}.${serverInfoState.latestVersion!.patch}"
-                  : "--",
+              text: serverInfoState.latestVersion!.major > 0 ? "${serverInfoState.latestVersion!}" : "--",
               tooltip: true,
               icon: serverInfoState.versionStatus == VersionStatus.serverOutOfDate
                   ? const Icon(Icons.info, color: Color.fromARGB(255, 243, 188, 106), size: 12)
@@ -91,7 +89,7 @@ class _ServerInfoItem extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        if (icon != null) ...[icon as Widget, const SizedBox(width: 8)],
+        if (icon != null) ...[icon! as Widget, const SizedBox(width: 8)],
         Text(
           label,
           style: TextStyle(

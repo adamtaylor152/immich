@@ -10,6 +10,22 @@ type ReleaseManifest = {
 
 export const SUPPORTED_UPSTREAM_MIGRATIONS: readonly string[] = supportedVersions.upstreamMigrations;
 
+/**
+ * Upstream-authored migrations the fork bundles and applies that landed AFTER
+ * the certified official tag (exact tag v3.1.0 ships without them). They are
+ * part of the fork's official-provider order, but a database that is byte-exact
+ * certified official must NOT contain them: cutover reverts their effects and
+ * removes their ledger rows, and the fork return re-applies them.
+ */
+export const POST_CERTIFIED_UPSTREAM_MIGRATIONS: ReadonlySet<string> = new Set(
+  supportedVersions.postCertifiedUpstreamMigrations,
+);
+
+/** The exact ledger of the certified official tag (v3.1.0). */
+export const CERTIFIED_TAG_MIGRATIONS: readonly string[] = SUPPORTED_UPSTREAM_MIGRATIONS.filter(
+  (name) => !POST_CERTIFIED_UPSTREAM_MIGRATIONS.has(name),
+);
+
 export const LEGACY_FORK_MIGRATIONS: ReadonlySet<string> = new Set([
   '1778000000000-PhysicalDeduplication',
   '1778255964846-PhysicalDeduplicationSchemaReconcile',
@@ -49,7 +65,7 @@ export function classifyMigration(name: string): 'upstream' | 'legacy-fork' | 'u
 }
 
 export function assertSupportedUpstream(version: string): void {
-  if (!supportedVersions.ranges.some((range) => semver.satisfies(version, range))) {
+  if (supportedVersions.ranges.every((range) => !semver.satisfies(version, range))) {
     throw new Error(`Unsupported official Immich database version: ${version}`);
   }
 }
@@ -59,7 +75,7 @@ export function assertReleaseManifest(
   manifest: ReleaseManifest,
   bundledMigrations: readonly string[],
 ): void {
-  if (!manifest.ranges.some((range) => semver.satisfies(serverVersion, range))) {
+  if (manifest.ranges.every((range) => !semver.satisfies(serverVersion, range))) {
     throw new Error(`Server version ${serverVersion} is outside the reversion compatibility manifest`);
   }
 

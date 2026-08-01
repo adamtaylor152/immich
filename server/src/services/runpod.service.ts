@@ -189,14 +189,16 @@ export class RunPodService extends BaseService {
     // before the pod came up would keep an empty managed URL and route every
     // ML job to the local fallback. Sync once at job-start so the actual
     // predict() call below picks up the pod.
-    if (ML_JOB_NAMES.has(job.name)) {
-      void this.syncManagedUrl().catch((error) => this.logger.warn(`Pre-job managed URL sync failed: ${error}`));
-      // Lazy provisioning for serverless mode — if the endpoint doesn't exist
-      // yet (e.g. first ML job after enabling), create it now.
-      void this.maybeEnsureServerlessOnJob().catch((error) =>
-        this.logger.warn(`Lazy serverless setup on JobStart failed: ${error}`),
-      );
+    if (!ML_JOB_NAMES.has(job.name)) {
+      return;
     }
+
+    void this.syncManagedUrl().catch((error) => this.logger.warn(`Pre-job managed URL sync failed: ${error}`));
+    // Lazy provisioning for serverless mode — if the endpoint doesn't exist
+    // yet (e.g. first ML job after enabling), create it now.
+    void this.maybeEnsureServerlessOnJob().catch((error) =>
+      this.logger.warn(`Lazy serverless setup on JobStart failed: ${error}`),
+    );
   }
 
   @OnEvent({ name: 'JobSuccess' })
@@ -423,6 +425,7 @@ export class RunPodService extends BaseService {
     if (state.status === 'idle') {
       throw new BadRequestException('No pod to stop');
     }
+    // eslint-disable-next-line unicorn/prefer-includes-over-repeated-comparisons -- `.includes()` widens `state.status` and breaks the discriminated-union narrowing the code below relies on.
     if (state.status === 'error' || state.status === 'stopped' || state.status === 'stopping') {
       return this.mapStateToDto(state);
     }
@@ -550,10 +553,12 @@ export class RunPodService extends BaseService {
   }
 
   private stopTicker() {
-    if (this.tickHandle) {
-      clearInterval(this.tickHandle);
-      this.tickHandle = undefined;
+    if (!this.tickHandle) {
+      return;
     }
+
+    clearInterval(this.tickHandle);
+    this.tickHandle = undefined;
   }
 
   /**
@@ -1031,27 +1036,36 @@ export class RunPodService extends BaseService {
     if ('podCreatedAt' in state && state.podCreatedAt) {
       base.podCreatedAt = state.podCreatedAt;
     }
-    if (state.status === 'running') {
-      base.mlUrl = state.mlUrl;
-      base.runningSince = state.runningSince;
-      base.lastBusyAt = state.lastBusyAt;
-      base.maxRuntimeHours = state.maxRuntimeHours;
-      base.unhealthySince = state.unhealthySince;
-    }
-    if (state.status === 'stopped') {
-      base.stoppedAt = state.stoppedAt;
-    }
-    if (state.status === 'error') {
-      base.errorMessage = state.message;
-    }
-    if (state.status === 'serverless-ready') {
-      base.endpointId = state.endpointId;
-      base.endpointUrl = state.endpointUrl;
-      base.templateId = state.templateId;
-      base.workersMin = state.workersMin;
-      base.workersMax = state.workersMax;
-      base.idleTimeoutSeconds = state.idleTimeoutSeconds;
-      base.mlUrl = state.endpointUrl;
+    switch (state.status) {
+      case 'running': {
+        base.mlUrl = state.mlUrl;
+        base.runningSince = state.runningSince;
+        base.lastBusyAt = state.lastBusyAt;
+        base.maxRuntimeHours = state.maxRuntimeHours;
+        base.unhealthySince = state.unhealthySince;
+        break;
+      }
+      case 'stopped': {
+        base.stoppedAt = state.stoppedAt;
+        break;
+      }
+      case 'error': {
+        base.errorMessage = state.message;
+        break;
+      }
+      case 'serverless-ready': {
+        base.endpointId = state.endpointId;
+        base.endpointUrl = state.endpointUrl;
+        base.templateId = state.templateId;
+        base.workersMin = state.workersMin;
+        base.workersMax = state.workersMax;
+        base.idleTimeoutSeconds = state.idleTimeoutSeconds;
+        base.mlUrl = state.endpointUrl;
+        break;
+      }
+      default: {
+        break;
+      }
     }
     return base;
   }

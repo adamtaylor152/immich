@@ -111,15 +111,25 @@ export class SearchService extends BaseService {
       checksum = fromChecksum(dto.checksum);
     }
 
+    let userIds: string[] | undefined;
+
+    if (dto.albumIds && dto.albumIds.length > 0) {
+      await this.requireAccess({ auth, ids: dto.albumIds, permission: Permission.AlbumRead });
+    } else if (auth.sharedLink) {
+      throw new BadRequestException('Shared link access is only allowed in combination with an albumIds filter');
+    } else {
+      userIds = await this.getUserIdsToSearch(auth, dto.visibility);
+    }
+
     const page = dto.page ?? 1;
     const size = dto.size || 250;
-    const userIds = await this.getUserIdsToSearch(auth);
     const { hasNextPage, items } = await this.searchRepository.searchMetadata(
       { page, size },
       {
         ...searchDto,
         checksum,
         ...privacyOptions,
+        visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
         userIds,
         orderDirection: dto.order ?? AssetOrder.Desc,
       },
@@ -130,11 +140,15 @@ export class SearchService extends BaseService {
 
   async searchStatistics(auth: AuthDto, dto: StatisticsSearchDto): Promise<SearchStatisticsResponseDto> {
     const { suppressedOnly, ...searchDto } = dto;
-    const userIds = await this.getUserIdsToSearch(auth);
+    const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
+    if (dto.visibility === AssetVisibility.Locked) {
+      requireElevatedPermission(auth);
+    }
 
     return await this.searchRepository.searchStatistics({
       ...searchDto,
       ...getPrivacyQueryOptions(auth, suppressedOnly),
+      visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
     });
   }
@@ -146,10 +160,11 @@ export class SearchService extends BaseService {
       requireElevatedPermission(auth);
     }
 
-    const userIds = await this.getUserIdsToSearch(auth);
+    const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
     const items = await this.searchRepository.searchRandom(dto.size || 250, {
       ...searchDto,
       ...getPrivacyQueryOptions(auth, suppressedOnly),
+      visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
     });
     return items.map((item) => mapAsset(item, { auth }));
@@ -162,10 +177,11 @@ export class SearchService extends BaseService {
       requireElevatedPermission(auth);
     }
 
-    const userIds = await this.getUserIdsToSearch(auth);
+    const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
     const items = await this.searchRepository.searchLargeAssets(dto.size || 250, {
       ...searchDto,
       ...getPrivacyQueryOptions(auth, suppressedOnly),
+      visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
     });
     return items.map((item) => mapAsset(item, { auth }));
@@ -183,7 +199,7 @@ export class SearchService extends BaseService {
       throw new BadRequestException('Smart search is not enabled');
     }
 
-    const userIds = this.getUserIdsToSearch(auth);
+    const userIds = this.getUserIdsToSearch(auth, dto.visibility);
     let embedding;
     if (dto.query) {
       const key = machineLearning.clip.modelName + dto.query + dto.language;
@@ -216,6 +232,7 @@ export class SearchService extends BaseService {
         userIds: await userIds,
         embedding,
         query: dto.query,
+        visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       },
     );
 
@@ -277,7 +294,11 @@ export class SearchService extends BaseService {
     }
   }
 
-  private async getUserIdsToSearch(auth: AuthDto): Promise<string[]> {
+  private async getUserIdsToSearch(auth: AuthDto, visibility?: AssetVisibility): Promise<string[]> {
+    // Locked assets are personal. Never include partner IDs, regardless of A's elevated session.
+    if (visibility === AssetVisibility.Locked) {
+      return [auth.user.id];
+    }
     const partnerIds = await getMyPartnerIds({
       userId: auth.user.id,
       repository: this.partnerRepository,

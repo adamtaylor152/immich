@@ -39,6 +39,15 @@ describe('workflow migration ledger alias', () => {
     await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${workflowMarkers})`.execute(db);
     await sql`DELETE FROM immich_fork.migration_audit WHERE phase = 'workflow-alias'`.execute(db);
     await sql`ALTER TABLE public.workflow ENABLE TRIGGER "workflow_updatedAt"`.execute(db);
+    // The migrated template database is already at the post-allowed-hosts
+    // stage; these scenarios start from the pre-templates baseline, so drop the
+    // later official columns to match the marker rows deleted above. Tests that
+    // simulate the later stages re-add them (and restore this baseline in their
+    // own finally blocks).
+    await sql`ALTER TABLE public.plugin_method DROP COLUMN IF EXISTS "allowedHosts"`.execute(db);
+    await sql`ALTER TABLE public.plugin DROP COLUMN IF EXISTS templates, DROP COLUMN IF EXISTS "sha256hash"`.execute(
+      db,
+    );
 
     const user = mediumFactory.userInsert();
     await db.insertInto('user').values(user).execute();

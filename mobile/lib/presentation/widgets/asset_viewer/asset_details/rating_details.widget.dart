@@ -41,10 +41,10 @@ class RatingDetails extends ConsumerWidget {
             unfilledColor: context.themeData.colorScheme.onSurface.withAlpha(100),
             itemSize: 40,
             onRatingUpdate: (rating) async {
-              await ref.read(actionProvider.notifier).updateRating(ActionSource.viewer, rating.round());
+              await ref.read(actionProvider.notifier).updateRating(ActionSource.viewer, rating);
             },
             onClearRating: () async {
-              await ref.read(actionProvider.notifier).updateRating(ActionSource.viewer, 0);
+              await ref.read(actionProvider.notifier).updateRating(ActionSource.viewer, null);
             },
           ),
         ],

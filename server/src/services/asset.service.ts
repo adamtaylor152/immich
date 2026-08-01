@@ -341,15 +341,17 @@ export class AssetService extends BaseService {
 
     let chunk: Array<{ id: string; isOffline: boolean }> = [];
     const queueChunk = async () => {
-      if (chunk.length > 0) {
-        await this.jobRepository.queueAll(
-          chunk.map(({ id, isOffline }) => ({
-            name: JobName.AssetDelete,
-            data: { id, deleteOnDisk: !isOffline },
-          })),
-        );
-        chunk = [];
+      if (chunk.length === 0) {
+        return;
       }
+
+      await this.jobRepository.queueAll(
+        chunk.map(({ id, isOffline }) => ({
+          name: JobName.AssetDelete,
+          data: { id, deleteOnDisk: !isOffline },
+        })),
+      );
+      chunk = [];
     };
 
     const assets = this.assetJobRepository.streamForDeletedJob(trashedBefore);
@@ -375,18 +377,25 @@ export class AssetService extends BaseService {
       return JobStatus.Failed;
     }
 
-    // replace the parent of the stack children with a new asset
-    if (asset.stack?.primaryAssetId === id) {
-      // this only includes timeline visible assets and excludes the primary asset
-      const stackAssetIds = asset.stack.assets.map((a) => a.id);
-      if (stackAssetIds.length >= 2) {
-        const newPrimaryAssetId = stackAssetIds.find((a) => a !== id)!;
+    if (asset.stack) {
+      // asset.stack.assets only includes timeline visible assets and excludes the primary asset
+      const remainingStackAssetIds = asset.stack.assets.map((a) => a.id).filter((assetId) => assetId !== id);
+
+      // the primary survives unless it is the asset being deleted
+      let remainingCount = remainingStackAssetIds.length;
+      if (asset.stack.primaryAssetId !== id) {
+        remainingCount++;
+      }
+
+      if (remainingCount < 2) {
+        // 0 or 1 asset would remain: dissolve the stack so it does not linger as a single-asset stack
+        await this.stackRepository.delete(asset.stack.id);
+      } else if (asset.stack.primaryAssetId === id) {
+        // the primary is being deleted but others remain: promote a new primary
         await this.stackRepository.update(asset.stack.id, {
           id: asset.stack.id,
-          primaryAssetId: newPrimaryAssetId,
+          primaryAssetId: remainingStackAssetIds[0],
         });
-      } else {
-        await this.stackRepository.delete(asset.stack.id);
       }
     }
 
@@ -682,14 +691,14 @@ export class AssetService extends BaseService {
       const trimStartMs = trimEdit?.parameters.startMs ?? 0;
       const trimEndMs = trimEdit?.parameters.endMs ?? durationMs;
       const speedEdits = edits.filter((edit) => edit.action === AssetEditAction.Speed);
-      const globalSpeedEdit = speedEdits.find(
+      const hasGlobalSpeedEdit = speedEdits.some(
         (edit) => edit.parameters.startMs === undefined && edit.parameters.endMs === undefined,
       );
       const speedSegments = speedEdits
         .filter((edit) => edit.parameters.startMs !== undefined && edit.parameters.endMs !== undefined)
         .sort((a, b) => a.parameters.startMs! - b.parameters.startMs!);
 
-      if (globalSpeedEdit && speedSegments.length > 0) {
+      if (hasGlobalSpeedEdit && speedSegments.length > 0) {
         throw new BadRequestException('Global and segment speed edits cannot be combined');
       }
 

@@ -1,5 +1,6 @@
 import { CurrentPlugin } from '@extism/extism';
-import { WorkflowTrigger, WorkflowType } from 'src/enum';
+import { WorkflowTrigger } from '@immich/plugin-sdk';
+import { WorkflowType } from 'src/enum';
 import { AlbumService } from 'src/services/album.service';
 import { WorkflowExecutionService } from 'src/services/workflow-execution.service';
 import { newUuid } from 'test/small.factory';
@@ -123,7 +124,7 @@ describe(WorkflowExecutionService.name, () => {
     mocks.workflow.getForAssetV1.mockResolvedValue({ id: assetId, ownerId } as never);
     mocks.plugin.callMethod.mockResolvedValue({});
 
-    await sut.handleAssetCreate({ workflowId, assetId });
+    await sut.handleAssetTrigger({ workflowId, assetId });
 
     expect(mocks.plugin.callMethod).toHaveBeenCalledWith(
       expect.objectContaining({ methodName: 'webhook' }),

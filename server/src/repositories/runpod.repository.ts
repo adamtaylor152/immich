@@ -144,7 +144,7 @@ export class RunPodNotFoundError extends RunPodApiError {
 const SAFE_MESSAGE_KEYS = ['error', 'message', 'errorCode', 'detail'] as const;
 const SAFE_MESSAGE_MAX_LEN = 200;
 // eslint-disable-next-line no-control-regex
-const SAFE_MESSAGE_CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
+const SAFE_MESSAGE_CONTROL_CHARS = /[\u{0000}-\u{001F}\u{007F}]/gu;
 
 const extractSafeUpstreamMessage = (body: unknown): string | undefined => {
   if (typeof body !== 'object' || body === null) {
@@ -271,7 +271,7 @@ export class RunPodRepository {
         env: input.env,
         // Serverless endpoints reject pod-flavoured templates with HTTP 500
         // "Serverless endpoints cannot use pod templates."
-        ...(input.isServerless ? { isServerless: true } : {}),
+        ...(input.isServerless && { isServerless: true }),
       },
       30_000,
     );

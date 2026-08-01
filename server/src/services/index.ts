@@ -16,7 +16,9 @@ import { ForkCutoverVerificationService } from 'src/services/fork-cutover-verifi
 import { ForkHandoffService } from 'src/services/fork-handoff.service';
 import { ForkSchemaCutoverService } from 'src/services/fork-schema-cutover.service';
 import { ForkSchemaMigrationService } from 'src/services/fork-schema-migration.service';
+import { HlsService } from 'src/services/hls.service';
 import { ImageEnrichmentService } from 'src/services/image-enrichment.service';
+import { IntegrityService } from 'src/services/integrity.service';
 import { JobService } from 'src/services/job.service';
 import { LibraryService } from 'src/services/library.service';
 import { LivePhotoService } from 'src/services/live-photo.service';
@@ -50,6 +52,7 @@ import { SystemMetadataService } from 'src/services/system-metadata.service';
 import { TagService } from 'src/services/tag.service';
 import { TelemetryService } from 'src/services/telemetry.service';
 import { TimelineService } from 'src/services/timeline.service';
+import { TranscodingService } from 'src/services/transcoding.service';
 import { TrashService } from 'src/services/trash.service';
 import { UserAdminService } from 'src/services/user-admin.service';
 import { UserService } from 'src/services/user.service';
@@ -79,6 +82,8 @@ export const services = [
   ForkSchemaCutoverService,
   ForkSchemaMigrationService,
   ImageEnrichmentService,
+  IntegrityService,
+  HlsService,
   JobService,
   LibraryService,
   LivePhotoService,
@@ -113,6 +118,7 @@ export const services = [
   TagService,
   TelemetryService,
   TimelineService,
+  TranscodingService,
   TrashService,
   UserAdminService,
   UserService,

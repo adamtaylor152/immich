@@ -32,6 +32,7 @@
     mdiBookshelf,
     mdiClockOutline,
     mdiDatabaseOutline,
+    mdiFileCheckOutline,
     mdiFileDocumentOutline,
     mdiFolderOutline,
     mdiImageOutline,
@@ -49,6 +50,7 @@
   import type { Component } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
+  import IntegrityChecksSettings from './IntegrityChecksSettings.svelte';
 
   type Props = {
     data: PageData;
@@ -83,6 +85,13 @@
       subtitle: $t('admin.image_settings_description'),
       key: 'image',
       icon: mdiImageOutline,
+    },
+    {
+      component: IntegrityChecksSettings,
+      title: $t('admin.integrity_checks_settings'),
+      subtitle: $t('admin.integrity_checks_settings_description'),
+      key: 'integrity-checks',
+      icon: mdiFileCheckOutline,
     },
     {
       component: JobSettings,

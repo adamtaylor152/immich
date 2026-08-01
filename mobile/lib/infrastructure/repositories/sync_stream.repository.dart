@@ -12,6 +12,7 @@ import 'package:immich_mobile/domain/models/user_metadata.model.dart';
 import 'package:immich_mobile/extensions/string_extensions.dart';
 import 'package:immich_mobile/infrastructure/entities/asset_edit.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/asset_face.entity.drift.dart';
+import 'package:immich_mobile/infrastructure/entities/asset_ocr.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/auth_user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/exif.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
@@ -30,8 +31,8 @@ import 'package:immich_mobile/infrastructure/entities/user_metadata.entity.drift
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/utils/exif.converter.dart';
 import 'package:logging/logging.dart';
-import 'package:openapi/api.dart' as api show AssetVisibility, AlbumUserRole, UserMetadataKey, AssetEditAction;
-import 'package:openapi/api.dart' hide UserMetadataKey, AssetEditAction, AssetVisibility, AlbumUserRole;
+import 'package:openapi/api.dart' as api show AlbumUserRole, AssetEditAction, AssetVisibility, UserMetadataKey;
+import 'package:openapi/api.dart' hide AlbumUserRole, AssetEditAction, AssetVisibility, UserMetadataKey;
 
 class SyncStreamRepository extends DriftDatabaseRepository {
   final Logger _logger = Logger('DriftSyncStreamRepository');
@@ -69,6 +70,7 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             await _db.userMetadataEntity.deleteAll();
             await _db.remoteAssetCloudIdEntity.deleteAll();
             await _db.assetEditEntity.deleteAll();
+            await _db.assetOcrEntity.deleteAll();
           });
         } finally {
           // re-enable FK even if the transaction throws, otherwise the connection
@@ -91,7 +93,7 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             email: Value(user.email),
             hasProfileImage: Value(user.hasProfileImage),
             profileChangedAt: Value(user.profileChangedAt),
-            avatarColor: Value(user.avatarColor?.toAvatarColor() ?? AvatarColor.primary),
+            avatarColor: Value(user.avatarColor.orElse(null)?.toAvatarColor() ?? AvatarColor.primary),
             isAdmin: Value(user.isAdmin),
             pinCode: Value(user.pinCode),
             quotaSizeInBytes: Value(user.quotaSizeInBytes ?? 0),
@@ -133,7 +135,7 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             email: Value(user.email),
             hasProfileImage: Value(user.hasProfileImage),
             profileChangedAt: Value(user.profileChangedAt),
-            avatarColor: Value(user.avatarColor?.toAvatarColor() ?? AvatarColor.primary),
+            avatarColor: Value(user.avatarColor.orElse(null)?.toAvatarColor() ?? AvatarColor.primary),
           );
 
           batch.insert(_db.userEntity, companion.copyWith(id: Value(user.id)), onConflict: DoUpdate((_) => companion));
@@ -285,8 +287,8 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             fNumber: Value(exif.fNumber),
             fileSize: Value(exif.fileSizeInByte),
             focalLength: Value(exif.focalLength),
-            latitude: Value(exif.latitude?.toDouble()),
-            longitude: Value(exif.longitude?.toDouble()),
+            latitude: Value(exif.latitude),
+            longitude: Value(exif.longitude),
             iso: Value(exif.iso),
             make: Value(exif.make),
             model: Value(exif.model),
@@ -356,12 +358,12 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             final map = metadata.value as Map<String, Object?>;
             final companion = RemoteAssetCloudIdEntityCompanion(
               cloudId: Value(map['iCloudId']?.toString()),
-              createdAt: Value(map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : null),
+              createdAt: Value(map['createdAt'] != null ? DateTime.parse(map['createdAt']! as String) : null),
               adjustmentTime: Value(
-                map['adjustmentTime'] != null ? DateTime.parse(map['adjustmentTime'] as String) : null,
+                map['adjustmentTime'] != null ? DateTime.parse(map['adjustmentTime']! as String) : null,
               ),
-              latitude: Value(map['latitude'] != null ? (double.tryParse(map['latitude'] as String)) : null),
-              longitude: Value(map['longitude'] != null ? (double.tryParse(map['longitude'] as String)) : null),
+              latitude: Value(map['latitude'] != null ? (double.tryParse(map['latitude']! as String)) : null),
+              longitude: Value(map['longitude'] != null ? (double.tryParse(map['longitude']! as String)) : null),
             );
             batch.insert(
               _db.remoteAssetCloudIdEntity,
@@ -848,6 +850,52 @@ class SyncStreamRepository extends DriftDatabaseRepository {
     }
   }
 
+  Future<void> updateAssetOcrV1(Iterable<SyncAssetOcrV1> data) async {
+    try {
+      await _db.batch((batch) {
+        for (final assetOcr in data) {
+          final companion = AssetOcrEntityCompanion(
+            assetId: Value(assetOcr.assetId),
+            recognizedText: Value(assetOcr.text),
+            x1: Value(assetOcr.x1),
+            y1: Value(assetOcr.y1),
+            x2: Value(assetOcr.x2),
+            y2: Value(assetOcr.y2),
+            x3: Value(assetOcr.x3),
+            y3: Value(assetOcr.y3),
+            x4: Value(assetOcr.x4),
+            y4: Value(assetOcr.y4),
+            boxScore: Value(assetOcr.boxScore),
+            textScore: Value(assetOcr.textScore),
+            isVisible: Value(assetOcr.isVisible),
+          );
+
+          batch.insert(
+            _db.assetOcrEntity,
+            companion.copyWith(id: Value(assetOcr.id)),
+            onConflict: DoUpdate((_) => companion),
+          );
+        }
+      });
+    } catch (error, stack) {
+      _logger.severe('Error: updateAssetOcrV1', error, stack);
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAssetOcrV1(Iterable<SyncAssetOcrDeleteV1> data) async {
+    try {
+      await _db.batch((batch) {
+        for (final assetOcr in data) {
+          batch.deleteWhere(_db.assetOcrEntity, (row) => row.id.equals(assetOcr.id));
+        }
+      });
+    } catch (error, stack) {
+      _logger.severe('Error: deleteAssetOcrV1', error, stack);
+      rethrow;
+    }
+  }
+
   Future<void> pruneAssets() async {
     try {
       await _db.transaction(() async {
@@ -889,7 +937,6 @@ extension on AssetTypeEnum {
     AssetTypeEnum.VIDEO => AssetType.video,
     AssetTypeEnum.AUDIO => AssetType.audio,
     AssetTypeEnum.OTHER => AssetType.other,
-    _ => throw Exception('Unknown AssetType value: $this'),
   };
 }
 
@@ -897,14 +944,12 @@ extension on AssetOrder {
   AlbumAssetOrder toAlbumAssetOrder() => switch (this) {
     AssetOrder.asc => AlbumAssetOrder.asc,
     AssetOrder.desc => AlbumAssetOrder.desc,
-    _ => throw Exception('Unknown AssetOrder value: $this'),
   };
 }
 
 extension on MemoryType {
   MemoryTypeEnum toMemoryType() => switch (this) {
     MemoryType.onThisDay => MemoryTypeEnum.onThisDay,
-    _ => throw Exception('Unknown MemoryType value: $this'),
   };
 }
 
@@ -913,7 +958,6 @@ extension on api.AlbumUserRole {
     api.AlbumUserRole.editor => AlbumUserRole.editor,
     api.AlbumUserRole.viewer => AlbumUserRole.viewer,
     api.AlbumUserRole.owner => AlbumUserRole.owner,
-    _ => throw Exception('Unknown AlbumUserRole value: $this'),
   };
 }
 
@@ -923,7 +967,6 @@ extension on api.AssetVisibility {
     api.AssetVisibility.hidden => AssetVisibility.hidden,
     api.AssetVisibility.archive => AssetVisibility.archive,
     api.AssetVisibility.locked => AssetVisibility.locked,
-    _ => throw Exception('Unknown AssetVisibility value: $this'),
   };
 }
 
@@ -932,12 +975,11 @@ extension on api.UserMetadataKey {
     api.UserMetadataKey.onboarding => UserMetadataKey.onboarding,
     api.UserMetadataKey.preferences => UserMetadataKey.preferences,
     api.UserMetadataKey.license => UserMetadataKey.license,
-    _ => throw Exception('Unknown UserMetadataKey value: $this'),
   };
 }
 
 extension on UserAvatarColor {
-  AvatarColor? toAvatarColor() => AvatarColor.values.firstWhereOrNull((c) => c.name == value);
+  AvatarColor? toAvatarColor() => AvatarColor.values.firstWhereOrNull((c) => c.name == toString());
 }
 
 extension on api.AssetEditAction {
@@ -945,6 +987,8 @@ extension on api.AssetEditAction {
     api.AssetEditAction.crop => AssetEditAction.crop,
     api.AssetEditAction.rotate => AssetEditAction.rotate,
     api.AssetEditAction.mirror => AssetEditAction.mirror,
+    // Fork server-side edits (e.g. video trim) have no client-side rendering;
+    // `other` excludes them from local edit replay.
     _ => AssetEditAction.other,
   };
 }

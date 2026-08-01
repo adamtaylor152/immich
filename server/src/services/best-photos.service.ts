@@ -16,7 +16,7 @@ import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MediaRepository } from 'src/repositories/media.repository';
 import { JobItem, JobOf } from 'src/types';
-import { asDateString } from 'src/utils/date';
+import { asDateTimeString } from 'src/utils/date';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 
 type BestPhotoScoringAsset = NonNullable<Awaited<ReturnType<AssetJobRepository['getForBestPhotoScoring']>>>;
@@ -172,7 +172,7 @@ export class BestPhotosService {
         subjectScore: asset.bestPhotoSubjectScore,
         diversityScore: asset.bestPhotoDiversityScore,
         scoreVersion: asset.bestPhotoScoreVersion,
-        computedAt: asDateString(asset.bestPhotoComputedAt),
+        computedAt: asDateTimeString(asset.bestPhotoComputedAt),
         metadata: asset.bestPhotoMetadata,
         bestFrameTimestampMs: asset.bestPhotoBestFrameTimestampMs,
         frameScore: asset.bestPhotoFrameScore,

@@ -11,8 +11,7 @@ export const hardwareAcceleration = {
 } as const;
 
 export type ImageEnrichmentHardwareAcceleration =
-  | MachineLearningHardwareAcceleration.Openvino
-  | MachineLearningHardwareAcceleration.Cuda;
+  MachineLearningHardwareAcceleration.Openvino | MachineLearningHardwareAcceleration.Cuda;
 
 export const isImageEnrichmentHardwareAcceleration = (
   acceleration: MachineLearningHardwareAcceleration,

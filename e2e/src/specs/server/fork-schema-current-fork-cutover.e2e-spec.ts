@@ -15,7 +15,7 @@ import {
   workflowEvidence,
 } from './fork-schema-certification';
 
-const lane = 'current-fork-to-official-v3.0.3';
+const lane = 'current-fork-to-official-v3.1.0';
 const LEGACY_FORK_MIGRATIONS = [
   '1778000000000-PhysicalDeduplication',
   '1778255964846-PhysicalDeduplicationSchemaReconcile',
@@ -111,11 +111,13 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       }
       await client.query(
         `INSERT INTO public.plugin
-          (id, enabled, name, version, title, description, author, "wasmBytes", "createdAt", "updatedAt")
+          (id, enabled, name, version, title, description, author, "wasmBytes", templates, "sha256hash",
+           "createdAt", "updatedAt")
          VALUES
           ('10000000-0000-4000-8000-000000000001', true, 'immich-plugin-core', '2.0.1', 'Immich Core Plugin',
            'Core workflow capabilities for Immich', 'Immich Team',
-           pg_read_binary_file('/tmp/immich-plugin-core-v3.0.3.wasm'), now(), now())`,
+           pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm'), '[]'::jsonb,
+           sha256(pg_read_binary_file('/tmp/immich-plugin-core-v3.1.0.wasm')), now(), now())`,
       );
       await client.query(
         `INSERT INTO public.plugin_method
@@ -169,14 +171,18 @@ describe.runIf(phase === 'current-fork-seed')(`${lane}: legacy marker fixture`, 
       albums: 256,
       assets: 256,
       hasSha256: true,
-      legacyLedger: [...LEGACY_FORK_MIGRATIONS].toSorted(),
+      legacyLedger: [...LEGACY_FORK_MIGRATIONS].toSorted((a, b) => a.localeCompare(b)),
     });
     expect(evidence.rows.workflow.length).toBeGreaterThan(0);
     expect(evidence.rows.workflow_step.length).toBeGreaterThan(0);
     expect(evidence.ledger).toContainEqual(expect.objectContaining({ name: LEGACY_WORKFLOW_MIGRATION }));
     expect(evidence.ledger).not.toContainEqual(expect.objectContaining({ name: OFFICIAL_WORKFLOW_MIGRATION }));
-    expect(evidence.ledger.map(({ name }) => name)).not.toEqual(expect.arrayContaining([...LATER_WORKFLOW_MIGRATIONS]));
-    expect(evidence.columns).not.toEqual(
+    // Post-sync, the later workflow migrations are bundled upstream migrations,
+    // so a current-fork origin ledgers them before cutover (aliasing only maps
+    // the legacy rewrite marker to its official name).
+    expect(evidence.ledger.map(({ name }) => name)).toEqual(expect.arrayContaining([...LATER_WORKFLOW_MIGRATIONS]));
+    // Post-sync these upstream columns exist on a current-fork origin too.
+    expect(evidence.columns).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ column_name: 'templates', table_name: 'plugin' }),
         expect.objectContaining({ column_name: 'allowedHosts', table_name: 'plugin_method' }),
@@ -217,6 +223,26 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     }
 
     expect(stableSnapshots).toBe(5);
+
+    // The microservices boot force-re-imports the bundled core plugin
+    // (onPluginSync), rewriting plugin/plugin_method rows the api-only seed
+    // phase captured. Rebaseline the evidence here so the cutover assertion
+    // certifies what it intends: cutover itself preserves every workflow row
+    // digest. Stable across later restarts — each re-import writes identical
+    // values from the same image.
+    // The import runs asynchronously on the microservices boot, so queue
+    // drain alone doesn't guarantee it has landed — poll until the manifest's
+    // 12 methods are present.
+    let converged = await workflowEvidence();
+    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 12; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      converged = await workflowEvidence();
+    }
+    expect(converged.rows.plugin).toHaveLength(1);
+    expect(converged.rows.plugin[0]).toMatchObject({ name: 'immich-plugin-core', version: '2.0.1' });
+    expect(converged.rows.plugin_method).toHaveLength(12);
+    const fullState = await loadState<Record<string, unknown>>(lane);
+    await saveState(lane, { ...fullState, evidence: converged });
   }, 120_000);
 });
 
@@ -240,7 +266,17 @@ describe.runIf(phase === 'current-fork-cutover')(`${lane}: locked cutover`, () =
       expect.objectContaining({ name: OFFICIAL_WORKFLOW_MIGRATION, timestamp: legacyTimestamp }),
     );
     expect(after.ledger).not.toContainEqual(expect.objectContaining({ name: LEGACY_WORKFLOW_MIGRATION }));
-    expect(after.rowDigests).toEqual(before.evidence.rowDigests);
+    // Scope to the workflow tables this test certifies. The bundled core
+    // plugin is force-re-imported on every microservices boot (the lane
+    // restarts the stack between phases), rewriting plugin/plugin_method
+    // content that cutover never touches — cutover itself re-verifies all
+    // four table digests inside its own transaction and aborts on drift, so
+    // that invariant is enforced server-side. Row ids must still be stable
+    // here: they anchor the workflow_step foreign keys.
+    expect(after.rowDigests.workflow).toBe(before.evidence.rowDigests.workflow);
+    expect(after.rowDigests.workflow_step).toBe(before.evidence.rowDigests.workflow_step);
+    expect(after.rowIds.plugin).toEqual(before.evidence.rowIds.plugin);
+    expect(after.rowIds.plugin_method).toEqual(before.evidence.rowIds.plugin_method);
     expect(after.schemaDigest).toBe(before.evidence.schemaDigest);
     expect(progress).toHaveLength(7);
     for (const item of progress) {

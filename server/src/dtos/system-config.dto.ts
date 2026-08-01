@@ -1,3 +1,4 @@
+import { validateCronExpression } from 'cron';
 import { createZodDto } from 'nestjs-zod';
 import { defaults, type SystemConfig } from 'src/config';
 import {
@@ -12,17 +13,18 @@ import {
   AudioCodecSchema,
   ColorspaceSchema,
   CQModeSchema,
+  HlsVideoResolutionSchema,
   ImageFormatSchema,
   LogLevelSchema,
   MachineLearningHardwareAccelerationSchema,
   OAuthTokenEndpointAuthMethodSchema,
+  ReleaseChannel,
   ToneMappingSchema,
   TranscodeHardwareAccelerationSchema,
   TranscodePolicySchema,
   VideoCodecSchema,
   VideoContainerSchema,
 } from 'src/enum';
-import { isValidTime } from 'src/validation';
 import z from 'zod';
 
 /** Coerces 'true'/'false' strings to boolean, but also allows booleans. */
@@ -46,7 +48,16 @@ const JobSettingsSchema = z
 
 const cronExpressionSchema = z
   .string()
-  .regex(/(((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*) ?){5,7}/, 'Invalid cron expression')
+  .superRefine((value, ctx) => {
+    const validated = validateCronExpression(value);
+    if (!validated.valid) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Invalid cron expression. ${validated.error?.message ?? ''}`,
+        input: value,
+      });
+    }
+  })
   .describe('Cron expression');
 
 const DatabaseBackupSchema = z
@@ -56,6 +67,35 @@ const DatabaseBackupSchema = z
     keepLastAmount: z.int().min(1).describe('Keep last amount'),
   })
   .meta({ id: 'DatabaseBackupConfig' });
+
+const SystemConfigIntegrityJobSchema = z
+  .object({
+    enabled: z.boolean().describe('Enabled'),
+    cronExpression: cronExpressionSchema.describe('Cron expression for when the integrity check should run'),
+  })
+  .describe('Integrity job config')
+  .meta({ id: 'SystemConfigIntegrityJob' });
+
+const SystemConfigIntegrityChecksumJobSchema = SystemConfigIntegrityJobSchema.extend({
+  timeLimit: z.int().nonnegative().describe('How long the integrity checksum job may run for'),
+  percentageLimit: z
+    .float32()
+    .nonnegative()
+    .max(1)
+    .describe('Percentage limit of the integrity checksum job')
+    .meta({ format: 'double' }),
+})
+  .describe('Integrity checksum job config')
+  .meta({ id: 'SystemConfigIntegrityChecksumJob' });
+
+const SystemConfigIntegrityChecksSchema = z
+  .object({
+    missingFiles: SystemConfigIntegrityJobSchema,
+    untrackedFiles: SystemConfigIntegrityJobSchema,
+    checksumFiles: SystemConfigIntegrityChecksumJobSchema,
+  })
+  .describe('Integrity checks config')
+  .meta({ id: 'SystemConfigIntegrityChecks' });
 
 const SystemConfigBackupsSchema = z.object({ database: DatabaseBackupSchema }).meta({ id: 'SystemConfigBackupsDto' });
 
@@ -82,6 +122,13 @@ const SystemConfigFFmpegSchema = z
     accel: TranscodeHardwareAccelerationSchema,
     accelDecode: configBool.describe('Accelerated decode'),
     tonemap: ToneMappingSchema,
+    realtime: z
+      .object({
+        enabled: configBool.describe('Enable real-time HLS transcoding (alpha)'),
+        videoCodecs: z.array(VideoCodecSchema).describe('Video codecs to use for real-time HLS transcoding'),
+        resolutions: z.array(HlsVideoResolutionSchema).describe('Resolutions to use for real-time HLS transcoding'),
+      })
+      .meta({ id: 'SystemConfigFFmpegRealtimeDto' }),
   })
   .meta({ id: 'SystemConfigFFmpegDto' });
 
@@ -100,12 +147,13 @@ const SystemConfigJobSchema = z
     library: JobSettingsSchema,
     notifications: JobSettingsSchema,
     ocr: JobSettingsSchema,
-    imageEnrichment: JobSettingsSchema.default(defaults.job.imageEnrichment),
-    imageDescription: JobSettingsSchema.default(defaults.job.imageDescription),
-    nsfwDetection: JobSettingsSchema.default(defaults.job.nsfwDetection),
-    mediaHealth: JobSettingsSchema.default(defaults.job.mediaHealth),
+    imageEnrichment: JobSettingsSchema.default(() => defaults.job.imageEnrichment),
+    imageDescription: JobSettingsSchema.default(() => defaults.job.imageDescription),
+    nsfwDetection: JobSettingsSchema.default(() => defaults.job.nsfwDetection),
+    mediaHealth: JobSettingsSchema.default(() => defaults.job.mediaHealth),
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
+    integrityCheck: JobSettingsSchema,
   })
   .meta({ id: 'SystemConfigJobDto' });
 
@@ -233,10 +281,10 @@ const SystemConfigRunPodSchema = z
       .int()
       .min(1)
       .max(60)
-      .default(defaults.machineLearning.runpod.provisionTimeoutMinutes)
+      .default(() => defaults.machineLearning.runpod.provisionTimeoutMinutes)
       .describe('How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)'),
     // Serverless-mode settings
-    serverless: SystemConfigRunPodServerlessSchema.default(defaults.machineLearning.runpod.serverless),
+    serverless: SystemConfigRunPodServerlessSchema.default(() => defaults.machineLearning.runpod.serverless),
   })
   .meta({ id: 'SystemConfigRunPodDto' });
 
@@ -244,7 +292,7 @@ const SystemConfigRunPodSchema = z
 // and the smart-album evaluator. Cap to 256 chars and reject control characters
 // (CWE-117 log injection hardening + general defensive bound).
 // eslint-disable-next-line no-control-regex
-const SMART_ALBUM_STRING_CONTROL_PATTERN = /[\u0000-\u001F\u007F]/;
+const SMART_ALBUM_STRING_CONTROL_PATTERN = /[\u{0000}-\u{001F}\u{007F}]/u;
 const smartAlbumString = z
   .string()
   .max(256, { error: 'String must be 256 characters or fewer' })
@@ -285,9 +333,9 @@ const SystemConfigMachineLearningSchema = z
     duplicateDetection: DuplicateDetectionConfigSchema,
     facialRecognition: FacialRecognitionConfigSchema,
     ocr: OcrConfigSchema,
-    imageDescription: ImageDescriptionConfigSchema.default(defaults.machineLearning.imageDescription),
-    nsfwDetection: NsfwDetectionConfigSchema.default(defaults.machineLearning.nsfwDetection),
-    runpod: SystemConfigRunPodSchema.default(defaults.machineLearning.runpod),
+    imageDescription: ImageDescriptionConfigSchema.default(() => defaults.machineLearning.imageDescription),
+    nsfwDetection: NsfwDetectionConfigSchema.default(() => defaults.machineLearning.nsfwDetection),
+    runpod: SystemConfigRunPodSchema.default(() => defaults.machineLearning.runpod),
   })
   .meta({ id: 'SystemConfigMachineLearningDto' });
 
@@ -299,13 +347,20 @@ const SystemConfigMapSchema = z
   })
   .meta({ id: 'SystemConfigMapDto' });
 
+const ReleaseChannelSchema = z.enum(ReleaseChannel).describe('Release channel').meta({ id: 'ReleaseChannel' });
+
 const SystemConfigNewVersionCheckSchema = z
-  .object({ enabled: configBool.describe('Enabled') })
+  .object({ enabled: configBool.describe('Enabled'), channel: ReleaseChannelSchema })
   .meta({ id: 'SystemConfigNewVersionCheckDto' });
 
 const SystemConfigNightlyTasksSchema = z
   .object({
-    startTime: isValidTime.describe('Start time'),
+    startTime: z.iso
+      .time({
+        precision: -1,
+        error: (iss) => `Invalid input: expected string in HH:MM format, received ${typeof iss.input}`,
+      })
+      .describe('Start time (HH:MM)'),
     databaseCleanup: configBool.describe('Database cleanup'),
     missingThumbnails: configBool.describe('Missing thumbnails'),
     clusterNewFaces: configBool.describe('Cluster new faces'),
@@ -501,7 +556,7 @@ const SystemConfigImageSchema = z
     fullsize: SystemConfigGeneratedFullsizeImageSchema,
     colorspace: ColorspaceSchema,
     extractEmbedded: configBool.describe('Extract embedded'),
-    enhancedRaw: SystemConfigEnhancedRawImageSchema.default(defaults.image.enhancedRaw),
+    enhancedRaw: SystemConfigEnhancedRawImageSchema.default(() => defaults.image.enhancedRaw),
   })
   .meta({ id: 'SystemConfigImageDto' });
 
@@ -529,8 +584,8 @@ export const SystemConfigSchema = z
     nightlyTasks: SystemConfigNightlyTasksSchema,
     oauth: SystemConfigOAuthSchema,
     passwordLogin: SystemConfigPasswordLoginSchema,
-    physicalDeduplication: SystemConfigPhysicalDeduplicationSchema.default(defaults.physicalDeduplication),
-    localFeatures: SystemConfigLocalFeaturesSchema.default(defaults.localFeatures),
+    physicalDeduplication: SystemConfigPhysicalDeduplicationSchema.default(() => defaults.physicalDeduplication),
+    localFeatures: SystemConfigLocalFeaturesSchema.default(() => defaults.localFeatures),
     reverseGeocoding: SystemConfigReverseGeocodingSchema,
     metadata: SystemConfigMetadataSchema,
     storageTemplate: SystemConfigStorageTemplateSchema,
@@ -543,7 +598,8 @@ export const SystemConfigSchema = z
     templates: SystemConfigTemplatesSchema,
     server: SystemConfigServerSchema,
     user: SystemConfigUserSchema,
-    smartAlbums: SystemConfigSmartAlbumsSchema.default(defaults.smartAlbums),
+    smartAlbums: SystemConfigSmartAlbumsSchema.default(() => defaults.smartAlbums),
+    integrityChecks: SystemConfigIntegrityChecksSchema,
   })
   .describe('System configuration')
   .meta({ id: 'SystemConfigDto' });
@@ -652,3 +708,5 @@ export function mapConfig(config: SystemConfig): SystemConfigDto {
     },
   };
 }
+
+export { ReleaseChannel } from 'src/enum';

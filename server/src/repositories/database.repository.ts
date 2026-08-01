@@ -26,11 +26,12 @@ import {
   getCatalogTableLocks,
 } from 'src/fork-schema/catalog';
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
-import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.1.0-public-catalog.json';
 import {
+  CERTIFIED_TAG_MIGRATIONS,
   classifyMigration,
   GENERIC_LEGACY_FORK_MIGRATIONS,
-  SUPPORTED_UPSTREAM_MIGRATIONS,
+  POST_CERTIFIED_UPSTREAM_MIGRATIONS,
 } from 'src/fork-schema/migration-manifest';
 import {
   createCertifiedLedgerMigrationProvider,
@@ -38,6 +39,10 @@ import {
   createLegacyMigrationProvider,
   createOfficialMigrationProvider,
 } from 'src/fork-schema/migration-provider';
+import {
+  irreversiblePostCertifiedMigrations,
+  REVERSIBLE_POST_CERTIFIED_MIGRATIONS,
+} from 'src/fork-schema/post-certified-residue';
 import {
   aliasLegacyWorkflowMigration,
   classifyWorkflowCompatibility,
@@ -60,7 +65,7 @@ import { DB } from 'src/schema';
 import { immich_uuid_v7 } from 'src/schema/functions';
 import { ExtensionVersion, VectorExtension } from 'src/types';
 import { vectorIndexQuery } from 'src/utils/database';
-import { isValidInteger } from 'src/validation';
+import z from 'zod';
 
 export let cachedVectorExtension: VectorExtension | undefined;
 
@@ -87,7 +92,7 @@ const expectedCatalogFor = (installationClass: ForkSchemaCutoverEvidence['instal
     functions: [...OFFICIAL_CATALOG_MANIFEST.functions, ...forkEntries(FORK_CATALOG_MANIFEST.functions)],
     indexes: [...OFFICIAL_CATALOG_MANIFEST.indexes, ...forkEntries(FORK_CATALOG_MANIFEST.indexes)],
     schemas: [...OFFICIAL_CATALOG_MANIFEST.schemas, ...forkEntries(FORK_CATALOG_MANIFEST.schemas)],
-    source: 'v3.0.3+fork-v2',
+    source: 'v3.1.0+fork-v2',
     tables: [...OFFICIAL_CATALOG_MANIFEST.tables, ...forkEntries(FORK_CATALOG_MANIFEST.tables)],
     triggers: [...OFFICIAL_CATALOG_MANIFEST.triggers, ...forkEntries(FORK_CATALOG_MANIFEST.triggers)],
   };
@@ -120,6 +125,7 @@ export const FORK_SCHEMA_CUTOVER_MUTATION_STAGES = [
   'legacy-ledger-audit',
   'legacy-ledger-delete',
   'legacy-artifact-shutdown',
+  'post-certified-residue',
   'state-transition',
   'checkpoint-audit',
 ] as const;
@@ -245,7 +251,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     return super.isCertifiedReturnStartup(kysely);
   }
 
-  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.0.3'> {
+  override assertCertifiedReturnLedger(kysely: Kysely<DB> = this.db): Promise<'v3.1.0'> {
     return super.assertCertifiedReturnLedger(kysely);
   }
 
@@ -377,9 +383,8 @@ export class DatabaseRepository extends ForkHandoffRepository {
               ) {
                 probes[indexName] = this.targetProbeCount(targetLists);
                 return this.reindexVectors(indexName, { lists: targetLists });
-              } else {
-                probes[indexName] = this.targetProbeCount(lists);
               }
+              probes[indexName] = this.targetProbeCount(lists);
             }),
           );
           break;
@@ -413,7 +418,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
       if (table === 'smart_search') {
         await sql`ALTER TABLE ${sql.raw(table)} DROP CONSTRAINT IF EXISTS dim_size_constraint`.execute(tx);
       }
-      if (!rows.some((row) => row.columnName === 'embedding')) {
+      if (rows.every((row) => row.columnName !== 'embedding')) {
         this.logger.warn(`Column 'embedding' does not exist in table '${table}', truncating and adding column.`);
         await sql`TRUNCATE TABLE ${sql.raw(table)}`.execute(tx);
         await sql`ALTER TABLE ${sql.raw(table)} ADD COLUMN embedding real[] NOT NULL`.execute(tx);
@@ -477,7 +482,13 @@ export class DatabaseRepository extends ForkHandoffRepository {
     `.execute(this.db);
 
     const dimSize = rows[0]?.dimsize;
-    if (!isValidInteger(dimSize, { min: 1, max: 2 ** 16 })) {
+    if (
+      !z
+        .int()
+        .min(1)
+        .max(2 ** 16)
+        .safeParse(dimSize).success
+    ) {
       this.logger.warn(`Could not retrieve dimension size of column '${column}' in table '${table}', assuming 512`);
       return 512;
     }
@@ -485,7 +496,13 @@ export class DatabaseRepository extends ForkHandoffRepository {
   }
 
   async setDimensionSize(dimSize: number): Promise<void> {
-    if (!isValidInteger(dimSize, { min: 1, max: 2 ** 16 })) {
+    if (
+      !z
+        .int()
+        .min(1)
+        .max(2 ** 16)
+        .safeParse(dimSize).success
+    ) {
       throw new Error(`Invalid CLIP dimension size: ${dimSize}`);
     }
 
@@ -557,11 +574,9 @@ export class DatabaseRepository extends ForkHandoffRepository {
   private targetListCount(count: number) {
     if (count < 128_000) {
       return 1;
-    } else if (count < 2_048_000) {
-      return 1 << (32 - Math.clz32(count / 1000));
-    } else {
-      return 1 << (33 - Math.clz32(Math.sqrt(count)));
     }
+    // eslint-disable-next-line unicorn/prefer-minimal-ternary
+    return count < 2_048_000 ? 1 << (32 - Math.clz32(count / 1000)) : 1 << (33 - Math.clz32(Math.sqrt(count)));
   }
 
   private targetProbeCount(lists: number) {
@@ -596,9 +611,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     for (const result of results ?? []) {
       if (result.status === 'Success') {
         this.logger.log(`Migration "${result.migrationName}" succeeded`);
-      }
-
-      if (result.status === 'Error') {
+      } else if (result.status === 'Error') {
         this.logger.warn(`Migration "${result.migrationName}" failed`);
       }
     }
@@ -699,7 +712,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     }
     const ledger = ledgerResult.rows.map((row) => ({ ...row, classification: classifyMigration(row.name) }));
     const workflowCompatibility = classifyWorkflowCompatibility(await getWorkflowCompatibilityEvidence(runner));
-    const installationClass = classificationResult.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+    const installationClass = classificationResult.rows[0]?.currentFork ? 'current-fork' : 'original-official';
     const officialNames = Object.keys(officialMigrations).toSorted();
     if (officialNames.some((name) => classifyMigration(name) !== 'upstream')) {
       throw new Error('Official migration provider exposed a non-upstream migration');
@@ -820,11 +833,13 @@ export class DatabaseRepository extends ForkHandoffRepository {
     const actualCatalog = await getCatalogEvidence(runner);
     const expectedCatalog = expectedCatalogFor(installationClass);
     const catalogDiff = compareCatalogs(expectedCatalog, actualCatalog, INERT_LEGACY_CATALOG_ALLOWLIST);
+    // An original-official installation is a byte-exact certified-tag database,
+    // so it must match the exact certified-tag ledger — which does not contain the
+    // post-certified upstream migrations the fork bundles.
     const exactOriginalOfficialLedger =
-      ledger.length === SUPPORTED_UPSTREAM_MIGRATIONS.length &&
+      ledger.length === CERTIFIED_TAG_MIGRATIONS.length &&
       ledger.every(
-        ({ classification, name }, index) =>
-          classification === 'upstream' && name === SUPPORTED_UPSTREAM_MIGRATIONS[index],
+        ({ classification, name }, index) => classification === 'upstream' && name === CERTIFIED_TAG_MIGRATIONS[index],
       );
     const migrationOrderValid =
       installationClass === 'current-fork'
@@ -840,10 +855,10 @@ export class DatabaseRepository extends ForkHandoffRepository {
     const forkLedgerValid =
       forkMigrations.length === expectedCatalog.forkMigrations.length &&
       forkMigrations.every((name, index) => expectedCatalog.forkMigrations[index] === name) &&
-      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present === true);
+      (state.schemaVersion !== '2' || cutoverAuditResult.rows[0]?.present);
     const tableEvidence: ForkSchemaCutoverEvidence['tableEvidence'] = [];
-    for (const table of expectedCatalog.tables.map(({ identity }) => identity)) {
-      const [schema, name] = table.split('.');
+    for (const { identity: table } of expectedCatalog.tables) {
+      const [schema, name] = table.split('.', 2);
       const identifier = `${quoteIdentifier(schema)}.${quoteIdentifier(name)}`;
       const result = await sql
         .raw<{ count: number; digest: string }>(
@@ -942,8 +957,9 @@ export class DatabaseRepository extends ForkHandoffRepository {
         const classification = await sql<{ currentFork: boolean }>`
           SELECT to_regclass('public.physical_file') IS NOT NULL AS "currentFork"
         `.execute(transaction);
-        const installationClass: ForkSchemaCutoverEvidence['installationClass'] =
-          classification.rows[0]?.currentFork === true ? 'current-fork' : 'original-official';
+        const installationClass: ForkSchemaCutoverEvidence['installationClass'] = classification.rows[0]?.currentFork
+          ? 'current-fork'
+          : 'original-official';
         const lockTables = getCatalogTableLocks(expectedCatalogFor(installationClass))
           .map((table) =>
             table
@@ -1012,6 +1028,45 @@ export class DatabaseRepository extends ForkHandoffRepository {
           ...LEGACY_MIGRATION_OVERRIDE_NAMES,
         ]})`.execute(transaction);
         await this.afterForkSchemaCutoverStage(transaction, 'legacy-artifact-shutdown');
+
+        // Post-certified upstream residue: migrations the fork applied on top
+        // of the certified official tag. Their ledger rows would crash the
+        // certified container's migrator and their effects drift from the
+        // certified catalog, so revert each one exactly (registered reversal),
+        // audit it, and remove its ledger row. The fork return re-applies them
+        // through the normal official provider. Fail closed on any residue
+        // without a registered reversal.
+        const residue = await sql<{ name: string; timestamp: string }>`
+          SELECT name, timestamp
+          FROM public.kysely_migrations
+          WHERE name = ANY(${[...POST_CERTIFIED_UPSTREAM_MIGRATIONS]})
+          ORDER BY name
+        `.execute(transaction);
+        const irreversible = irreversiblePostCertifiedMigrations(residue.rows.map(({ name }) => name));
+        if (irreversible.length > 0) {
+          throw new Error(`Fork schema cutover cannot revert post-certified migration(s): ${irreversible.join(', ')}`);
+        }
+        for (const row of residue.rows.toReversed()) {
+          await REVERSIBLE_POST_CERTIFIED_MIGRATIONS.get(row.name)!.revert(transaction);
+          await sql`
+            INSERT INTO immich_fork.migration_audit (name, phase, status, details, "completedAt")
+            VALUES (
+              ${row.name},
+              'ledger-cutover',
+              'applied',
+              jsonb_build_object(
+                'classification', 'post-certified-upstream',
+                'originalTimestamp', ${row.timestamp}::text,
+                'reportDigest', ${reportDigest}::text
+              ),
+              now()
+            )
+          `.execute(transaction);
+        }
+        await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${[
+          ...POST_CERTIFIED_UPSTREAM_MIGRATIONS,
+        ]})`.execute(transaction);
+        await this.afterForkSchemaCutoverStage(transaction, 'post-certified-residue');
 
         const committedAt = new Date().toISOString();
         const state = await sql<{ id: number }>`
@@ -1083,7 +1138,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     await this.runMigrationSet(migrator, 'fork');
   }
 
-  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'fresh'> {
+  async detectMigrationMode(): Promise<'legacy' | 'isolated' | 'official-origin' | 'fresh'> {
     const {
       rows: [ledgers],
     } = await sql<{ forkLedger: string | null; officialLedger: string | null }>`
@@ -1093,10 +1148,12 @@ export class DatabaseRepository extends ForkHandoffRepository {
     `.execute(this.db);
 
     let hasLegacyMigrations = false;
+    let officialLedgerRows = 0;
     if (ledgers.officialLedger) {
       const { rows } = await sql<{ name: string }>`SELECT name FROM public.kysely_migrations ORDER BY name`.execute(
         this.db,
       );
+      officialLedgerRows = rows.length;
       for (const { name } of rows) {
         const owner = classifyMigration(name);
         if (owner === 'unknown') {
@@ -1110,7 +1167,18 @@ export class DatabaseRepository extends ForkHandoffRepository {
       return 'legacy';
     }
 
-    return ledgers.forkLedger ? 'isolated' : 'fresh';
+    if (ledgers.forkLedger) {
+      return 'isolated';
+    }
+
+    // A populated upstream-only ledger without a fork ledger is an official
+    // database being adopted by the fork. Its upstream migrations already
+    // produced the certified schema (including the workflow-table rewrite the
+    // fork carries as a legacy migration), so adoption must never execute the
+    // legacy-fork migrations — the official provider runs and the workflow
+    // ledger machinery aliases markers instead. Only a database with no
+    // ledgered migrations at all is a truly fresh install.
+    return officialLedgerRows > 0 ? 'official-origin' : 'fresh';
   }
 
   async migrateFilePaths(sourceFolder: string, targetFolder: string): Promise<void> {
@@ -1230,9 +1298,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     for (const result of results ?? []) {
       if (result.status === 'Success') {
         this.logger.log(`Reverted migration "${result.migrationName}"`);
-      }
-
-      if (result.status === 'Error') {
+      } else if (result.status === 'Error') {
         this.logger.warn(`Failed to revert migration "${result.migrationName}"`);
       }
     }
@@ -1268,8 +1334,12 @@ export class DatabaseRepository extends ForkHandoffRepository {
    * reorder churn that landed `1779400000000-UpdateWorkflowTables.ts`. See the
    * `2100000000010-AddAssetIsNsfwIndex.ts` migration for an example.
    *
-   * `allowUnorderedMigrations` is enabled in dev so reordering is forgiving;
-   * production migrations should still be timestamp-ordered for clarity.
+   * `allowUnorderedMigrations` must stay enabled for the combined provider:
+   * adopting an official-origin database (and upgrading an existing fork
+   * database across an upstream sync) applies migrations whose names sort
+   * before already-ledgered ones — e.g. `1779806699547-AddPluginTemplates`
+   * lands after `2100000000030-AddSha256ChecksumAlgorithm` was applied — and
+   * Kysely's ordered mode refuses those as "corrupted migrations".
    */
   private createMigrator(
     provider: MigrationProvider = createLegacyMigrationProvider(join(__dirname, '..', 'schema/migrations')),
@@ -1277,7 +1347,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     return new Migrator({
       db: this.db,
       migrationLockTableName: 'kysely_migrations_lock',
-      allowUnorderedMigrations: this.configRepository.isDev(),
+      allowUnorderedMigrations: true,
       migrationTableName: 'kysely_migrations',
       provider,
     });
@@ -1289,9 +1359,7 @@ export class DatabaseRepository extends ForkHandoffRepository {
     for (const result of results ?? []) {
       if (result.status === 'Success') {
         this.logger.log(`${owner} migration "${result.migrationName}" succeeded`);
-      }
-
-      if (result.status === 'Error') {
+      } else if (result.status === 'Error') {
         this.logger.warn(`${owner} migration "${result.migrationName}" failed`);
       }
     }

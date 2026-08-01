@@ -2,8 +2,11 @@ name: Check OpenAPI
 on:
   workflow_dispatch:
   pull_request:
+    # labeled/unlabeled re-evaluate the api-breaking-approved gate below
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - 'open-api/**'
+      - 'mobile/lib/utils/openapi_patching.dart'
       - '.github/workflows/check-openapi.yml'
 
 concurrency:
@@ -14,18 +17,55 @@ permissions: {}
 
 jobs:
   check-openapi:
+    # Breaking API changes can be acknowledged explicitly (e.g. upstream sync
+    # merges that inherit upstream's own deliberate breaking changes) by adding
+    # the `api-breaking-approved` label to the PR.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'api-breaking-approved') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Check for breaking API changes
-        uses: oasdiff/oasdiff-action/breaking@26ccb332c67a45ca649de9faf60552ef1b8260d9 # v0.0.46
+        uses: oasdiff/oasdiff-action/breaking@4bdf89062dad92caea71236f59704b04d3ce9682 # v0.1.8
         with:
           base: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.base_ref || 'fork/main' }}/open-api/immich-openapi-specs.json
           revision: open-api/immich-openapi-specs.json
           fail-on: ERR
+          review: false
+
+  check-mobile-patches:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Mise
+        uses: immich-app/devtools/actions/use-mise@4d97fb30d9edd3ff0d735f411f607a35204eea79 # use-mise-action-v3.2.0
+        with:
+          github_token: ${{ github.token }}
+          working_directory: ./mobile
+
+      - name: Install dependencies
+        run: mise //mobile:install:ci
+
+      - name: Fetch base spec from main
+        run: |
+          curl -fsSL \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/open-api/immich-openapi-specs.json" \
+            -o /tmp/base-spec.json
+
+      - name: Check newly-required fields have a backward-compat patch
+        working-directory: ./mobile
+        env:
+          OPENAPI_BASE_SPEC: /tmp/base-spec.json
+          OPENAPI_REVISION_SPEC: ../open-api/immich-openapi-specs.json
+        run: flutter test test/openapi_patches_coverage.dart

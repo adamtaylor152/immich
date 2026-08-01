@@ -69,6 +69,7 @@ const commonImports = [
 
 const bullImports = [BullModule.forRoot(bull.config), BullModule.registerQueue(...bull.queues)];
 
+// eslint-disable-next-line unicorn/no-top-level-side-effects
 configureUserAgent();
 
 export class BaseModule implements OnModuleInit, OnModuleDestroy {

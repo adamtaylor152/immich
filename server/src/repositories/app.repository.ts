@@ -44,7 +44,8 @@ export class AppRepository {
                 throw new Error("One or more node(s) returned a non-'ok' response to our restart request!");
               }
             })
-            .then(resolve, reject);
+            .then(resolve)
+            .catch(reject);
         });
       });
     } finally {

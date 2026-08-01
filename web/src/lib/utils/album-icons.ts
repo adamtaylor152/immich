@@ -86,7 +86,7 @@ export type AlbumIconKey = keyof typeof ALBUM_ICONS;
  * Always returns a valid path — the default folder icon is the fallback.
  */
 export function albumIconPath(key: string | null | undefined): string {
-  if (key && key in ALBUM_ICONS) {
+  if (key && Object.hasOwn(ALBUM_ICONS, key)) {
     return ALBUM_ICONS[key as AlbumIconKey];
   }
   return DEFAULT_ALBUM_ICON_PATH;

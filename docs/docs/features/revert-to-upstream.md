@@ -11,7 +11,7 @@ Do not change only the image tag. Follow the complete [fork-to-official handoff 
 - completed, resumable backfills for every fork sidecar family;
 - a fresh database backup and matching media snapshot;
 - maintenance mode and a digest-bound, locked cutover;
-- the exact certified official image, currently `ghcr.io/immich-app/immich-server:v3.0.3`;
+- the exact certified official image, currently `ghcr.io/immich-app/immich-server:v3.1.0`;
 - a compatible fork release before returning from official Immich.
 
 Official Immich owns plugin and workflow data. The compatibility process does not copy, translate, delete, or sidecar `plugin`, `plugin_method`, `workflow`, or `workflow_step` rows. Existing official workflows, workflows created while on the fork, and workflows created during official operation remain in the official tables. The fork restores the matching official plugin host ABI when it starts again.

@@ -32,6 +32,12 @@ vitest.mock('$lib/utils', async () => {
   };
 });
 
+vi.mock(import('$lib/managers/feature-flags-manager.svelte'), function () {
+  return {
+    featureFlagsManager: { init: vi.fn(), loadFeatureFlags: vi.fn(), value: {} } as never,
+  };
+});
+
 describe('AssetService', () => {
   describe('getAssetActions', () => {
     beforeEach(() => {

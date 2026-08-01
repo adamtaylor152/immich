@@ -75,10 +75,10 @@
       sidebarStore.isResizing = false;
       controller.abort();
     };
-    globalThis.addEventListener('pointermove', (e: PointerEvent) => resizeTo(e.clientX), { signal });
-    globalThis.addEventListener('pointerup', stopResize, { once: true, signal });
-    globalThis.addEventListener('pointercancel', stopResize, { once: true, signal });
-    globalThis.addEventListener('blur', stopResize, { once: true, signal });
+    addEventListener('pointermove', (e: PointerEvent) => resizeTo(e.clientX), { signal });
+    addEventListener('pointerup', stopResize, { once: true, signal });
+    addEventListener('pointercancel', stopResize, { once: true, signal });
+    addEventListener('blur', stopResize, { once: true, signal });
   };
 
   const onResizeKey = (event: KeyboardEvent) => {

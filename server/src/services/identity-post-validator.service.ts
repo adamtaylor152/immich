@@ -91,10 +91,10 @@ const isAfterSentenceEnd = (text: string, index: number): boolean => {
   }
   for (let i = index - 1; i >= 0; i--) {
     const ch = text[i];
-    if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
+    if ([' ', '\n', '\r', '\t'].includes(ch)) {
       continue;
     }
-    return ch === '.' || ch === '!' || ch === '?' || ch === ':';
+    return ['.', '!', '?', ':'].includes(ch);
   }
   return true; // reached start
 };

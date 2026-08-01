@@ -110,9 +110,6 @@ class _FixedSegmentRow extends ConsumerWidget {
     final timelineService = ref.read(timelineServiceProvider);
     final isDynamicLayout = columnCount <= (context.isMobile ? 2 : 3);
 
-    if (isScrubbing) {
-      return _buildPlaceholder(context);
-    }
     if (timelineService.hasRange(assetIndex, assetCount)) {
       return _buildAssetRow(
         context,
@@ -120,6 +117,10 @@ class _FixedSegmentRow extends ConsumerWidget {
         timelineService,
         isDynamicLayout,
       );
+    }
+
+    if (isScrubbing) {
+      return _buildPlaceholder(context);
     }
 
     return FutureBuilder<List<BaseAsset>>(
@@ -210,6 +211,10 @@ class _AssetTileWidget extends ConsumerWidget {
       ref.read(multiSelectProvider.notifier).toggleAssetSelection(asset);
     } else {
       await ref.read(timelineServiceProvider).loadAssets(assetIndex, 1);
+      if (!ctx.mounted) {
+        return;
+      }
+
       ref.read(isPlayingMotionVideoProvider.notifier).playing = false;
       AssetViewer.setAsset(ref, asset);
       unawaited(

@@ -8,7 +8,7 @@ export type AssetGridRouteSearchParams = {
   at: string | null | undefined;
 };
 export const isExternalUrl = (url: string): boolean => {
-  return new URL(url, globalThis.location.href).origin !== globalThis.location.origin;
+  return new URL(url, location.href).origin !== location.origin;
 };
 
 export const isPhotosRoute = (route?: string | null) => !!route?.startsWith('/(user)/photos/[[assetId=id]]');
@@ -34,13 +34,13 @@ function currentUrlWithoutAsset() {
   // off / instead of a subpath, unlike every other asset-containing route.
   if (isPhotosRoute(page.route.id)) {
     return Route.photos() + page.url.search;
-  } else if (isRecentlyAddedRoute(page.route.id)) {
-    return Route.recentlyAdded() + page.url.search;
-  } else if (isSharedLinkSlugRoute(page.route.id)) {
-    return Route.viewSharedLink({ slug: page.data.slug, key: page.data.key }) + page.url.search;
-  } else {
-    return page.url.pathname.replace(/(\/photos.*)$/, '') + page.url.search;
   }
+  if (isRecentlyAddedRoute(page.route.id)) {
+    return Route.recentlyAdded() + page.url.search;
+  }
+  return isSharedLinkSlugRoute(page.route.id)
+    ? Route.viewSharedLink({ slug: page.data.slug, key: page.data.key }) + page.url.search
+    : page.url.pathname.replace(/(\/photos.*)$/, '') + page.url.search;
 }
 
 export function currentUrlReplaceAssetId(assetId: string) {
@@ -142,7 +142,8 @@ async function navigateAssetGridRoute(route: AssetGridRoute, options?: NavOption
 export function navigate(change: ImmichRoute, options?: NavOptions): Promise<void> {
   if (isAssetGridRoute(change)) {
     return navigateAssetGridRoute(change, options);
-  } else if (isAssetRoute(change)) {
+  }
+  if (isAssetRoute(change)) {
     return navigateAssetRoute(change, options);
   }
   // future navigation requests here
@@ -150,20 +151,22 @@ export function navigate(change: ImmichRoute, options?: NavOptions): Promise<voi
 }
 
 export const clearQueryParam = async (queryParam: string, url: URL) => {
-  if (url.searchParams.has(queryParam)) {
-    url.searchParams.delete(queryParam);
-    await goto(url, { keepFocus: true });
+  if (!url.searchParams.has(queryParam)) {
+    return;
   }
+
+  url.searchParams.delete(queryParam);
+  await goto(url, { keepFocus: true });
 };
 
 export const getQueryValue = (queryKey: string) => {
-  const url = globalThis.location.href;
+  const url = location.href;
   const urlObject = new URL(url);
   return urlObject.searchParams.get(queryKey);
 };
 
 export const setQueryValue = async (queryKey: string, queryValue: string) => {
-  const url = globalThis.location.href;
+  const url = location.href;
   const urlObject = new URL(url);
   urlObject.searchParams.set(queryKey, queryValue);
   await goto(urlObject, { keepFocus: true });

@@ -2,24 +2,25 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/asset_metadata.model.dart';
-import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart' hide AssetVisibility;
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
-import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/extensions/network_capability_extensions.dart';
+import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/infrastructure/repositories/backup.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/storage.repository.dart';
 import 'package:immich_mobile/platform/connectivity_api.g.dart';
-import 'package:immich_mobile/providers/app_settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/platform.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/storage.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
-import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:logging/logging.dart';
+import 'package:openapi/api.dart';
 import 'package:path/path.dart' as p;
 import 'package:photo_manager/photo_manager.dart' show PMProgressHandler;
 
@@ -39,7 +40,6 @@ final foregroundUploadServiceProvider = Provider((ref) {
     ref.watch(storageRepositoryProvider),
     ref.watch(backupRepositoryProvider),
     ref.watch(connectivityApiProvider),
-    ref.watch(appSettingsServiceProvider),
     ref.watch(assetMediaRepositoryProvider),
   );
 });
@@ -55,7 +55,6 @@ class ForegroundUploadService {
     this._storageRepository,
     this._backupRepository,
     this._connectivityApi,
-    this._appSettingsService,
     this._assetMediaRepository,
   );
 
@@ -63,7 +62,6 @@ class ForegroundUploadService {
   final StorageRepository _storageRepository;
   final DriftBackupRepository _backupRepository;
   final ConnectivityApi _connectivityApi;
-  final AppSettingsService _appSettingsService;
   final AssetMediaRepository _assetMediaRepository;
   final Logger _logger = Logger('ForegroundUploadService');
 
@@ -103,7 +101,7 @@ class ForegroundUploadService {
           final requireWifi = _shouldRequireWiFi(asset);
           return requireWifi && !hasWifi;
         },
-        processItem: (asset) => _uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
+        processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
       );
     }
   }
@@ -129,7 +127,7 @@ class ForegroundUploadService {
         continue;
       }
 
-      await _uploadSingleAsset(asset, cancelToken, callbacks: callbacks);
+      await uploadSingleAsset(asset, cancelToken, callbacks: callbacks);
     }
   }
 
@@ -146,7 +144,7 @@ class ForegroundUploadService {
     await _executeWithWorkerPool<LocalAsset>(
       items: localAssets,
       cancelToken: cancelToken,
-      processItem: (asset) => _uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
+      processItem: (asset) => uploadSingleAsset(asset, cancelToken, callbacks: callbacks),
     );
   }
 
@@ -155,7 +153,7 @@ class ForegroundUploadService {
     List<File> files, {
     Completer<void>? cancelToken,
     void Function(String fileId, int bytes, int totalBytes)? onProgress,
-    void Function(String fileId)? onSuccess,
+    void Function(String fileId, String remoteAssetId)? onSuccess,
     void Function(String fileId, String errorMessage)? onError,
   }) async {
     if (files.isEmpty) {
@@ -175,7 +173,7 @@ class ForegroundUploadService {
         );
 
         if (result.isSuccess) {
-          onSuccess?.call(fileId);
+          onSuccess?.call(fileId, result.remoteAssetId!);
         } else if (!result.isCancelled && result.errorMessage != null) {
           onError?.call(fileId, result.errorMessage!);
         }
@@ -236,7 +234,8 @@ class ForegroundUploadService {
     await Future.wait(workerFutures);
   }
 
-  Future<void> _uploadSingleAsset(
+  @visibleForTesting
+  Future<void> uploadSingleAsset(
     LocalAsset asset,
     Completer<void>? cancelToken, {
     required UploadCallbacks callbacks,
@@ -310,17 +309,10 @@ class ForegroundUploadService {
         return;
       }
 
-      String fileName = await _assetMediaRepository.getOriginalFilename(asset.id) ?? asset.name;
-
-      /// Handle special file name from DJI or Fusion app
-      /// If the file name has no extension, likely due to special renaming template by specific apps
-      /// we append the original extension from the asset name
-      final hasExtension = p.extension(fileName).isNotEmpty;
-      if (!hasExtension) {
-        fileName = p.setExtension(fileName, p.extension(asset.name));
-      }
-
-      final originalFileName = entity.isLivePhoto ? p.setExtension(fileName, p.extension(file.path)) : fileName;
+      final fileName = await _assetMediaRepository.getOriginalFilename(asset.id) ?? asset.name;
+      // Some apps (e.g. DJI/Fusion) return names without an extension; fall back to the asset name for those.
+      final extension = p.extension(file.path).isNotEmpty ? p.extension(file.path) : p.extension(asset.name);
+      final originalFileName = p.setExtension(fileName, extension);
       final deviceId = Store.get(StoreKey.deviceId);
 
       final fields = {
@@ -342,7 +334,8 @@ class ForegroundUploadService {
         final livePhotoResult = await _uploadRepository.uploadFile(
           file: livePhotoFile,
           originalFileName: livePhotoTitle,
-          fields: fields,
+          // Visibility hidden on upload to prevent the server from running regular jobs on the live photo asset
+          fields: {...fields, 'visibility': AssetVisibility.hidden.toString()},
           cancelToken: cancelToken,
           onProgress: onProgress != null
               ? (bytes, totalBytes) => onProgress(asset.localId!, livePhotoTitle, bytes, totalBytes)
@@ -405,7 +398,7 @@ class ForegroundUploadService {
         }
       }
     } catch (error, stackTrace) {
-      _logger.severe(() => "Error backup asset: ${error.toString()}", stackTrace);
+      _logger.severe(() => "Error backup asset: $error", stackTrace);
       callbacks.onError?.call(asset.localId!, error.toString());
     } finally {
       if (Platform.isIOS) {
@@ -413,7 +406,7 @@ class ForegroundUploadService {
           await file?.delete();
           await livePhotoFile?.delete();
         } catch (error, stackTrace) {
-          _logger.severe(() => "ERROR deleting file: ${error.toString()}", stackTrace);
+          _logger.severe(() => "ERROR deleting file: $error", stackTrace);
         }
       }
     }
@@ -426,6 +419,7 @@ class ForegroundUploadService {
     void Function(int bytes, int totalBytes)? onProgress,
   }) async {
     try {
+      // ignore: avoid_slow_async_io
       final stats = await file.stat();
       final fileCreatedAt = stats.changed;
       final fileModifiedAt = stats.modified;
@@ -455,14 +449,13 @@ class ForegroundUploadService {
   }
 
   bool _shouldRequireWiFi(LocalAsset asset) {
-    bool requiresWiFi = true;
-
-    if (asset.isVideo && _appSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)) {
-      requiresWiFi = false;
-    } else if (!asset.isVideo && _appSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)) {
-      requiresWiFi = false;
+    final backup = SettingsRepository.instance.appConfig.backup;
+    if (asset.isVideo && backup.useCellularForVideos) {
+      return false;
     }
-
-    return requiresWiFi;
+    if (!asset.isVideo && backup.useCellularForPhotos) {
+      return false;
+    }
+    return true;
   }
 }

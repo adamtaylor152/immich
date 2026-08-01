@@ -95,7 +95,7 @@
       <GalleryViewer
         {assets}
         assetInteraction={assetMultiSelectManager}
-        onIntersected={loadNextPage}
+        onEndReached={loadNextPage}
         showArchiveIcon={true}
         {viewport}
         onReload={reload}

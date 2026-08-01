@@ -83,6 +83,10 @@ const syncLivePhotoVideoId = (options: HiddenContentQueryOptions) => {
 
 const syncAsset = (options: HiddenContentQueryOptions) => [...syncAssetColumns, syncLivePhotoVideoId(options)] as const;
 
+const syncAlbumAssetColumns = columns.syncAlbumAsset.filter((column) => column !== 'asset.livePhotoVideoId');
+const syncAlbumAsset = (options: HiddenContentQueryOptions) =>
+  [...syncAlbumAssetColumns, syncLivePhotoVideoId(options)] as const;
+
 const syncPartnerAssetColumns = columns.syncPartnerAsset.filter((column) => column !== 'asset.livePhotoVideoId');
 const syncPartnerAsset = (options: HiddenContentQueryOptions) =>
   [...syncPartnerAssetColumns, syncLivePhotoVideoId(options)] as const;
@@ -99,6 +103,7 @@ export class SyncRepository {
   assetEdit: AssetEditSync;
   assetFace: AssetFaceSync;
   assetMetadata: AssetMetadataSync;
+  assetOcr: AssetOcrSync;
   authUser: AuthUserSync;
   memory: MemorySync;
   memoryToAsset: MemoryToAssetSync;
@@ -122,6 +127,7 @@ export class SyncRepository {
     this.assetEdit = new AssetEditSync(this.db);
     this.assetFace = new AssetFaceSync(this.db);
     this.assetMetadata = new AssetMetadataSync(this.db);
+    this.assetOcr = new AssetOcrSync(this.db);
     this.authUser = new AuthUserSync(this.db);
     this.memory = new MemorySync(this.db);
     this.memoryToAsset = new MemoryToAssetSync(this.db);
@@ -147,7 +153,7 @@ export class BaseSync {
       .selectFrom(table(t).as(t))
       .where(updateIdRef, '<', nowId)
       .where(updateIdRef, '<=', beforeUpdateId)
-      .$if(!!afterUpdateId, (qb) => qb.where(updateIdRef, '>=', afterUpdateId!))
+      .$if(!!afterUpdateId, (qb) => qb.where(updateIdRef, '>', afterUpdateId!))
       .orderBy(updateIdRef, 'asc');
   }
 
@@ -236,11 +242,20 @@ class AlbumSync extends BaseSync {
 }
 
 class AlbumAssetSync extends BaseSync {
-  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
-  getBackfill(options: SyncBackfillOptions, albumId: string) {
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, albumId: string, userId: string) {
     return this.backfillQuery('album_asset', options)
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
-      .select(syncAsset(options))
+      .select(syncAlbumAsset(options))
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
       .$call((qb) => withHiddenContentFilter(qb, options))
@@ -252,7 +267,16 @@ class AlbumAssetSync extends BaseSync {
     const userId = options.userId;
     return this.upsertQuery('asset', options)
       .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
-      .select(syncAsset(options))
+      .select(syncAlbumAsset(options))
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
       .select('asset.updateId')
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send updates for assets that the client already knows about
       .innerJoin('album_user', 'album_user.albumId', 'album_asset.albumId')
@@ -267,7 +291,16 @@ class AlbumAssetSync extends BaseSync {
     return this.upsertQuery('album_asset', options)
       .select('album_asset.updateId')
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
-      .select(syncAsset(options))
+      .select(syncAlbumAsset(options))
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
       .innerJoin('album_user', 'album_user.albumId', 'album_asset.albumId')
       .where('album_user.userId', '=', userId)
       .$call((qb) => withHiddenContentFilter(qb, options))
@@ -901,6 +934,30 @@ class AssetMetadataSync extends BaseSync {
       .where('asset.ownerId', '=', userId)
       .where('asset_metadata.key', '!=', AssetMetadataKey.MlEnrichment)
       .$call((qb) => withHiddenContentFilter(qb, options))
+      .stream();
+  }
+}
+
+class AssetOcrSync extends BaseSync {
+  @GenerateSql({ params: [dummyQueryOptions, DummyValue.UUID], stream: true })
+  getDeletes(options: SyncQueryOptions, userId: string) {
+    return this.auditQuery('asset_ocr_audit', options)
+      .select(['asset_ocr_audit.id', 'asset_ocr_audit.assetId', 'asset_ocr_audit.deletedAt'])
+      .leftJoin('asset', 'asset.id', 'asset_ocr_audit.assetId')
+      .where('asset.ownerId', '=', userId)
+      .stream();
+  }
+
+  cleanupAuditTable(daysAgo: number) {
+    return this.auditCleanup('asset_ocr_audit', daysAgo);
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions, DummyValue.UUID], stream: true })
+  getUpserts(options: SyncQueryOptions, userId: string) {
+    return this.upsertQuery('asset_ocr', options)
+      .select(columns.syncAssetOcr)
+      .innerJoin('asset', 'asset.id', 'asset_ocr.assetId')
+      .where('asset.ownerId', '=', userId)
       .stream();
   }
 }

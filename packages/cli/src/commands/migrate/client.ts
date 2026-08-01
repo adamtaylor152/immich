@@ -41,13 +41,13 @@ export class MigrateHttpError extends Error {
 class StreamFile extends File {
   constructor(
     private readonly filepath: string,
-    private readonly _size: number,
+    size: number,
     name: string,
   ) {
     super([], name);
-  }
-  get size() {
-    return this._size;
+    // File declares `size` as a data property, so a getter override is a
+    // TS2611 error — shadow it with an own property instead.
+    Object.defineProperty(this, 'size', { value: size });
   }
   stream() {
     return createReadStream(this.filepath) as unknown as ReadableStream;
@@ -85,8 +85,9 @@ export class ServerClient {
   static async connect(url: string, key: string): Promise<{ client: ServerClient; user: UserAdminResponseDto }> {
     let baseUrl = url.replace(/\/+$/, '');
     try {
-      const wellKnown = await fetch(new URL('.well-known/immich', url)).then((r) => r.json());
-      baseUrl = new URL(wellKnown.api.endpoint, url).toString().replace(/\/+$/, '');
+      const wellKnownResponse = await fetch(new URL('.well-known/immich', url));
+      const wellKnown = (await wellKnownResponse.json()) as { api: { endpoint: string } };
+      baseUrl = new URL(wellKnown.api.endpoint, url).href.replace(/\/+$/, '');
     } catch {
       // no well-known endpoint; use the URL as given
     }

@@ -392,7 +392,13 @@ export async function getWorkflowCompatibilityEvidence(runner: Kysely<DB>): Prom
     tableName: string;
     type: string;
   }>`
-    SELECT class.relname AS "tableName", attribute.attnum::int AS ordinal,
+    -- Rank the surviving columns instead of using raw attnum: Postgres never
+    -- reuses the attnum of a dropped column, so a drop/re-add cycle would shift
+    -- every later ordinal and break the stage fingerprints even though the
+    -- logical schema is identical. Pristine (never-dropped) tables rank the
+    -- same as their attnum, so the manifest digests are unchanged.
+    SELECT class.relname AS "tableName",
+      (row_number() OVER (PARTITION BY class.relname ORDER BY attribute.attnum))::int AS ordinal,
       attribute.attname AS "columnName", pg_catalog.format_type(attribute.atttypid, attribute.atttypmod) AS type,
       attribute.attnotnull AS "isNotNull", pg_catalog.pg_get_expr(defaults.adbin, defaults.adrelid) AS "defaultExpression"
     FROM pg_catalog.pg_attribute attribute

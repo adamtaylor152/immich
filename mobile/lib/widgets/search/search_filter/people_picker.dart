@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/extensions/asyncvalue_extensions.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
+import 'package:immich_mobile/extensions/string_extensions.dart';
 import 'package:immich_mobile/pages/common/large_leading_tile.dart';
 import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/providers/search/people.provider.dart';
@@ -20,7 +21,7 @@ class PeoplePicker extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final formFocus = useFocusNode();
-    final imageSize = 60.0;
+    const imageSize = 60.0;
     final searchQuery = useState('');
     final people = ref.watch(getAllPeopleProvider);
     final selectedPeople = useState<Set<PersonDto>>(filter ?? {});
@@ -44,16 +45,19 @@ class PeoplePicker extends HookConsumerWidget {
         Expanded(
           child: people.widgetWhen(
             onData: (people) {
+              final filtered = people
+                  .where(
+                    (person) => person.name.toLowerCase().removeDiacritics().contains(
+                      searchQuery.value.toLowerCase().removeDiacritics(),
+                    ),
+                  )
+                  .toList();
               return ListView.builder(
                 shrinkWrap: true,
-                itemCount: people
-                    .where((person) => person.name.toLowerCase().contains(searchQuery.value.toLowerCase()))
-                    .length,
+                itemCount: filtered.length,
                 padding: const EdgeInsets.all(8),
                 itemBuilder: (context, index) {
-                  final person = people
-                      .where((person) => person.name.toLowerCase().contains(searchQuery.value.toLowerCase()))
-                      .toList()[index];
+                  final person = filtered[index];
                   final isSelected = selectedPeople.value.contains(person);
 
                   return Padding(
@@ -76,7 +80,9 @@ class PeoplePicker extends HookConsumerWidget {
                           child: CircleAvatar(
                             key: ValueKey(person.id),
                             maxRadius: imageSize / 2,
-                            backgroundImage: RemoteImageProvider(url: getFaceThumbnailUrl(person.id)),
+                            backgroundImage: RemoteImageProvider(
+                              url: getFaceThumbnailUrl(person.id, updatedAt: person.updatedAt),
+                            ),
                           ),
                         ),
                       ),

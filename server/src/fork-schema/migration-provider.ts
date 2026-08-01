@@ -1,7 +1,11 @@
 import { FileMigrationProvider, Migration, MigrationProvider } from 'kysely';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyMigration, SUPPORTED_UPSTREAM_MIGRATIONS } from 'src/fork-schema/migration-manifest';
+import {
+  classifyMigration,
+  POST_CERTIFIED_UPSTREAM_MIGRATIONS,
+  SUPPORTED_UPSTREAM_MIGRATIONS,
+} from 'src/fork-schema/migration-manifest';
 
 const fileProvider = (migrationFolder: string) =>
   new FileMigrationProvider({
@@ -22,6 +26,14 @@ function createClassifiedMigrationProvider(migrationFolder: string, includeLegac
         const owner = classifyMigration(name);
         if (owner === 'unknown') {
           throw new Error(`Unknown migration in official migration folder: ${name}`);
+        }
+        // Post-certified upstream migrations are excluded from the certified
+        // official provider: a post-cutover (isolated) database must stay
+        // byte-exact with the certified official tag, and the cutover itself
+        // reverts them. They run on fresh/legacy installs through the combined
+        // legacy provider and are re-applied by the fork return reconciliation.
+        if (owner === 'upstream' && !includeLegacyFork && POST_CERTIFIED_UPSTREAM_MIGRATIONS.has(name)) {
+          continue;
         }
         if (owner === 'upstream' || (includeLegacyFork && owner === 'legacy-fork')) {
           officialMigrations[name] = migration;

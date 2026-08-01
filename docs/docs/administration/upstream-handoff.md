@@ -3,7 +3,7 @@
 This procedure applies only to a compatibility-certified fork database whose
 supported official release is listed in
 `server/src/fork-schema/supported-versions.json`. The currently certified image
-is exactly `ghcr.io/immich-app/immich-server:v3.0.3`. Never replace that tag
+is exactly `ghcr.io/immich-app/immich-server:v3.1.0`. Never replace that tag
 with `latest`, `release`, or another floating tag.
 
 The return mechanism is supported for the certified 3.0 release line and later
@@ -16,7 +16,7 @@ The synthetic container certification in the repository does not certify your
 installation. Before release, repeat the complete sequence against a sanitized,
 production-shaped clone. Interrupt and resume every backfill and storage
 verification job, compare final row and file digests, and boot exact official
-`v3.0.3`. This external gate cannot be claimed by a local test run.
+`v3.1.0`. This external gate cannot be claimed by a local test run.
 :::
 
 ## Data ownership and markers
@@ -87,12 +87,15 @@ immich-admin fork-handoff prepare-official
 ```
 
 Save the canonical JSON printed by `prepare-official`. It names exact image
-`ghcr.io/immich-app/immich-server:v3.0.3`. Keep maintenance enabled while
+`ghcr.io/immich-app/immich-server:v3.1.0`. Keep maintenance enabled while
 capturing that checkpoint, then stop the fork server. From a one-shot admin
 process using the same fork image, run `immich-admin disable-maintenance-mode`
 and immediately start the exact official image without changing the tag. This
 normal official boot applies every pending certified migration; verify the
-public ledger is the full `v3.0.3` manifest before API operations.
+public ledger is the full `v3.1.0` manifest before API operations. Upstream
+migrations the fork bundles beyond the certified tag (the post-certified
+residue) are exactly reverted and removed from the ledger during cutover, and
+the fork return re-applies them automatically.
 
 Authenticate, list and execute an existing workflow, create a new workflow,
 and upload, download, and delete a disposable asset. Confirm database counts

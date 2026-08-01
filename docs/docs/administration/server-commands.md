@@ -35,6 +35,7 @@ Found Admin:
 - Email=admin@example.com
 - Name=Immich Admin
 ? Please choose a new password (optional) immich-is-cool
+? Invalidate existing sessions? Yes
 The admin password has been updated.
 ```
 
@@ -90,7 +91,7 @@ immich-admin list-users
 [
   {
     id: 'e65e6f88-2a30-4dbe-8dd9-1885f4889b53',
-    email: 'immich@example.com.com',
+    email: 'immich@example.com',
     name: 'Immich Admin',
     storageLabel: 'admin',
     externalPath: null,

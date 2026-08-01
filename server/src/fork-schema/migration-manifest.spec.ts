@@ -37,8 +37,8 @@ it('rejects an unsupported upstream version', () => {
 describe(assertReleaseManifest, () => {
   it('pins the certified core plugin for every official image architecture', () => {
     expect(supportedVersions.certification.officialCorePluginDigests).toEqual({
-      amd64: '7498177fc72f9a9cfa17ab99141c6ccaea6d1720988bfc2ee0fe85a9b2db92c0',
-      arm64: 'ce2156934a9ce62010b93f551a6963f46668fdcda1aecb14a0b19cc1bdd8afed',
+      amd64: 'b6161c1e7535c6d18d90d78bd9851d7645da834e00c18521b662fa33beae8f07',
+      arm64: '66369060c5d5aa41222fb148dfa397a5c316322ef2f01ff70a1725d7e0cb5d06',
     });
   });
 

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { DatabaseLock } from 'src/enum';
 import { assertSupportedUpstream } from 'src/fork-schema/migration-manifest';
+import { irreversiblePostCertifiedMigrations } from 'src/fork-schema/post-certified-residue';
 import { ForkSchemaCutoverEvidence } from 'src/repositories/database.repository';
 import { BaseService } from 'src/services/base.service';
 
@@ -56,6 +57,12 @@ const getBlockers = (
   const unknown = evidence.ledger.filter(({ classification }) => classification === 'unknown');
   for (const migration of unknown) {
     blockers.push(`Unknown migration in kysely_migrations: ${migration.name}`);
+  }
+  // Post-certified upstream migrations are reverted and de-ledgered at cutover;
+  // one without a registered exact reversal can never be handed to the
+  // certified official container, so refuse instead of stripping.
+  for (const name of irreversiblePostCertifiedMigrations(evidence.ledger.map((migration) => migration.name))) {
+    blockers.push(`Fork schema cutover cannot revert post-certified migration(s): ${name}`);
   }
   try {
     assertSupportedUpstream(evidence.state.upstreamVersion);

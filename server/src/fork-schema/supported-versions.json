@@ -4,18 +4,22 @@
     ">=3.0.0 <4.0.0"
   ],
   "certifiedTags": [
-    "v3.0.3"
+    "v3.1.0"
   ],
   "certification": {
-    "officialImage": "ghcr.io/immich-app/immich-server:v3.0.3",
-    "officialDigest": "sha256:c716dc20f957aafd89fa9d284a2ec63e25c9e2d8d8e87c6197d540a3dce237db",
+    "officialImage": "ghcr.io/immich-app/immich-server:v3.1.0",
+    "officialDigest": "sha256:b434cb9287eea1471c9974845914d4dd328c9c2d652e446ed4930f99944f0ceb",
     "officialCorePluginDigests": {
-      "amd64": "7498177fc72f9a9cfa17ab99141c6ccaea6d1720988bfc2ee0fe85a9b2db92c0",
-      "arm64": "ce2156934a9ce62010b93f551a6963f46668fdcda1aecb14a0b19cc1bdd8afed"
+      "amd64": "b6161c1e7535c6d18d90d78bd9851d7645da834e00c18521b662fa33beae8f07",
+      "arm64": "66369060c5d5aa41222fb148dfa397a5c316322ef2f01ff70a1725d7e0cb5d06"
     },
     "result": "local-synthetic-passed",
     "externalProductionGate": "required"
   },
+  "postCertifiedUpstreamMigrations": [
+    "1784986754473-ConvertUserPasswordEmptyStringToNull",
+    "1784986754474-AlbumDescriptionNullable"
+  ],
   "upstreamMigrations": [
     "1744910873969-InitialMigration",
     "1744991379464-AddNotificationsTable",
@@ -102,6 +106,10 @@
     "1780592071031-AssetOcrSync",
     "1781089983296-CreateIntegrityReportTable",
     "1782414436633-AddPluginMethodAllowedHosts",
-    "1782500000000-RestoreLivePhotoStillVisibility"
+    "1782500000000-RestoreLivePhotoStillVisibility",
+    "1784647658615-AddOAuthBearerTokenToSession",
+    "1784836013770-MinFacePreferenceMigration",
+    "1784986754473-ConvertUserPasswordEmptyStringToNull",
+    "1784986754474-AlbumDescriptionNullable"
   ]
 }

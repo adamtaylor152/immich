@@ -6,7 +6,7 @@ import {
   serializeCatalogManifest,
 } from 'src/fork-schema/catalog';
 import forkCatalogManifest from 'src/fork-schema/manifests/fork-v2-catalog.json';
-import officialCatalogManifest from 'src/fork-schema/manifests/v3.0.3-public-catalog.json';
+import officialCatalogManifest from 'src/fork-schema/manifests/v3.1.0-public-catalog.json';
 
 const entry = (identity: string, definition = identity): CatalogEntry => ({ definition, identity });
 
@@ -89,7 +89,7 @@ describe('catalog manifests', () => {
     expect(getCatalogTableLocks(originalOfficial)).toEqual(
       [...official.tables, ...forkTables].map(({ identity }) => identity).toSorted(),
     );
-    expect(getCatalogTableLocks(fork)).toHaveLength(100);
+    expect(getCatalogTableLocks(fork)).toHaveLength(102);
     expect(getCatalogTableLocks(originalOfficial)).toHaveLength(91);
   });
 

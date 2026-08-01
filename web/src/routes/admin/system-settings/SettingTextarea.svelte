@@ -33,7 +33,7 @@
   // resolution. Use `crypto.randomUUID()` so each mount has its own id.
   const uniqueId =
     typeof globalThis.crypto?.randomUUID === 'function'
-      ? globalThis.crypto.randomUUID()
+      ? crypto.randomUUID()
       : `setting-textarea-${Math.random().toString(36).slice(2)}`;
   const descId = description ? `${uniqueId}-desc` : undefined;
 
@@ -86,6 +86,5 @@
     {required}
     {value}
     oninput={handleInput}
-    {disabled}
-  ></textarea>
+    {disabled}></textarea>
 </div>

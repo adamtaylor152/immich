@@ -45,7 +45,7 @@ describe(MapService.name, () => {
 
       await sut.getMapMarkers(auth, {});
 
-      expect(mocks.map.getMapMarkers).toHaveBeenCalledWith([auth.user.id], [], { excludeNsfw: true });
+      expect(mocks.map.getMapMarkers).toHaveBeenCalledWith(auth.user.id, [auth.user.id], [], { excludeNsfw: true });
     });
 
     it('should include partner assets', async () => {
@@ -69,6 +69,7 @@ describe(MapService.name, () => {
       const markers = await sut.getMapMarkers(auth, { withPartners: true });
 
       expect(mocks.map.getMapMarkers).toHaveBeenCalledWith(
+        auth.user.id,
         [auth.user.id, partner.sharedById],
         expect.arrayContaining([]),
         { withPartners: true },

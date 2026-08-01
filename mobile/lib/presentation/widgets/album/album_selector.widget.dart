@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
-import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/theme_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
@@ -15,12 +14,11 @@ import 'package:immich_mobile/models/albums/album_search.model.dart';
 import 'package:immich_mobile/presentation/widgets/album/album_tile.dart';
 import 'package:immich_mobile/presentation/widgets/album/new_album_name_modal.widget.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
-import 'package:immich_mobile/domain/models/metadata_key.dart';
 import 'package:immich_mobile/providers/album/album_sort_by_options.provider.dart';
 import 'package:immich_mobile/providers/asset_viewer/asset_viewer.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
-import 'package:immich_mobile/providers/infrastructure/metadata.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
@@ -58,14 +56,14 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final albumConfig = ref.read(metadataProvider).appConfig.album;
+      final albumConfig = ref.read(appConfigProvider).album;
 
       setState(() {
         sort = AlbumSort(mode: albumConfig.sortMode, isReverse: albumConfig.isReverse);
         isGrid = albumConfig.isGrid;
       });
 
-      ref.read(remoteAlbumProvider.notifier).refresh();
+      unawaited(ref.read(remoteAlbumProvider.notifier).refresh());
     });
 
     searchController.addListener(() {
@@ -83,7 +81,7 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
     final userId = ref.read(currentUserProvider)?.id;
     filter = filter.copyWith(query: searchTerm, userId: userId, mode: filterMode);
 
-    filterAlbums();
+    unawaited(filterAlbums());
   }
 
   Future<void> onRefresh() async {
@@ -94,7 +92,7 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
     setState(() {
       isGrid = !isGrid;
     });
-    ref.read(metadataProvider).write(MetadataKey.albumIsGrid, isGrid);
+    unawaited(ref.read(settingsProvider).write(.albumIsGrid, isGrid));
   }
 
   void changeFilter(QuickFilterMode mode) {
@@ -102,7 +100,7 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
       filter = filter.copyWith(mode: mode);
     });
 
-    filterAlbums();
+    unawaited(filterAlbums());
   }
 
   Future<void> changeSort(AlbumSort sort) async {
@@ -110,9 +108,9 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
       this.sort = sort;
     });
 
-    final metadata = ref.read(metadataProvider);
-    await metadata.write(MetadataKey.albumSortMode, sort.mode);
-    await metadata.write(MetadataKey.albumIsReverse, sort.isReverse);
+    final metadata = ref.read(settingsProvider);
+    await metadata.write(.albumSortMode, sort.mode);
+    await metadata.write(.albumIsReverse, sort.isReverse);
 
     await sortAlbums();
   }
@@ -123,7 +121,7 @@ class _AlbumSelectorState extends ConsumerState<AlbumSelector> {
       searchController.clear();
     });
 
-    filterAlbums();
+    unawaited(filterAlbums());
   }
 
   Future<void> sortAlbums() async {
@@ -397,7 +395,7 @@ class _SearchBar extends StatelessWidget {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       sliver: SliverToBoxAdapter(
-        child: Container(
+        child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: context.colorScheme.onSurface.withAlpha(0), width: 0),
             borderRadius: const BorderRadius.all(Radius.circular(24)),
@@ -701,7 +699,7 @@ class _GridAlbumCard extends ConsumerWidget {
                         );
                       }
 
-                      return Container(
+                      return ColoredBox(
                         color: context.colorScheme.surfaceContainerHighest,
                         child: const Icon(Icons.photo_album_rounded, size: 40, color: Colors.grey),
                       );
@@ -747,12 +745,19 @@ class AddToAlbumHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> onCreateAlbum() async {
+      final albumName = await showDialog<String?>(context: context, builder: (context) => const NewAlbumNameModal());
+      if (albumName == null) {
+        return;
+      }
+
+      final selectedAssets = ref.read(multiSelectProvider).selectedAssets;
       final newAlbum = await ref
           .read(remoteAlbumProvider.notifier)
-          .createAlbum(
-            title: "Untitled Album",
-            assetIds: ref.read(multiSelectProvider).selectedAssets.map((e) => (e as RemoteAsset).id).toList(),
-          );
+          .createAlbumWithAssets(title: albumName, assets: selectedAssets);
+
+      if (!context.mounted) {
+        return;
+      }
 
       if (newAlbum == null) {
         ImmichToast.show(context: context, toastType: ToastType.error, msg: 'errors.failed_to_create_album'.tr());
@@ -773,7 +778,7 @@ class AddToAlbumHeader extends ConsumerWidget {
             TextButton.icon(
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // remove internal padding
-                minimumSize: const Size(0, 0), // allow shrinking
+                minimumSize: Size.zero, // allow shrinking
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap, // remove extra height
               ),
               onPressed: onCreateAlbum,
@@ -796,8 +801,8 @@ class CreateAlbumButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> onCreateAlbum() async {
-      var albumName = await showDialog<String?>(context: context, builder: (context) => const NewAlbumNameModal());
-      if (albumName == null) {
+      final albumName = await showDialog<String?>(context: context, builder: (context) => const NewAlbumNameModal());
+      if (albumName == null || !context.mounted) {
         return;
       }
 
@@ -811,6 +816,10 @@ class CreateAlbumButton extends ConsumerWidget {
       final album = await ref
           .read(remoteAlbumProvider.notifier)
           .createAlbum(title: albumName, assetIds: [asset.remoteId!]);
+
+      if (!context.mounted) {
+        return;
+      }
 
       if (album == null) {
         ImmichToast.show(context: context, toastType: ToastType.error, msg: 'errors.failed_to_create_album'.tr());
@@ -838,7 +847,7 @@ class CreateAlbumButton extends ConsumerWidget {
             TextButton.icon(
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(0, 0),
+                minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               onPressed: onCreateAlbum,

@@ -103,7 +103,9 @@
       {description}
     </p>
   {:else}
-    {@render descriptionSnippet?.()}
+    <div class="pb-2">
+      {@render descriptionSnippet?.()}
+    </div>
   {/if}
 
   {#if inputType !== SettingInputFieldType.PASSWORD}

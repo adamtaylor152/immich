@@ -530,10 +530,8 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
                 frameScore: null,
                 frameMetadata: null,
               })
-              .then(
-                () => ({ status: 'fulfilled' as const }),
-                (error: unknown) => ({ status: 'rejected' as const, error }),
-              );
+              .then(() => ({ status: 'fulfilled' as const }))
+              .catch((error: unknown) => ({ status: 'rejected' as const, error }));
           } finally {
             await sql`SELECT pg_advisory_unlock(${advisoryKey})`.execute(controller);
           }

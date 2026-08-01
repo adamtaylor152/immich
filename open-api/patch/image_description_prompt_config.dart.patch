@@ -1,9 +1,11 @@
-@@ -141,7 +141,7 @@ class ImageDescriptionPromptConfig {
-             ? (json[r'nsfwIndicators'] as Iterable).cast<String>().toList(growable: false)
-             : const [],
-         sentenceCountTarget: mapValueOfType<int>(json, r'sentenceCountTarget') ?? 3,
--        style: ImageDescriptionPromptConfigStyleEnum.fromJson(json[r'style']) ?? 'balanced',
-+        style: ImageDescriptionPromptConfigStyleEnum.fromJson(json[r'style']) ?? ImageDescriptionPromptConfigStyleEnum.balanced,
-       );
-     }
-     return null;
+--- a/image_description_prompt_config.dart
++++ b/image_description_prompt_config.dart
+@@ -22,7 +22,7 @@
+     this.medicalIndicators = const Optional.present(const []),
+     this.nsfwIndicators = const Optional.present(const []),
+     this.sentenceCountTarget = const Optional.present(3),
+-    this.style = const Optional.present(const ImageDescriptionPromptConfigStyleEnum._('balanced')),
++    this.style = const Optional.present(ImageDescriptionPromptConfigStyleEnum.balanced),
+   });
+ 
+   ///

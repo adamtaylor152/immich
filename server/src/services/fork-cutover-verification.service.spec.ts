@@ -23,7 +23,7 @@ const run = {
 describe(ForkCutoverVerificationService.name, () => {
   it.each([
     ['', 'snapshot-1', 'Database backup ID is required'],
-    ['backup-1', '   ', 'Media snapshot ID is required'],
+    ['backup-1', ' '.repeat(3), 'Media snapshot ID is required'],
   ])('rejects empty immutable checkpoint IDs before mutation', async (databaseBackupId, snapshotId, message) => {
     const repository = { start: vi.fn() } as unknown as ForkCutoverVerificationRepository;
     const service = new ForkCutoverVerificationService(repository);
@@ -32,7 +32,7 @@ describe(ForkCutoverVerificationService.name, () => {
     expect(repository.start).not.toHaveBeenCalled();
   });
 
-  it.each([0, -1, 1.5, Number.NaN])('rejects invalid batch size %s before mutation', async (batchSize) => {
+  it.each([0, -1, 1.5, NaN])('rejects invalid batch size %s before mutation', async (batchSize) => {
     const repository = { resume: vi.fn() } as unknown as ForkCutoverVerificationRepository;
     const service = new ForkCutoverVerificationService(repository);
 
