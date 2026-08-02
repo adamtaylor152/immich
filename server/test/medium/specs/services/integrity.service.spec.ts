@@ -8,6 +8,7 @@ import { AssetFileType, ChecksumAlgorithm, IntegrityReport, JobName, JobStatus, 
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { IntegrityRepository } from 'src/repositories/integrity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -23,7 +24,7 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(IntegrityService, {
     database: db || defaultDatabase,
-    real: [IntegrityRepository, AssetRepository, ConfigRepository, SystemMetadataRepository],
+    real: [IntegrityRepository, AssetRepository, ConfigRepository, ForkSchemaRepository, SystemMetadataRepository],
     mock: [LoggingRepository, EventRepository, StorageRepository, JobRepository],
   });
 };
