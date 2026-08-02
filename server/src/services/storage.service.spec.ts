@@ -183,7 +183,7 @@ describe(StorageService.name, () => {
     // The repository owns the unlink so the reference count and the delete stay
     // inside one advisory-locked transaction; these mocks stand in for that
     // decision. Whether the count itself is correct is a repository concern.
-    const allowDelete = () =>
+    beforeEach(() => {
       mocks.physicalFile.deleteUnreferencedPath.mockImplementation((async (
         path: string,
         unlink: () => Promise<void>,
@@ -191,9 +191,7 @@ describe(StorageService.name, () => {
         await unlink();
         return { deleted: true, references: 0 };
       }) as never);
-
-    const refuseDelete = (references: number) =>
-      mocks.physicalFile.deleteUnreferencedPath.mockResolvedValue({ deleted: false, references } as never);
+    });
 
     it('should handle null values', async () => {
       await sut.handleDeleteFiles({ files: [undefined, null] });
@@ -203,7 +201,6 @@ describe(StorageService.name, () => {
     });
 
     it('should handle an error removing a file', async () => {
-      allowDelete();
       mocks.storage.unlink.mockRejectedValue(new Error('something-went-wrong'));
 
       await sut.handleDeleteFiles({ files: ['path/to/something'] });
@@ -212,8 +209,6 @@ describe(StorageService.name, () => {
     });
 
     it('should remove the file', async () => {
-      allowDelete();
-
       await sut.handleDeleteFiles({ files: ['path/to/something'] });
 
       expect(mocks.storage.unlink).toHaveBeenCalledWith('path/to/something');
@@ -222,7 +217,7 @@ describe(StorageService.name, () => {
     it('should not remove a path that is still referenced', async () => {
       // A live asset.originalPath pointing at a shared file — how the dedup
       // migration destroyed master originals.
-      refuseDelete(1);
+      mocks.physicalFile.deleteUnreferencedPath.mockResolvedValue({ deleted: false, references: 1 } as never);
 
       await sut.handleDeleteFiles({ files: ['path/to/shared-original'] });
 
