@@ -846,7 +846,7 @@ export class ForkSchemaRepository {
         ${input.sizeInBytes},
         ARRAY[${input.path}]::text[],
         1,
-        ${JSON.stringify({ source: input.source })}::jsonb,
+        jsonb_build_object('source', ${input.source}::text),
         now(),
         now()
       )
@@ -867,12 +867,20 @@ export class ForkSchemaRepository {
       return [];
     }
 
+    // Bind each digest as its own bytea parameter: postgres.js sends a
+    // Buffer[] as a single bytea value, so `= ANY($1::bytea[])` fails with
+    // "cannot cast type bytea to bytea[]".
+    const digests = sql.join(
+      sha1Checksums.map((sha1) => sql`${sha1}`),
+      sql`, `,
+    );
+
     const result = await sql<{ sha1: Buffer; checksum: Buffer }>`
       SELECT checksum.sha1, asset.checksum
       FROM immich_fork.asset_checksum checksum
       INNER JOIN public.asset asset ON asset.id = checksum."assetId"
       WHERE asset."ownerId" = ${ownerId}::uuid
-        AND checksum.sha1 = ANY(${sha1Checksums}::bytea[])
+        AND checksum.sha1 IN (${digests})
         AND asset.checksum <> checksum.sha1
     `.execute(this.db);
 
