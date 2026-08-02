@@ -115,6 +115,13 @@ export class PhysicalFileRepository {
       .where('asset.status', '=', AssetStatus.Active)
       .where('asset.checksum', '=', checksum)
       .where('asset_exif.fileSizeInByte', '=', sizeInBytes)
+      // When the master account holds several copies of the same file, an
+      // unordered limit lets upload-time dedup and the dedup migration pick
+      // different masters for the same duplicate — the migration then treats
+      // the first master's file as the duplicate's own and queues it for
+      // deletion. Both callers share this query, so a stable pick keeps them
+      // agreeing on one canonical master.
+      .orderBy('asset.id', 'asc')
       .limit(1)
       .executeTakeFirst();
   }
@@ -761,6 +768,30 @@ export class PhysicalFileRepository {
         .selectFrom('asset_file')
         .select((eb) => eb.fn.countAll<number>().as('count'))
         .where('physicalFileId', '=', asUuid(physicalFileId))
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return Number(assetRefs.count) + Number(fileRefs.count);
+  }
+
+  /**
+   * A path can be the live original of an asset that has no `physical_file`
+   * link at all — both upload-time dedup and the dedup migration point
+   * `asset.originalPath` at a file owned by another asset. Counting only
+   * physical-file links therefore misses real references, so callers about to
+   * unlink a file must also ask who still names that path.
+   */
+  async countPathReferences(path: string): Promise<number> {
+    const [assetRefs, fileRefs] = await Promise.all([
+      this.db
+        .selectFrom('asset')
+        .select((eb) => eb.fn.countAll<number>().as('count'))
+        .where('originalPath', '=', path)
+        .executeTakeFirstOrThrow(),
+      this.db
+        .selectFrom('asset_file')
+        .select((eb) => eb.fn.countAll<number>().as('count'))
+        .where('path', '=', path)
         .executeTakeFirstOrThrow(),
     ]);
 

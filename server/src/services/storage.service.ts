@@ -156,6 +156,18 @@ export class StorageService extends BaseService {
           }
         }
 
+        // Every caller queues deletes for a path it believes it owns, but a
+        // deduplicated path is owned by whichever asset happens to be
+        // canonical — the dedup migration queued its duplicates' original
+        // paths without checking whether those paths were already shared
+        // master files, and unlinked the only copy. Refuse to delete anything
+        // a live row still names, whatever the caller intended.
+        const pathReferences = await this.physicalFileRepository.countPathReferences(file);
+        if (pathReferences > 0) {
+          this.logger.warn(`Skipping delete for ${file}; ${pathReferences} asset row(s) still reference this path`);
+          continue;
+        }
+
         await this.storageRepository.unlink(file);
         if (physicalFile) {
           await this.physicalFileRepository.deletePhysicalFile(physicalFile.id);

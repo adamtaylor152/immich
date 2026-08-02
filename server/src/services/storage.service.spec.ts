@@ -210,6 +210,17 @@ describe(StorageService.name, () => {
       expect(mocks.physicalFile.deletePhysicalFile).not.toHaveBeenCalled();
     });
 
+    it('should not remove a path another asset still uses as its original', async () => {
+      // No physical_file row at the path, but a live asset.originalPath points
+      // at it — how the dedup migration destroyed master originals.
+      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue(void 0 as never);
+      mocks.physicalFile.countPathReferences.mockResolvedValue(1);
+
+      await sut.handleDeleteFiles({ files: ['path/to/shared-original'] });
+
+      expect(mocks.storage.unlink).not.toHaveBeenCalled();
+    });
+
     it('should remove a shared physical file after the last reference is gone', async () => {
       mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue({ id: 'physical-file-id' } as never);
       mocks.physicalFile.countReferences.mockResolvedValue(0);
