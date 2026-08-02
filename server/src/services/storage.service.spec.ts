@@ -180,13 +180,30 @@ describe(StorageService.name, () => {
   });
 
   describe('handleDeleteFiles', () => {
+    // The repository owns the unlink so the reference count and the delete stay
+    // inside one advisory-locked transaction; these mocks stand in for that
+    // decision. Whether the count itself is correct is a repository concern.
+    const allowDelete = () =>
+      mocks.physicalFile.deleteUnreferencedPath.mockImplementation((async (
+        path: string,
+        unlink: () => Promise<void>,
+      ) => {
+        await unlink();
+        return { deleted: true, references: 0 };
+      }) as never);
+
+    const refuseDelete = (references: number) =>
+      mocks.physicalFile.deleteUnreferencedPath.mockResolvedValue({ deleted: false, references } as never);
+
     it('should handle null values', async () => {
       await sut.handleDeleteFiles({ files: [undefined, null] });
 
+      expect(mocks.physicalFile.deleteUnreferencedPath).not.toHaveBeenCalled();
       expect(mocks.storage.unlink).not.toHaveBeenCalled();
     });
 
     it('should handle an error removing a file', async () => {
+      allowDelete();
       mocks.storage.unlink.mockRejectedValue(new Error('something-went-wrong'));
 
       await sut.handleDeleteFiles({ files: ['path/to/something'] });
@@ -195,40 +212,21 @@ describe(StorageService.name, () => {
     });
 
     it('should remove the file', async () => {
+      allowDelete();
+
       await sut.handleDeleteFiles({ files: ['path/to/something'] });
 
       expect(mocks.storage.unlink).toHaveBeenCalledWith('path/to/something');
     });
 
-    it('should not remove a shared physical file while references remain', async () => {
-      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue({ id: 'physical-file-id' } as never);
-      mocks.physicalFile.countReferences.mockResolvedValue(1);
-
-      await sut.handleDeleteFiles({ files: ['path/to/shared'] });
-
-      expect(mocks.storage.unlink).not.toHaveBeenCalled();
-      expect(mocks.physicalFile.deletePhysicalFile).not.toHaveBeenCalled();
-    });
-
-    it('should not remove a path another asset still uses as its original', async () => {
-      // No physical_file row at the path, but a live asset.originalPath points
-      // at it — how the dedup migration destroyed master originals.
-      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue(void 0 as never);
-      mocks.physicalFile.countPathReferences.mockResolvedValue(1);
+    it('should not remove a path that is still referenced', async () => {
+      // A live asset.originalPath pointing at a shared file — how the dedup
+      // migration destroyed master originals.
+      refuseDelete(1);
 
       await sut.handleDeleteFiles({ files: ['path/to/shared-original'] });
 
       expect(mocks.storage.unlink).not.toHaveBeenCalled();
-    });
-
-    it('should remove a shared physical file after the last reference is gone', async () => {
-      mocks.physicalFile.getPhysicalFileByPath.mockResolvedValue({ id: 'physical-file-id' } as never);
-      mocks.physicalFile.countReferences.mockResolvedValue(0);
-
-      await sut.handleDeleteFiles({ files: ['path/to/shared'] });
-
-      expect(mocks.storage.unlink).toHaveBeenCalledWith('path/to/shared');
-      expect(mocks.physicalFile.deletePhysicalFile).toHaveBeenCalledWith('physical-file-id');
     });
   });
 });

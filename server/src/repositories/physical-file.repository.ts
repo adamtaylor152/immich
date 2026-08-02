@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Kysely, Selectable, Transaction, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, parse } from 'node:path';
 import { AssetFileType, AssetStatus, ChecksumAlgorithm, PhysicalFileType } from 'src/enum';
 import { DB } from 'src/schema';
@@ -130,10 +130,6 @@ export class PhysicalFileRepository {
 
   getPhysicalFile(id: string): Promise<PhysicalFile | undefined> {
     return this.db.selectFrom('physical_file').selectAll().where('id', '=', asUuid(id)).executeTakeFirst();
-  }
-
-  getPhysicalFileByPath(path: string): Promise<PhysicalFile | undefined> {
-    return this.db.selectFrom('physical_file').selectAll().where('path', '=', path).executeTakeFirst();
   }
 
   getOriginalPhysicalFile(assetId: string): Promise<PhysicalFile | undefined> {
@@ -697,12 +693,17 @@ export class PhysicalFileRepository {
     });
   }
 
+  // Aliases an asset onto a file another asset already owns, so it takes the
+  // path lock: without it this can add a reference to a path a concurrent
+  // FileDelete job has already counted as unreferenced.
   async linkAssetToOriginalPhysicalFile(assetId: string, physicalFile: Pick<PhysicalFile, 'id' | 'path'>) {
-    await this.db
-      .updateTable('asset')
-      .set({ physicalOriginalFileId: physicalFile.id, originalPath: physicalFile.path })
-      .where('id', '=', asUuid(assetId))
-      .execute();
+    await this.withPathLock(physicalFile.path, (trx) =>
+      trx
+        .updateTable('asset')
+        .set({ physicalOriginalFileId: physicalFile.id, originalPath: physicalFile.path })
+        .where('id', '=', asUuid(assetId))
+        .execute(),
+    );
   }
 
   async isOriginalCanonical(assetId: string, physicalFileId: string): Promise<boolean> {
@@ -710,8 +711,9 @@ export class PhysicalFileRepository {
     return physicalFile?.canonicalAssetId === assetId;
   }
 
+  // Moves a physical file onto `path`, which makes that path referenced.
   async updateOriginalPhysicalPathForAsset(assetId: string, path: string) {
-    await this.db.transaction().execute(async (trx) => {
+    await this.withPathLock(path, async (trx) => {
       const physicalFile = await trx
         .selectFrom('physical_file')
         .select(['id'])
@@ -749,59 +751,101 @@ export class PhysicalFileRepository {
       .executeTakeFirst();
   }
 
+  // Same aliasing hazard as linkAssetToOriginalPhysicalFile, for derivatives.
   async linkGeneratedFile(assetId: string, type: AssetFileType, physicalFileId: string, path: string) {
-    await this.db
-      .updateTable('asset_file')
-      .set({ physicalFileId, path })
-      .where('assetId', '=', asUuid(assetId))
-      .where('type', '=', type)
-      .where('isEdited', '=', false)
-      .execute();
+    await this.withPathLock(path, (trx) =>
+      trx
+        .updateTable('asset_file')
+        .set({ physicalFileId, path })
+        .where('assetId', '=', asUuid(assetId))
+        .where('type', '=', type)
+        .where('isEdited', '=', false)
+        .execute(),
+    );
   }
 
-  async countReferences(physicalFileId: string): Promise<number> {
-    const [assetRefs, fileRefs] = await Promise.all([
-      this.db
-        .selectFrom('asset')
-        .select((eb) => eb.fn.countAll<number>().as('count'))
-        .where('physicalOriginalFileId', '=', asUuid(physicalFileId))
-        .executeTakeFirstOrThrow(),
-      this.db
-        .selectFrom('asset_file')
-        .select((eb) => eb.fn.countAll<number>().as('count'))
-        .where('physicalFileId', '=', asUuid(physicalFileId))
-        .executeTakeFirstOrThrow(),
-    ]);
+  private async countPathReferencesIn(trx: Transaction<DB>, path: string, physicalFileId?: string): Promise<number> {
+    // A path can be the live original of an asset that has no `physical_file`
+    // link at all — both upload-time dedup and the dedup migration point
+    // `asset.originalPath` at a file owned by another asset. Counting only
+    // physical-file links misses those references entirely.
+    const assetRefs = await trx
+      .selectFrom('asset')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where((eb) =>
+        eb.or([
+          eb('asset.originalPath', '=', path),
+          ...(physicalFileId ? [eb('asset.physicalOriginalFileId', '=', asUuid(physicalFileId))] : []),
+        ]),
+      )
+      .executeTakeFirstOrThrow();
+
+    const fileRefs = await trx
+      .selectFrom('asset_file')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where((eb) =>
+        eb.or([
+          eb('asset_file.path', '=', path),
+          ...(physicalFileId ? [eb('asset_file.physicalFileId', '=', asUuid(physicalFileId))] : []),
+        ]),
+      )
+      .executeTakeFirstOrThrow();
 
     return Number(assetRefs.count) + Number(fileRefs.count);
   }
 
   /**
-   * A path can be the live original of an asset that has no `physical_file`
-   * link at all — both upload-time dedup and the dedup migration point
-   * `asset.originalPath` at a file owned by another asset. Counting only
-   * physical-file links therefore misses real references, so callers about to
-   * unlink a file must also ask who still names that path.
+   * Advisory lock guarding one path against concurrent reference changes.
+   * Transaction-scoped, so it is released on commit or rollback. The key is
+   * derived in JS rather than via `hashtext` so every caller agrees on it
+   * without depending on an undocumented Postgres builtin.
    */
-  async countPathReferences(path: string): Promise<number> {
-    const [assetRefs, fileRefs] = await Promise.all([
-      this.db
-        .selectFrom('asset')
-        .select((eb) => eb.fn.countAll<number>().as('count'))
-        .where('originalPath', '=', path)
-        .executeTakeFirstOrThrow(),
-      this.db
-        .selectFrom('asset_file')
-        .select((eb) => eb.fn.countAll<number>().as('count'))
-        .where('path', '=', path)
-        .executeTakeFirstOrThrow(),
-    ]);
-
-    return Number(assetRefs.count) + Number(fileRefs.count);
+  private async lockPath(trx: Transaction<DB>, path: string): Promise<void> {
+    const key = createHash('sha1').update(path).digest().readBigInt64BE(0);
+    await sql`SELECT pg_advisory_xact_lock(${key.toString()}::bigint)`.execute(trx);
   }
 
-  async deletePhysicalFile(id: string) {
-    await this.db.deleteFrom('physical_file').where('id', '=', asUuid(id)).execute();
+  private async withPathLock<T>(path: string, callback: (trx: Transaction<DB>) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute(async (trx) => {
+      await this.lockPath(trx, path);
+      return callback(trx);
+    });
+  }
+
+  /**
+   * Unlinks `path` only while nothing references it, holding the path's
+   * advisory lock across the count and the unlink so a writer cannot introduce
+   * a reference in between. Every method that can point a new row at an
+   * existing file takes the same lock, which is what makes the count still
+   * true at the moment `unlink` runs.
+   *
+   * The physical_file row is cleaned up in the same transaction, so a failed
+   * unlink leaves both the file and its row intact.
+   */
+  async deleteUnreferencedPath(
+    path: string,
+    unlink: () => Promise<void>,
+  ): Promise<{ deleted: boolean; references: number }> {
+    return this.withPathLock(path, async (trx) => {
+      const physicalFile = await trx
+        .selectFrom('physical_file')
+        .select(['id'])
+        .where('path', '=', path)
+        .executeTakeFirst();
+
+      const references = await this.countPathReferencesIn(trx, path, physicalFile?.id);
+      if (references > 0) {
+        return { deleted: false, references };
+      }
+
+      await unlink();
+
+      if (physicalFile) {
+        await trx.deleteFrom('physical_file').where('id', '=', physicalFile.id).execute();
+      }
+
+      return { deleted: true, references: 0 };
+    });
   }
 
   getMigrationCandidates(masterUserId: string) {
