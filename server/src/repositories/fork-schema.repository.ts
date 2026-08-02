@@ -814,23 +814,27 @@ export class ForkSchemaRepository {
   }
 
   /**
-   * Records the digests computed while the upload was streamed.
+   * Records digests computed over bytes just read from disk — either an
+   * upload being streamed in, or the integrity checker verifying an existing
+   * file.
    *
    * Clients pre-check for duplicates with SHA-1 (`bulk-upload-check`) while
    * this fork persists SHA-256, so without a recorded SHA-1 the pre-check
    * never matches and every already-uploaded file is re-sent. This is real
-   * evidence — both digests are taken over the bytes just written, at a path
-   * we just created — but it deliberately writes no `asset_physical_file`
+   * evidence — both digests are taken over bytes actually read, at a path
+   * that held them — but it deliberately writes no `asset_physical_file`
    * mapping, so normalization-completeness readers (which inner-join that
    * table) continue to ignore these rows until normalization runs and upserts
-   * over them.
+   * over them. Existing rows are never overwritten: normalization evidence
+   * outranks this.
    */
-  async recordUploadChecksums(input: {
+  async recordAssetChecksums(input: {
     assetId: string;
     sha1: Buffer;
     sha256: Buffer;
     sizeInBytes: number;
     path: string;
+    source: 'upload' | 'integrity';
   }): Promise<void> {
     await sql`
       INSERT INTO immich_fork.asset_checksum
@@ -842,7 +846,7 @@ export class ForkSchemaRepository {
         ${input.sizeInBytes},
         ARRAY[${input.path}]::text[],
         1,
-        ${JSON.stringify({ source: 'upload' })}::jsonb,
+        ${JSON.stringify({ source: input.source })}::jsonb,
         now(),
         now()
       )

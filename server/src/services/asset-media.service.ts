@@ -201,12 +201,13 @@ export class AssetMediaService extends BaseService {
       }
 
       if (file.legacyChecksum) {
-        await this.forkSchemaRepository.recordUploadChecksums({
+        await this.forkSchemaRepository.recordAssetChecksums({
           assetId: asset.id,
           sha1: file.legacyChecksum,
           sha256: file.checksum,
           sizeInBytes: file.size,
           path: asset.originalPath,
+          source: 'upload',
         });
       }
 

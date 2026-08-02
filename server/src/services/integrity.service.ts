@@ -503,18 +503,42 @@ export class IntegrityService extends BaseService {
       return;
     }
 
+    // Clients pre-check for duplicates with sha1 and cannot match a sha256
+    // row without a recorded sha1. Uploads record one as they stream, but
+    // assets that predate that never got one — so hash sha1 alongside the
+    // verification read, which is already streaming the whole file. This is
+    // the backfill: no extra I/O, and it inherits the job's checkpointing and
+    // time limits.
+    const legacyHash = checksumAlgorithm === ChecksumAlgorithm.sha256File ? createHash('sha1') : null;
+    let sizeInBytes = 0;
+
     try {
       await pipeline([
         this.storageRepository.createPlainReadStream(originalPath),
         new Writable({
           write(chunk, _encoding, callback) {
             hash.update(chunk);
+            legacyHash?.update(chunk);
+            sizeInBytes += chunk.length;
             callback();
           },
         }),
       ]);
 
-      if (checksum.equals(hash.digest())) {
+      const digest = hash.digest();
+      if (checksum.equals(digest)) {
+        // Only record digests for a file that just verified against its row.
+        if (legacyHash) {
+          await this.forkSchemaRepository.recordAssetChecksums({
+            assetId,
+            sha1: legacyHash.digest(),
+            sha256: digest,
+            sizeInBytes,
+            path: originalPath,
+            source: 'integrity',
+          });
+        }
+
         if (reportId) {
           await this.integrityRepository.deleteById(reportId);
         }

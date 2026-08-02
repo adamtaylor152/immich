@@ -5,7 +5,7 @@ import { Mocked, vitest } from 'vitest';
 export const newForkSchemaRepositoryMock = (): Mocked<RepositoryInterface<ForkSchemaRepository>> => ({
   activateAfterReturnReconciliation: vitest.fn(),
   beginOrResumeReturnReconciliation: vitest.fn(),
-  recordUploadChecksums: vitest.fn(),
+  recordAssetChecksums: vitest.fn(),
   getChecksumTranslations: vitest.fn((_ownerId: string, _sha1Checksums: Buffer[]) => Promise.resolve([])),
   overlayConfig: vitest.fn((config) => Promise.resolve(config)),
   mirrorConfig: vitest.fn(),
