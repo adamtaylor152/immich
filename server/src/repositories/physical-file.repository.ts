@@ -96,6 +96,14 @@ export class PhysicalFileRepository {
     return Promise.resolve();
   }
 
+  /**
+   * The ordering is load-bearing: when the master account holds several copies
+   * of the same file, an unordered limit lets upload-time dedup and the dedup
+   * migration pick different masters for the same duplicate — the migration
+   * then treats the first master's file as the duplicate's own and queues it
+   * for deletion. Both callers share this query, so a stable pick keeps them
+   * agreeing on one canonical master.
+   */
   async getMasterOriginalCandidate(masterUserId: string, checksum: Buffer, sizeInBytes: number) {
     return this.db
       .selectFrom('asset')
@@ -115,12 +123,6 @@ export class PhysicalFileRepository {
       .where('asset.status', '=', AssetStatus.Active)
       .where('asset.checksum', '=', checksum)
       .where('asset_exif.fileSizeInByte', '=', sizeInBytes)
-      // When the master account holds several copies of the same file, an
-      // unordered limit lets upload-time dedup and the dedup migration pick
-      // different masters for the same duplicate — the migration then treats
-      // the first master's file as the duplicate's own and queues it for
-      // deletion. Both callers share this query, so a stable pick keeps them
-      // agreeing on one canonical master.
       .orderBy('asset.id', 'asc')
       .limit(1)
       .executeTakeFirst();
