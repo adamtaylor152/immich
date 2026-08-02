@@ -147,18 +147,18 @@ export class StorageService extends BaseService {
       }
 
       try {
-        const physicalFile = await this.physicalFileRepository.getPhysicalFileByPath(file);
-        if (physicalFile) {
-          const references = await this.physicalFileRepository.countReferences(physicalFile.id);
-          if (references > 0) {
-            this.logger.debug(`Skipping shared physical file delete for ${file}; ${references} reference(s) remain`);
-            continue;
-          }
-        }
+        // Every caller queues deletes for a path it believes it owns, but a
+        // deduplicated path is owned by whichever asset happens to be
+        // canonical — the dedup migration queued its duplicates' original
+        // paths without checking whether those paths were already shared
+        // master files, and unlinked the only copy. Refuse to delete anything
+        // a live row still names, whatever the caller intended.
+        const { deleted, references } = await this.physicalFileRepository.deleteUnreferencedPath(file, () =>
+          this.storageRepository.unlink(file),
+        );
 
-        await this.storageRepository.unlink(file);
-        if (physicalFile) {
-          await this.physicalFileRepository.deletePhysicalFile(physicalFile.id);
+        if (!deleted) {
+          this.logger.debug(`Skipping delete for ${file}; ${references} reference(s) remain`);
         }
       } catch (error: any) {
         this.logger.warn('Unable to remove file from disk', error);
