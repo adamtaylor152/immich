@@ -129,7 +129,8 @@ describe('checkForDuplicates', () => {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-'));
   const testFilePath = path.join(testDir, 'test.png');
   const testFileData = 'test';
-  const testFileChecksum = 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'; // SHA1
+  const testFileChecksumSha1 = 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3';
+  const testFileChecksumSha256 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
   const retry = 3;
 
   beforeEach(() => {
@@ -153,7 +154,11 @@ describe('checkForDuplicates', () => {
       assetBulkUploadCheckDto: {
         assets: [
           {
-            checksum: testFileChecksum,
+            checksum: testFileChecksumSha256,
+            id: testFilePath,
+          },
+          {
+            checksum: testFileChecksumSha1,
             id: testFilePath,
           },
         ],
@@ -181,6 +186,78 @@ describe('checkForDuplicates', () => {
         },
       ],
       newFiles: [],
+    });
+  });
+
+  it('treats a file as a duplicate when only one of its two digests is rejected', async () => {
+    // The sha256 item is accepted (no row hashed that way yet) while the sha1
+    // item matches a legacy row — the file is already on the server either way.
+    vi.mocked(checkBulkUpload).mockResolvedValue({
+      results: [
+        {
+          action: AssetUploadAction.Accept,
+          id: testFilePath,
+        },
+        {
+          action: AssetUploadAction.Reject,
+          id: testFilePath,
+          assetId: 'fc5621b1-86f6-44a1-9905-403e607df9f5',
+          reason: AssetRejectReason.Duplicate,
+        },
+      ],
+    });
+
+    await expect(checkForDuplicates([testFilePath], { concurrency: 1 })).resolves.toEqual({
+      duplicates: [
+        {
+          filepath: testFilePath,
+          id: 'fc5621b1-86f6-44a1-9905-403e607df9f5',
+        },
+      ],
+      newFiles: [],
+    });
+  });
+
+  it('treats a file as a duplicate regardless of the order the digest results arrive in', async () => {
+    // Same as above but reject-then-accept: the server does not promise result
+    // ordering, so a later accept must never clear an earlier reject.
+    vi.mocked(checkBulkUpload).mockResolvedValue({
+      results: [
+        {
+          action: AssetUploadAction.Reject,
+          id: testFilePath,
+          assetId: 'fc5621b1-86f6-44a1-9905-403e607df9f5',
+          reason: AssetRejectReason.Duplicate,
+        },
+        {
+          action: AssetUploadAction.Accept,
+          id: testFilePath,
+        },
+      ],
+    });
+
+    await expect(checkForDuplicates([testFilePath], { concurrency: 1 })).resolves.toEqual({
+      duplicates: [
+        {
+          filepath: testFilePath,
+          id: 'fc5621b1-86f6-44a1-9905-403e607df9f5',
+        },
+      ],
+      newFiles: [],
+    });
+  });
+
+  it('counts a file once when both of its digests are accepted', async () => {
+    vi.mocked(checkBulkUpload).mockResolvedValue({
+      results: [
+        { action: AssetUploadAction.Accept, id: testFilePath },
+        { action: AssetUploadAction.Accept, id: testFilePath },
+      ],
+    });
+
+    await expect(checkForDuplicates([testFilePath], { concurrency: 1 })).resolves.toEqual({
+      duplicates: [],
+      newFiles: [testFilePath],
     });
   });
 
@@ -261,11 +338,17 @@ describe('startWatch', () => {
       () =>
         expect(checkBulkUpload).toHaveBeenCalledWith({
           assetBulkUploadCheckDto: {
-            assets: [
+            // one item per digest (SHA-256 and SHA-1), both keyed by the file path
+            assets: expect.arrayContaining([
               expect.objectContaining({
                 id: testFilePath,
+                checksum: '179c781562b6b81841d785abc9c16ad838712b97474aabb477584d860a03fab8',
               }),
-            ],
+              expect.objectContaining({
+                id: testFilePath,
+                checksum: 'ba3b66a0a285b1a8f6c845e9324f75ddd99b9c56',
+              }),
+            ]),
           },
         }),
       { timeout: 5000 },

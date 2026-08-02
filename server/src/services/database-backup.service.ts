@@ -488,6 +488,17 @@ const SQL_RESET_SCHEMA = (username: string) => `
   DROP SCHEMA public CASCADE;
   CREATE SCHEMA public;
 
+  -- The fork's sidecar schema lives outside public, so dropping public alone
+  -- would leave a stale immich_fork behind: its rows would no longer match the
+  -- restored public tables, and its surviving migration ledger would make the
+  -- half-wiped database look 'isolated' to detectMigrationMode — routing the
+  -- restore to the certified official migrator, which omits the migrations
+  -- that create the fork's public tables. A fork backup carries immich_fork in
+  -- the same dump, so it is restored alongside public; restoring an official
+  -- backup correctly yields a fork-free database that runForkMigrations
+  -- re-initialises.
+  DROP SCHEMA IF EXISTS immich_fork CASCADE;
+
   -- restore access to schema
   GRANT ALL ON SCHEMA public TO "${username}";
   GRANT ALL ON SCHEMA public TO public;

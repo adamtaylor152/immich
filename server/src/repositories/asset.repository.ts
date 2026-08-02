@@ -663,6 +663,18 @@ export class AssetRepository {
       await this.forkEnrichment.delete(ids, tx);
       await this.smartAlbums.deleteAssets(ids, tx);
       await this.deleteForkDerivedResults(ids, tx);
+      // `stack.primaryAssetId` has no ON DELETE action, so stacks have to go before
+      // the assets they point at. Upstream never hits this because it deletes the
+      // user row and lets a single cascading statement remove `stack` and `asset`
+      // together (NO ACTION is only enforced at the end of the statement). The fork
+      // deletes the assets in their own statement — to collect fork-managed original
+      // paths and clean up the `immich_fork` sidecar rows — so the stacks have to be
+      // removed first, including any owned by someone else that points at one of
+      // these assets.
+      await tx
+        .deleteFrom('stack')
+        .where((eb) => eb.or([eb('ownerId', '=', asUuid(ownerId)), eb('primaryAssetId', '=', anyUuid(ids))]))
+        .execute();
       await tx.deleteFrom('asset').where('ownerId', '=', ownerId).execute();
       return assets.map(({ originalPath, reservationTemporaryPath, libraryId, isOffline }) => ({
         originalPath,
