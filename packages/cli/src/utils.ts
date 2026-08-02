@@ -205,6 +205,28 @@ export const sha1 = (filepath: string) => {
   });
 };
 
+/**
+ * Compute the SHA-1 and SHA-256 digests of a file in a single read pass.
+ *
+ * The server stores SHA-256 for assets uploaded after the SHA-256 transition and
+ * SHA-1 for legacy rows (see `asset.checksumAlgorithm`), and duplicate checks
+ * compare the client-supplied digest byte-for-byte. Clients therefore have to
+ * offer both digests to detect duplicates against either kind of row.
+ */
+export const hashFile = (filepath: string) => {
+  const sha1Hash = createHash('sha1');
+  const sha256Hash = createHash('sha256');
+  return new Promise<{ sha1: string; sha256: string }>((resolve, reject) => {
+    const rs = createReadStream(filepath);
+    rs.on('error', reject);
+    rs.on('data', (chunk) => {
+      sha1Hash.update(chunk);
+      sha256Hash.update(chunk);
+    });
+    rs.on('end', () => resolve({ sha1: sha1Hash.digest('hex'), sha256: sha256Hash.digest('hex') }));
+  });
+};
+
 // The server stores SHA-256 for all new uploads, so migration dedup/audit must match on SHA-256.
 export const sha256 = (filepath: string, encoding: 'hex' | 'base64' = 'base64') => {
   const hash = createHash('sha256');

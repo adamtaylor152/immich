@@ -2,6 +2,7 @@ import { Kysely } from 'kysely';
 import { AssetFileType, AssetMetadataKey, AssetOrder, AssetType, AssetVisibility } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { StackRepository } from 'src/repositories/stack.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { MediumTestContext, newMediumService } from 'test/medium.factory';
@@ -254,6 +255,25 @@ describe(AssetRepository.name, () => {
       expect(stats.totalAssets - baseline.totalAssets).toBe(1);
       expect(stats.withDescription - baseline.withDescription).toBe(1);
       expect(stats.withoutDescription - baseline.withoutDescription).toBe(0);
+    });
+  });
+
+  describe('deleteAll', () => {
+    it('should delete stacked assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const [{ asset: primary }, { asset: child }] = await Promise.all([
+        ctx.newAsset({ ownerId: user.id }),
+        ctx.newAsset({ ownerId: user.id }),
+      ]);
+      // `stack.primaryAssetId` has no ON DELETE action, so the stack has to be
+      // removed before the assets it points at.
+      await ctx.get(StackRepository).create({ ownerId: user.id }, [primary.id, child.id]);
+
+      const deleted = await sut.deleteAll(user.id);
+
+      expect(deleted).toHaveLength(2);
+      await expect(sut.getByIds([primary.id, child.id])).resolves.toEqual([]);
     });
   });
 });

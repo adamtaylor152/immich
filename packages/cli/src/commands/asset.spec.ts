@@ -129,7 +129,8 @@ describe('checkForDuplicates', () => {
   const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-'));
   const testFilePath = path.join(testDir, 'test.png');
   const testFileData = 'test';
-  const testFileChecksum = 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'; // SHA1
+  const testFileChecksumSha1 = 'a94a8fe5ccb19ba61c4c0873d391e987982fbbd3';
+  const testFileChecksumSha256 = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
   const retry = 3;
 
   beforeEach(() => {
@@ -153,7 +154,11 @@ describe('checkForDuplicates', () => {
       assetBulkUploadCheckDto: {
         assets: [
           {
-            checksum: testFileChecksum,
+            checksum: testFileChecksumSha256,
+            id: testFilePath,
+          },
+          {
+            checksum: testFileChecksumSha1,
             id: testFilePath,
           },
         ],
@@ -261,11 +266,12 @@ describe('startWatch', () => {
       () =>
         expect(checkBulkUpload).toHaveBeenCalledWith({
           assetBulkUploadCheckDto: {
-            assets: [
+            // one item per digest (SHA-256 and SHA-1), both keyed by the file path
+            assets: expect.arrayContaining([
               expect.objectContaining({
                 id: testFilePath,
               }),
-            ],
+            ]),
           },
         }),
       { timeout: 5000 },

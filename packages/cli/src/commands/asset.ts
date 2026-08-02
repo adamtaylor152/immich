@@ -22,7 +22,7 @@ import { Stats, createReadStream, existsSync } from 'node:fs';
 import { stat, unlink } from 'node:fs/promises';
 import path, { basename } from 'node:path';
 import { Queue } from 'src/queue';
-import { BaseOptions, Batcher, authenticate, crawl, requirePermissions, s, sha1 } from 'src/utils';
+import { BaseOptions, Batcher, authenticate, crawl, hashFile, requirePermissions, s } from 'src/utils';
 
 const UPLOAD_WATCH_BATCH_SIZE = 100;
 const UPLOAD_WATCH_DEBOUNCE_TIME_MS = 10_000;
@@ -236,19 +236,30 @@ export const checkForDuplicates = async (files: string[], { concurrency, skipHas
 
       const results = response.results as AssetBulkUploadCheckResults;
 
+      // Every file is submitted once per digest (see below), so results are
+      // aggregated by `id` (the file path): a reject on any digest means the
+      // server already has the file.
+      const checkedFiles = new Set<string>();
+      const duplicateAssetIds = new Map<string, string>();
       for (const { id: filepath, assetId, action } of results) {
-        if (action === AssetUploadAction.Accept) {
-          newFiles.push(filepath);
-        } else {
+        checkedFiles.add(filepath);
+        if (action !== AssetUploadAction.Accept) {
           // rejects are always duplicates
-          duplicates.push({ id: assetId as string, filepath });
+          duplicateAssetIds.set(filepath, assetId as string);
         }
       }
 
       // Update progress based on total size of processed files
       let processedSize = 0;
-      for (const asset of assets) {
-        const stats = statsMap.get(asset.id);
+      for (const filepath of checkedFiles) {
+        const duplicateAssetId = duplicateAssetIds.get(filepath);
+        if (duplicateAssetId === undefined) {
+          newFiles.push(filepath);
+        } else {
+          duplicates.push({ id: duplicateAssetId, filepath });
+        }
+
+        const stats = statsMap.get(filepath);
         processedSize += stats?.size || 0;
       }
       checkProgressBar?.increment(processedSize);
@@ -265,11 +276,20 @@ export const checkForDuplicates = async (files: string[], { concurrency, skipHas
       if (!stats) {
         throw new Error(`Stats not found for ${filepath}`);
       }
-      const dto = { id: filepath, checksum: await sha1(filepath) };
+      // The server persists SHA-256 for assets uploaded after the SHA-256
+      // transition and SHA-1 for legacy rows, and matches the supplied digest
+      // byte-for-byte. Submit both digests for each file so duplicates are found
+      // against either kind of row; the two items share the same `id` and are
+      // always sent in the same batch, so the check queue can aggregate them.
+      const { sha1, sha256 } = await hashFile(filepath);
+      const dtos = [
+        { id: filepath, checksum: sha256 },
+        { id: filepath, checksum: sha1 },
+      ];
 
-      results.push(dto);
-      checkBulkUploadRequests.push(dto);
-      if (checkBulkUploadRequests.length === 5000) {
+      results.push(...dtos);
+      checkBulkUploadRequests.push(...dtos);
+      if (checkBulkUploadRequests.length >= 5000) {
         const batch = checkBulkUploadRequests;
         checkBulkUploadRequests = [];
         void checkBulkUploadQueue.push(batch);
