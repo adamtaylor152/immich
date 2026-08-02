@@ -360,7 +360,8 @@ export interface IIntegrityUntrackedFilesJob {
 
 export interface IIntegrityMissingFilesJob {
   items: ({ path: string; reportId: string | null } & (
-    { assetId: string; fileAssetId: null } | { assetId: null; fileAssetId: string }
+    | { assetId: string; fileAssetId: null }
+    | { assetId: null; fileAssetId: string }
   ))[];
 }
 
@@ -540,13 +541,16 @@ export interface ExtensionVersion {
 
 export interface ImmichFile extends Express.Multer.File {
   uuid: string;
-  /** sha1 hash of file */
+  /** sha256 hash of file */
   checksum: Buffer;
+  /** sha1 hash of the same bytes, for clients that pre-check with sha1 */
+  legacyChecksum?: Buffer;
 }
 
 export interface UploadFile {
   uuid: string;
   checksum: Buffer;
+  legacyChecksum?: Buffer;
   originalPath: string;
   originalName: string;
   size: number;
@@ -621,7 +625,8 @@ export type PhysicalDeduplicationMigrationState = {
   samples: string[];
 };
 export type MaintenanceModeState =
-  { isMaintenanceMode: true; secret: string; action?: SetMaintenanceModeDto } | { isMaintenanceMode: false };
+  | { isMaintenanceMode: true; secret: string; action?: SetMaintenanceModeDto }
+  | { isMaintenanceMode: false };
 export type MemoriesState = {
   /** memories have already been created through this date */
   lastOnThisDayDate: string;

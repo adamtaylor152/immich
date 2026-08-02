@@ -812,4 +812,66 @@ export class ForkSchemaRepository {
       `.execute(trx);
     });
   }
+
+  /**
+   * Records the digests computed while the upload was streamed.
+   *
+   * Clients pre-check for duplicates with SHA-1 (`bulk-upload-check`) while
+   * this fork persists SHA-256, so without a recorded SHA-1 the pre-check
+   * never matches and every already-uploaded file is re-sent. This is real
+   * evidence — both digests are taken over the bytes just written, at a path
+   * we just created — but it deliberately writes no `asset_physical_file`
+   * mapping, so normalization-completeness readers (which inner-join that
+   * table) continue to ignore these rows until normalization runs and upserts
+   * over them.
+   */
+  async recordUploadChecksums(input: {
+    assetId: string;
+    sha1: Buffer;
+    sha256: Buffer;
+    sizeInBytes: number;
+    path: string;
+  }): Promise<void> {
+    await sql`
+      INSERT INTO immich_fork.asset_checksum
+        ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount", evidence, "verifiedAt", "updatedAt")
+      VALUES (
+        ${input.assetId}::uuid,
+        ${input.sha1},
+        ${input.sha256},
+        ${input.sizeInBytes},
+        ARRAY[${input.path}]::text[],
+        1,
+        ${JSON.stringify({ source: 'upload' })}::jsonb,
+        now(),
+        now()
+      )
+      ON CONFLICT ("assetId") DO NOTHING
+    `.execute(this.db);
+  }
+
+  /**
+   * Maps client-supplied SHA-1 digests onto the SHA-256 digests this fork
+   * stores on `public.asset`, so a SHA-1 duplicate pre-check can be resolved
+   * through the normal filtered lookup.
+   */
+  async getChecksumTranslations(
+    ownerId: string,
+    sha1Checksums: Buffer[],
+  ): Promise<Array<{ sha1: Buffer; checksum: Buffer }>> {
+    if (sha1Checksums.length === 0) {
+      return [];
+    }
+
+    const result = await sql<{ sha1: Buffer; checksum: Buffer }>`
+      SELECT checksum.sha1, asset.checksum
+      FROM immich_fork.asset_checksum checksum
+      INNER JOIN public.asset asset ON asset.id = checksum."assetId"
+      WHERE asset."ownerId" = ${ownerId}::uuid
+        AND checksum.sha1 = ANY(${sha1Checksums}::bytea[])
+        AND asset.checksum <> checksum.sha1
+    `.execute(this.db);
+
+    return result.rows;
+  }
 }

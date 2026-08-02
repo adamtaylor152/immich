@@ -941,6 +941,33 @@ describe(AssetMediaService.name, () => {
       expect(mocks.asset.getByChecksums).toHaveBeenCalledWith(authStub.admin.user.id, [file1, file2]);
     });
 
+    it('should detect a duplicate when the client sends sha1 and the asset is stored as sha256', async () => {
+      // Clients pre-check with sha1; this fork persists sha256, so without the
+      // translation every already-uploaded file is re-sent and only rejected
+      // at the unique constraint.
+      const sha1 = Buffer.from('d2947b871a706081be194569951b7db246907957', 'hex');
+      const sha256 = Buffer.from('9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', 'hex');
+
+      mocks.forkSchema.getChecksumTranslations.mockResolvedValue([{ sha1, checksum: sha256 }]);
+      mocks.asset.getByChecksums.mockResolvedValue([{ id: 'asset-1', checksum: sha256, deletedAt: null }]);
+
+      await expect(
+        sut.bulkUploadCheck(authStub.admin, { assets: [{ id: '1', checksum: sha1.toString('hex') }] }),
+      ).resolves.toEqual({
+        results: [
+          {
+            id: '1',
+            assetId: 'asset-1',
+            action: AssetUploadAction.REJECT,
+            reason: AssetRejectReason.DUPLICATE,
+            isTrashed: false,
+          },
+        ],
+      });
+
+      expect(mocks.asset.getByChecksums).toHaveBeenCalledWith(authStub.admin.user.id, [sha1, sha256]);
+    });
+
     it('should return non-duplicates as well', async () => {
       const file1 = Buffer.from('d2947b871a706081be194569951b7db246907957', 'hex');
       const file2 = Buffer.from('53be335e99f18a66ff12e9a901c7a6171dd76573', 'hex');
