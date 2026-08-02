@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { randomBytes } from 'node:crypto';
+import { SystemConfig } from 'src/config';
 import { AssetMediaStatus, AssetRejectReason, AssetUploadAction } from 'src/dtos/asset-media-response.dto';
 import { AssetMediaSize } from 'src/dtos/asset-media.dto';
 import { AlbumUserRole, AssetFileType, AssetMetadataKey, AssetType, ChecksumAlgorithm, SharedLinkType } from 'src/enum';
@@ -8,6 +9,7 @@ import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
@@ -27,7 +29,7 @@ import { getActiveForkKyselyDB as getKyselyDB } from 'test/utils';
 let defaultDatabase: Kysely<DB>;
 
 const setup = (db?: Kysely<DB>) => {
-  return newMediumService(AssetMediaService, {
+  const result = newMediumService(AssetMediaService, {
     database: db || defaultDatabase,
     real: [
       AccessRepository,
@@ -39,8 +41,17 @@ const setup = (db?: Kysely<DB>) => {
       TagRepository,
       UserRepository,
     ],
-    mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
+    mock: [EventRepository, ForkSchemaRepository, LoggingRepository, JobRepository, StorageRepository],
   });
+
+  // automock returns undefined for everything, so restore the two behaviours
+  // the service actually relies on: config passthrough, and "no sha1
+  // translations recorded" for the duplicate pre-check.
+  const forkSchema = result.ctx.getMock(ForkSchemaRepository);
+  forkSchema.overlayConfig.mockImplementation((config: SystemConfig) => Promise.resolve(config));
+  forkSchema.getChecksumTranslations.mockResolvedValue([]);
+
+  return result;
 };
 
 const nsfwMetadata = (isNsfw: boolean, review?: { action: string; isNsfw: boolean }) => ({

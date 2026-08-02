@@ -200,6 +200,17 @@ export class AssetMediaService extends BaseService {
         }
       }
 
+      if (file.legacyChecksum) {
+        await this.forkSchemaRepository.recordAssetChecksums({
+          assetId: asset.id,
+          sha1: file.legacyChecksum,
+          sha256: file.checksum,
+          sizeInBytes: file.size,
+          path: asset.originalPath,
+          source: 'upload',
+        });
+      }
+
       await this.jobRepository.queue({ name: JobName.AssetExtractMetadata, data: { id: asset.id, source: 'upload' } });
 
       if (auth.sharedLink) {
@@ -340,14 +351,27 @@ export class AssetMediaService extends BaseService {
 
   async bulkUploadCheck(auth: AuthDto, dto: AssetBulkUploadCheckDto): Promise<AssetBulkUploadCheckResponseDto> {
     const checksums: Buffer[] = dto.assets.map((asset) => fromChecksum(asset.checksum));
+    // Clients hash with SHA-1 while this fork persists SHA-256, so resolve the
+    // sent digests through the SHA-1 recorded at upload. Translating to the
+    // stored digest (rather than matching separately) keeps the duplicate
+    // lookup on the single filtered query, hidden-content rules included.
+    const translations = await this.forkSchemaRepository.getChecksumTranslations(auth.user.id, checksums);
+    const lookups = [...checksums, ...translations.map(({ checksum }) => checksum)];
     const duplicateOptions = this.getDuplicateCheckOptions(auth);
     const results = duplicateOptions
-      ? await this.assetRepository.getByChecksums(auth.user.id, checksums, duplicateOptions)
-      : await this.assetRepository.getByChecksums(auth.user.id, checksums);
+      ? await this.assetRepository.getByChecksums(auth.user.id, lookups, duplicateOptions)
+      : await this.assetRepository.getByChecksums(auth.user.id, lookups);
     const checksumMap: Record<string, { id: string; isTrashed: boolean }> = {};
 
     for (const { id, deletedAt, checksum } of results) {
       checksumMap[checksum.toString('hex')] = { id, isTrashed: !!deletedAt };
+    }
+
+    for (const { sha1, checksum } of translations) {
+      const match = checksumMap[checksum.toString('hex')];
+      if (match) {
+        checksumMap[sha1.toString('hex')] = match;
+      }
     }
 
     return {

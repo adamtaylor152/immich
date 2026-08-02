@@ -130,17 +130,25 @@ export class FileUploadInterceptor implements NestInterceptor {
       //   OR SHA-256 (new path); `fromChecksum` (utils/request.ts) decodes
       //   based on the encoded string length.
       const hash = file.fieldname === UploadFieldName.ASSET_DATA ? createHash('sha256') : null;
+      // Clients pre-check for duplicates with SHA-1 (`bulk-upload-check`), but
+      // this fork persists SHA-256, so that check never matches and every file
+      // is re-uploaded only to be rejected at the unique constraint. Hash both
+      // while the bytes are already streaming; the SHA-1 is recorded alongside
+      // the asset so the pre-check can translate.
+      const legacyHash = hash ? createHash('sha1') : null;
 
       let size = 0;
 
       file.stream.on('data', (chunk) => {
         hash?.update(chunk);
+        legacyHash?.update(chunk);
         size += chunk.length;
       });
 
       pipeline(file.stream, writeStream, (error) => {
         if (error) {
           hash?.destroy();
+          legacyHash?.destroy();
           return callback(error);
         }
         if (size === 0) {
@@ -150,6 +158,7 @@ export class FileUploadInterceptor implements NestInterceptor {
           path,
           size,
           checksum: hash?.digest(),
+          legacyChecksum: legacyHash?.digest(),
         });
       });
     } catch (error: any) {
