@@ -113,7 +113,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -127,6 +126,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select
@@ -242,7 +252,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -256,6 +265,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select
@@ -373,7 +393,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -387,6 +406,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select
@@ -1059,7 +1089,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -1074,6 +1103,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select
@@ -1890,7 +1930,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."localDateTime",
@@ -1904,6 +1943,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select
@@ -2035,7 +2085,6 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
-  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."localDateTime",
@@ -2049,6 +2098,17 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  coalesce(
+    (
+      select
+        checksum.sha1
+      from
+        immich_fork.asset_checksum checksum
+      where
+        checksum."assetId" = asset.id
+    ),
+    asset.checksum
+  ) as "checksum",
   case
     when exists (
       select

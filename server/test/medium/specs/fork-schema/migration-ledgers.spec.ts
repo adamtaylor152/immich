@@ -64,6 +64,7 @@ describe('fork schema migration ledgers', () => {
       { name: '0000000000040-ChecksumsAndStorage' },
       { name: '0000000000050-CutoverVerification' },
       { name: '0000000000060-SharedUpstreamPaths' },
+      { name: '0000000000070-ResetAssetSyncChecksums' },
     ]);
     expect(controlTables.rows.map(({ tableName }) => tableName)).toEqual([
       'backfill_progress',
