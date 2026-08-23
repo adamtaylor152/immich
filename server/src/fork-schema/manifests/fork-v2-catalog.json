@@ -3992,7 +3992,8 @@
     "0000000000030-DerivedResults",
     "0000000000040-ChecksumsAndStorage",
     "0000000000050-CutoverVerification",
-    "0000000000060-SharedUpstreamPaths"
+    "0000000000060-SharedUpstreamPaths",
+    "0000000000070-ResetAssetSyncChecksums"
   ],
   "functions": [
     {

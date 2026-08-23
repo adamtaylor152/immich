@@ -69,7 +69,15 @@ const personFaceAssetId = (options: HiddenContentQueryOptions) => {
     : sql<string | null>`person."faceAssetId"`.as('faceAssetId');
 };
 
-const syncAssetColumns = columns.syncAsset.filter((column) => column !== 'asset.livePhotoVideoId');
+const syncChecksum = () =>
+  sql<Buffer>`coalesce(
+    (select checksum.sha1 from immich_fork.asset_checksum checksum where checksum."assetId" = asset.id),
+    asset.checksum
+  )`.as('checksum');
+
+const syncAssetColumns = columns.syncAsset.filter(
+  (column) => column !== 'asset.checksum' && column !== 'asset.livePhotoVideoId',
+);
 
 const syncLivePhotoVideoId = (options: HiddenContentQueryOptions) => {
   const hiddenContent = getHiddenContentFilter(options);
@@ -81,15 +89,20 @@ const syncLivePhotoVideoId = (options: HiddenContentQueryOptions) => {
     : sql<string | null>`asset."livePhotoVideoId"`.as('livePhotoVideoId');
 };
 
-const syncAsset = (options: HiddenContentQueryOptions) => [...syncAssetColumns, syncLivePhotoVideoId(options)] as const;
+const syncAsset = (options: HiddenContentQueryOptions) =>
+  [...syncAssetColumns, syncChecksum(), syncLivePhotoVideoId(options)] as const;
 
-const syncAlbumAssetColumns = columns.syncAlbumAsset.filter((column) => column !== 'asset.livePhotoVideoId');
+const syncAlbumAssetColumns = columns.syncAlbumAsset.filter(
+  (column) => column !== 'asset.checksum' && column !== 'asset.livePhotoVideoId',
+);
 const syncAlbumAsset = (options: HiddenContentQueryOptions) =>
-  [...syncAlbumAssetColumns, syncLivePhotoVideoId(options)] as const;
+  [...syncAlbumAssetColumns, syncChecksum(), syncLivePhotoVideoId(options)] as const;
 
-const syncPartnerAssetColumns = columns.syncPartnerAsset.filter((column) => column !== 'asset.livePhotoVideoId');
+const syncPartnerAssetColumns = columns.syncPartnerAsset.filter(
+  (column) => column !== 'asset.checksum' && column !== 'asset.livePhotoVideoId',
+);
 const syncPartnerAsset = (options: HiddenContentQueryOptions) =>
-  [...syncPartnerAssetColumns, syncLivePhotoVideoId(options)] as const;
+  [...syncPartnerAssetColumns, syncChecksum(), syncLivePhotoVideoId(options)] as const;
 
 @Injectable()
 export class SyncRepository {
