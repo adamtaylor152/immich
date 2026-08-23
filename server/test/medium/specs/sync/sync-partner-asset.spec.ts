@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { AssetMetadataKey, AssetType, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
@@ -33,6 +34,7 @@ describe(SyncRequestType.PartnerAssetsV2, () => {
 
     const originalFileName = 'firstPartnerAsset';
     const checksum = '1115vHcVkZzNp3Q9G+FEA0nu6zUbGb4Tj4UOXkN0wRA=';
+    const legacyChecksum = 'EREREREREREREREREREREQ==';
     const thumbhash = '2225vHcVkZzNp3Q9G+FEA0nu6zUbGb4Tj4UOXkN0wRA=';
     const date = new Date().toISOString();
 
@@ -50,6 +52,14 @@ describe(SyncRequestType.PartnerAssetsV2, () => {
       duration: 600_000,
       libraryId: null,
     });
+    await ctx.get(ForkSchemaRepository).recordAssetChecksums({
+      assetId: asset.id,
+      sha1: Buffer.from(legacyChecksum, 'base64'),
+      sha256: Buffer.from(checksum, 'base64'),
+      sizeInBytes: 1,
+      path: asset.originalPath,
+      source: 'upload',
+    });
 
     await ctx.newPartner({ sharedById: user2.id, sharedWithId: auth.user.id });
 
@@ -62,7 +72,7 @@ describe(SyncRequestType.PartnerAssetsV2, () => {
           ownerId: asset.ownerId,
           originalFileName,
           thumbhash,
-          checksum,
+          checksum: legacyChecksum,
           deletedAt: null,
           fileCreatedAt: date,
           fileModifiedAt: date,
