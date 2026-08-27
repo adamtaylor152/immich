@@ -54,6 +54,382 @@ export type ActivityStatisticsResponseDto = {
     /** Number of likes */
     likes: number;
 };
+export type AdminConfigDatabaseBackupDto = {
+    /** Cron expression */
+    cronExpression: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Keep last amount */
+    keepLastAmount: number;
+};
+export type AdminConfigBackupsDto = {
+    database: AdminConfigDatabaseBackupDto;
+};
+export type AdminConfigFFmpegRealtimeDto = {
+    /** Enable real-time HLS transcoding (alpha) */
+    enabled: boolean;
+    /** Resolutions to use for real-time HLS transcoding */
+    resolutions: HlsVideoResolution[];
+    /** Video codecs to use for real-time HLS transcoding */
+    videoCodecs: VideoCodec[];
+};
+export type AdminConfigFFmpegDto = {
+    accel: TranscodeHWAccel;
+    /** Accelerated decode */
+    accelDecode: boolean;
+    /** Accepted audio codecs */
+    acceptedAudioCodecs: AudioCodec[];
+    /** Accepted containers */
+    acceptedContainers: VideoContainer[];
+    /** Accepted video codecs */
+    acceptedVideoCodecs: VideoCodec[];
+    /** B-frames */
+    bframes: number;
+    cqMode: CQMode;
+    /** CRF */
+    crf: number;
+    /** GOP size */
+    gopSize: number;
+    /** Max bitrate */
+    maxBitrate: string;
+    /** Preferred hardware device */
+    preferredHwDevice: string;
+    /** Preset */
+    preset: string;
+    realtime: AdminConfigFFmpegRealtimeDto;
+    /** References */
+    refs: number;
+    targetAudioCodec: AudioCodec;
+    /** Target resolution */
+    targetResolution: string;
+    targetVideoCodec: VideoCodec;
+    /** Temporal AQ */
+    temporalAQ: boolean;
+    /** Threads */
+    threads: number;
+    tonemap: ToneMapping;
+    transcode: TranscodePolicy;
+    /** Two pass */
+    twoPass: boolean;
+};
+export type AdminConfigGeneratedFullsizeImageDto = {
+    /** Enabled */
+    enabled: boolean;
+    format: ImageFormat;
+    /** Progressive */
+    progressive?: boolean;
+    /** Quality */
+    quality: number;
+};
+export type AdminConfigGeneratedImageDto = {
+    format: ImageFormat;
+    /** Progressive */
+    progressive?: boolean;
+    /** Quality */
+    quality: number;
+    /** Size */
+    size: number;
+};
+export type AdminConfigImageDto = {
+    colorspace: Colorspace;
+    /** Extract embedded */
+    extractEmbedded: boolean;
+    fullsize: AdminConfigGeneratedFullsizeImageDto;
+    preview: AdminConfigGeneratedImageDto;
+    thumbnail: AdminConfigGeneratedImageDto;
+};
+export type AdminConfigIntegrityChecksumJobDto = {
+    /** Cron expression for when the integrity check should run */
+    cronExpression: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Percentage limit of the integrity checksum job */
+    percentageLimit: number;
+    /** How long the integrity checksum job may run for */
+    timeLimit: number;
+};
+export type AdminConfigIntegrityJobDto = {
+    /** Cron expression for when the integrity check should run */
+    cronExpression: string;
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigIntegrityChecksDto = {
+    checksumFiles: AdminConfigIntegrityChecksumJobDto;
+    missingFiles: AdminConfigIntegrityJobDto;
+    untrackedFiles: AdminConfigIntegrityJobDto;
+};
+export type AdminConfigJobSettingsDto = {
+    /** Concurrency */
+    concurrency: number;
+};
+export type AdminConfigJobDto = {
+    backgroundTask: AdminConfigJobSettingsDto;
+    editor: AdminConfigJobSettingsDto;
+    faceDetection: AdminConfigJobSettingsDto;
+    integrityCheck: AdminConfigJobSettingsDto;
+    library: AdminConfigJobSettingsDto;
+    metadataExtraction: AdminConfigJobSettingsDto;
+    migration: AdminConfigJobSettingsDto;
+    notifications: AdminConfigJobSettingsDto;
+    ocr: AdminConfigJobSettingsDto;
+    search: AdminConfigJobSettingsDto;
+    sidecar: AdminConfigJobSettingsDto;
+    smartSearch: AdminConfigJobSettingsDto;
+    thumbnailGeneration: AdminConfigJobSettingsDto;
+    videoConversion: AdminConfigJobSettingsDto;
+    workflow: AdminConfigJobSettingsDto;
+};
+export type AdminConfigLibraryScanDto = {
+    /** Cron expression */
+    cronExpression: string;
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigLibraryWatchDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigLibraryDto = {
+    scan: AdminConfigLibraryScanDto;
+    watch: AdminConfigLibraryWatchDto;
+};
+export type AdminConfigLoggingDto = {
+    /** Enabled */
+    enabled: boolean;
+    level: LogLevel;
+};
+export type AdminConfigMachineLearningAvailabilityChecksDto = {
+    /** Enabled */
+    enabled: boolean;
+    interval: number;
+    timeout: number;
+};
+export type AdminConfigClipDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Name of the model to use */
+    modelName: string;
+};
+export type AdminConfigDuplicateDetectionDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Maximum distance threshold for duplicate detection */
+    maxDistance: number;
+};
+export type AdminConfigFacialRecognitionDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Maximum distance threshold for face recognition */
+    maxDistance: number;
+    /** Minimum number of faces required for recognition */
+    minFaces: number;
+    /** Minimum confidence score for face detection */
+    minScore: number;
+    /** Name of the model to use */
+    modelName: string;
+};
+export type AdminConfigOcrDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Maximum resolution for OCR processing */
+    maxResolution: number;
+    /** Minimum confidence score for text detection */
+    minDetectionScore: number;
+    /** Minimum confidence score for text recognition */
+    minRecognitionScore: number;
+    /** Name of the model to use */
+    modelName: string;
+};
+export type AdminConfigMachineLearningDto = {
+    availabilityChecks: AdminConfigMachineLearningAvailabilityChecksDto;
+    clip: AdminConfigClipDto;
+    duplicateDetection: AdminConfigDuplicateDetectionDto;
+    /** Enabled */
+    enabled: boolean;
+    facialRecognition: AdminConfigFacialRecognitionDto;
+    ocr: AdminConfigOcrDto;
+    /** ML service URLs */
+    urls: string[];
+};
+export type AdminConfigMapDto = {
+    /** Dark map style URL */
+    darkStyle: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Light map style URL */
+    lightStyle: string;
+};
+export type AdminConfigFacesDto = {
+    /** Import */
+    "import": boolean;
+};
+export type AdminConfigMetadataDto = {
+    faces: AdminConfigFacesDto;
+};
+export type AdminConfigNewVersionCheckDto = {
+    channel: ReleaseChannel;
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigNightlyTasksDto = {
+    /** Cluster new faces */
+    clusterNewFaces: boolean;
+    /** Database cleanup */
+    databaseCleanup: boolean;
+    /** Generate memories */
+    generateMemories: boolean;
+    /** Missing thumbnails */
+    missingThumbnails: boolean;
+    /** Start time (HH:MM) */
+    startTime: string;
+    /** Sync quota usage */
+    syncQuotaUsage: boolean;
+};
+export type AdminConfigSmtpTransportDto = {
+    /** SMTP server hostname */
+    host: string;
+    /** Whether to ignore SSL certificate errors */
+    ignoreCert: boolean;
+    /** SMTP password */
+    password: string;
+    /** SMTP server port */
+    port: number;
+    /** Whether to use secure connection (TLS/SSL) */
+    secure: boolean;
+    /** SMTP username */
+    username: string;
+};
+export type AdminConfigSmtpDto = {
+    /** Whether SMTP email notifications are enabled */
+    enabled: boolean;
+    /** Email address to send from */
+    "from": string;
+    /** Email address for replies */
+    replyTo: string;
+    transport: AdminConfigSmtpTransportDto;
+};
+export type AdminConfigNotificationsDto = {
+    smtp: AdminConfigSmtpDto;
+};
+export type AdminConfigOAuthDto = {
+    /** Account management URL */
+    accountManagementUrl?: string;
+    /** Allow insecure requests */
+    allowInsecureRequests: boolean;
+    /** Auto launch */
+    autoLaunch: boolean;
+    /** Auto register */
+    autoRegister: boolean;
+    /** Button text */
+    buttonText: string;
+    /** Client ID */
+    clientId: string;
+    /** Client secret */
+    clientSecret: string;
+    /** Default storage quota */
+    defaultStorageQuota: number | null;
+    /** Enabled */
+    enabled: boolean;
+    /** End session endpoint */
+    endSessionEndpoint: string;
+    /** Issuer URL */
+    issuerUrl: string;
+    /** Mobile override enabled */
+    mobileOverrideEnabled: boolean;
+    /** Mobile redirect URI (set to empty string to disable) */
+    mobileRedirectUri: string;
+    /** Profile signing algorithm */
+    profileSigningAlgorithm: string;
+    /** OAuth prompt parameter (e.g. select_account, login, consent) */
+    prompt: string;
+    /** Role claim */
+    roleClaim: string;
+    /** Scope */
+    scope: string;
+    /** Signing algorithm */
+    signingAlgorithm: string;
+    /** Storage label claim */
+    storageLabelClaim: string;
+    /** Storage quota claim */
+    storageQuotaClaim: string;
+    /** Timeout */
+    timeout: number;
+    tokenEndpointAuthMethod: OAuthTokenEndpointAuthMethod;
+};
+export type AdminConfigPasswordLoginDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigReverseGeocodingDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigServerDto = {
+    /** External domain */
+    externalDomain: string;
+    /** Login page message */
+    loginPageMessage: string;
+    /** Public users */
+    publicUsers: boolean;
+};
+export type AdminConfigStorageTemplateDto = {
+    /** Enabled */
+    enabled: boolean;
+    /** Hash verification enabled */
+    hashVerificationEnabled: boolean;
+    /** Template */
+    template: string;
+};
+export type AdminConfigTemplateEmailsDto = {
+    /** Album invite template */
+    albumInviteTemplate: string;
+    /** Album update template */
+    albumUpdateTemplate: string;
+    /** Welcome template */
+    welcomeTemplate: string;
+};
+export type AdminConfigTemplatesDto = {
+    email: AdminConfigTemplateEmailsDto;
+};
+export type AdminConfigThemeDto = {
+    /** Custom CSS for theming */
+    customCss: string;
+};
+export type AdminConfigTrashDto = {
+    /** Days */
+    days: number;
+    /** Enabled */
+    enabled: boolean;
+};
+export type AdminConfigUserDto = {
+    /** Delete delay */
+    deleteDelay: number;
+};
+export type AdminConfigDto = {
+    backup: AdminConfigBackupsDto;
+    ffmpeg: AdminConfigFFmpegDto;
+    image: AdminConfigImageDto;
+    integrityChecks: AdminConfigIntegrityChecksDto;
+    job: AdminConfigJobDto;
+    library: AdminConfigLibraryDto;
+    logging: AdminConfigLoggingDto;
+    machineLearning: AdminConfigMachineLearningDto;
+    map: AdminConfigMapDto;
+    metadata: AdminConfigMetadataDto;
+    newVersionCheck: AdminConfigNewVersionCheckDto;
+    nightlyTasks: AdminConfigNightlyTasksDto;
+    notifications: AdminConfigNotificationsDto;
+    oauth: AdminConfigOAuthDto;
+    passwordLogin: AdminConfigPasswordLoginDto;
+    reverseGeocoding: AdminConfigReverseGeocodingDto;
+    server: AdminConfigServerDto;
+    storageTemplate: AdminConfigStorageTemplateDto;
+    templates: AdminConfigTemplatesDto;
+    theme: AdminConfigThemeDto;
+    trash: AdminConfigTrashDto;
+    user: AdminConfigUserDto;
+};
 export type DatabaseBackupDeleteDto = {
     /** Backup filenames to delete */
     backups: string[];
@@ -165,29 +541,6 @@ export type TemplateResponseDto = {
     /** Template name */
     name: string;
 };
-export type SystemConfigSmtpTransportDto = {
-    /** SMTP server hostname */
-    host: string;
-    /** Whether to ignore SSL certificate errors */
-    ignoreCert: boolean;
-    /** SMTP password */
-    password: string;
-    /** SMTP server port */
-    port: number;
-    /** Whether to use secure connection (TLS/SSL) */
-    secure: boolean;
-    /** SMTP username */
-    username: string;
-};
-export type SystemConfigSmtpDto = {
-    /** Whether SMTP email notifications are enabled */
-    enabled: boolean;
-    /** Email address to send from */
-    "from": string;
-    /** Email address for replies */
-    replyTo: string;
-    transport: SystemConfigSmtpTransportDto;
-};
 export type TestEmailResponseDto = {
     /** Email message ID */
     messageId: string;
@@ -202,6 +555,8 @@ export type UserLicense = {
 };
 export type UserAdminResponseDto = {
     avatarColor: UserAvatarColor;
+    /** Cluster group the user is a member of */
+    clusterGroupId: string;
     /** Creation date */
     createdAt: string;
     /** Deletion date */
@@ -323,6 +678,8 @@ export type MemoriesResponse = {
     duration: number;
     /** Whether memories are enabled */
     enabled: boolean;
+    /** Whether memories appear in web sidebar */
+    sidebarWeb: boolean;
 };
 export type PeopleResponse = {
     /** Whether people are enabled */
@@ -331,17 +688,6 @@ export type PeopleResponse = {
     minimumFaces?: number;
     /** Whether people appear in web sidebar */
     sidebarWeb: boolean;
-};
-export type SuppressionResponse = {
-    /** Person IDs to suppress from locked browsing sessions */
-    personIds: string[];
-    /** Whether suppression applies only to owned assets or all visible assets */
-    scope: SuppressionScope;
-    /** Tag IDs to suppress from locked browsing sessions */
-    tagIds: string[];
-};
-export type PrivacyResponse = {
-    suppression: SuppressionResponse;
 };
 export type PurchaseResponse = {
     /** Date until which to hide buy button */
@@ -377,7 +723,6 @@ export type UserPreferencesResponseDto = {
     folders: FoldersResponse;
     memories: MemoriesResponse;
     people: PeopleResponse;
-    privacy: PrivacyResponse;
     purchase: PurchaseResponse;
     ratings: RatingsResponse;
     recentlyAdded: RecentlyAddedResponse;
@@ -419,6 +764,8 @@ export type MemoriesUpdate = {
     duration?: number;
     /** Whether memories are enabled */
     enabled?: boolean;
+    /** Whether memories appear in web sidebar */
+    sidebarWeb?: boolean;
 };
 export type PeopleUpdate = {
     /** Whether people are enabled */
@@ -427,17 +774,6 @@ export type PeopleUpdate = {
     minimumFaces?: number;
     /** Whether people appear in web sidebar */
     sidebarWeb?: boolean;
-};
-export type SuppressionUpdate = {
-    /** Person IDs to suppress from locked browsing sessions */
-    personIds?: string[];
-    /** Whether suppression applies only to owned assets or all visible assets */
-    scope?: SuppressionScope;
-    /** Tag IDs to suppress from locked browsing sessions */
-    tagIds?: string[];
-};
-export type PrivacyUpdate = {
-    suppression?: SuppressionUpdate;
 };
 export type PurchaseUpdate = {
     /** Date until which to hide buy button */
@@ -474,7 +810,6 @@ export type UserPreferencesUpdateDto = {
     folders?: FoldersUpdate;
     memories?: MemoriesUpdate;
     people?: PeopleUpdate;
-    privacy?: PrivacyUpdate;
     purchase?: PurchaseUpdate;
     ratings?: RatingsUpdate;
     recentlyAdded?: RecentlyAddedUpdate;
@@ -537,8 +872,6 @@ export type AlbumResponseDto = {
     endDate?: string;
     /** Has shared link */
     hasSharedLink: boolean;
-    /** Icon key (null = default folder icon) */
-    icon: string | null;
     /** Album ID */
     id: string;
     /** Activity feed enabled */
@@ -546,12 +879,8 @@ export type AlbumResponseDto = {
     /** Last modified asset timestamp */
     lastModifiedAssetTimestamp?: string;
     order?: AssetOrder;
-    /** Parent album ID for nesting (null = top-level) */
-    parentId: string | null;
     /** Is shared album */
     shared: boolean;
-    /** Sibling display position. Lower values appear first. */
-    sortOrder: number | null;
     /** Start date (earliest asset) */
     startDate?: string;
     /** Last update date */
@@ -571,10 +900,6 @@ export type CreateAlbumDto = {
     assetIds?: string[];
     /** Album description */
     description?: string | null;
-    /** Optional icon key (see album-icons.ts) */
-    icon?: string;
-    /** Parent album ID for nesting (omit for top-level) */
-    parentId?: string;
 };
 export type AlbumsAddAssetsDto = {
     /** Album IDs */
@@ -602,15 +927,9 @@ export type UpdateAlbumDto = {
     albumThumbnailAssetId?: string;
     /** Album description */
     description?: string | null;
-    /** Icon key (null = clear / use default folder icon) */
-    icon?: string | null;
     /** Enable activity feed */
     isActivityEnabled?: boolean;
     order?: AssetOrder;
-    /** Parent album ID for nesting (null = move to top-level, omit = no change) */
-    parentId?: string | null;
-    /** Sibling display position. Lower values appear first. Computed by the client as a midpoint. */
-    sortOrder?: number;
 };
 export type BulkIdsDto = {
     /** IDs to process */
@@ -623,10 +942,6 @@ export type BulkIdResponseDto = {
     id: string;
     /** Whether operation succeeded */
     success: boolean;
-};
-export type AlbumDescendantCountResponseDto = {
-    /** Number of descendant albums (children, grandchildren, etc.) */
-    count: number;
 };
 export type MapMarkerResponseDto = {
     /** City name */
@@ -675,14 +990,41 @@ export type ApiKeyCreateDto = {
 };
 export type ApiKeyCreateResponseDto = {
     apiKey: ApiKeyResponseDto;
+    /** Creation date */
+    createdAt: string;
+    /** API key ID */
+    id: string;
+    /** API key name */
+    name: string;
+    /** List of permissions */
+    permissions: Permission[];
     /** API key secret (only shown once) */
     secret: string;
+    /** Last update date */
+    updatedAt: string;
 };
 export type ApiKeyUpdateDto = {
     /** API key name */
     name?: string;
     /** List of permissions */
     permissions?: Permission[];
+};
+export type AssetFileResponseDto = {
+    /** Creation date */
+    createdAt: string;
+    /** Asset file ID */
+    id: string;
+    /** The file was generated from an edit */
+    isEdited: boolean;
+    /** The file is a progressively encoded JPEG */
+    isProgressive: boolean;
+    /** The file is transparent */
+    isTransparent: boolean;
+    /** File path */
+    path: string;
+    "type": AssetFileType;
+    /** Update date */
+    updatedAt: string;
 };
 export type AssetBulkDeleteDto = {
     /** Force delete even if in use */
@@ -748,7 +1090,7 @@ export type AssetBulkUpdateDto = {
     visibility?: AssetVisibility;
 };
 export type AssetBulkUploadCheckItem = {
-    /** Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets. */
+    /** Base64 or hex encoded SHA1 hash */
     checksum: string;
     /** Client-side identifier echoed in the response to match results to inputs (e.g. filename) */
     id: string;
@@ -917,7 +1259,7 @@ export type TagResponseDto = {
     value: string;
 };
 export type AssetResponseDto = {
-    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
+    /** Base64 encoded SHA1 hash */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1009,74 +1351,12 @@ export type RotateParameters = {
 export type MirrorParameters = {
     axis: MirrorAxis;
 };
-export type TrimParameters = {
-    /** Trim end time in milliseconds */
-    endMs: number;
-    /** Trim start time in milliseconds */
-    startMs: number;
-};
-export type StraightenParameters = {
-    /** Straighten angle in degrees */
-    angle: number;
-};
-export type AdjustParameters = {
-    blackPoint?: number;
-    blueTone?: number;
-    brightness?: number;
-    contrast?: number;
-    hdr?: number;
-    highlights?: number;
-    saturation?: number;
-    shadows?: number;
-    skinTone?: number;
-    tint?: number;
-    vignette?: number;
-    warmth?: number;
-    whitePoint?: number;
-};
-export type LookParameters = {
-    /** Filter or effect intensity */
-    intensity?: number;
-    /** Filter or effect name */
-    name: string;
-};
-export type ToggleParameters = {
-    enabled?: boolean;
-};
-export type TextOverlayParameters = {
-    /** Text color in hex format */
-    color?: string;
-    /** Overlay end time in milliseconds */
-    endMs?: number;
-    /** Font size as a percentage of video height */
-    size?: number;
-    /** Overlay start time in milliseconds */
-    startMs?: number;
-    text: string;
-    /** Horizontal position as a percentage of video width */
-    x: number;
-    /** Vertical position as a percentage of video height */
-    y: number;
-};
-export type AudioParameters = {
-    muted?: boolean;
-    /** Audio volume multiplier */
-    volume?: number;
-};
-export type SpeedParameters = {
-    /** Speed segment end time in milliseconds */
-    endMs?: number;
-    /** Playback speed multiplier */
-    rate: number;
-    /** Speed segment start time in milliseconds */
-    startMs?: number;
-};
 export type AssetEditActionItemResponseDto = {
     action: AssetEditAction;
     /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply */
-    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
+    /** List of edit actions to apply (crop, rotate, or mirror) */
+    parameters: CropParameters | RotateParameters | MirrorParameters;
 };
 export type AssetEditsResponseDto = {
     /** Asset ID these edits belong to */
@@ -1086,65 +1366,12 @@ export type AssetEditsResponseDto = {
 };
 export type AssetEditActionItemDto = {
     action: AssetEditAction;
-    /** List of edit actions to apply */
-    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
+    /** List of edit actions to apply (crop, rotate, or mirror) */
+    parameters: CropParameters | RotateParameters | MirrorParameters;
 };
 export type AssetEditsCreateDto = {
-    /** List of edit actions to apply */
+    /** List of edit actions to apply (crop, rotate, or mirror) */
     edits: AssetEditActionItemDto[];
-};
-export type ImageDescriptionEnrichmentResponseDto = {
-    appliedDescription: boolean;
-    appliedTags: boolean;
-    context?: string;
-    description?: string;
-    environment?: string;
-    error?: string;
-    modelName?: string;
-    objects?: string[];
-    people?: {
-        activity: string;
-        apparent_age_group: string;
-        confidence: string;
-        count: number;
-    }[];
-    /** Machine-readable reason when status === "skipped" */
-    skipReason?: string;
-    status: Status;
-    tags?: string[];
-    updatedAt?: string;
-    visibleText?: string[];
-};
-export type ImageEnrichmentReview = {
-    action: Action;
-    isNsfw: boolean;
-    /** Review timestamp */
-    reviewedAt: string;
-    /** Reviewer user ID */
-    reviewedBy: string;
-};
-export type NsfwDetectionEnrichmentResponseDto = {
-    appliedTags: boolean;
-    effectiveIsNsfw: boolean;
-    error?: string;
-    isNsfw?: boolean;
-    labels?: {
-        [key: string]: number;
-    };
-    modelName?: string;
-    review?: ImageEnrichmentReview;
-    score?: number;
-    status: Status2;
-    updatedAt?: string;
-};
-export type AssetImageEnrichmentResponseDto = {
-    /** Asset ID */
-    assetId: string;
-    description: ImageDescriptionEnrichmentResponseDto;
-    nsfwDetection: NsfwDetectionEnrichmentResponseDto;
-};
-export type AssetImageEnrichmentActionRequestDto = {
-    action: AssetImageEnrichmentAction;
 };
 export type AssetMetadataResponseDto = {
     /** Metadata key */
@@ -1272,90 +1499,132 @@ export type ValidateAccessTokenResponseDto = {
     /** Authentication status */
     authStatus: boolean;
 };
-export type BestPhotoScoreDto = {
-    aestheticScore: number | null;
-    bestFrameTimestampMs: number | null;
-    computedAt: string;
-    diversityScore: number | null;
-    frameMetadata: {
-        [key: string]: any;
-    } | null;
-    frameScore: number | null;
-    metadata: {
-        [key: string]: any;
-    } | null;
-    score: number;
-    scoreVersion: number;
-    subjectScore: number | null;
-    technicalScore: number | null;
-};
-export type BestPhotoAssetResponseDto = {
-    bestPhotoScore: BestPhotoScoreDto;
-    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
-    checksum: string;
-    /** The UTC timestamp when the asset was originally uploaded to Immich. */
+export type ClusterGroupRequestResponseDto = {
+    /** Cluster group the user is invited to join */
+    clusterGroupId: string;
+    /** Creation date */
     createdAt: string;
-    /** Duplicate group ID */
-    duplicateId?: string | null;
-    /** Video/gif duration in milliseconds (null for static images) */
-    duration: number | null;
-    exifInfo?: ExifResponseDto;
-    /** The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken. */
-    fileCreatedAt: string;
-    /** The UTC timestamp when the file was last modified on the filesystem. This reflects the last time the physical file was changed, which may be different from when the photo was originally taken. */
-    fileModifiedAt: string;
-    /** Whether asset has metadata */
-    hasMetadata: boolean;
-    /** Asset height */
-    height: number | null;
-    /** Asset ID */
+    /** Request ID */
     id: string;
-    /** Is archived */
-    isArchived: boolean;
-    /** Is edited */
-    isEdited: boolean;
-    /** Is favorite */
-    isFavorite: boolean;
-    /** Is offline */
-    isOffline: boolean;
-    /** Is trashed */
-    isTrashed: boolean;
-    /** Library ID */
-    libraryId?: string | null;
-    /** Live photo video ID */
-    livePhotoVideoId?: string | null;
-    /** The local date and time when the photo/video was taken, derived from EXIF metadata. This represents the photographer's local time regardless of timezone, stored as a timezone-agnostic timestamp. Used for timeline grouping by "local" days and months. */
-    localDateTime: string;
-    /** Original file name */
-    originalFileName: string;
-    /** Original MIME type */
-    originalMimeType?: string;
-    /** Original file path */
-    originalPath: string;
-    owner?: UserResponseDto;
-    /** Owner user ID */
-    ownerId: string;
-    people?: PersonResponseDto[];
-    /** Is resized */
-    resized?: boolean;
-    stack?: (AssetStackResponseDto) | null;
-    tags?: TagResponseDto[];
-    /** Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting. */
-    thumbhash: string | null;
-    "type": AssetTypeEnum;
-    /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
-    updatedAt: string;
-    visibility: AssetVisibility;
-    /** Asset width */
-    width: number | null;
+    /** User the request was created for */
+    userId: string;
 };
-export type BestPhotosResponseDto = {
-    count: number;
-    items: BestPhotoAssetResponseDto[];
-    nextPage: string | null;
-    total: number;
+export type ClusterGroupRequestCreateDto = {
+    /** User to invite into the cluster group */
+    userId: string;
+};
+export type UserConfigFFmpegRealtimeDto = {
+    /** Enable real-time HLS transcoding (alpha) */
+    enabled: boolean;
+    /** Resolutions to use for real-time HLS transcoding */
+    resolutions: HlsVideoResolution[];
+    /** Video codecs to use for real-time HLS transcoding */
+    videoCodecs: VideoCodec[];
+};
+export type UserConfigFFmpegDto = {
+    realtime: UserConfigFFmpegRealtimeDto;
+};
+export type UserConfigGeneratedFullsizeImageDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type UserConfigGeneratedImageDto = {
+    /** Size */
+    size: number;
+};
+export type UserConfigImageDto = {
+    fullsize: UserConfigGeneratedFullsizeImageDto;
+    preview: UserConfigGeneratedImageDto;
+    thumbnail: UserConfigGeneratedImageDto;
+};
+export type UserConfigClipDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+};
+export type UserConfigDuplicateDetectionDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+};
+export type UserConfigFacialRecognitionDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Minimum number of faces required for recognition */
+    minFaces: number;
+};
+export type UserConfigOcrDto = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+};
+export type UserConfigMachineLearningDto = {
+    clip: UserConfigClipDto;
+    duplicateDetection: UserConfigDuplicateDetectionDto;
+    /** Enabled */
+    enabled: boolean;
+    facialRecognition: UserConfigFacialRecognitionDto;
+    ocr: UserConfigOcrDto;
+};
+export type UserConfigMapDto = {
+    /** Dark map style URL */
+    darkStyle: string;
+    /** Enabled */
+    enabled: boolean;
+    /** Light map style URL */
+    lightStyle: string;
+};
+export type UserConfigOAuthDto = {
+    /** Auto launch */
+    autoLaunch: boolean;
+    /** Button text */
+    buttonText: string;
+    /** Enabled */
+    enabled: boolean;
+};
+export type UserConfigPasswordLoginDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type UserConfigReverseGeocodingDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type UserConfigServerDto = {
+    /** External domain */
+    externalDomain: string;
+    /** Login page message */
+    loginPageMessage: string;
+    /** Public users */
+    publicUsers: boolean;
+};
+export type UserConfigThemeDto = {
+    /** Custom CSS for theming */
+    customCss: string;
+};
+export type UserConfigTrashDto = {
+    /** Days */
+    days: number;
+    /** Enabled */
+    enabled: boolean;
+};
+export type UserConfigUserDto = {
+    /** Delete delay */
+    deleteDelay: number;
+};
+export type UserConfigDto = {
+    ffmpeg: UserConfigFFmpegDto;
+    image: UserConfigImageDto;
+    machineLearning: UserConfigMachineLearningDto;
+    map: UserConfigMapDto;
+    oauth: UserConfigOAuthDto;
+    passwordLogin: UserConfigPasswordLoginDto;
+    reverseGeocoding: UserConfigReverseGeocodingDto;
+    server: UserConfigServerDto;
+    theme: UserConfigThemeDto;
+    trash: UserConfigTrashDto;
+    user: UserConfigUserDto;
 };
 export type DownloadArchiveDto = {
+    /** The name of the archive to download, without extension */
+    archiveName?: string;
     /** Asset IDs */
     assetIds: string[];
     /** Download edited asset if available */
@@ -1477,15 +1746,11 @@ export type QueuesResponseLegacyDto = {
     editor: QueueResponseLegacyDto;
     faceDetection: QueueResponseLegacyDto;
     facialRecognition: QueueResponseLegacyDto;
-    imageDescription: QueueResponseLegacyDto;
-    imageEnrichment: QueueResponseLegacyDto;
     integrityCheck: QueueResponseLegacyDto;
     library: QueueResponseLegacyDto;
-    mediaHealth: QueueResponseLegacyDto;
     metadataExtraction: QueueResponseLegacyDto;
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
-    nsfwDetection: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
@@ -1493,7 +1758,6 @@ export type QueuesResponseLegacyDto = {
     storageTemplateMigration: QueueResponseLegacyDto;
     thumbnailGeneration: QueueResponseLegacyDto;
     videoConversion: QueueResponseLegacyDto;
-    videoDuplicateDetection: QueueResponseLegacyDto;
     workflow: QueueResponseLegacyDto;
 };
 export type JobCreateDto = {
@@ -1570,36 +1834,6 @@ export type ValidateLibraryResponseDto = {
     /** Validation results for import paths */
     importPaths?: ValidateLibraryImportPathResponseDto[];
 };
-export type LivePhotoCandidateDto = {
-    confidence: LivePhotoMatchConfidence;
-    /** Why these two assets are believed to be a separated live photo pair */
-    matchReason: string;
-    photo: AssetResponseDto;
-    video: AssetResponseDto;
-};
-export type LivePhotoCandidatesResponseDto = {
-    candidates: LivePhotoCandidateDto[];
-    /** Total number of candidate pairs found */
-    total: number;
-};
-export type LivePhotoRelinkItemDto = {
-    /** Still image asset ID */
-    photoId: string;
-    /** Motion video asset ID */
-    videoId: string;
-};
-export type LivePhotoRelinkDto = {
-    pairs: LivePhotoRelinkItemDto[];
-};
-export type LivePhotoRelinkResultDto = {
-    error?: string;
-    photoId: string;
-    success: boolean;
-    videoId: string;
-};
-export type LivePhotoRelinkResponseDto = {
-    results: LivePhotoRelinkResultDto[];
-};
 export type MapReverseGeocodeResponseDto = {
     /** City name */
     city: string | null;
@@ -1607,95 +1841,6 @@ export type MapReverseGeocodeResponseDto = {
     country: string | null;
     /** State/Province name */
     state: string | null;
-};
-export type MediaHealthCandidateDto = {
-    /** Candidate file path */
-    candidatePath: string;
-    checkedAt: string;
-    evidence: {
-        [key: string]: any;
-    };
-    /** Media health finding ID */
-    healthId: string;
-    /** Candidate ID */
-    id: string;
-    resolution: {
-        [key: string]: any;
-    };
-    status: MediaHealthStatus;
-    /** Visual match score from 0 to 1 */
-    visualMatchScore: number | null;
-};
-export type MediaHealthItemDto = {
-    asset: AssetResponseDto;
-    /** Asset ID */
-    assetId: string;
-    candidates: MediaHealthCandidateDto[];
-    category: MediaHealthCategory;
-    checkedAt: string;
-    dismissedAt: string | null;
-    evidence: {
-        [key: string]: any;
-    };
-    /** Media health finding ID */
-    id: string;
-    /** Original media filename */
-    originalFileName: string;
-    /** Original media path */
-    originalPath: string;
-    resolution: {
-        [key: string]: any;
-    };
-    resolvedAt: string | null;
-    severity: MediaHealthSeverity;
-    status: MediaHealthStatus;
-};
-export type MediaHealthBucketDto = {
-    /** Number of findings in the bucket */
-    count: number;
-    items: MediaHealthItemDto[];
-    /** Timeline bucket date */
-    timeBucket: string;
-};
-export type MediaHealthRunResponseDto = {
-    category: MediaHealthCategory;
-    checkedAssets: number;
-    error: string | null;
-    finishedAt: string | null;
-    foundAssets: number;
-    /** Media health run ID */
-    id: string;
-    startedAt: string;
-    /** Run status */
-    status: string;
-    totalAssets: number;
-};
-export type MediaHealthListResponseDto = {
-    buckets: MediaHealthBucketDto[];
-    run: (MediaHealthRunResponseDto) | null;
-    total: number;
-};
-export type MediaHealthDeleteCorruptDto = {
-    /** Typed confirmation text */
-    confirmText: string;
-    /** Media health finding IDs */
-    ids: string[];
-};
-export type MediaHealthBulkResultDto = {
-    error?: string;
-    id: string;
-    status?: MediaHealthStatus;
-    success: boolean;
-};
-export type MediaHealthBulkResponseDto = {
-    results: MediaHealthBulkResultDto[];
-};
-export type MediaHealthScanResponseDto = {
-    runId: string;
-};
-export type MediaHealthBulkActionDto = {
-    /** Media health finding IDs */
-    ids: string[];
 };
 export type OnThisDayDto = {
     /** Year for on this day memory */
@@ -1948,6 +2093,32 @@ export type PluginTemplateResponseDto = {
     /** Ui hints, for example "smart-album" */
     uiHints: string[];
 };
+export type PublicConfigOAuthDto = {
+    /** Auto launch */
+    autoLaunch: boolean;
+    /** Button text */
+    buttonText: string;
+    /** Enabled */
+    enabled: boolean;
+};
+export type PublicConfigPasswordLoginDto = {
+    /** Enabled */
+    enabled: boolean;
+};
+export type PublicConfigServerDto = {
+    /** Login page message */
+    loginPageMessage: string;
+};
+export type PublicConfigThemeDto = {
+    /** Custom CSS for theming */
+    customCss: string;
+};
+export type PublicConfigDto = {
+    oauth: PublicConfigOAuthDto;
+    passwordLogin: PublicConfigPasswordLoginDto;
+    server: PublicConfigServerDto;
+    theme: PublicConfigThemeDto;
+};
 export type QueueResponseDto = {
     /** Whether the queue is paused */
     isPaused: boolean;
@@ -1972,210 +2143,6 @@ export type QueueJobResponseDto = {
     name: JobName;
     /** Job creation timestamp */
     timestamp: number;
-};
-export type RunPodBackfillResultDto = {
-    enqueued: string[];
-    skipped: string[];
-};
-export type RunPodConnectionTestDto = {
-    /** API key to verify (overrides the stored key for the test) */
-    apiKey?: string;
-};
-export type RunPodConnectionResultDto = {
-    message?: string;
-    ok: boolean;
-};
-export type RunPodStateDto = {
-    endpointId?: string;
-    endpointUrl?: string;
-    errorMessage?: string;
-    estimatedCostUsd?: number;
-    gpuTypeId?: string;
-    /** Serverless idle timeout; may be null when not yet provisioned. */
-    idleTimeoutSeconds?: number | null;
-    imageName?: string;
-    instanceTag?: string;
-    lastBusyAt?: string;
-    maxRuntimeHours?: number;
-    mlUrl?: string;
-    podCreatedAt?: string;
-    podId?: string;
-    pricePerHour?: number;
-    runningSince?: string;
-    status: Status3;
-    stoppedAt?: string;
-    templateId?: string;
-    unhealthySince?: string;
-    workerReady?: boolean;
-    /** Serverless workersMax; may be null when not yet provisioned. */
-    workersMax?: number | null;
-    /** Serverless workersMin; may be null when not yet provisioned. */
-    workersMin?: number | null;
-};
-export type RunPodGpuTypeDto = {
-    communityCloud?: boolean;
-    displayName: string;
-    id: string;
-    memoryInGb: number;
-    pricePerHour?: number | null;
-    secureCloud?: boolean;
-};
-export type RunPodProvisionDto = {
-    /** User confirms image previews will be sent to RunPod (must be true to launch) */
-    acknowledgeDataPrivacy: true;
-    gpuCount?: number;
-    /** RunPod GPU type ID, e.g. "NVIDIA RTX A5000" */
-    gpuTypeId: string;
-    /** Override the configured image */
-    imageName?: string;
-    maxRuntimeHours?: number;
-};
-export type AskSearchDto = {
-    /** Search language code */
-    language?: string;
-    /** Page number */
-    page?: number;
-    /** Natural language Ask Search query */
-    query: string;
-    /** Number of results to return */
-    size?: number;
-};
-export type AskSearchPlanDto = {
-    /** Structured filters applied to the search */
-    filters: {
-        /** Filter by album IDs */
-        albumIds?: string[];
-        /** Filter by file checksum */
-        checksum?: string;
-        /** Filter by city name */
-        city?: string | null;
-        /** Filter by country name */
-        country?: string | null;
-        /** Filter by creation date (after) */
-        createdAfter?: string;
-        /** Filter by creation date (before) */
-        createdBefore?: string;
-        /** Filter by description text */
-        description?: string;
-        /** Filter by encoded video file path */
-        encodedVideoPath?: string;
-        /** Filter by asset ID */
-        id?: string;
-        imageEnrichment?: ImageEnrichmentFilter;
-        /** Filter by encoded status */
-        isEncoded?: boolean;
-        /** Filter by favorite status */
-        isFavorite?: boolean;
-        /** Filter by motion photo status */
-        isMotion?: boolean;
-        /** Filter assets not in any album */
-        isNotInAlbum?: boolean;
-        /** Filter by offline status */
-        isOffline?: boolean;
-        /** Filter by lens model */
-        lensModel?: string | null;
-        /** Library ID to filter by */
-        libraryId?: string | null;
-        /** Filter by camera make */
-        make?: string | null;
-        /** Filter by camera model */
-        model?: string | null;
-        /** Filter by OCR text content */
-        ocr?: string;
-        /** Sort order */
-        order?: AssetOrder;
-        /** Filter by original file name */
-        originalFileName?: string;
-        /** Filter by original file path */
-        originalPath?: string;
-        /** Page number */
-        page?: number;
-        /** Filter by person IDs */
-        personIds?: string[];
-        /** Filter by preview file path */
-        previewPath?: string;
-        /** Filter by rating [1-5], or null for unrated */
-        rating?: number | null;
-        /** Number of results to return */
-        size?: number;
-        /** Filter by state/province name */
-        state?: string | null;
-        /** Return only suppressed content. Requires an elevated session. */
-        suppressedOnly?: boolean;
-        /** Filter by tag IDs */
-        tagIds?: string[] | null;
-        /** Filter by taken date (after) */
-        takenAfter?: string;
-        /** Filter by taken date (before) */
-        takenBefore?: string;
-        /** Filter by thumbnail file path */
-        thumbnailPath?: string;
-        /** Filter by trash date (after) */
-        trashedAfter?: string;
-        /** Filter by trash date (before) */
-        trashedBefore?: string;
-        "type"?: AssetTypeEnum;
-        /** Filter by update date (after) */
-        updatedAfter?: string;
-        /** Filter by update date (before) */
-        updatedBefore?: string;
-        visibility?: AssetVisibility;
-        /** Include deleted assets */
-        withDeleted?: boolean;
-        /** Include EXIF data in response */
-        withExif?: boolean;
-        /** Include people data in response */
-        withPeople?: boolean;
-        /** Include stacked assets */
-        withStacked?: boolean;
-    };
-    /** Search mode used to answer the query */
-    mode: Mode;
-    /** Normalized query text */
-    normalizedQuery: string;
-};
-export type SearchFacetCountResponseDto = {
-    /** Number of assets with this facet value */
-    count: number;
-    /** Facet value */
-    value: string;
-};
-export type SearchFacetResponseDto = {
-    counts: SearchFacetCountResponseDto[];
-    /** Facet field name */
-    fieldName: string;
-};
-export type SearchAlbumResponseDto = {
-    /** Number of albums in this page */
-    count: number;
-    facets: SearchFacetResponseDto[];
-    items: AlbumResponseDto[];
-    /** Total number of matching albums */
-    total: number;
-};
-export type SearchAssetResponseDto = {
-    /** Number of assets in this page */
-    count: number;
-    facets: SearchFacetResponseDto[];
-    items: AssetResponseDto[];
-    /** Next page token */
-    nextPage: string | null;
-    /** Total number of matching assets */
-    total: number;
-};
-export type SearchResponseDto = {
-    albums: SearchAlbumResponseDto;
-    assets: SearchAssetResponseDto;
-};
-export type AskSearchResponseDto = {
-    /** Short explanation of how the query was interpreted */
-    explanation: string;
-    plan: AskSearchPlanDto;
-    /** Original Ask Search query */
-    query: string;
-    results: SearchResponseDto;
-    /** Unsupported or ambiguous parts of the query */
-    warnings: string[];
 };
 export type SearchExploreItem = {
     data: AssetResponseDto;
@@ -2206,7 +2173,6 @@ export type MetadataSearchDto = {
     encodedVideoPath?: string;
     /** Filter by asset ID */
     id?: string;
-    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2245,8 +2211,6 @@ export type MetadataSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
-    /** Return only suppressed content. Requires an elevated session. */
-    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2274,6 +2238,39 @@ export type MetadataSearchDto = {
     /** Include stacked assets */
     withStacked?: boolean;
 };
+export type SearchFacetCountResponseDto = {
+    /** Number of assets with this facet value */
+    count: number;
+    /** Facet value */
+    value: string;
+};
+export type SearchFacetResponseDto = {
+    counts: SearchFacetCountResponseDto[];
+    /** Facet field name */
+    fieldName: string;
+};
+export type SearchAlbumResponseDto = {
+    /** Number of albums in this page */
+    count: number;
+    facets: SearchFacetResponseDto[];
+    items: AlbumResponseDto[];
+    /** Total number of matching albums */
+    total: number;
+};
+export type SearchAssetResponseDto = {
+    /** Number of assets in this page */
+    count: number;
+    facets: SearchFacetResponseDto[];
+    items: AssetResponseDto[];
+    /** Next page token */
+    nextPage: string | null;
+    /** Total number of matching assets */
+    total: number;
+};
+export type SearchResponseDto = {
+    albums: SearchAlbumResponseDto;
+    assets: SearchAssetResponseDto;
+};
 export type PlacesResponseDto = {
     /** Administrative level 1 name (state/province) */
     admin1name?: string;
@@ -2297,7 +2294,6 @@ export type RandomSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
-    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2326,8 +2322,6 @@ export type RandomSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
-    /** Return only suppressed content. Requires an elevated session. */
-    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2364,7 +2358,6 @@ export type SmartSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
-    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2401,8 +2394,6 @@ export type SmartSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
-    /** Return only suppressed content. Requires an elevated session. */
-    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2437,7 +2428,6 @@ export type StatisticsSearchDto = {
     createdBefore?: string;
     /** Filter by description text */
     description?: string;
-    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2464,8 +2454,6 @@ export type StatisticsSearchDto = {
     rating?: number | null;
     /** Filter by state/province name */
     state?: string | null;
-    /** Return only suppressed content. Requires an elevated session. */
-    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2502,8 +2490,6 @@ export type ServerAboutResponseDto = {
     ffmpeg?: string;
     /** ImageMagick version */
     imagemagick?: string;
-    /** LibRaw/dcraw_emu version */
-    libraw?: string;
     /** libvips version */
     libvips?: string;
     /** Whether the server is licensed */
@@ -2544,8 +2530,6 @@ export type ServerApkLinksDto = {
     x86_64: string;
 };
 export type ServerConfigDto = {
-    /** Canonical default for the image-description advanced raw prompt template */
-    defaultImageDescriptionRawPromptTemplate: string;
     /** External domain URL */
     externalDomain: string;
     /** Whether the server has been initialized */
@@ -2562,6 +2546,8 @@ export type ServerConfigDto = {
     mapLightStyleUrl: string;
     /** People min faces server default */
     minFaces: number;
+    /** OAuth account management URL */
+    oauthAccountManagementUrl?: string;
     /** OAuth button text */
     oauthButtonText: string;
     /** Whether public user registration is enabled */
@@ -2580,16 +2566,10 @@ export type ServerFeaturesDto = {
     email: boolean;
     /** Whether facial recognition is enabled */
     facialRecognition: boolean;
-    /** Whether image description and tag generation is enabled */
-    imageDescription: boolean;
     /** Whether face import is enabled */
     importFaces: boolean;
     /** Whether map feature is enabled */
     map: boolean;
-    /** Whether NSFW detection is enabled */
-    nsfwDetection: boolean;
-    /** Whether NSFW-tagged assets are hidden from non-elevated library views */
-    nsfwHiding: boolean;
     /** Whether OAuth is enabled */
     oauth: boolean;
     /** Whether OAuth auto-launch is enabled */
@@ -2598,8 +2578,6 @@ export type ServerFeaturesDto = {
     ocr: boolean;
     /** Whether password login is enabled */
     passwordLogin: boolean;
-    /** Whether physical file deduplication is enabled */
-    physicalDeduplication: boolean;
     /** Whether real-time transcoding is enabled */
     realtimeTranscoding: boolean;
     /** Whether reverse geocoding is enabled */
@@ -2849,596 +2827,6 @@ export type SyncStreamDto = {
     /** Sync request types */
     types: SyncRequestType[];
 };
-export type DatabaseBackupConfig = {
-    /** Cron expression */
-    cronExpression: string;
-    /** Enabled */
-    enabled: boolean;
-    /** Keep last amount */
-    keepLastAmount: number;
-};
-export type SystemConfigBackupsDto = {
-    database: DatabaseBackupConfig;
-};
-export type SystemConfigFFmpegRealtimeDto = {
-    /** Enable real-time HLS transcoding (alpha) */
-    enabled: boolean;
-    /** Resolutions to use for real-time HLS transcoding */
-    resolutions: HlsVideoResolution[];
-    /** Video codecs to use for real-time HLS transcoding */
-    videoCodecs: VideoCodec[];
-};
-export type SystemConfigFFmpegDto = {
-    accel: TranscodeHWAccel;
-    /** Accelerated decode */
-    accelDecode: boolean;
-    /** Accepted audio codecs */
-    acceptedAudioCodecs: AudioCodec[];
-    /** Accepted containers */
-    acceptedContainers: VideoContainer[];
-    /** Accepted video codecs */
-    acceptedVideoCodecs: VideoCodec[];
-    /** B-frames */
-    bframes: number;
-    cqMode: CQMode;
-    /** CRF */
-    crf: number;
-    /** GOP size */
-    gopSize: number;
-    /** Max bitrate */
-    maxBitrate: string;
-    /** Preferred hardware device */
-    preferredHwDevice: string;
-    /** Preset */
-    preset: string;
-    realtime: SystemConfigFFmpegRealtimeDto;
-    /** References */
-    refs: number;
-    targetAudioCodec: AudioCodec;
-    /** Target resolution */
-    targetResolution: string;
-    targetVideoCodec: VideoCodec;
-    /** Temporal AQ */
-    temporalAQ: boolean;
-    /** Threads */
-    threads: number;
-    tonemap: ToneMapping;
-    transcode: TranscodePolicy;
-    /** Two pass */
-    twoPass: boolean;
-};
-export type SystemConfigEnhancedRawImageDto = {
-    /** Enhanced RAW rendering */
-    enabled: boolean;
-};
-export type SystemConfigGeneratedFullsizeImageDto = {
-    /** Enabled */
-    enabled: boolean;
-    format: ImageFormat;
-    /** Progressive */
-    progressive?: boolean;
-    /** Quality */
-    quality: number;
-};
-export type SystemConfigGeneratedImageDto = {
-    format: ImageFormat;
-    /** Progressive */
-    progressive?: boolean;
-    /** Quality */
-    quality: number;
-    /** Size */
-    size: number;
-};
-export type SystemConfigImageDto = {
-    colorspace: Colorspace;
-    enhancedRaw?: SystemConfigEnhancedRawImageDto;
-    /** Extract embedded */
-    extractEmbedded: boolean;
-    fullsize: SystemConfigGeneratedFullsizeImageDto;
-    preview: SystemConfigGeneratedImageDto;
-    thumbnail: SystemConfigGeneratedImageDto;
-};
-export type SystemConfigIntegrityChecksumJob = {
-    /** Cron expression for when the integrity check should run */
-    cronExpression: string;
-    /** Enabled */
-    enabled: boolean;
-    /** Percentage limit of the integrity checksum job */
-    percentageLimit: number;
-    /** How long the integrity checksum job may run for */
-    timeLimit: number;
-};
-export type SystemConfigIntegrityJob = {
-    /** Cron expression for when the integrity check should run */
-    cronExpression: string;
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigIntegrityChecks = {
-    checksumFiles: SystemConfigIntegrityChecksumJob;
-    missingFiles: SystemConfigIntegrityJob;
-    untrackedFiles: SystemConfigIntegrityJob;
-};
-export type JobSettingsDto = {
-    /** Concurrency */
-    concurrency: number;
-};
-export type SystemConfigJobDto = {
-    backgroundTask: JobSettingsDto;
-    editor: JobSettingsDto;
-    faceDetection: JobSettingsDto;
-    imageDescription?: JobSettingsDto;
-    imageEnrichment?: JobSettingsDto;
-    integrityCheck: JobSettingsDto;
-    library: JobSettingsDto;
-    mediaHealth?: JobSettingsDto;
-    metadataExtraction: JobSettingsDto;
-    migration: JobSettingsDto;
-    notifications: JobSettingsDto;
-    nsfwDetection?: JobSettingsDto;
-    ocr: JobSettingsDto;
-    search: JobSettingsDto;
-    sidecar: JobSettingsDto;
-    smartSearch: JobSettingsDto;
-    thumbnailGeneration: JobSettingsDto;
-    videoConversion: JobSettingsDto;
-    videoDuplicateDetection: JobSettingsDto;
-    workflow: JobSettingsDto;
-};
-export type SystemConfigLibraryScanDto = {
-    /** Cron expression */
-    cronExpression: string;
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigLibraryWatchDto = {
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigLibraryDto = {
-    scan: SystemConfigLibraryScanDto;
-    watch: SystemConfigLibraryWatchDto;
-};
-export type SystemConfigLocalFeaturesDto = {
-    askSearch: {
-        /** Enable local Ask Photos-style search */
-        enabled: boolean;
-        /** Maximum number of Ask Search results */
-        maxResults: number;
-    };
-};
-export type SystemConfigLoggingDto = {
-    /** Enabled */
-    enabled: boolean;
-    level: LogLevel;
-};
-export type MachineLearningAvailabilityChecksDto = {
-    /** Enabled */
-    enabled: boolean;
-    interval: number;
-    timeout: number;
-};
-export type ZeroShotTaggingConfig = {
-    /** Whether zero-shot auto-tagging is enabled */
-    enabled: boolean;
-    /** Maximum number of zero-shot tags applied per asset */
-    maxTags: number;
-    /** Cosine similarity above which a label is applied as a tag */
-    minSimilarity: number;
-};
-export type ClipConfig = {
-    /** Whether the task is enabled */
-    enabled: boolean;
-    /** Name of the model to use */
-    modelName: string;
-    zeroShotTagging: ZeroShotTaggingConfig;
-};
-export type DuplicateDetectionConfig = {
-    /** Whether the task is enabled */
-    enabled: boolean;
-    enhancedVideo: {
-        /** Whether enhanced video duplicate detection is enabled */
-        enabled: boolean;
-        /** Number of video frames to sample for duplicate confirmation */
-        frameCount: number;
-        /** Maximum distance threshold for enhanced video duplicate frame matching */
-        maxDistance: number;
-        /** Minimum matching sampled frames required to confirm a video duplicate */
-        minMatchingFrames: number;
-    };
-    /** Maximum distance threshold for duplicate detection */
-    maxDistance: number;
-    /** When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size */
-    preferOriginalFormat: boolean;
-};
-export type FacialRecognitionConfig = {
-    /** Whether the task is enabled */
-    enabled: boolean;
-    /** Maximum distance threshold for face recognition */
-    maxDistance: number;
-    /** Minimum number of faces required for recognition */
-    minFaces: number;
-    /** Minimum confidence score for face detection */
-    minScore: number;
-    /** Name of the model to use */
-    modelName: string;
-};
-export type AdvancedPromptConfig = {
-    /** Use a raw prompt template instead of the structured fields */
-    enabled?: boolean;
-    /** Whether missing {schema} placeholder fails save (strict) or warns (warn) */
-    placeholderValidation?: PlaceholderValidation;
-    /** Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders */
-    rawPromptTemplate?: string;
-};
-export type IdentityInjectionConfig = {
-    /** Inject named-face data into description prompts */
-    enabled?: boolean;
-    /** Maximum named persons to inject into a single prompt */
-    maxNames?: number;
-    /** Minimum face-recognition confidence required to inject a name */
-    minFaceConfidence?: number;
-};
-export type ImageDescriptionPromptConfig = {
-    /** Advanced raw-prompt-editor configuration */
-    advanced?: AdvancedPromptConfig;
-    /** Free-form additional natural-language instructions appended to the description prompt. Example: "If you see a car, identify the make and model. If people are playing a sport, name the sport." */
-    customInstructions?: string;
-    /** Tag values the model should prefer when applicable */
-    customVocabulary?: string[];
-    /** Categories the model must not infer (diagnoses, medications, etc.) */
-    forbiddenInferences?: string[];
-    /** Named-face injection configuration */
-    identityInjection?: IdentityInjectionConfig;
-    /** Additional categories the model should note when visibly supported (brands, sports equipment, etc.) */
-    lookFor?: string[];
-    /** Allow-list of medical indicator terms permitted in the description */
-    medicalIndicators?: string[];
-    /** Allow-list of explicit NSFW indicator terms permitted in the description */
-    nsfwIndicators?: string[];
-    /** Target number of sentences in the description */
-    sentenceCountTarget?: number;
-    /** Description verbosity preset */
-    style?: Style;
-};
-export type ImageDescriptionConfig = {
-    /** Hardware acceleration backend to use */
-    acceleration?: MachineLearningHardwareAcceleration;
-    /** Hardware device to use */
-    device: string;
-    /** Whether the task is enabled */
-    enabled: boolean;
-    /** Name of the fallback model to use */
-    fallbackModelName: string;
-    /** ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth). */
-    lastConfigChangeAt?: string | null;
-    /** Name of the model to use */
-    modelName: string;
-    /** ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent "re-queue pending" banner. */
-    pendingRequeueAt?: string | null;
-    prompt?: ImageDescriptionPromptConfig;
-};
-export type NsfwDetectionConfig = {
-    /** Hardware device to use */
-    device: string;
-    /** Whether the task is enabled */
-    enabled: boolean;
-    /** Hide NSFW assets from library views unless the session has PIN-elevated access */
-    hideFromLibrary: boolean;
-    /** Name of the model to use */
-    modelName: string;
-    /** Minimum score required to mark an image as NSFW */
-    threshold: number;
-};
-export type OcrConfig = {
-    /** Whether the task is enabled */
-    enabled: boolean;
-    /** Maximum resolution for OCR processing */
-    maxResolution: number;
-    /** Minimum confidence score for text detection */
-    minDetectionScore: number;
-    /** Minimum confidence score for text recognition */
-    minRecognitionScore: number;
-    /** Name of the model to use */
-    modelName: string;
-};
-export type SystemConfigRunPodServerlessDto = {
-    /** Max time per request (ms) */
-    executionTimeoutMs: number;
-    /** Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required. */
-    gpuTypeIds: string[];
-    /** Seconds before an idle worker scales down */
-    idleTimeoutSeconds: number;
-    /** Worker autoscaler strategy */
-    scalerType: ScalerType;
-    /** Scaler threshold (queue seconds or request count) */
-    scalerValue: number;
-    /** Max concurrent workers */
-    workersMax: number;
-    /** Always-warm workers (0 = scale to zero) */
-    workersMin: number;
-};
-export type SystemConfigRunPodDto = {
-    /** RunPod API key (write-only; empty preserves the existing key) */
-    apiKey: string;
-    /** Read-only indicator that a key is currently stored. Set by the server; ignored on write. */
-    apiKeyConfigured?: boolean;
-    /** Auto-run ML backfill on pod ready (Pod mode) */
-    autoBackfillOnLaunch: boolean;
-    /** Auto-stop when idle (Pod mode) */
-    autoStopEnabled: boolean;
-    /** Idle minutes before auto-stop (Pod mode) */
-    autoStopGraceMinutes: number;
-    /** Container disk size (GB) (Pod mode) */
-    containerDiskGb: number;
-    /** User accepted that image previews leave the network */
-    dataPrivacyAcknowledged: boolean;
-    /** Preferred GPU type ID (Pod mode) */
-    defaultGpuTypeId: string;
-    /** Enabled */
-    enabled: boolean;
-    /** HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token) */
-    hfToken?: string;
-    /** Read-only indicator that an HF token is currently stored. Set by the server; ignored on write. */
-    hfTokenConfigured?: boolean;
-    /** Container image to launch */
-    imageName: string;
-    /** Hard runtime ceiling (hours) (Pod mode) */
-    maxRuntimeHours: number;
-    /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients. */
-    mode?: Mode2;
-    /** How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode) */
-    provisionTimeoutMinutes?: number;
-    serverless?: SystemConfigRunPodServerlessDto;
-    /** Persistent volume size (GB) (Pod mode) */
-    volumeGb: number;
-};
-export type SystemConfigMachineLearningDto = {
-    availabilityChecks: MachineLearningAvailabilityChecksDto;
-    clip: ClipConfig;
-    duplicateDetection: DuplicateDetectionConfig;
-    /** Enabled */
-    enabled: boolean;
-    facialRecognition: FacialRecognitionConfig;
-    imageDescription?: ImageDescriptionConfig;
-    nsfwDetection?: NsfwDetectionConfig;
-    ocr: OcrConfig;
-    runpod?: SystemConfigRunPodDto;
-    /** ML service URLs */
-    urls: string[];
-};
-export type SystemConfigMapDto = {
-    /** Dark map style URL */
-    darkStyle: string;
-    /** Enabled */
-    enabled: boolean;
-    /** Light map style URL */
-    lightStyle: string;
-};
-export type SystemConfigFacesDto = {
-    /** Import */
-    "import": boolean;
-};
-export type SystemConfigMetadataDto = {
-    faces: SystemConfigFacesDto;
-};
-export type SystemConfigNewVersionCheckDto = {
-    channel: ReleaseChannel;
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigNightlyTasksDto = {
-    /** Cluster new faces */
-    clusterNewFaces: boolean;
-    /** Database cleanup */
-    databaseCleanup: boolean;
-    /** Generate memories */
-    generateMemories: boolean;
-    /** Missing thumbnails */
-    missingThumbnails: boolean;
-    /** Start time (HH:MM) */
-    startTime: string;
-    /** Sync quota usage */
-    syncQuotaUsage: boolean;
-};
-export type SystemConfigNotificationsDto = {
-    smtp: SystemConfigSmtpDto;
-};
-export type SystemConfigOAuthDto = {
-    /** Allow insecure requests */
-    allowInsecureRequests: boolean;
-    /** Auto launch */
-    autoLaunch: boolean;
-    /** Auto register */
-    autoRegister: boolean;
-    /** Button text */
-    buttonText: string;
-    /** Client ID */
-    clientId: string;
-    /** Client secret */
-    clientSecret: string;
-    /** Default storage quota */
-    defaultStorageQuota: number | null;
-    /** Enabled */
-    enabled: boolean;
-    /** End session endpoint */
-    endSessionEndpoint: string;
-    /** Issuer URL */
-    issuerUrl: string;
-    /** Mobile override enabled */
-    mobileOverrideEnabled: boolean;
-    /** Mobile redirect URI (set to empty string to disable) */
-    mobileRedirectUri: string;
-    /** Profile signing algorithm */
-    profileSigningAlgorithm: string;
-    /** OAuth prompt parameter (e.g. select_account, login, consent) */
-    prompt: string;
-    /** Role claim */
-    roleClaim: string;
-    /** Scope */
-    scope: string;
-    /** Signing algorithm */
-    signingAlgorithm: string;
-    /** Storage label claim */
-    storageLabelClaim: string;
-    /** Storage quota claim */
-    storageQuotaClaim: string;
-    /** Timeout */
-    timeout: number;
-    tokenEndpointAuthMethod: OAuthTokenEndpointAuthMethod;
-};
-export type SystemConfigPasswordLoginDto = {
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigPhysicalDeduplicationDto = {
-    /** Enabled */
-    enabled: boolean;
-    /** Master user ID */
-    masterUserId: string | null;
-};
-export type SystemConfigReverseGeocodingDto = {
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigServerDto = {
-    /** External domain */
-    externalDomain: string;
-    /** Login page message */
-    loginPageMessage: string;
-    /** Public users */
-    publicUsers: boolean;
-};
-export type SmartAlbumKindConfig = {
-    /** CLIP query phrases used when no tag trigger matches */
-    clipQueries: string[];
-    /** Whether this smart album is active */
-    enabled: boolean;
-    /** User-visible album name */
-    name: string;
-    /** Tags that mark an asset as belonging to this album */
-    tagTriggers: string[];
-    /** CLIP similarity threshold */
-    threshold: number;
-};
-export type SystemConfigSmartAlbumsDto = {
-    builtIn: {
-        documents: SmartAlbumKindConfig;
-        food: SmartAlbumKindConfig;
-        nature: SmartAlbumKindConfig;
-        pets: SmartAlbumKindConfig;
-        screenshots: SmartAlbumKindConfig;
-        travel: SmartAlbumKindConfig;
-    };
-    /** Master smart-album enabled toggle */
-    enabled: boolean;
-};
-export type SystemConfigStorageTemplateDto = {
-    /** Enabled */
-    enabled: boolean;
-    /** Hash verification enabled */
-    hashVerificationEnabled: boolean;
-    /** Template */
-    template: string;
-};
-export type SystemConfigTemplateEmailsDto = {
-    /** Album invite template */
-    albumInviteTemplate: string;
-    /** Album update template */
-    albumUpdateTemplate: string;
-    /** Welcome template */
-    welcomeTemplate: string;
-};
-export type SystemConfigTemplatesDto = {
-    email: SystemConfigTemplateEmailsDto;
-};
-export type SystemConfigThemeDto = {
-    /** Custom CSS for theming */
-    customCss: string;
-};
-export type SystemConfigTrashDto = {
-    /** Days */
-    days: number;
-    /** Enabled */
-    enabled: boolean;
-};
-export type SystemConfigUserDto = {
-    /** Delete delay */
-    deleteDelay: number;
-};
-export type SystemConfigDto = {
-    backup: SystemConfigBackupsDto;
-    ffmpeg: SystemConfigFFmpegDto;
-    image: SystemConfigImageDto;
-    integrityChecks: SystemConfigIntegrityChecks;
-    job: SystemConfigJobDto;
-    library: SystemConfigLibraryDto;
-    localFeatures?: SystemConfigLocalFeaturesDto;
-    logging: SystemConfigLoggingDto;
-    machineLearning: SystemConfigMachineLearningDto;
-    map: SystemConfigMapDto;
-    metadata: SystemConfigMetadataDto;
-    newVersionCheck: SystemConfigNewVersionCheckDto;
-    nightlyTasks: SystemConfigNightlyTasksDto;
-    notifications: SystemConfigNotificationsDto;
-    oauth: SystemConfigOAuthDto;
-    passwordLogin: SystemConfigPasswordLoginDto;
-    physicalDeduplication?: SystemConfigPhysicalDeduplicationDto;
-    reverseGeocoding: SystemConfigReverseGeocodingDto;
-    server: SystemConfigServerDto;
-    smartAlbums?: SystemConfigSmartAlbumsDto;
-    storageTemplate: SystemConfigStorageTemplateDto;
-    templates: SystemConfigTemplatesDto;
-    theme: SystemConfigThemeDto;
-    trash: SystemConfigTrashDto;
-    user: SystemConfigUserDto;
-};
-export type ImageDescriptionRequeueResponseDto = {
-    /** Whether the queue-all job was newly enqueued (false = already in-flight) */
-    queued: boolean;
-};
-export type ImageDescriptionRequeueEstimateDto = {
-    /** Configured hardware acceleration backend (e.g. "auto", "cuda") */
-    activeBackend: string;
-    /** Configured image description model name */
-    activeModel: string;
-    /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
-    estimatedTotalSeconds: number;
-    /** Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started. */
-    rollingAvgSeconds: number;
-    /** Total eligible image assets */
-    totalAssets: number;
-    /** Number of eligible assets that currently have a description (will be re-run on force-requeue). */
-    withDescription: number;
-    /** Number of eligible assets that currently have no description. */
-    withoutDescription: number;
-};
-export type MachineLearningHardwareResponseDto = {
-    /** Available PyTorch CUDA device count */
-    cudaDeviceCount: number;
-    /** Available OpenVINO device IDs */
-    openvinoDeviceIds: string[];
-    /** Detected preferred hardware acceleration */
-    preferredAcceleration: MachineLearningHardwareAcceleration;
-    /** Available ONNX Runtime providers */
-    providers: string[];
-    /** Whether PyTorch CUDA is available */
-    torchCudaAvailable: boolean;
-};
-export type SmartAlbumReevaluateRequestDto = {
-    /** Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind. */
-    kind?: Kind;
-};
-export type SmartAlbumReevaluateResponseDto = {
-    /** Whether the re-evaluate job was newly enqueued (false = already in-flight) */
-    queued: boolean;
-};
-export type SmartAlbumReevaluateEstimateDto = {
-    /** Total image assets that will be evaluated (currently equals withDescription) */
-    totalAssets: number;
-    /** Image assets with a successfully completed description */
-    withDescription: number;
-};
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
     dayOptions: string[];
@@ -3492,12 +2880,16 @@ export type TagBulkAssetsResponseDto = {
 export type TagUpdateDto = {
     /** Tag color (hex) */
     color?: string | null;
+    /** Tag name */
+    name?: string;
 };
 export type TimeBucketAssetResponseDto = {
     /** Array of city names extracted from EXIF GPS data */
     city?: (string | null)[];
     /** Array of country names extracted from EXIF GPS data */
     country?: (string | null)[];
+    /** Array of UTC timestamps when each asset was originally uploaded to Immich */
+    createdAt: string[];
     /** Array of video/gif durations in milliseconds (null for static images) */
     duration: (number | null)[];
     /** Array of file creation timestamps in UTC */
@@ -3589,6 +2981,8 @@ export type WorkflowResponseDto = {
     enabled: boolean;
     /** Workflow ID */
     id: string;
+    /** Workflow logs run results */
+    logging: boolean;
     /** Workflow name */
     name: string | null;
     /** Workflow steps */
@@ -3603,6 +2997,8 @@ export type WorkflowCreateDto = {
     description?: string | null;
     /** Workflow enabled */
     enabled?: boolean;
+    /** Workflow logs run results */
+    logging?: boolean;
     /** Workflow name */
     name?: string | null;
     steps?: WorkflowStepDto[];
@@ -3620,11 +3016,29 @@ export type WorkflowUpdateDto = {
     description?: string | null;
     /** Workflow enabled */
     enabled?: boolean;
+    /** Workflow logs run results */
+    logging?: boolean;
     /** Workflow name */
     name?: string | null;
     steps?: WorkflowStepDto[];
     /** Workflow trigger type */
     trigger?: WorkflowTrigger;
+};
+export type WorkflowLogEntryDto = {
+    /** Workflow run date/time */
+    at: string;
+    /** Workflow log entry ID */
+    id: string;
+    /** Last step ran, if the workflow ended early */
+    lastStep?: {
+        /** Index of the step in the workflow */
+        index: number;
+        /** Method of the step */
+        method: string;
+    };
+    result: WorkflowResult;
+    /** Workflow trigger data ID */
+    triggerDataId?: string;
 };
 export type WorkflowShareStepDto = {
     /** Step configuration */
@@ -4219,6 +3633,43 @@ export function unlinkAllOAuthAccountsAdmin(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Get the admin configuration
+ */
+export function getAdminConfig(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AdminConfigDto;
+    }>("/admin/config", {
+        ...opts
+    }));
+}
+/**
+ * Update the system configuration
+ */
+export function updateAdminConfig({ adminConfigDto }: {
+    adminConfigDto: AdminConfigDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AdminConfigDto;
+    }>("/admin/config", oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: adminConfigDto
+    })));
+}
+/**
+ * Get the system configuration defaults
+ */
+export function getAdminConfigDefaults(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AdminConfigDto;
+    }>("/admin/config/defaults", {
+        ...opts
+    }));
+}
+/**
  * Delete database backup
  */
 export function deleteDatabaseBackup({ databaseBackupDeleteDto }: {
@@ -4425,8 +3876,8 @@ export function getNotificationTemplateAdmin({ name, templateDto }: {
 /**
  * Send test email
  */
-export function sendTestEmailAdmin({ systemConfigSmtpDto }: {
-    systemConfigSmtpDto: SystemConfigSmtpDto;
+export function sendTestEmailAdmin({ adminConfigSmtpDto }: {
+    adminConfigSmtpDto: AdminConfigSmtpDto;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -4434,7 +3885,7 @@ export function sendTestEmailAdmin({ systemConfigSmtpDto }: {
     }>("/admin/notifications/test-email", oazapfts.json({
         ...opts,
         method: "POST",
-        body: systemConfigSmtpDto
+        body: adminConfigSmtpDto
     })));
 }
 /**
@@ -4613,13 +4064,12 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
 /**
  * List all albums
  */
-export function getAllAlbums({ assetId, id, isOwned, isShared, name, suppressedOnly }: {
+export function getAllAlbums({ assetId, id, isOwned, isShared, name }: {
     assetId?: string;
     id?: string;
     isOwned?: boolean;
     isShared?: boolean;
     name?: string;
-    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -4629,8 +4079,7 @@ export function getAllAlbums({ assetId, id, isOwned, isShared, name, suppressedO
         id,
         isOwned,
         isShared,
-        name,
-        suppressedOnly
+        name
     }))}`, {
         ...opts
     }));
@@ -4690,19 +4139,17 @@ export function deleteAlbum({ id }: {
 /**
  * Retrieve an album
  */
-export function getAlbumInfo({ id, key, slug, suppressedOnly }: {
+export function getAlbumInfo({ id, key, slug }: {
     id: string;
     key?: string;
     slug?: string;
-    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumResponseDto;
     }>(`/albums/${encodeURIComponent(id)}${QS.query(QS.explode({
         key,
-        slug,
-        suppressedOnly
+        slug
     }))}`, {
         ...opts
     }));
@@ -4754,19 +4201,6 @@ export function addAssetsToAlbum({ id, bulkIdsDto }: {
         method: "PUT",
         body: bulkIdsDto
     })));
-}
-/**
- * Count descendant albums
- */
-export function getAlbumDescendantCount({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AlbumDescendantCountResponseDto;
-    }>(`/albums/${encodeURIComponent(id)}/descendant-count`, {
-        ...opts
-    }));
 }
 /**
  * Retrieve album map markers
@@ -4904,6 +4338,80 @@ export function updateApiKey({ id, apiKeyUpdateDto }: {
         method: "PUT",
         body: apiKeyUpdateDto
     })));
+}
+/**
+ * Rotate an API key
+ */
+export function rotateApiKey({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: ApiKeyCreateResponseDto;
+    }>(`/api-keys/${encodeURIComponent(id)}/rotate`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Search asset files
+ */
+export function searchAssetFiles({ assetId, isEdited, isProgressive, isTransparent, $type }: {
+    assetId: string;
+    isEdited?: boolean;
+    isProgressive?: boolean;
+    isTransparent?: boolean;
+    $type?: AssetFileType;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetFileResponseDto[];
+    }>(`/asset-files${QS.query(QS.explode({
+        assetId,
+        isEdited,
+        isProgressive,
+        isTransparent,
+        "type": $type
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Delete an asset file
+ */
+export function deleteAssetFile({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/asset-files/${encodeURIComponent(id)}`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Retrieve an asset file
+ */
+export function getAssetFile({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetFileResponseDto;
+    }>(`/asset-files/${encodeURIComponent(id)}`, {
+        ...opts
+    }));
+}
+/**
+ * Download an asset file
+ */
+export function downloadAssetFile({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/asset-files/${encodeURIComponent(id)}/download`, {
+        ...opts
+    }));
 }
 /**
  * Delete assets
@@ -5113,35 +4621,6 @@ export function editAsset({ id, assetEditsCreateDto }: {
         ...opts,
         method: "PUT",
         body: assetEditsCreateDto
-    })));
-}
-/**
- * Get image enrichment metadata
- */
-export function getAssetImageEnrichment({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetImageEnrichmentResponseDto;
-    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, {
-        ...opts
-    }));
-}
-/**
- * Update image enrichment metadata
- */
-export function updateAssetImageEnrichment({ id, assetImageEnrichmentActionRequestDto }: {
-    id: string;
-    assetImageEnrichmentActionRequestDto: AssetImageEnrichmentActionRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AssetImageEnrichmentResponseDto;
-    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, oazapfts.json({
-        ...opts,
-        method: "PUT",
-        body: assetImageEnrichmentActionRequestDto
     })));
 }
 /**
@@ -5494,23 +4973,110 @@ export function validateAccessToken(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
- * Retrieve best photos
+ * Retrieve cluster group requests
  */
-export function getBestPhotos({ includeArchived, limit, minScore, page }: {
-    includeArchived?: boolean;
-    limit?: number;
-    minScore?: number;
-    page?: number;
+export function getClusterGroupRequests(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ClusterGroupRequestResponseDto[];
+    }>("/cluster-groups/requests", {
+        ...opts
+    }));
+}
+/**
+ * Decline a cluster group request
+ */
+export function deleteClusterGroupRequest({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/cluster-groups/requests/${encodeURIComponent(id)}`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Accept a cluster group request
+ */
+export function acceptClusterGroupRequest({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/cluster-groups/requests/${encodeURIComponent(id)}/accept`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Leave a cluster group
+ */
+export function leaveClusterGroup({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/cluster-groups/${encodeURIComponent(id)}/leave`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Retrieve the requests sent by a cluster group
+ */
+export function getClusterGroupRequestsForGroup({ id }: {
+    id: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: BestPhotosResponseDto;
-    }>(`/best-photos${QS.query(QS.explode({
-        includeArchived,
-        limit,
-        minScore,
-        page
-    }))}`, {
+        data: ClusterGroupRequestResponseDto[];
+    }>(`/cluster-groups/${encodeURIComponent(id)}/requests`, {
+        ...opts
+    }));
+}
+/**
+ * Create a cluster group request
+ */
+export function createClusterGroupRequest({ id, clusterGroupRequestCreateDto }: {
+    id: string;
+    clusterGroupRequestCreateDto: ClusterGroupRequestCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ClusterGroupRequestResponseDto;
+    }>(`/cluster-groups/${encodeURIComponent(id)}/requests`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: clusterGroupRequestCreateDto
+    })));
+}
+/**
+ * Retrieve the users of a cluster group
+ */
+export function getClusterGroupUsers({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: UserResponseDto[];
+    }>(`/cluster-groups/${encodeURIComponent(id)}/users`, {
+        ...opts
+    }));
+}
+/**
+ * Get the configuration with user visibility
+ */
+export function getUserConfig(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: UserConfigDto;
+    }>("/config", {
+        ...opts
+    }));
+}
+/**
+ * Get the default configuration with user visibility
+ */
+export function getUserConfigDefaults(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: UserConfigDto;
+    }>("/config/defaults", {
         ...opts
     }));
 }
@@ -5805,32 +5371,6 @@ export function validate({ id, validateLibraryDto }: {
     })));
 }
 /**
- * List live photo relink candidates
- */
-export function getLivePhotoCandidates(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: LivePhotoCandidatesResponseDto;
-    }>("/live-photo/candidates", {
-        ...opts
-    }));
-}
-/**
- * Relink live photos
- */
-export function relinkLivePhotos({ livePhotoRelinkDto }: {
-    livePhotoRelinkDto: LivePhotoRelinkDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: LivePhotoRelinkResponseDto;
-    }>("/live-photo/relink", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: livePhotoRelinkDto
-    })));
-}
-/**
  * Retrieve map markers
  */
 export function getMapMarkers({ fileCreatedAfter, fileCreatedBefore, isArchived, isFavorite, withPartners, withSharedAlbums }: {
@@ -5873,113 +5413,16 @@ export function reverseGeocode({ lat, lon }: {
     }));
 }
 /**
- * List media health findings
- */
-export function list({ category, size, status }: {
-    category?: MediaHealthCategory;
-    size?: number;
-    status?: MediaHealthStatus;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: MediaHealthListResponseDto;
-    }>(`/media-health${QS.query(QS.explode({
-        category,
-        size,
-        status
-    }))}`, {
-        ...opts
-    }));
-}
-/**
- * Move confirmed corrupt media to trash
- */
-export function deleteCorrupt({ mediaHealthDeleteCorruptDto }: {
-    mediaHealthDeleteCorruptDto: MediaHealthDeleteCorruptDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: MediaHealthBulkResponseDto;
-    }>("/media-health/corrupt", oazapfts.json({
-        ...opts,
-        method: "DELETE",
-        body: mediaHealthDeleteCorruptDto
-    })));
-}
-/**
- * Start corrupt media scan
- */
-export function startCorruptScan(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: MediaHealthScanResponseDto;
-    }>("/media-health/corrupt/scan", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Dismiss media health findings
- */
-export function dismiss({ mediaHealthBulkActionDto }: {
-    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/media-health/dismiss", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: mediaHealthBulkActionDto
-    })));
-}
-/**
- * Locate missing media
- */
-export function locateMissing({ mediaHealthBulkActionDto }: {
-    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: MediaHealthScanResponseDto;
-    }>("/media-health/missing/locate", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: mediaHealthBulkActionDto
-    })));
-}
-/**
- * Relink missing media
- */
-export function relinkMissing({ mediaHealthBulkActionDto }: {
-    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: MediaHealthBulkResponseDto;
-    }>("/media-health/missing/relink", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: mediaHealthBulkActionDto
-    })));
-}
-/**
- * Start missing media scan
- */
-export function startMissingScan(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: MediaHealthScanResponseDto;
-    }>("/media-health/missing/scan", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
  * Retrieve memories
  */
-export function searchMemories({ $for, isSaved, isTrashed, order, size, $type }: {
+export function searchMemories({ $for, id, isSaved, isTrashed, isUpcoming, order, page, size, $type }: {
     $for?: string;
+    id?: string;
     isSaved?: boolean;
     isTrashed?: boolean;
+    isUpcoming?: boolean;
     order?: MemorySearchOrder;
+    page?: number;
     size?: number;
     $type?: MemoryType;
 }, opts?: Oazapfts.RequestOpts) {
@@ -5988,9 +5431,12 @@ export function searchMemories({ $for, isSaved, isTrashed, order, size, $type }:
         data: MemoryResponseDto[];
     }>(`/memories${QS.query(QS.explode({
         "for": $for,
+        id,
         isSaved,
         isTrashed,
+        isUpcoming,
         order,
+        page,
         size,
         "type": $type
     }))}`, {
@@ -6015,11 +5461,14 @@ export function createMemory({ memoryCreateDto }: {
 /**
  * Retrieve memories statistics
  */
-export function memoriesStatistics({ $for, isSaved, isTrashed, order, size, $type }: {
+export function memoriesStatistics({ $for, id, isSaved, isTrashed, isUpcoming, order, page, size, $type }: {
     $for?: string;
+    id?: string;
     isSaved?: boolean;
     isTrashed?: boolean;
+    isUpcoming?: boolean;
     order?: MemorySearchOrder;
+    page?: number;
     size?: number;
     $type?: MemoryType;
 }, opts?: Oazapfts.RequestOpts) {
@@ -6028,9 +5477,12 @@ export function memoriesStatistics({ $for, isSaved, isTrashed, order, size, $typ
         data: MemoryStatisticsResponseDto;
     }>(`/memories/statistics${QS.query(QS.explode({
         "for": $for,
+        id,
         isSaved,
         isTrashed,
+        isUpcoming,
         order,
+        page,
         size,
         "type": $type
     }))}`, {
@@ -6586,6 +6038,28 @@ export function getPlugin({ id }: {
     }));
 }
 /**
+ * Get the public configuration
+ */
+export function getPublicConfig(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PublicConfigDto;
+    }>("/public/config", {
+        ...opts
+    }));
+}
+/**
+ * Get the public configuration defaults
+ */
+export function getPublicConfigDefaults(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PublicConfigDto;
+    }>("/public/config/defaults", {
+        ...opts
+    }));
+}
+/**
  * List all queues
  */
 export function getQueues(opts?: Oazapfts.RequestOpts) {
@@ -6655,145 +6129,6 @@ export function getQueueJobs({ name, status }: {
     }));
 }
 /**
- * Enqueue all ML backfill jobs
- */
-export function backfill(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodBackfillResultDto;
-    }>("/runpod/backfill", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Test RunPod connection
- */
-export function testConnection({ runPodConnectionTestDto }: {
-    runPodConnectionTestDto: RunPodConnectionTestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodConnectionResultDto;
-    }>("/runpod/connect", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: runPodConnectionTestDto
-    })));
-}
-/**
- * Tear down the serverless endpoint
- */
-export function teardownServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/endpoint", {
-        ...opts,
-        method: "DELETE"
-    }));
-}
-/**
- * Set up (or verify) the serverless endpoint
- */
-export function setupServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/endpoint/setup", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * List RunPod GPU types
- */
-export function listGpus(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodGpuTypeDto[];
-    }>("/runpod/gpus", {
-        ...opts
-    }));
-}
-/**
- * Provision a RunPod pod
- */
-export function provision({ runPodProvisionDto }: {
-    runPodProvisionDto: RunPodProvisionDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: RunPodStateDto;
-    }>("/runpod/pods", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: runPodProvisionDto
-    })));
-}
-/**
- * Terminate the current RunPod pod
- */
-export function terminate(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/pods/current", {
-        ...opts,
-        method: "DELETE"
-    }));
-}
-/**
- * Get current RunPod state
- */
-export function getCurrent(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/pods/current", {
-        ...opts
-    }));
-}
-/**
- * Resume the current RunPod pod
- */
-export function start(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/pods/current/start", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Stop the current RunPod pod
- */
-export function stop(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: RunPodStateDto;
-    }>("/runpod/pods/current/stop", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Ask Search
- */
-export function askSearch({ askSearchDto }: {
-    askSearchDto: AskSearchDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AskSearchResponseDto;
-    }>("/search/ask", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: askSearchDto
-    })));
-}
-/**
  * Retrieve assets by city
  */
 export function getAssetsByCity(opts?: Oazapfts.RequestOpts) {
@@ -6818,13 +6153,12 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, imageEnrichment, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, suppressedOnly, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
     createdAfter?: string;
     createdBefore?: string;
-    imageEnrichment?: ImageEnrichmentFilter;
     isEncoded?: boolean;
     isFavorite?: boolean;
     isMotion?: boolean;
@@ -6840,7 +6174,6 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     rating?: number | null;
     size?: number;
     state?: string | null;
-    suppressedOnly?: boolean;
     tagIds?: string[] | null;
     takenAfter?: string;
     takenBefore?: string;
@@ -6862,7 +6195,6 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         country,
         createdAfter,
         createdBefore,
-        imageEnrichment,
         isEncoded,
         isFavorite,
         isMotion,
@@ -6878,7 +6210,6 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         rating,
         size,
         state,
-        suppressedOnly,
         tagIds,
         takenAfter,
         takenBefore,
@@ -7538,7 +6869,7 @@ export function getSyncStream({ syncStreamDto }: {
 export function getConfig(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: SystemConfigDto;
+        data: AdminConfigDto;
     }>("/system-config", {
         ...opts
     }));
@@ -7546,16 +6877,16 @@ export function getConfig(opts?: Oazapfts.RequestOpts) {
 /**
  * Update system configuration
  */
-export function updateConfig({ systemConfigDto }: {
-    systemConfigDto: SystemConfigDto;
+export function updateConfig({ adminConfigDto }: {
+    adminConfigDto: AdminConfigDto;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: SystemConfigDto;
+        data: AdminConfigDto;
     }>("/system-config", oazapfts.json({
         ...opts,
         method: "PUT",
-        body: systemConfigDto
+        body: adminConfigDto
     })));
 }
 /**
@@ -7564,81 +6895,8 @@ export function updateConfig({ systemConfigDto }: {
 export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: SystemConfigDto;
+        data: AdminConfigDto;
     }>("/system-config/defaults", {
-        ...opts
-    }));
-}
-/**
- * Defer image description re-queue
- */
-export function deferImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/system-config/image-description/defer-requeue", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Trigger image description re-queue
- */
-export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: ImageDescriptionRequeueResponseDto;
-    } | {
-        status: 400;
-    }>("/system-config/image-description/requeue", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Estimate image description re-queue cost
- */
-export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: ImageDescriptionRequeueEstimateDto;
-    }>("/system-config/image-description/requeue-estimate", {
-        ...opts
-    }));
-}
-/**
- * Get machine learning hardware
- */
-export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: MachineLearningHardwareResponseDto;
-    }>("/system-config/machine-learning/hardware", {
-        ...opts
-    }));
-}
-/**
- * Trigger smart-album re-evaluate
- */
-export function triggerSmartAlbumReevaluate({ smartAlbumReevaluateRequestDto }: {
-    smartAlbumReevaluateRequestDto?: SmartAlbumReevaluateRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: SmartAlbumReevaluateResponseDto;
-    } | {
-        status: 400;
-    }>("/system-config/smart-albums/reevaluate", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: smartAlbumReevaluateRequestDto
-    })));
-}
-/**
- * Estimate smart-album re-evaluate cost
- */
-export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: SmartAlbumReevaluateEstimateDto;
-    }>("/system-config/smart-albums/reevaluate-estimate", {
         ...opts
     }));
 }
@@ -7829,17 +7087,16 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, personId, slug, suppressedOnly, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
-    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
     order?: AssetOrder;
+    orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
-    suppressedOnly?: boolean;
     tagId?: string;
     timeBucket: string;
     userId?: string;
@@ -7854,14 +7111,13 @@ export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, 
     }>(`/timeline/bucket${QS.query(QS.explode({
         albumId,
         bbox,
-        dateType,
         isFavorite,
         isTrashed,
         key,
         order,
+        orderBy,
         personId,
         slug,
-        suppressedOnly,
         tagId,
         timeBucket,
         userId,
@@ -7876,17 +7132,16 @@ export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, 
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, personId, slug, suppressedOnly, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
-    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
     order?: AssetOrder;
+    orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
-    suppressedOnly?: boolean;
     tagId?: string;
     userId?: string;
     visibility?: AssetVisibility;
@@ -7900,14 +7155,13 @@ export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed,
     }>(`/timeline/buckets${QS.query(QS.explode({
         albumId,
         bbox,
-        dateType,
         isFavorite,
         isTrashed,
         key,
         order,
+        orderBy,
         personId,
         slug,
-        suppressedOnly,
         tagId,
         userId,
         visibility,
@@ -8188,10 +7442,11 @@ export function getUniqueOriginalPaths(opts?: Oazapfts.RequestOpts) {
 /**
  * List all workflows
  */
-export function searchWorkflows({ description, enabled, id, name, trigger }: {
+export function searchWorkflows({ description, enabled, id, logging, name, trigger }: {
     description?: string;
     enabled?: boolean;
     id?: string;
+    logging?: boolean;
     name?: string;
     trigger?: WorkflowTrigger;
 }, opts?: Oazapfts.RequestOpts) {
@@ -8202,6 +7457,7 @@ export function searchWorkflows({ description, enabled, id, name, trigger }: {
         description,
         enabled,
         id,
+        logging,
         name,
         trigger
     }))}`, {
@@ -8275,6 +7531,26 @@ export function updateWorkflow({ id, workflowUpdateDto }: {
     })));
 }
 /**
+ * Retrieve workflow logs
+ */
+export function getWorkflowLogs({ before, id, limit, result }: {
+    before?: string;
+    id: string;
+    limit?: number;
+    result?: WorkflowResult;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: WorkflowLogEntryDto[];
+    }>(`/workflows/${encodeURIComponent(id)}/logs${QS.query(QS.explode({
+        before,
+        limit,
+        result
+    }))}`, {
+        ...opts
+    }));
+}
+/**
  * Retrieve a workflow
  */
 export function getWorkflowForShare({ id }: {
@@ -8307,6 +7583,80 @@ export enum UserAvatarColor {
     Gray = "gray",
     Amber = "amber"
 }
+export enum TranscodeHWAccel {
+    Nvenc = "nvenc",
+    Qsv = "qsv",
+    Vaapi = "vaapi",
+    Rkmpp = "rkmpp",
+    Disabled = "disabled"
+}
+export enum AudioCodec {
+    Mp3 = "mp3",
+    Aac = "aac",
+    Opus = "opus",
+    PcmS16Le = "pcm_s16le"
+}
+export enum VideoContainer {
+    Mov = "mov",
+    Mp4 = "mp4",
+    Ogg = "ogg",
+    Webm = "webm"
+}
+export enum VideoCodec {
+    H264 = "h264",
+    Hevc = "hevc",
+    Vp9 = "vp9",
+    Av1 = "av1"
+}
+export enum CQMode {
+    Auto = "auto",
+    Cqp = "cqp",
+    Icq = "icq"
+}
+export enum HlsVideoResolution {
+    $480 = 480,
+    $720 = 720,
+    $1080 = 1080,
+    $1440 = 1440,
+    $2160 = 2160
+}
+export enum ToneMapping {
+    Hable = "hable",
+    Mobius = "mobius",
+    Reinhard = "reinhard",
+    Disabled = "disabled"
+}
+export enum TranscodePolicy {
+    All = "all",
+    Optimal = "optimal",
+    Bitrate = "bitrate",
+    Required = "required",
+    Disabled = "disabled"
+}
+export enum Colorspace {
+    Srgb = "srgb",
+    P3 = "p3"
+}
+export enum ImageFormat {
+    Jpeg = "jpeg",
+    Webp = "webp"
+}
+export enum LogLevel {
+    Verbose = "verbose",
+    Debug = "debug",
+    Log = "log",
+    Warn = "warn",
+    Error = "error",
+    Fatal = "fatal"
+}
+export enum ReleaseChannel {
+    Stable = "stable",
+    ReleaseCandidate = "releaseCandidate"
+}
+export enum OAuthTokenEndpointAuthMethod {
+    ClientSecretPost = "client_secret_post",
+    ClientSecretBasic = "client_secret_basic"
+}
 export enum IntegrityReport {
     UntrackedFile = "untracked_file",
     MissingFile = "missing_file",
@@ -8338,6 +7688,7 @@ export enum NotificationType {
     SystemMessage = "SystemMessage",
     AlbumInvite = "AlbumInvite",
     AlbumUpdate = "AlbumUpdate",
+    ClusterGroupRequest = "ClusterGroupRequest",
     Custom = "Custom"
 }
 export enum UserStatus {
@@ -8352,10 +7703,6 @@ export enum CalendarHeatmapType {
 export enum AssetOrder {
     Asc = "asc",
     Desc = "desc"
-}
-export enum SuppressionScope {
-    Owned = "owned",
-    Visible = "visible"
 }
 export enum AssetVisibility {
     Archive = "archive",
@@ -8386,6 +7733,7 @@ export enum Permission {
     ApiKeyRead = "apiKey.read",
     ApiKeyUpdate = "apiKey.update",
     ApiKeyDelete = "apiKey.delete",
+    ApiKeyRotate = "apiKey.rotate",
     AssetRead = "asset.read",
     AssetUpdate = "asset.update",
     AssetDelete = "asset.delete",
@@ -8396,6 +7744,9 @@ export enum Permission {
     AssetUpload = "asset.upload",
     AssetCopy = "asset.copy",
     AssetDerive = "asset.derive",
+    AssetFileRead = "assetFile.read",
+    AssetFileDelete = "assetFile.delete",
+    AssetFileDownload = "assetFile.download",
     AssetEditGet = "asset.edit.get",
     AssetEditCreate = "asset.edit.create",
     AssetEditDelete = "asset.edit.delete",
@@ -8418,6 +7769,14 @@ export enum Permission {
     BackupDownload = "backup.download",
     BackupUpload = "backup.upload",
     BackupDelete = "backup.delete",
+    ClusterGroupRead = "clusterGroup.read",
+    ClusterGroupLeave = "clusterGroup.leave",
+    ClusterGroupRequestCreate = "clusterGroupRequest.create",
+    ClusterGroupRequestRead = "clusterGroupRequest.read",
+    ClusterGroupRequestDelete = "clusterGroupRequest.delete",
+    AdminConfigRead = "adminConfig.read",
+    AdminConfigUpdate = "adminConfig.update",
+    UserConfigRead = "userConfig.read",
     DuplicateRead = "duplicate.read",
     DuplicateDelete = "duplicate.delete",
     FaceCreate = "face.create",
@@ -8525,12 +7884,20 @@ export enum Permission {
     WorkflowRead = "workflow.read",
     WorkflowUpdate = "workflow.update",
     WorkflowDelete = "workflow.delete",
+    WorkflowLogs = "workflow.logs",
     AdminUserCreate = "adminUser.create",
     AdminUserRead = "adminUser.read",
     AdminUserUpdate = "adminUser.update",
     AdminUserDelete = "adminUser.delete",
     AdminSessionRead = "adminSession.read",
     AdminAuthUnlinkAll = "adminAuth.unlinkAll"
+}
+export enum AssetFileType {
+    Fullsize = "fullsize",
+    Preview = "preview",
+    Thumbnail = "thumbnail",
+    Sidecar = "sidecar",
+    EncodedVideo = "encoded_video"
 }
 export enum AssetMediaStatus {
     Created = "created",
@@ -8559,46 +7926,11 @@ export enum AssetTypeEnum {
 export enum AssetEditAction {
     Crop = "crop",
     Rotate = "rotate",
-    Mirror = "mirror",
-    Trim = "trim",
-    Straighten = "straighten",
-    Adjust = "adjust",
-    Filter = "filter",
-    Effect = "effect",
-    AutoEnhance = "autoEnhance",
-    Stabilize = "stabilize",
-    TextOverlay = "textOverlay",
-    Audio = "audio",
-    Speed = "speed"
+    Mirror = "mirror"
 }
 export enum MirrorAxis {
     Horizontal = "horizontal",
     Vertical = "vertical"
-}
-export enum Status {
-    Missing = "missing",
-    Success = "success",
-    Failed = "failed",
-    Skipped = "skipped"
-}
-export enum Action {
-    Accepted = "accepted",
-    MarkedSafe = "marked-safe",
-    MarkedNsfw = "marked-nsfw"
-}
-export enum Status2 {
-    Missing = "missing",
-    Success = "success",
-    Failed = "failed"
-}
-export enum AssetImageEnrichmentAction {
-    RerunImageDescription = "rerun-image-description",
-    RerunNsfwDetection = "rerun-nsfw-detection",
-    AcceptNsfwResult = "accept-nsfw-result",
-    MarkNsfw = "mark-nsfw",
-    MarkSafe = "mark-safe",
-    ClearGeneratedDescription = "clear-generated-description",
-    ClearGeneratedTags = "clear-generated-tags"
 }
 export enum AssetMediaSize {
     Original = "original",
@@ -8618,9 +7950,6 @@ export enum ManualJobName {
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
     BackupDatabase = "backup-database",
-    BestPhotosBackfill = "best-photos-backfill",
-    PhysicalDeduplicationDryRun = "physical-deduplication-dry-run",
-    PhysicalDeduplicationApply = "physical-deduplication-apply",
     IntegrityMissingFiles = "integrity-missing-files",
     IntegrityUntrackedFiles = "integrity-untracked-files",
     IntegrityChecksumMismatch = "integrity-checksum-mismatch",
@@ -8639,7 +7968,6 @@ export enum QueueName {
     FacialRecognition = "facialRecognition",
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
-    VideoDuplicateDetection = "videoDuplicateDetection",
     BackgroundTask = "backgroundTask",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
@@ -8649,10 +7977,6 @@ export enum QueueName {
     Notifications = "notifications",
     BackupDatabase = "backupDatabase",
     Ocr = "ocr",
-    ImageEnrichment = "imageEnrichment",
-    ImageDescription = "imageDescription",
-    NsfwDetection = "nsfwDetection",
-    MediaHealth = "mediaHealth",
     Workflow = "workflow",
     IntegrityCheck = "integrityCheck",
     Editor = "editor"
@@ -8663,34 +7987,6 @@ export enum QueueCommand {
     Resume = "resume",
     Empty = "empty",
     ClearFailed = "clear-failed"
-}
-export enum LivePhotoMatchConfidence {
-    High = "high",
-    Low = "low"
-}
-export enum MediaHealthCategory {
-    Missing = "missing",
-    Corrupt = "corrupt"
-}
-export enum MediaHealthStatus {
-    Found = "found",
-    Missing = "missing",
-    Candidate = "candidate",
-    Relinked = "relinked",
-    Dismissed = "dismissed",
-    Resolved = "resolved",
-    UnsupportedRaw = "unsupported_raw",
-    CorruptSuspect = "corrupt_suspect",
-    CorruptConfirmed = "corrupt_confirmed",
-    TrashQueued = "trash_queued",
-    Trashed = "trashed",
-    DeleteQueued = "delete_queued",
-    Deleted = "deleted"
-}
-export enum MediaHealthSeverity {
-    Info = "info",
-    Warning = "warning",
-    Critical = "critical"
 }
 export enum MemorySearchOrder {
     Asc = "asc",
@@ -8709,7 +8005,8 @@ export enum WorkflowType {
 }
 export enum WorkflowTrigger {
     AssetCreate = "AssetCreate",
-    AssetMetadataExtraction = "AssetMetadataExtraction"
+    AssetMetadataExtraction = "AssetMetadataExtraction",
+    AssetTagged = "AssetTagged"
 }
 export enum QueueJobStatus {
     Active = "active",
@@ -8720,17 +8017,13 @@ export enum QueueJobStatus {
     Paused = "paused"
 }
 export enum JobName {
-    ForkSchemaBackfill = "ForkSchemaBackfill",
     AssetDelete = "AssetDelete",
     AssetDeleteCheck = "AssetDeleteCheck",
     AssetDetectFacesQueueAll = "AssetDetectFacesQueueAll",
     AssetDetectFaces = "AssetDetectFaces",
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
-    AssetGenerateVideoDuplicateFramesQueueAll = "AssetGenerateVideoDuplicateFramesQueueAll",
-    AssetGenerateVideoDuplicateFrames = "AssetGenerateVideoDuplicateFrames",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
-    AssetVideoEditGeneration = "AssetVideoEditGeneration",
     AssetEncodeVideoQueueAll = "AssetEncodeVideoQueueAll",
     AssetEncodeVideo = "AssetEncodeVideo",
     AssetEmptyTrash = "AssetEmptyTrash",
@@ -8739,12 +8032,6 @@ export enum JobName {
     AssetFileMigration = "AssetFileMigration",
     AssetGenerateThumbnailsQueueAll = "AssetGenerateThumbnailsQueueAll",
     AssetGenerateThumbnails = "AssetGenerateThumbnails",
-    BestPhotosScoreQueueAll = "BestPhotosScoreQueueAll",
-    BestPhotosScore = "BestPhotosScore",
-    MediaHealthScanMissing = "MediaHealthScanMissing",
-    MediaHealthLocateMissing = "MediaHealthLocateMissing",
-    MediaHealthScanCorrupt = "MediaHealthScanCorrupt",
-    MediaHealthDeleteCorrupt = "MediaHealthDeleteCorrupt",
     AuditTableCleanup = "AuditTableCleanup",
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",
@@ -8781,17 +8068,10 @@ export enum JobName {
     SmartSearch = "SmartSearch",
     StorageTemplateMigration = "StorageTemplateMigration",
     StorageTemplateMigrationSingle = "StorageTemplateMigrationSingle",
-    PhysicalDeduplicationMigrationDryRun = "PhysicalDeduplicationMigrationDryRun",
-    PhysicalDeduplicationMigrationApply = "PhysicalDeduplicationMigrationApply",
     TagCleanup = "TagCleanup",
     VersionCheck = "VersionCheck",
     OcrQueueAll = "OcrQueueAll",
     Ocr = "Ocr",
-    ImageDescriptionQueueAll = "ImageDescriptionQueueAll",
-    ImageDescription = "ImageDescription",
-    NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
-    NsfwDetection = "NsfwDetection",
-    SmartAlbumReevaluateAll = "SmartAlbumReevaluateAll",
     WorkflowAssetTrigger = "WorkflowAssetTrigger",
     IntegrityUntrackedFilesQueueAll = "IntegrityUntrackedFilesQueueAll",
     IntegrityUntrackedFiles = "IntegrityUntrackedFiles",
@@ -8803,31 +8083,6 @@ export enum JobName {
     IntegrityChecksumFilesRefresh = "IntegrityChecksumFilesRefresh",
     IntegrityDeleteReportType = "IntegrityDeleteReportType",
     IntegrityDeleteReports = "IntegrityDeleteReports"
-}
-export enum Status3 {
-    Idle = "idle",
-    Provisioning = "provisioning",
-    Starting = "starting",
-    Running = "running",
-    Stopping = "stopping",
-    Stopped = "stopped",
-    Error = "error",
-    ServerlessProvisioning = "serverless-provisioning",
-    ServerlessReady = "serverless-ready"
-}
-export enum ImageEnrichmentFilter {
-    Nsfw = "nsfw",
-    NsfwReview = "nsfw-review",
-    NsfwReviewed = "nsfw-reviewed",
-    NsfwOverridden = "nsfw-overridden",
-    ImageDescriptionFailed = "image-description-failed",
-    NsfwDetectionFailed = "nsfw-detection-failed",
-    MissingImageDescription = "missing-image-description",
-    MissingNsfwDetection = "missing-nsfw-detection"
-}
-export enum Mode {
-    Smart = "smart",
-    Metadata = "metadata"
 }
 export enum SearchSuggestionType {
     Country = "country",
@@ -8936,115 +8191,14 @@ export enum SyncRequestType {
     AssetFacesV2 = "AssetFacesV2",
     UserMetadataV1 = "UserMetadataV1"
 }
-export enum TranscodeHWAccel {
-    Nvenc = "nvenc",
-    Qsv = "qsv",
-    Vaapi = "vaapi",
-    Rkmpp = "rkmpp",
-    Disabled = "disabled"
+export enum AssetOrderBy {
+    TakenAt = "takenAt",
+    CreatedAt = "createdAt"
 }
-export enum AudioCodec {
-    Mp3 = "mp3",
-    Aac = "aac",
-    Libopus = "libopus",
-    Opus = "opus",
-    PcmS16Le = "pcm_s16le"
-}
-export enum VideoContainer {
-    Mov = "mov",
-    Mp4 = "mp4",
-    Ogg = "ogg",
-    Webm = "webm"
-}
-export enum VideoCodec {
-    H264 = "h264",
-    Hevc = "hevc",
-    Vp9 = "vp9",
-    Av1 = "av1"
-}
-export enum CQMode {
-    Auto = "auto",
-    Cqp = "cqp",
-    Icq = "icq"
-}
-export enum HlsVideoResolution {
-    $480 = 480,
-    $720 = 720,
-    $1080 = 1080,
-    $1440 = 1440,
-    $2160 = 2160
-}
-export enum ToneMapping {
-    Hable = "hable",
-    Mobius = "mobius",
-    Reinhard = "reinhard",
-    Disabled = "disabled"
-}
-export enum TranscodePolicy {
-    All = "all",
-    Optimal = "optimal",
-    Bitrate = "bitrate",
-    Required = "required",
-    Disabled = "disabled"
-}
-export enum Colorspace {
-    Srgb = "srgb",
-    P3 = "p3"
-}
-export enum ImageFormat {
-    Jpeg = "jpeg",
-    Webp = "webp"
-}
-export enum LogLevel {
-    Verbose = "verbose",
-    Debug = "debug",
-    Log = "log",
-    Warn = "warn",
-    Error = "error",
-    Fatal = "fatal"
-}
-export enum MachineLearningHardwareAcceleration {
-    Auto = "auto",
-    Openvino = "openvino",
-    Cuda = "cuda"
-}
-export enum PlaceholderValidation {
-    Strict = "strict",
-    Warn = "warn"
-}
-export enum Style {
-    Terse = "terse",
-    Balanced = "balanced",
-    Rich = "rich"
-}
-export enum Mode2 {
-    Disabled = "disabled",
-    Pod = "pod",
-    Serverless = "serverless"
-}
-export enum ScalerType {
-    QueueDelay = "QUEUE_DELAY",
-    RequestCount = "REQUEST_COUNT"
-}
-export enum ReleaseChannel {
-    Stable = "stable",
-    ReleaseCandidate = "releaseCandidate"
-}
-export enum OAuthTokenEndpointAuthMethod {
-    ClientSecretPost = "client_secret_post",
-    ClientSecretBasic = "client_secret_basic"
-}
-export enum Kind {
-    Travel = "travel",
-    Documents = "documents",
-    Screenshots = "screenshots",
-    Food = "food",
-    Pets = "pets",
-    Nature = "nature"
-}
-export enum TimeBucketDateType {
-    Added = "added",
-    Taken = "taken"
+export enum WorkflowResult {
+    Completed = "completed",
+    Halted = "halted",
+    Error = "error"
 }
 export enum ReleaseType {
     Major = "major",

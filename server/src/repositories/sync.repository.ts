@@ -125,6 +125,7 @@ export class SyncRepository {
   partnerAssetExif: PartnerAssetExifsSync;
   partnerStack: PartnerStackSync;
   person: PersonSync;
+  personGroup: PersonGroupSync;
   stack: StackSync;
   user: UserSync;
   userMetadata: UserMetadataSync;
@@ -149,6 +150,7 @@ export class SyncRepository {
     this.partnerAssetExif = new PartnerAssetExifsSync(this.db);
     this.partnerStack = new PartnerStackSync(this.db);
     this.person = new PersonSync(this.db);
+    this.personGroup = new PersonGroupSync(this.db);
     this.stack = new StackSync(this.db);
     this.user = new UserSync(this.db);
     this.userMetadata = new UserMetadataSync(this.db);
@@ -514,7 +516,7 @@ class PersonSync extends BaseSync {
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
     return this.auditQuery('person_audit', options)
-      .select(['id', 'personId'])
+      .select(['id', 'personGroupId as personId'])
       .where('ownerId', '=', options.userId)
       .stream();
   }
@@ -527,7 +529,7 @@ class PersonSync extends BaseSync {
   getUpserts(options: SyncQueryOptions) {
     return this.upsertQuery('person', options)
       .select([
-        'person.id',
+        'person.personGroupId as id',
         'person.createdAt',
         'person.updatedAt',
         'person.ownerId',
@@ -584,6 +586,12 @@ class PersonSync extends BaseSync {
   }
 }
 
+class PersonGroupSync extends BaseSync {
+  cleanupAuditTable(daysAgo: number) {
+    return this.auditCleanup('person_group_audit', daysAgo);
+  }
+}
+
 class AssetFaceSync extends BaseSync {
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
@@ -605,7 +613,7 @@ class AssetFaceSync extends BaseSync {
       .select([
         'asset_face.id',
         'assetId',
-        'personId',
+        'personGroupId as personId',
         'imageWidth',
         'imageHeight',
         'boundingBoxX1',

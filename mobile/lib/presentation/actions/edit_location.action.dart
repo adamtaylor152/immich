@@ -7,6 +7,7 @@ import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/presentation/actions/action.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset_viewer/asset.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/db.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/toast.provider.dart';
 import 'package:immich_mobile/utils/error_handler.dart';
 import 'package:immich_mobile/widgets/common/location_picker.dart';
@@ -21,7 +22,7 @@ final _stateProvider = Provider.family.autoDispose<_State?, ActionSource>((ref, 
   }
 
   return (assetIds: assets.map((asset) => asset.id).toList(growable: false), origin: assets.singleOrNull);
-});
+}, dependencies: [ownedAssetsActionProvider]);
 
 class EditLocationAction extends AssetActionBuilder {
   const EditLocationAction({required super.source});
@@ -46,7 +47,7 @@ class EditLocationAction extends AssetActionBuilder {
     }
 
     final (:assetIds, :origin) = state;
-    final remoteAssetRepository = ref.read(remoteAssetRepositoryProvider);
+    final remoteAssetRepository = ref.read(driftProvider).remoteAssetRepository;
     final clearSelection = ref.read(clearSelectionProvider(source));
 
     try {

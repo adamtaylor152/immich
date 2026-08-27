@@ -33,58 +33,7 @@ select distinct
   "album"."description",
   "album"."createdAt",
   "album"."updatedAt",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "album"."albumThumbnailAssetId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else album."albumThumbnailAssetId"
-  end as "thumbnailAssetId",
+  "album"."albumThumbnailAssetId" as "thumbnailAssetId",
   "album"."isActivityEnabled",
   "album"."order",
   "album"."updateId"
@@ -113,6 +62,7 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -121,74 +71,12 @@ select
   "asset"."deletedAt",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   case
     when "asset"."ownerId" = $1 then "asset"."isFavorite"
     else $2
@@ -202,47 +90,6 @@ where
   and "album_asset"."updateId" <= $4
   and "album_asset"."updateId" > $5
   and "album_asset"."albumId" = $6
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
@@ -252,6 +99,7 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -260,74 +108,12 @@ select
   "asset"."deletedAt",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   case
     when "asset"."ownerId" = $1 then "asset"."isFavorite"
     else $2
@@ -342,47 +128,6 @@ where
   and "asset"."updateId" > $4
   and "album_asset"."updateId" <= $5
   and "album_user"."userId" = $6
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset"."updateId" asc
 
@@ -393,6 +138,7 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -401,74 +147,12 @@ select
   "asset"."deletedAt",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   case
     when "asset"."ownerId" = $1 then "asset"."isFavorite"
     else $2
@@ -481,47 +165,6 @@ where
   "album_asset"."updateId" < $3
   and "album_asset"."updateId" > $4
   and "album_user"."userId" = $5
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
@@ -556,53 +199,11 @@ select
 from
   "album_asset" as "album_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "album_asset"."assetId"
-  inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
@@ -637,54 +238,12 @@ select
 from
   "asset_exif" as "asset_exif"
   inner join "album_asset" on "album_asset"."assetId" = "asset_exif"."assetId"
-  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
   inner join "album_user" on "album_user"."albumId" = "album_asset"."albumId"
 where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
   and "album_asset"."updateId" <= $3
   and "album_user"."userId" = $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_exif"."updateId" asc
 
@@ -719,54 +278,12 @@ select
 from
   "album_asset" as "album_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "album_asset"."assetId"
-  inner join "asset" on "asset"."id" = "album_asset"."assetId"
   inner join "album" on "album"."id" = "album_asset"."albumId"
   left join "album_user" on "album_user"."albumId" = "album_asset"."albumId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" > $2
   and "album_user"."userId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
@@ -777,64 +294,21 @@ select
   "album_asset"."updateId"
 from
   "album_asset" as "album_asset"
-  inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
 -- SyncRepository.albumToAsset.getDeletes
 select
-  "album_asset_audit"."id",
+  "id",
   "assetId",
   "albumId"
 from
   "album_asset_audit" as "album_asset_audit"
-  left join "asset" on "asset"."id" = "album_asset_audit"."assetId"
 where
   "album_asset_audit"."id" < $1
   and "album_asset_audit"."id" > $2
@@ -846,47 +320,6 @@ where
     where
       "album_user"."userId" = $3
   )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset_audit"."id" asc
 
@@ -897,53 +330,11 @@ select
   "album_asset"."updateId"
 from
   "album_asset" as "album_asset"
-  inner join "asset" on "asset"."id" = "album_asset"."assetId"
   inner join "album_user" on "album_user"."albumId" = "album_asset"."albumId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" > $2
   and "album_user"."userId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "album_asset"."updateId" asc
 
@@ -1019,76 +410,13 @@ where
 order by
   "asset_audit"."id" asc
 
--- SyncRepository.asset.getHiddenDeletes
-select
-  "asset_metadata"."updateId" as "id",
-  "asset"."id" as "assetId"
-from
-  "asset_metadata" as "asset_metadata"
-  inner join "asset" on "asset"."id" = "asset_metadata"."assetId"
-where
-  "asset_metadata"."updateId" < $1
-  and "asset_metadata"."updateId" > $2
-  and "asset"."ownerId" = $3
-  and "asset"."deletedAt" is null
-  and exists (
-    select
-      1
-    from
-      asset as hidden_content_asset
-    where
-      hidden_content_asset.id = "asset"."id"
-      and (
-        case
-          when "hidden_content_asset"."id" is null then false
-          when coalesce(
-            (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ),
-            'inactive'
-          ) in ('legacy', 'dual-write', 'ready') then exists (
-            select
-              1
-            from
-              asset as nsfw_asset
-            where
-              nsfw_asset.id = "hidden_content_asset"."id"
-              and nsfw_asset.is_nsfw = true
-          )
-          when (
-            select
-              phase
-            from
-              immich_fork.state
-            where
-              id = 1
-          ) = 'active' then not exists (
-            select
-              1
-            from
-              immich_fork.asset_privacy as privacy_asset
-            where
-              privacy_asset."assetId" = "hidden_content_asset"."id"
-              and privacy_asset."isNsfw" = false
-          )
-          else false
-        end
-      )
-  )
-order by
-  "asset_metadata"."updateId" asc
-
 -- SyncRepository.asset.getUpserts
 select
   "asset"."id",
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."createdAt",
@@ -1098,74 +426,12 @@ select
   "asset"."isFavorite",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   "asset"."updateId"
 from
   "asset" as "asset"
@@ -1173,47 +439,6 @@ where
   "asset"."updateId" < $1
   and "asset"."updateId" > $2
   and "ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset"."updateId" asc
 
@@ -1247,51 +472,16 @@ select
   "asset_exif"."updateId"
 from
   "asset_exif" as "asset_exif"
-  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
-  and "asset"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
+  and "assetId" in (
+    select
+      "id"
+    from
+      "asset"
+    where
+      "ownerId" = $3
   )
 order by
   "asset_exif"."updateId" asc
@@ -1307,47 +497,6 @@ where
   "asset_edit_audit"."id" < $1
   and "asset_edit_audit"."id" > $2
   and "asset"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_edit_audit"."id" asc
 
@@ -1366,47 +515,6 @@ where
   "asset_edit"."updateId" < $1
   and "asset_edit"."updateId" > $2
   and "asset"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_edit"."updateId" asc
 
@@ -1421,47 +529,6 @@ where
   "asset_face_audit"."id" < $1
   and "asset_face_audit"."id" > $2
   and "asset"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_face_audit"."id" asc
 
@@ -1469,7 +536,7 @@ order by
 select
   "asset_face"."id",
   "assetId",
-  "personId",
+  "personGroupId" as "personId",
   "imageWidth",
   "imageHeight",
   "boundingBoxX1",
@@ -1487,47 +554,6 @@ where
   "asset_face"."updateId" < $1
   and "asset_face"."updateId" > $2
   and "asset"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_face"."updateId" asc
 
@@ -1543,48 +569,6 @@ where
   "asset_metadata_audit"."id" < $1
   and "asset_metadata_audit"."id" > $2
   and "asset"."ownerId" = $3
-  and "asset_metadata_audit"."key" != $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_metadata_audit"."id" asc
 
@@ -1601,48 +585,6 @@ where
   "asset_metadata"."updateId" < $1
   and "asset_metadata"."updateId" > $2
   and "asset"."ownerId" = $3
-  and "asset_metadata"."key" != $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_metadata"."updateId" asc
 
@@ -1752,12 +694,11 @@ order by
 
 -- SyncRepository.memoryToAsset.getDeletes
 select
-  "memory_asset_audit"."id",
+  "id",
   "memoryId",
   "assetId"
 from
   "memory_asset_audit" as "memory_asset_audit"
-  left join "asset" on "asset"."id" = "memory_asset_audit"."assetId"
 where
   "memory_asset_audit"."id" < $1
   and "memory_asset_audit"."id" > $2
@@ -1769,58 +710,16 @@ where
     where
       "ownerId" = $3
   )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "memory_asset_audit"."id" asc
 
 -- SyncRepository.memoryToAsset.getUpserts
 select
-  "memory_asset"."memoriesId" as "memoryId",
-  "memory_asset"."assetId" as "assetId",
-  "memory_asset"."updateId"
+  "memoriesId" as "memoryId",
+  "assetId" as "assetId",
+  "updateId"
 from
   "memory_asset" as "memory_asset"
-  inner join "asset" on "asset"."id" = "memory_asset"."assetId"
 where
   "memory_asset"."updateId" < $1
   and "memory_asset"."updateId" > $2
@@ -1831,47 +730,6 @@ where
       "memory"
     where
       "ownerId" = $3
-  )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
   )
 order by
   "memory_asset"."updateId" asc
@@ -1930,6 +788,7 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."localDateTime",
@@ -1938,74 +797,12 @@ select
   "asset"."deletedAt",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   $1 as "isFavorite",
   "asset"."updateId"
 from
@@ -2014,48 +811,7 @@ where
   "asset"."updateId" < $2
   and "asset"."updateId" <= $3
   and "asset"."updateId" > $4
-  and "asset"."ownerId" = $5
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
+  and "ownerId" = $5
 order by
   "asset"."updateId" asc
 
@@ -2085,6 +841,7 @@ select
   "asset"."ownerId",
   "asset"."originalFileName",
   "asset"."thumbhash",
+  "asset"."checksum",
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."localDateTime",
@@ -2093,74 +850,12 @@ select
   "asset"."deletedAt",
   "asset"."visibility",
   "asset"."duration",
+  "asset"."livePhotoVideoId",
   "asset"."stackId",
   "asset"."libraryId",
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
-  coalesce(
-    (
-      select
-        checksum.sha1
-      from
-        immich_fork.asset_checksum checksum
-      where
-        checksum."assetId" = asset.id
-    ),
-    asset.checksum
-  ) as "checksum",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "asset"."livePhotoVideoId"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else asset."livePhotoVideoId"
-  end as "livePhotoVideoId",
   $1 as "isFavorite",
   "asset"."updateId"
 from
@@ -2168,54 +863,13 @@ from
 where
   "asset"."updateId" < $2
   and "asset"."updateId" > $3
-  and "asset"."ownerId" in (
+  and "ownerId" in (
     select
       "sharedById"
     from
       "partner"
     where
       "sharedWithId" = $4
-  )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
   )
 order by
   "asset"."updateId" asc
@@ -2256,47 +910,6 @@ where
   and "asset_exif"."updateId" <= $2
   and "asset_exif"."updateId" > $3
   and "asset"."ownerId" = $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "asset_exif"."updateId" asc
 
@@ -2330,58 +943,23 @@ select
   "asset_exif"."updateId"
 from
   "asset_exif" as "asset_exif"
-  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
-  and "asset"."ownerId" in (
+  and "assetId" in (
     select
-      "sharedById"
+      "id"
     from
-      "partner"
+      "asset"
     where
-      "sharedWithId" = $3
-  )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
+      "ownerId" in (
         select
-          1
+          "sharedById"
         from
-          asset as nsfw_asset
+          "partner"
         where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
+          "sharedWithId" = $3
       )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
   )
 order by
   "asset_exif"."updateId" asc
@@ -2413,56 +991,14 @@ select
   "stack"."updatedAt",
   "stack"."primaryAssetId",
   "stack"."ownerId",
-  "stack"."updateId"
+  "updateId"
 from
   "stack" as "stack"
-  inner join "asset" on "asset"."id" = "stack"."primaryAssetId"
 where
   "stack"."updateId" < $1
   and "stack"."updateId" <= $2
   and "stack"."updateId" > $3
-  and "stack"."ownerId" = $4
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
+  and "ownerId" = $4
 order by
   "stack"."updateId" asc
 
@@ -2473,14 +1009,13 @@ select
   "stack"."updatedAt",
   "stack"."primaryAssetId",
   "stack"."ownerId",
-  "stack"."updateId"
+  "updateId"
 from
   "stack" as "stack"
-  inner join "asset" on "asset"."id" = "stack"."primaryAssetId"
 where
   "stack"."updateId" < $1
   and "stack"."updateId" > $2
-  and "stack"."ownerId" in (
+  and "ownerId" in (
     select
       "sharedById"
     from
@@ -2488,54 +1023,13 @@ where
     where
       "sharedWithId" = $3
   )
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
 order by
   "stack"."updateId" asc
 
 -- SyncRepository.person.getDeletes
 select
   "id",
-  "personId"
+  "personGroupId" as "personId"
 from
   "person_audit" as "person_audit"
 where
@@ -2547,143 +1041,23 @@ order by
 
 -- SyncRepository.person.getUpserts
 select
-  "person"."id",
-  "person"."createdAt",
-  "person"."updatedAt",
-  "person"."ownerId",
-  "person"."name",
-  "person"."birthDate",
-  "person"."isHidden",
-  "person"."isFavorite",
-  "person"."color",
-  "person"."updateId",
-  case
-    when exists (
-      select
-        1
-      from
-        asset as hidden_content_asset
-      where
-        hidden_content_asset.id = "person_face_asset"."id"
-        and (
-          case
-            when "hidden_content_asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "hidden_content_asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "hidden_content_asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    ) then null
-    else person."faceAssetId"
-  end as "faceAssetId"
+  "personGroupId" as "id",
+  "createdAt",
+  "updatedAt",
+  "ownerId",
+  "name",
+  "birthDate",
+  "isHidden",
+  "isFavorite",
+  "color",
+  "updateId",
+  "faceAssetId"
 from
   "person" as "person"
-  left join "asset_face" as "person_face" on "person_face"."id" = "person"."faceAssetId"
-  left join "asset" as "person_face_asset" on "person_face_asset"."id" = "person_face"."assetId"
 where
   "person"."updateId" < $1
   and "person"."updateId" > $2
-  and "person"."ownerId" = $3
-  and (
-    not exists (
-      select
-      from
-        "asset_face"
-        inner join "asset" on "asset"."id" = "asset_face"."assetId"
-        and "asset"."visibility" = 'timeline'
-        and "asset"."deletedAt" is null
-      where
-        "asset_face"."personId" = "person"."id"
-        and "asset_face"."deletedAt" is null
-        and "asset_face"."isVisible" is true
-    )
-    or exists (
-      select
-      from
-        "asset_face"
-        inner join "asset" on "asset"."id" = "asset_face"."assetId"
-        and "asset"."visibility" = 'timeline'
-        and "asset"."deletedAt" is null
-      where
-        "asset_face"."personId" = "person"."id"
-        and "asset_face"."deletedAt" is null
-        and "asset_face"."isVisible" is true
-        and not (
-          case
-            when "asset"."id" is null then false
-            when coalesce(
-              (
-                select
-                  phase
-                from
-                  immich_fork.state
-                where
-                  id = 1
-              ),
-              'inactive'
-            ) in ('legacy', 'dual-write', 'ready') then exists (
-              select
-                1
-              from
-                asset as nsfw_asset
-              where
-                nsfw_asset.id = "asset"."id"
-                and nsfw_asset.is_nsfw = true
-            )
-            when (
-              select
-                phase
-              from
-                immich_fork.state
-              where
-                id = 1
-            ) = 'active' then not exists (
-              select
-                1
-              from
-                immich_fork.asset_privacy as privacy_asset
-              where
-                privacy_asset."assetId" = "asset"."id"
-                and privacy_asset."isNsfw" = false
-            )
-            else false
-          end
-        )
-    )
-  )
+  and "ownerId" = $3
 order by
   "person"."updateId" asc
 
@@ -2707,55 +1081,13 @@ select
   "stack"."updatedAt",
   "stack"."primaryAssetId",
   "stack"."ownerId",
-  "stack"."updateId"
+  "updateId"
 from
   "stack" as "stack"
-  inner join "asset" on "asset"."id" = "stack"."primaryAssetId"
 where
   "stack"."updateId" < $1
   and "stack"."updateId" > $2
-  and "stack"."ownerId" = $3
-  and not (
-    case
-      when "asset"."id" is null then false
-      when coalesce(
-        (
-          select
-            phase
-          from
-            immich_fork.state
-          where
-            id = 1
-        ),
-        'inactive'
-      ) in ('legacy', 'dual-write', 'ready') then exists (
-        select
-          1
-        from
-          asset as nsfw_asset
-        where
-          nsfw_asset.id = "asset"."id"
-          and nsfw_asset.is_nsfw = true
-      )
-      when (
-        select
-          phase
-        from
-          immich_fork.state
-        where
-          id = 1
-      ) = 'active' then not exists (
-        select
-          1
-        from
-          immich_fork.asset_privacy as privacy_asset
-        where
-          privacy_asset."assetId" = "asset"."id"
-          and privacy_asset."isNsfw" = false
-      )
-      else false
-    end
-  )
+  and "ownerId" = $3
 order by
   "stack"."updateId" asc
 

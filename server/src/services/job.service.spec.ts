@@ -62,7 +62,7 @@ describe(JobService.name, () => {
         jobs: [],
       },
       {
-        item: { name: JobName.PersonGenerateThumbnail, data: { id: 'asset-1' } },
+        item: { name: JobName.PersonGenerateThumbnail, data: { ownerId: 'owner-1', personGroupId: 'person-group-1' } },
         jobs: [],
       },
       {
@@ -108,6 +108,7 @@ describe(JobService.name, () => {
     for (const { item, jobs, stub } of tests) {
       it(`should queue ${jobs.length} jobs when a ${item.name} job finishes successfully`, async () => {
         if (stub) {
+          mocks.asset.getById.mockResolvedValue(stub[0]);
           mocks.asset.getByIdsWithAllRelationsButStacks.mockResolvedValue(stub);
         }
 

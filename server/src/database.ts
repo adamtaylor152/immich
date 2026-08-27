@@ -135,6 +135,7 @@ export type User = {
 };
 
 export type UserAdmin = User & {
+  clusterGroupId: string;
   storageLabel: string | null;
   shouldChangePassword: boolean;
   isAdmin: boolean;
@@ -243,7 +244,7 @@ export type Exif = Omit<Selectable<AssetExifTable>, 'updatedAt' | 'updateId' | '
 
 export type Person = {
   createdAt: Date;
-  id: string;
+  personGroupId: string;
   ownerId: string;
   updatedAt: Date;
   updateId: string;
@@ -266,7 +267,7 @@ export type AssetFace = {
   boundingBoxY2: number;
   imageHeight: number;
   imageWidth: number;
-  personId: string | null;
+  personGroupId: string | null;
   sourceType: SourceType;
   person?: ShallowDehydrateObject<Person> | null;
   updatedAt: Date;
@@ -385,6 +386,7 @@ export const columns = {
   userWithPrefix: userWithPrefixColumns,
   userAdmin: [
     ...userColumns,
+    'clusterGroupId',
     'createdAt',
     'updatedAt',
     'deletedAt',

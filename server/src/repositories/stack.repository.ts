@@ -45,7 +45,8 @@ const withAssets = (eb: ExpressionBuilder<DB, 'stack'>, withTags = false, option
       .where('asset.deletedAt', 'is', null)
       .whereRef('asset.stackId', '=', 'stack.id')
       .$call(withDefaultVisibility)
-      .$call((qb) => withHiddenContentFilter(qb, options)),
+      .$call((qb) => withHiddenContentFilter(qb, options))
+      .orderBy('asset.fileCreatedAt', 'asc'),
   ).as('assets');
 };
 

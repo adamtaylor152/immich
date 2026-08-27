@@ -7,16 +7,12 @@ import { Route } from '$lib/route';
 export type AssetGridRouteSearchParams = {
   at: string | null | undefined;
 };
-export const isExternalUrl = (url: string): boolean => {
-  return new URL(url, location.href).origin !== location.origin;
-};
 
 export const isPhotosRoute = (route?: string | null) => !!route?.startsWith('/(user)/photos/[[assetId=id]]');
 const isRecentlyAddedRoute = (route?: string | null) => !!route?.startsWith('/(user)/recently-added/[[assetId=id]]');
 const isSharedLinkSlugRoute = (route?: string | null) => !!route?.startsWith('/(user)/s/[slug]');
 export const isSharedLinkRoute = (route?: string | null) =>
   !!route?.startsWith('/(user)/share/[key]') || isSharedLinkSlugRoute(route);
-export const isSearchRoute = (route?: string | null) => !!route?.startsWith('/(user)/search');
 export const isAlbumsRoute = (route?: string | null) => !!route?.startsWith('/(user)/albums/[albumId=id]');
 export const isPeopleRoute = (route?: string | null) => !!route?.startsWith('/(user)/people/[personId]');
 export const isLockedFolderRoute = (route?: string | null) => !!route?.startsWith('/(user)/locked');
@@ -48,7 +44,7 @@ export function currentUrlReplaceAssetId(assetId: string) {
   // always remove the assetGridScrollTargetParams
   params.delete('at');
   const paramsString = params.toString();
-  const searchparams = paramsString == '' ? '' : '?' + params.toString();
+  const searchparams = paramsString === '' ? '' : '?' + params.toString();
   // this contains special casing for the /photos/:assetId photos route, which hangs directly
   // off / instead of a subpath, unlike every other asset-containing route.
   if (isPhotosRoute(page.route.id)) {
@@ -157,12 +153,6 @@ export const clearQueryParam = async (queryParam: string, url: URL) => {
 
   url.searchParams.delete(queryParam);
   await goto(url, { keepFocus: true });
-};
-
-export const getQueryValue = (queryKey: string) => {
-  const url = location.href;
-  const urlObject = new URL(url);
-  return urlObject.searchParams.get(queryKey);
 };
 
 export const setQueryValue = async (queryKey: string, queryValue: string) => {

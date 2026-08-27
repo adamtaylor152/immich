@@ -76,11 +76,6 @@ export interface PlacesViewSettings {
   };
 }
 
-export interface SidebarSettings {
-  people: boolean;
-  sharing: boolean;
-}
-
 export enum SortOrder {
   Asc = 'asc',
   Desc = 'desc',

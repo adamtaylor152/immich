@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Duration } from 'luxon';
 import { readFile } from 'node:fs/promises';
-import { MachineLearningConfig } from 'src/config';
+import { MachineLearningConfig } from 'src/dtos/config.dto';
 import { CLIPConfig } from 'src/dtos/model-config.dto';
 import { MachineLearningHardwareAcceleration } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -139,7 +139,6 @@ export interface Face {
 }
 
 export type FacialRecognitionResponse = { [ModelTask.FACIAL_RECOGNITION]: Face[] } & VisualResponse;
-export type DetectedFaces = { faces: Face[] } & VisualResponse;
 export type MachineLearningRequest =
   | ClipVisualRequest
   | ClipTextualRequest
@@ -344,10 +343,8 @@ export class MachineLearningRepository {
         this.logger.warn(
           `Machine learning request to "${entry.url}" failed with status ${response.status}: ${response.statusText}`,
         );
-      } catch (error: unknown) {
-        this.logger.warn(
-          `Machine learning request to "${entry.url}" failed: ${error instanceof Error ? error.message : error}`,
-        );
+      } catch (error: Error | unknown) {
+        this.logger.warn(`Machine learning request to "${entry.url}" failed`, error);
       }
 
       this.setHealthy(entry.url, false);
@@ -381,7 +378,7 @@ export class MachineLearningRepository {
     };
   }
 
-  async encodeImage(imagePath: string, { modelName }: CLIPConfig) {
+  async encodeImage(imagePath: string, { modelName }: MachineLearningConfig['clip']) {
     const request = { [ModelTask.SEARCH]: { [ModelType.VISUAL]: { modelName } } };
     const response = await this.predict<ClipVisualResponse>({ imagePath }, request);
     return response[ModelTask.SEARCH];

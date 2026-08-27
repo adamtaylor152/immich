@@ -20,7 +20,7 @@ export const fromQueueSlug = (slug: string): QueueName | undefined => {
   }
 };
 
-type QueryValue = number | string;
+type QueryValue = number | string | boolean;
 const asQueryString = (
   params?: Record<string, QueryValue | undefined>,
   options?: { skipEmptyStrings?: boolean; skipNullValues?: boolean },
@@ -43,12 +43,6 @@ const asQueryString = (
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
 
   return items.length === 0 ? '' : `?${items.join('&')}`;
-};
-
-const DOCS_BASE = 'https://docs.immich.app';
-
-export const Docs = {
-  duplicates: () => `${DOCS_BASE}/features/duplicates-utility`,
 };
 
 export const Route = {
@@ -90,7 +84,11 @@ export const Route = {
     '/map' + (point ? `#${point.zoom}/${point.lat}/${point.lng}` : ''),
 
   // memories
-  memories: (params?: { id?: string }) => '/memory' + asQueryString(params),
+  memories: (params?: { isSaved?: boolean }) => '/memories' + asQueryString(params),
+  viewMemory: ({ id, ...params }: { id: string; assetId?: string; isSaved?: boolean }) =>
+    `/memories/${id}` + asQueryString(params),
+  viewMemoryAsset: ({ id, assetId, ...params }: { id: string; assetId: string; isSaved?: boolean }) =>
+    `/memories/${id}/photos/${assetId}` + asQueryString({ assetId, ...params }),
 
   // partners
   viewPartner: ({ id }: { id: string }) => `/partners/${id}`,

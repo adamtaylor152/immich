@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hashFile, hashFileMatching, SHA1_HEX_LENGTH, SHA256_HEX_LENGTH } from './hash-file';
 
 // Known-good vectors for the empty input
@@ -14,6 +14,11 @@ const ABC_SHA1 = 'a9993e364706816aba3e25717850c26c9cd0d89d';
 const ABC_SHA256 = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
 
 describe('hashFile', () => {
+  afterEach(() => {
+    vi.doUnmock('hash-wasm');
+    vi.resetModules();
+  });
+
   it('computes SHA-256 by default and returns a 64-character hex digest', async () => {
     const file = new File(['abc'], 'test.bin');
 
@@ -52,6 +57,33 @@ describe('hashFile', () => {
     expect(hex).toHaveLength(SHA256_HEX_LENGTH);
     const second = await hashFile(file);
     expect(second).toBe(hex);
+  });
+
+  it('hashFileWasm and hashFileJs produce identical output for the same input', async () => {
+    const { hashFileWasm, hashFileJs } = await import('./hash-file');
+    for (const size of [0, 1, 1024, 10_000]) {
+      const file = new File([new Uint8Array(size)], 'x.bin');
+      for (const algorithm of ['SHA-1', 'SHA-256'] as const) {
+        const [wasmHash, jsHash] = await Promise.all([
+          hashFileWasm(file, algorithm),
+          hashFileJs(file, algorithm),
+        ]);
+        expect(wasmHash).toBe(jsHash);
+      }
+    }
+  });
+
+  it('falls back to the JS implementation when the WASM path throws', async () => {
+    vi.doMock('hash-wasm', () => ({
+      createSHA1: () => Promise.reject(new Error('boom')),
+      createSHA256: () => Promise.reject(new Error('boom')),
+    }));
+    vi.resetModules();
+
+    const { hashFile: hashFileMocked } = await import('./hash-file');
+    const file = new File(['abc'], 'a.txt');
+    await expect(hashFileMocked(file)).resolves.toBe(ABC_SHA256);
+    await expect(hashFileMocked(file, 'SHA-1')).resolves.toBe(ABC_SHA1);
   });
 });
 
