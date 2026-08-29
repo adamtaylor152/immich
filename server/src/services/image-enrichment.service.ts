@@ -470,7 +470,7 @@ export class ImageEnrichmentService extends BaseService {
       }
     }
 
-    const knownPersons = await this.getKnownPersonsForAsset(asset.id);
+    const knownPersons = await this.getKnownPersonsForAsset(asset.id, asset.ownerId);
 
     let result: ImageDescriptionResult;
     try {
@@ -1190,7 +1190,7 @@ export class ImageEnrichmentService extends BaseService {
     }
 
     await this.updateExifTags(id);
-    await this.eventRepository.emit('AssetTag', { assetId: id });
+    await this.eventRepository.emit('AssetTag', { assetId: id, userId: ownerId });
     return { visible: true, appliedTagValues };
   }
 
@@ -1216,10 +1216,10 @@ export class ImageEnrichmentService extends BaseService {
    * per-face recognition-confidence column; named faces are considered
    * user-curated ground truth.
    */
-  private async getKnownPersonsForAsset(assetId: string): Promise<KnownPerson[]> {
+  private async getKnownPersonsForAsset(assetId: string, ownerId: string): Promise<KnownPerson[]> {
     let faces;
     try {
-      faces = await this.personRepository.getFaces(assetId, { isVisible: true });
+      faces = await this.personRepository.getFaces(assetId, { isVisible: true, viewingUserId: ownerId });
     } catch (error) {
       // Non-fatal: identity injection is best-effort. If face lookup fails
       // (DB hiccup, transient error), the description proceeds without
@@ -1234,7 +1234,7 @@ export class ImageEnrichmentService extends BaseService {
       // Trim before checking so whitespace-only names ('   ') are rejected the same
       // as empty strings — both would degrade the identity hint to "Known people: -".
       const name = face.person?.name?.trim();
-      if (!face.personId || !name || face.person?.isHidden) {
+      if (!face.personGroupId || !name || face.person?.isHidden) {
         continue;
       }
 

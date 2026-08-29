@@ -1282,7 +1282,7 @@
     },
     {
       "definition": "uuid|nullable|||",
-      "identity": "public.asset_face.personId"
+      "identity": "public.asset_face.personGroupId"
     },
     {
       "definition": "sourcetype|not null|'machine-learning'::sourcetype||",
@@ -1597,6 +1597,10 @@
       "identity": "public.asset_ocr.textScore"
     },
     {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.asset_ocr.updatedAt"
+    },
+    {
       "definition": "uuid|not null|immich_uuid_v7()||",
       "identity": "public.asset_ocr.updateId"
     },
@@ -1847,6 +1851,42 @@
     {
       "definition": "integer|nullable|||",
       "identity": "public.asset.width"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.cluster_group_request.clusterGroupId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.cluster_group_request.createdAt"
+    },
+    {
+      "definition": "uuid|not null|uuid_generate_v4()||",
+      "identity": "public.cluster_group_request.id"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.cluster_group_request.userId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.cluster_group.createdAt"
+    },
+    {
+      "definition": "uuid|not null|uuid_generate_v4()||",
+      "identity": "public.cluster_group.id"
+    },
+    {
+      "definition": "character varying|nullable|||",
+      "identity": "public.cluster_group.name"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.cluster_group.updatedAt"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.cluster_group.updateId"
     },
     {
       "definition": "vector(512)|not null|||",
@@ -2246,7 +2286,47 @@
     },
     {
       "definition": "uuid|not null|||",
-      "identity": "public.person_audit.personId"
+      "identity": "public.person_audit.personGroupId"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.person_group_audit.clusterGroupId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|clock_timestamp()||",
+      "identity": "public.person_group_audit.deletedAt"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.person_group_audit.id"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.person_group_audit.personGroupId"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.person_group.clusterGroupId"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.person_group.createdAt"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.person_group.createId"
+    },
+    {
+      "definition": "uuid|not null|uuid_generate_v4()||",
+      "identity": "public.person_group.id"
+    },
+    {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.person_group.updatedAt"
+    },
+    {
+      "definition": "uuid|not null|immich_uuid_v7()||",
+      "identity": "public.person_group.updateId"
     },
     {
       "definition": "date|nullable|||",
@@ -2265,10 +2345,6 @@
       "identity": "public.person.faceAssetId"
     },
     {
-      "definition": "uuid|not null|uuid_generate_v4()||",
-      "identity": "public.person.id"
-    },
-    {
       "definition": "boolean|not null|false||",
       "identity": "public.person.isFavorite"
     },
@@ -2283,6 +2359,10 @@
     {
       "definition": "uuid|not null|||",
       "identity": "public.person.ownerId"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.person.personGroupId"
     },
     {
       "definition": "character varying|not null|''::character varying||",
@@ -2773,6 +2853,10 @@
       "identity": "public.user.avatarColor"
     },
     {
+      "definition": "uuid|not null|||",
+      "identity": "public.user.clusterGroupId"
+    },
+    {
       "definition": "timestamp with time zone|not null|now()||",
       "identity": "public.user.createdAt"
     },
@@ -2909,6 +2993,34 @@
       "identity": "public.video_stream_variant.sessionId"
     },
     {
+      "definition": "timestamp with time zone|not null|now()||",
+      "identity": "public.workflow_log.createdAt"
+    },
+    {
+      "definition": "uuid|not null|uuid_generate_v4()||",
+      "identity": "public.workflow_log.id"
+    },
+    {
+      "definition": "character varying|not null|||",
+      "identity": "public.workflow_log.result"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.workflow_log.runId"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "public.workflow_log.triggerDataId"
+    },
+    {
+      "definition": "uuid|not null|||",
+      "identity": "public.workflow_log.workflowId"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "public.workflow_log.workflowStepId"
+    },
+    {
       "definition": "jsonb|nullable|||",
       "identity": "public.workflow_step.config"
     },
@@ -2947,6 +3059,10 @@
     {
       "definition": "uuid|not null|uuid_generate_v4()||",
       "identity": "public.workflow.id"
+    },
+    {
+      "definition": "boolean|not null|false||",
+      "identity": "public.workflow.logging"
     },
     {
       "definition": "character varying|nullable|||",
@@ -3335,8 +3451,8 @@
       "identity": "public.asset_face.asset_face_assetId_fkey"
     },
     {
-      "definition": "FOREIGN KEY (\"personId\") REFERENCES person(id) ON UPDATE CASCADE ON DELETE SET NULL",
-      "identity": "public.asset_face.asset_face_personId_fkey"
+      "definition": "FOREIGN KEY (\"personGroupId\") REFERENCES person_group(id) ON UPDATE CASCADE ON DELETE SET NULL",
+      "identity": "public.asset_face.asset_face_personGroupId_fkey"
     },
     {
       "definition": "PRIMARY KEY (id)",
@@ -3471,6 +3587,26 @@
       "identity": "public.asset.asset_stackId_fkey"
     },
     {
+      "definition": "FOREIGN KEY (\"clusterGroupId\") REFERENCES cluster_group(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.cluster_group_request.cluster_group_request_clusterGroupId_fkey"
+    },
+    {
+      "definition": "UNIQUE (\"clusterGroupId\", \"userId\")",
+      "identity": "public.cluster_group_request.cluster_group_request_clusterGroupId_userId_uq"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.cluster_group_request.cluster_group_request_pkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"userId\") REFERENCES \"user\"(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.cluster_group_request.cluster_group_request_userId_fkey"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.cluster_group.cluster_group_pkey"
+    },
+    {
       "definition": "FOREIGN KEY (\"faceId\") REFERENCES asset_face(id) ON DELETE CASCADE",
       "identity": "public.face_search.face_search_faceId_fkey"
     },
@@ -3603,6 +3739,18 @@
       "identity": "public.person_audit.person_audit_pkey"
     },
     {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.person_group_audit.person_group_audit_pkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"clusterGroupId\") REFERENCES cluster_group(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.person_group.person_group_clusterGroupId_fkey"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.person_group.person_group_pkey"
+    },
+    {
       "definition": "CHECK (\"birthDate\" <= CURRENT_DATE)",
       "identity": "public.person.person_birthDate_chk"
     },
@@ -3615,7 +3763,11 @@
       "identity": "public.person.person_ownerId_fkey"
     },
     {
-      "definition": "PRIMARY KEY (id)",
+      "definition": "FOREIGN KEY (\"personGroupId\") REFERENCES person_group(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.person.person_personGroupId_fkey"
+    },
+    {
+      "definition": "PRIMARY KEY (\"ownerId\", \"personGroupId\")",
       "identity": "public.person.person_pkey"
     },
     {
@@ -3847,6 +3999,10 @@
       "identity": "public.user_metadata.user_metadata_userId_fkey"
     },
     {
+      "definition": "FOREIGN KEY (\"clusterGroupId\") REFERENCES cluster_group(id) ON UPDATE CASCADE",
+      "identity": "public.user.user_clusterGroupId_fkey"
+    },
+    {
       "definition": "UNIQUE (email)",
       "identity": "public.user.user_email_uq"
     },
@@ -3885,6 +4041,18 @@
     {
       "definition": "FOREIGN KEY (\"sessionId\") REFERENCES video_stream_session(id) ON DELETE CASCADE",
       "identity": "public.video_stream_variant.video_stream_variant_sessionId_fkey"
+    },
+    {
+      "definition": "PRIMARY KEY (id)",
+      "identity": "public.workflow_log.workflow_log_pkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"workflowId\") REFERENCES workflow(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.workflow_log.workflow_log_workflowId_fkey"
+    },
+    {
+      "definition": "FOREIGN KEY (\"workflowStepId\") REFERENCES workflow_step(id) ON UPDATE CASCADE ON DELETE SET NULL",
+      "identity": "public.workflow_log.workflow_log_workflowStepId_fkey"
     },
     {
       "definition": "PRIMARY KEY (id)",
@@ -4127,6 +4295,10 @@
     {
       "definition": "CREATE OR REPLACE FUNCTION public.album_user_delete_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO album_audit (\"albumId\", \"userId\")\n      SELECT \"albumId\", \"userId\"\n      FROM OLD;\n\n      IF pg_trigger_depth() = 1 THEN\n        INSERT INTO album_user_audit (\"albumId\", \"userId\")\n        SELECT \"albumId\", \"userId\"\n        FROM OLD;\n      END IF;\n\n      RETURN NULL;\n    END\n  $function$",
       "identity": "public.album_user_delete_audit()"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.album_user_delete()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      DELETE FROM \"album\"\n      WHERE \"album\".\"id\" = OLD.\"albumId\"\n      AND NOT EXISTS (SELECT \"albumId\" FROM \"album_user\" WHERE \"album_user\".\"albumId\" = \"album\".\"id\" AND \"album_user\".\"role\" = 'owner');\n\n      RETURN NULL;\n    END\n  $function$",
+      "identity": "public.album_user_delete()"
     },
     {
       "definition": "CREATE OR REPLACE FUNCTION public.array_to_halfvec(double precision[], integer, boolean)\n RETURNS halfvec\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/vector', $function$array_to_halfvec$function$",
@@ -4701,8 +4873,12 @@
       "identity": "public.partner_delete_audit()"
     },
     {
-      "definition": "CREATE OR REPLACE FUNCTION public.person_delete_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO person_audit (\"personId\", \"ownerId\")\n      SELECT \"id\", \"ownerId\"\n      FROM OLD;\n      RETURN NULL;\n    END\n  $function$",
+      "definition": "CREATE OR REPLACE FUNCTION public.person_delete_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO person_audit (\"personGroupId\", \"ownerId\")\n      SELECT \"personGroupId\", \"ownerId\"\n      FROM OLD;\n      RETURN NULL;\n    END\n  $function$",
       "identity": "public.person_delete_audit()"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.person_group_delete_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\n    BEGIN\n      INSERT INTO person_group_audit (\"personGroupId\", \"clusterGroupId\")\n      SELECT \"id\", \"clusterGroupId\"\n      FROM OLD;\n      RETURN NULL;\n    END\n  $function$",
+      "identity": "public.person_group_delete_audit()"
     },
     {
       "definition": "CREATE OR REPLACE FUNCTION public.quantize_to_scalar8(halfvec)\n RETURNS scalar8\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/vchord', $function$_vchord_halfvec_quantize_to_scalar8_wrapper$function$",
@@ -5555,16 +5731,16 @@
       "identity": "public.asset_face_audit.asset_face_audit_pkey"
     },
     {
-      "definition": "CREATE INDEX \"asset_face_assetId_personId_idx\" ON public.asset_face USING btree (\"assetId\", \"personId\")",
-      "identity": "public.asset_face.asset_face_assetId_personId_idx"
+      "definition": "CREATE INDEX \"asset_face_assetId_personGroupId_idx\" ON public.asset_face USING btree (\"assetId\", \"personGroupId\")",
+      "identity": "public.asset_face.asset_face_assetId_personGroupId_idx"
     },
     {
-      "definition": "CREATE INDEX \"asset_face_personId_assetId_idx\" ON public.asset_face USING btree (\"personId\", \"assetId\")",
-      "identity": "public.asset_face.asset_face_personId_assetId_idx"
+      "definition": "CREATE INDEX \"asset_face_personGroupId_assetId_idx\" ON public.asset_face USING btree (\"personGroupId\", \"assetId\")",
+      "identity": "public.asset_face.asset_face_personGroupId_assetId_idx"
     },
     {
-      "definition": "CREATE INDEX \"asset_face_personId_assetId_notDeleted_isVisible_idx\" ON public.asset_face USING btree (\"personId\", \"assetId\") WHERE ((\"deletedAt\" IS NULL) AND (\"isVisible\" IS TRUE))",
-      "identity": "public.asset_face.asset_face_personId_assetId_notDeleted_isVisible_idx"
+      "definition": "CREATE INDEX \"asset_face_personGroupId_assetId_notDeleted_isVisible_idx\" ON public.asset_face USING btree (\"personGroupId\", \"assetId\") WHERE ((\"deletedAt\" IS NULL) AND (\"isVisible\" IS TRUE))",
+      "identity": "public.asset_face.asset_face_personGroupId_assetId_notDeleted_isVisible_idx"
     },
     {
       "definition": "CREATE UNIQUE INDEX asset_face_pkey ON public.asset_face USING btree (id)",
@@ -5787,6 +5963,30 @@
       "identity": "public.asset.UQ_assets_owner_checksum"
     },
     {
+      "definition": "CREATE INDEX \"cluster_group_request_clusterGroupId_idx\" ON public.cluster_group_request USING btree (\"clusterGroupId\")",
+      "identity": "public.cluster_group_request.cluster_group_request_clusterGroupId_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX \"cluster_group_request_clusterGroupId_userId_uq\" ON public.cluster_group_request USING btree (\"clusterGroupId\", \"userId\")",
+      "identity": "public.cluster_group_request.cluster_group_request_clusterGroupId_userId_uq"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX cluster_group_request_pkey ON public.cluster_group_request USING btree (id)",
+      "identity": "public.cluster_group_request.cluster_group_request_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"cluster_group_request_userId_idx\" ON public.cluster_group_request USING btree (\"userId\")",
+      "identity": "public.cluster_group_request.cluster_group_request_userId_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX cluster_group_pkey ON public.cluster_group USING btree (id)",
+      "identity": "public.cluster_group.cluster_group_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"cluster_group_updateId_idx\" ON public.cluster_group USING btree (\"updateId\")",
+      "identity": "public.cluster_group.cluster_group_updateId_idx"
+    },
+    {
       "definition": "CREATE INDEX face_index ON public.face_search USING vchordrq (embedding vector_cosine_ops) WITH (options='\n        residual_quantization = false\n        [build.internal]\n        lists = [1]\n        spherical_centroids = true\n        build_threads = 4\n        sampling_factor = 1024\n        ')",
       "identity": "public.face_search.face_index"
     },
@@ -5995,12 +6195,44 @@
       "identity": "public.person_audit.person_audit_ownerId_idx"
     },
     {
-      "definition": "CREATE INDEX \"person_audit_personId_idx\" ON public.person_audit USING btree (\"personId\")",
-      "identity": "public.person_audit.person_audit_personId_idx"
+      "definition": "CREATE INDEX \"person_audit_personGroupId_idx\" ON public.person_audit USING btree (\"personGroupId\")",
+      "identity": "public.person_audit.person_audit_personGroupId_idx"
     },
     {
       "definition": "CREATE UNIQUE INDEX person_audit_pkey ON public.person_audit USING btree (id)",
       "identity": "public.person_audit.person_audit_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_audit_clusterGroupId_idx\" ON public.person_group_audit USING btree (\"clusterGroupId\")",
+      "identity": "public.person_group_audit.person_group_audit_clusterGroupId_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_audit_deletedAt_idx\" ON public.person_group_audit USING btree (\"deletedAt\")",
+      "identity": "public.person_group_audit.person_group_audit_deletedAt_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_audit_personGroupId_idx\" ON public.person_group_audit USING btree (\"personGroupId\")",
+      "identity": "public.person_group_audit.person_group_audit_personGroupId_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX person_group_audit_pkey ON public.person_group_audit USING btree (id)",
+      "identity": "public.person_group_audit.person_group_audit_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_clusterGroupId_idx\" ON public.person_group USING btree (\"clusterGroupId\")",
+      "identity": "public.person_group.person_group_clusterGroupId_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_createId_idx\" ON public.person_group USING btree (\"createId\")",
+      "identity": "public.person_group.person_group_createId_idx"
+    },
+    {
+      "definition": "CREATE UNIQUE INDEX person_group_pkey ON public.person_group USING btree (id)",
+      "identity": "public.person_group.person_group_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"person_group_updateId_idx\" ON public.person_group USING btree (\"updateId\")",
+      "identity": "public.person_group.person_group_updateId_idx"
     },
     {
       "definition": "CREATE INDEX idx_person_name_trigram ON public.person USING gin (f_unaccent((name)::text) gin_trgm_ops)",
@@ -6011,11 +6243,11 @@
       "identity": "public.person.person_faceAssetId_idx"
     },
     {
-      "definition": "CREATE INDEX \"person_ownerId_idx\" ON public.person USING btree (\"ownerId\")",
-      "identity": "public.person.person_ownerId_idx"
+      "definition": "CREATE INDEX \"person_personGroupId_idx\" ON public.person USING btree (\"personGroupId\")",
+      "identity": "public.person.person_personGroupId_idx"
     },
     {
-      "definition": "CREATE UNIQUE INDEX person_pkey ON public.person USING btree (id)",
+      "definition": "CREATE UNIQUE INDEX person_pkey ON public.person USING btree (\"ownerId\", \"personGroupId\")",
       "identity": "public.person.person_pkey"
     },
     {
@@ -6311,6 +6543,10 @@
       "identity": "public.user_metadata.user_metadata_pkey"
     },
     {
+      "definition": "CREATE INDEX \"user_clusterGroupId_idx\" ON public.\"user\" USING btree (\"clusterGroupId\")",
+      "identity": "public.user.user_clusterGroupId_idx"
+    },
+    {
       "definition": "CREATE UNIQUE INDEX user_email_uq ON public.\"user\" USING btree (email)",
       "identity": "public.user.user_email_uq"
     },
@@ -6359,6 +6595,18 @@
       "identity": "public.video_stream_variant.video_stream_variant_sessionId_bitrate_resolution_codec_idx"
     },
     {
+      "definition": "CREATE UNIQUE INDEX workflow_log_pkey ON public.workflow_log USING btree (id)",
+      "identity": "public.workflow_log.workflow_log_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"workflow_log_workflowId_idx\" ON public.workflow_log USING btree (\"workflowId\")",
+      "identity": "public.workflow_log.workflow_log_workflowId_idx"
+    },
+    {
+      "definition": "CREATE INDEX \"workflow_log_workflowStepId_idx\" ON public.workflow_log USING btree (\"workflowStepId\")",
+      "identity": "public.workflow_log.workflow_log_workflowStepId_idx"
+    },
+    {
       "definition": "CREATE UNIQUE INDEX workflow_step_pkey ON public.workflow_step USING btree (id)",
       "identity": "public.workflow_step.workflow_step_pkey"
     },
@@ -6383,6 +6631,7 @@
     "function_album_asset_delete_audit",
     "function_album_parent_cycle_check",
     "function_album_user_after_insert",
+    "function_album_user_delete",
     "function_album_user_delete_audit",
     "function_asset_delete_audit",
     "function_asset_edit_audit",
@@ -6399,6 +6648,7 @@
     "function_memory_delete_audit",
     "function_partner_delete_audit",
     "function_person_delete_audit",
+    "function_person_group_delete_audit",
     "function_stack_delete_audit",
     "function_updated_at",
     "function_user_delete_audit",
@@ -6411,7 +6661,7 @@
     "index_album_parent_sort_idx",
     "index_album_root_sort_idx",
     "index_album_user_unique_owner",
-    "index_asset_face_personId_assetId_notDeleted_isVisible_idx",
+    "index_asset_face_personGroupId_assetId_notDeleted_isVisible_idx",
     "index_asset_id_timeline_notDeleted_idx",
     "index_asset_localDateTime_idx",
     "index_asset_localDateTime_month_idx",
@@ -6432,6 +6682,7 @@
     "trigger_album_parent_cycle_check_trigger",
     "trigger_album_updatedAt",
     "trigger_album_user_after_insert",
+    "trigger_album_user_delete",
     "trigger_album_user_delete_audit",
     "trigger_album_user_updatedAt",
     "trigger_api_key_updatedAt",
@@ -6449,8 +6700,10 @@
     "trigger_asset_metadata_audit",
     "trigger_asset_metadata_updated_at",
     "trigger_asset_ocr_delete_audit",
+    "trigger_asset_ocr_updatedAt",
     "trigger_asset_updatedAt",
     "trigger_asset_video_duplicate_frame_updatedAt",
+    "trigger_cluster_group_updatedAt",
     "trigger_library_updatedAt",
     "trigger_memory_asset_delete_audit",
     "trigger_memory_asset_updatedAt",
@@ -6460,6 +6713,8 @@
     "trigger_partner_delete_audit",
     "trigger_partner_updatedAt",
     "trigger_person_delete_audit",
+    "trigger_person_group_delete_audit",
+    "trigger_person_group_updatedAt",
     "trigger_person_updatedAt",
     "trigger_physical_file_updatedAt",
     "trigger_session_sync_checkpoint_updatedAt",
@@ -6707,6 +6962,14 @@
     },
     {
       "definition": "table",
+      "identity": "public.cluster_group"
+    },
+    {
+      "definition": "table",
+      "identity": "public.cluster_group_request"
+    },
+    {
+      "definition": "table",
       "identity": "public.face_search"
     },
     {
@@ -6780,6 +7043,14 @@
     {
       "definition": "table",
       "identity": "public.person_audit"
+    },
+    {
+      "definition": "table",
+      "identity": "public.person_group"
+    },
+    {
+      "definition": "table",
+      "identity": "public.person_group_audit"
     },
     {
       "definition": "table",
@@ -6891,6 +7162,10 @@
     },
     {
       "definition": "table",
+      "identity": "public.workflow_log"
+    },
+    {
+      "definition": "table",
       "identity": "public.workflow_step"
     }
   ],
@@ -6926,6 +7201,10 @@
     {
       "definition": "CREATE TRIGGER album_user_after_insert AFTER INSERT ON album_user REFERENCING NEW TABLE AS inserted_rows FOR EACH STATEMENT EXECUTE FUNCTION album_user_after_insert()",
       "identity": "public.album_user.album_user_after_insert"
+    },
+    {
+      "definition": "CREATE TRIGGER album_user_delete AFTER DELETE ON album_user REFERENCING OLD TABLE AS old FOR EACH ROW EXECUTE FUNCTION album_user_delete()",
+      "identity": "public.album_user.album_user_delete"
     },
     {
       "definition": "CREATE TRIGGER album_user_delete_audit AFTER DELETE ON album_user REFERENCING OLD TABLE AS old FOR EACH STATEMENT WHEN (pg_trigger_depth() <= 1) EXECUTE FUNCTION album_user_delete_audit()",
@@ -7000,6 +7279,10 @@
       "identity": "public.asset_ocr.asset_ocr_delete_audit"
     },
     {
+      "definition": "CREATE TRIGGER \"asset_ocr_updatedAt\" BEFORE UPDATE ON asset_ocr FOR EACH ROW EXECUTE FUNCTION updated_at()",
+      "identity": "public.asset_ocr.asset_ocr_updatedAt"
+    },
+    {
       "definition": "CREATE TRIGGER \"asset_video_duplicate_frame_updatedAt\" BEFORE UPDATE ON asset_video_duplicate_frame FOR EACH ROW EXECUTE FUNCTION updated_at()",
       "identity": "public.asset_video_duplicate_frame.asset_video_duplicate_frame_updatedAt"
     },
@@ -7010,6 +7293,10 @@
     {
       "definition": "CREATE TRIGGER \"asset_updatedAt\" BEFORE UPDATE ON asset FOR EACH ROW EXECUTE FUNCTION updated_at()",
       "identity": "public.asset.asset_updatedAt"
+    },
+    {
+      "definition": "CREATE TRIGGER \"cluster_group_updatedAt\" BEFORE UPDATE ON cluster_group FOR EACH ROW EXECUTE FUNCTION updated_at()",
+      "identity": "public.cluster_group.cluster_group_updatedAt"
     },
     {
       "definition": "CREATE TRIGGER \"library_updatedAt\" BEFORE UPDATE ON library FOR EACH ROW EXECUTE FUNCTION updated_at()",
@@ -7044,7 +7331,15 @@
       "identity": "public.partner.partner_updatedAt"
     },
     {
-      "definition": "CREATE TRIGGER person_delete_audit AFTER DELETE ON person REFERENCING OLD TABLE AS old FOR EACH STATEMENT WHEN (pg_trigger_depth() = 0) EXECUTE FUNCTION person_delete_audit()",
+      "definition": "CREATE TRIGGER person_group_delete_audit AFTER DELETE ON person_group REFERENCING OLD TABLE AS old FOR EACH STATEMENT WHEN (pg_trigger_depth() = 0) EXECUTE FUNCTION person_group_delete_audit()",
+      "identity": "public.person_group.person_group_delete_audit"
+    },
+    {
+      "definition": "CREATE TRIGGER \"person_group_updatedAt\" BEFORE UPDATE ON person_group FOR EACH ROW EXECUTE FUNCTION updated_at()",
+      "identity": "public.person_group.person_group_updatedAt"
+    },
+    {
+      "definition": "CREATE TRIGGER person_delete_audit AFTER DELETE ON person REFERENCING OLD TABLE AS old FOR EACH STATEMENT WHEN (pg_trigger_depth() <= 1) EXECUTE FUNCTION person_delete_audit()",
       "identity": "public.person.person_delete_audit"
     },
     {

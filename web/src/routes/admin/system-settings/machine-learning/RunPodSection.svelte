@@ -6,10 +6,10 @@
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import { SettingInputFieldType } from '$lib/constants';
   import {
-    Mode2 as RunPodMode,
-    type SystemConfigMachineLearningDto,
-    type SystemConfigRunPodDto,
-    type SystemConfigRunPodServerlessDto,
+    Mode as RunPodMode,
+    type AdminConfigMachineLearningDto,
+    type AdminConfigRunPodDto,
+    type AdminConfigRunPodServerlessDto,
   } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiCheck, mdiOpenInNew } from '@mdi/js';
@@ -19,11 +19,11 @@
   import { computeRunpodMode } from './machine-learning-helpers';
 
   interface Props {
-    workingConfig: SystemConfigMachineLearningDto;
-    runpod: SystemConfigRunPodDto;
-    savedRunpod: SystemConfigRunPodDto;
-    runpodServerless: SystemConfigRunPodServerlessDto;
-    savedRunpodServerless: SystemConfigRunPodServerlessDto;
+    workingConfig: AdminConfigMachineLearningDto;
+    runpod: AdminConfigRunPodDto;
+    savedRunpod: AdminConfigRunPodDto;
+    runpodServerless: AdminConfigRunPodServerlessDto;
+    savedRunpodServerless: AdminConfigRunPodServerlessDto;
     disabled: boolean;
   }
 

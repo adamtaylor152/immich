@@ -41,7 +41,7 @@ describe(ForkSchemaRepository.name, () => {
   });
 
   const seedAssets = async (count: number) => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(user).execute();
     const assets = Array.from({ length: count }, () => mediumFactory.assetInsert({ ownerId: user.id }));
     await db.insertInto('asset').values(assets).execute();

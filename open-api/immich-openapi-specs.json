@@ -2210,6 +2210,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "suppressedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Return album metadata for suppressed content only",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -2510,6 +2519,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "suppressedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Return album metadata for suppressed content only",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -2770,6 +2788,58 @@
         ],
         "x-immich-permission": "albumAsset.create",
         "x-immich-state": "Stable"
+      }
+    },
+    "/albums/{id}/descendant-count": {
+      "get": {
+        "description": "Return the number of descendant albums (children, grandchildren, etc.) for a specific album. Used by the UI to show \"Delete X and N nested albums?\" confirmations.",
+        "operationId": "getAlbumDescendantCount",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlbumDescendantCountResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Count descendant albums",
+        "tags": [
+          "Albums"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "album.read"
       }
     },
     "/albums/{id}/map-markers": {
@@ -3800,7 +3870,7 @@
           {
             "name": "x-immich-checksum",
             "in": "header",
-            "description": "sha1 checksum that can be used for duplicate detection before the file is uploaded",
+            "description": "SHA-256 checksum (preferred) or SHA-1 checksum (legacy) for duplicate detection before upload; hex or base64-encoded",
             "required": false,
             "schema": {
               "type": "string"
@@ -4600,6 +4670,128 @@
           }
         ],
         "x-immich-permission": "asset.edit.create",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/assets/{id}/image-enrichment": {
+      "get": {
+        "description": "Retrieve private image description, tag, and NSFW detection metadata for a specific asset.",
+        "operationId": "getAssetImageEnrichment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetImageEnrichmentResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get image enrichment metadata",
+        "tags": [
+          "Assets"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "asset.update",
+        "x-immich-state": "Beta"
+      },
+      "put": {
+        "description": "Run repair actions for generated image descriptions, tags, and NSFW detection metadata.",
+        "operationId": "updateAssetImageEnrichment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetImageEnrichmentActionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetImageEnrichmentResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update image enrichment metadata",
+        "tags": [
+          "Assets"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "asset.update",
         "x-immich-state": "Beta"
       }
     },
@@ -6117,6 +6309,93 @@
           }
         ],
         "x-immich-state": "Stable"
+      }
+    },
+    "/best-photos": {
+      "get": {
+        "description": "Retrieve visible photo assets ranked by the locally computed Best Photos score.",
+        "operationId": "getBestPhotos",
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "minScore",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BestPhotosResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Retrieve best photos",
+        "tags": [
+          "Views"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.0",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.0",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "asset.read",
+        "x-immich-state": "Beta"
       }
     },
     "/cluster-groups/requests": {
@@ -7859,6 +8138,106 @@
         "x-immich-state": "Stable"
       }
     },
+    "/live-photo/candidates": {
+      "get": {
+        "description": "Find separated live photos (a still image and its motion video that are not linked) that can be reassembled.",
+        "operationId": "getLivePhotoCandidates",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePhotoCandidatesResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List live photo relink candidates",
+        "tags": [
+          "Live Photo"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/live-photo/relink": {
+      "post": {
+        "description": "Reassemble the selected still + video pairs into live photos, hiding the standalone videos.",
+        "operationId": "relinkLivePhotos",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LivePhotoRelinkDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePhotoRelinkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Relink live photos",
+        "tags": [
+          "Live Photo"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
     "/map/markers": {
       "get": {
         "description": "Retrieve a list of latitude and longitude coordinates for every asset with location data.",
@@ -8045,6 +8424,389 @@
         ],
         "x-immich-permission": "map.search",
         "x-immich-state": "Stable"
+      }
+    },
+    "/media-health": {
+      "get": {
+        "description": "List missing and corrupt media health findings in timeline buckets.",
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHealthCategory"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MediaHealthStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthListResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List media health findings",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/corrupt": {
+      "delete": {
+        "description": "Move recently confirmed corrupt media findings to trash after revalidation.",
+        "operationId": "deleteCorrupt",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthDeleteCorruptDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthBulkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Move confirmed corrupt media to trash",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/corrupt/scan": {
+      "post": {
+        "description": "Queue an explicit scan that validates source media integrity.",
+        "operationId": "startCorruptScan",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Start corrupt media scan",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/dismiss": {
+      "post": {
+        "description": "Dismiss selected media health findings without modifying assets.",
+        "operationId": "dismiss",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Dismiss media health findings",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/locate": {
+      "post": {
+        "description": "Queue candidate discovery for missing media findings.",
+        "operationId": "locateMissing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Locate missing media",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/relink": {
+      "post": {
+        "description": "Relink missing external-library assets to validated candidate files.",
+        "operationId": "relinkMissing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaHealthBulkActionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthBulkResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Relink missing media",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
+      }
+    },
+    "/media-health/missing/scan": {
+      "post": {
+        "description": "Queue a scan that identifies missing or unreadable source files.",
+        "operationId": "startMissingScan",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaHealthScanResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Start missing media scan",
+        "tags": [
+          "Media Health"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v3.0.0",
+            "state": "Added"
+          },
+          {
+            "version": "v3.0.0",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-state": "Alpha"
       }
     },
     "/memories": {
@@ -11083,6 +11845,498 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/runpod/backfill": {
+      "post": {
+        "description": "Queues smart-search, face detection, duplicates, OCR, image description, and NSFW detection.",
+        "operationId": "backfill",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodBackfillResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Enqueue all ML backfill jobs",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/connect": {
+      "post": {
+        "description": "Verify that a RunPod API key works. Pass `apiKey` to test a candidate key without saving.",
+        "operationId": "testConnection",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunPodConnectionTestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodConnectionResultDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Test RunPod connection",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/endpoint": {
+      "delete": {
+        "description": "Deletes the serverless endpoint and template owned by this Immich instance. Soft-fails when resources are already gone on RunPod.",
+        "operationId": "teardownServerlessEndpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Tear down the serverless endpoint",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/endpoint/setup": {
+      "post": {
+        "description": "Idempotently creates the RunPod template + serverless endpoint for this Immich instance. Reuses an existing endpoint tagged with our instance prefix when one is found.",
+        "operationId": "setupServerlessEndpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Set up (or verify) the serverless endpoint",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/gpus": {
+      "get": {
+        "description": "Returns the GPU types currently offered by RunPod, with pricing.",
+        "operationId": "listGpus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunPodGpuTypeDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List RunPod GPU types",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read"
+      }
+    },
+    "/runpod/pods": {
+      "post": {
+        "description": "Launch the ML container on RunPod and inject the proxy URL into the live ML config.",
+        "operationId": "provision",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunPodProvisionDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Provision a RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/pods/current": {
+      "delete": {
+        "description": "Destroys the pod and its persistent volume. Next launch is a full cold-start.",
+        "operationId": "terminate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Terminate the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      },
+      "get": {
+        "description": "Returns the current managed RunPod pod state (idle / provisioning / running / etc).",
+        "operationId": "getCurrent",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get current RunPod state",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read"
+      }
+    },
+    "/runpod/pods/current/start": {
+      "post": {
+        "description": "Start a previously stopped pod, reusing its model cache.",
+        "operationId": "start",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Resume the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/runpod/pods/current/stop": {
+      "post": {
+        "description": "Stops the pod but keeps the model-cache volume so a future start is fast.",
+        "operationId": "stop",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPodStateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Stop the current RunPod pod",
+        "tags": [
+          "RunPod (admin)"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update"
+      }
+    },
+    "/search/ask": {
+      "post": {
+        "description": "Interpret a natural language query locally and search assets with existing search primitives.",
+        "operationId": "askSearch",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskSearchDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskSearchResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Ask Search",
+        "tags": [
+          "Search"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.0",
+            "state": "Added"
+          }
+        ],
+        "x-immich-permission": "asset.read"
+      }
+    },
     "/search/cities": {
       "get": {
         "description": "Retrieve a list of assets with each asset belonging to a different city. This endpoint is used on the places pages to show a single thumbnail for each city the user has assets in.",
@@ -11250,6 +12504,14 @@
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
               "example": "2024-01-01T00:00:00.000Z",
               "type": "string"
+            }
+          },
+          {
+            "name": "imageEnrichment",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ImageEnrichmentFilter"
             }
           },
           {
@@ -11425,6 +12687,15 @@
             "schema": {
               "type": "string",
               "nullable": true
+            }
+          },
+          {
+            "name": "suppressedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -14529,6 +15800,304 @@
         "x-immich-state": "Deprecated"
       }
     },
+    "/system-config/image-description/defer-requeue": {
+      "post": {
+        "description": "Marks the image description config as having a pending re-queue. The persistent banner on the admin Image Description settings page will surface a reminder until the actual re-queue is triggered.",
+        "operationId": "deferImageDescriptionRequeue",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Image description is not enabled."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Defer image description re-queue",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/image-description/requeue": {
+      "post": {
+        "description": "Enqueues a bulk re-queue of the image description pipeline for all eligible assets. Idempotent: if image-description work is already active or waiting, the call returns without re-enqueuing.",
+        "operationId": "triggerImageDescriptionRequeue",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Image description is not enabled."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Trigger image description re-queue",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/image-description/requeue-estimate": {
+      "get": {
+        "description": "Returns asset counts and a rough time estimate for re-running the image description pipeline over all eligible assets.",
+        "operationId": "getImageDescriptionRequeueEstimate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDescriptionRequeueEstimateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Estimate image description re-queue cost",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/machine-learning/hardware": {
+      "get": {
+        "description": "Retrieve available hardware acceleration providers from the machine learning service.",
+        "operationId": "getMachineLearningHardware",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineLearningHardwareResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get machine learning hardware",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/system-config/smart-albums/reevaluate": {
+      "post": {
+        "description": "Enqueues a bulk re-evaluation of all described image assets against the smart-album tag rules. Pass an optional `kind` body field to scope the re-evaluation to a single built-in kind. Idempotent via BullMQ deduplication (kind-scoped dispatches use their own dedup namespace).",
+        "operationId": "triggerSmartAlbumReevaluate",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmartAlbumReevaluateRequestDto"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartAlbumReevaluateResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "Smart albums are not enabled, or invalid kind."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Trigger smart-album re-evaluate",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/system-config/smart-albums/reevaluate-estimate": {
+      "get": {
+        "description": "Returns the number of image assets that have a completed description and will be re-evaluated by the re-evaluate job.",
+        "operationId": "getSmartAlbumReevaluateEstimate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmartAlbumReevaluateEstimateDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Estimate smart-album re-evaluate cost",
+        "tags": [
+          "System config"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "systemConfig.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/system-config/storage-template-options": {
       "get": {
         "description": "Retrieve exemplary storage template options.",
@@ -15379,6 +16948,15 @@
             }
           },
           {
+            "name": "dateType",
+            "required": false,
+            "in": "query",
+            "description": "Date source for timeline bucket grouping. Defaults to taken date.",
+            "schema": {
+              "$ref": "#/components/schemas/TimeBucketDateType"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -15439,6 +17017,15 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "suppressedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -15578,6 +17165,15 @@
             }
           },
           {
+            "name": "dateType",
+            "required": false,
+            "in": "query",
+            "description": "Date source for timeline bucket grouping. Defaults to taken date.",
+            "schema": {
+              "$ref": "#/components/schemas/TimeBucketDateType"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -15638,6 +17234,15 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "suppressedOnly",
+            "required": false,
+            "in": "query",
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -17486,12 +19091,20 @@
       "description": "An external library is made up of input file paths or expressions that are scanned for asset files. Discovered files are automatically imported. Assets much be unique within a library, but can be duplicated across libraries. Each user has a default upload library, and can have one or more external libraries."
     },
     {
+      "name": "Live Photo",
+      "description": "Endpoints for finding and reassembling separated live photos (a still image and its paired motion video)."
+    },
+    {
       "name": "Maintenance (admin)",
       "description": "Maintenance mode allows you to put Immich in a read-only state to perform various operations."
     },
     {
       "name": "Map",
       "description": "Map endpoints include supplemental functionality related to geolocation, such as reverse geocoding and retrieving map markers for assets with geolocation data."
+    },
+    {
+      "name": "Media Health",
+      "description": "Media health utilities identify missing and corrupt source files."
     },
     {
       "name": "Memories",
@@ -17520,6 +19133,10 @@
     {
       "name": "Queues",
       "description": "Queues and background jobs are used for processing tasks asynchronously. Queues can be paused and resumed as needed."
+    },
+    {
+      "name": "RunPod (admin)",
+      "description": "Provision the Immich machine-learning container on RunPod cloud GPUs. The integration manages a single pod, transparently routes ML jobs to it, and stops it when idle to control cost."
     },
     {
       "name": "Search",
@@ -17716,6 +19333,119 @@
         ],
         "type": "object"
       },
+      "AdjustParameters": {
+        "properties": {
+          "blackPoint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "blueTone": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "brightness": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "contrast": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "hdr": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "highlights": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "saturation": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "shadows": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "skinTone": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "tint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "vignette": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "warmth": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "whitePoint": {
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "AdminConfigAdvancedPromptDto": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "description": "Use a raw prompt template instead of the structured fields",
+            "type": "boolean"
+          },
+          "placeholderValidation": {
+            "default": "strict",
+            "description": "Whether missing {schema} placeholder fails save (strict) or warns (warn)",
+            "enum": [
+              "strict",
+              "warn"
+            ],
+            "type": "string"
+          },
+          "rawPromptTemplate": {
+            "default": "",
+            "description": "Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AdminConfigAskSearchDto": {
+        "properties": {
+          "enabled": {
+            "description": "Enable local Ask Photos-style search",
+            "type": "boolean"
+          },
+          "maxResults": {
+            "description": "Maximum number of Ask Search results",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "maxResults"
+        ],
+        "type": "object"
+      },
       "AdminConfigBackupsDto": {
         "properties": {
           "database": {
@@ -17736,11 +19466,15 @@
           "modelName": {
             "description": "Name of the model to use",
             "type": "string"
+          },
+          "zeroShotTagging": {
+            "$ref": "#/components/schemas/AdminConfigZeroShotTaggingDto"
           }
         },
         "required": [
           "enabled",
-          "modelName"
+          "modelName",
+          "zeroShotTagging"
         ],
         "type": "object"
       },
@@ -17789,6 +19523,9 @@
           "library": {
             "$ref": "#/components/schemas/AdminConfigLibraryDto"
           },
+          "localFeatures": {
+            "$ref": "#/components/schemas/AdminConfigLocalFeaturesDto"
+          },
           "logging": {
             "$ref": "#/components/schemas/AdminConfigLoggingDto"
           },
@@ -17816,11 +19553,17 @@
           "passwordLogin": {
             "$ref": "#/components/schemas/AdminConfigPasswordLoginDto"
           },
+          "physicalDeduplication": {
+            "$ref": "#/components/schemas/AdminConfigPhysicalDeduplicationDto"
+          },
           "reverseGeocoding": {
             "$ref": "#/components/schemas/AdminConfigReverseGeocodingDto"
           },
           "server": {
             "$ref": "#/components/schemas/AdminConfigServerDto"
+          },
+          "smartAlbums": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumsDto"
           },
           "storageTemplate": {
             "$ref": "#/components/schemas/AdminConfigStorageTemplateDto"
@@ -17870,17 +19613,69 @@
             "description": "Whether the task is enabled",
             "type": "boolean"
           },
+          "enhancedVideo": {
+            "properties": {
+              "enabled": {
+                "description": "Whether enhanced video duplicate detection is enabled",
+                "type": "boolean"
+              },
+              "frameCount": {
+                "description": "Number of video frames to sample for duplicate confirmation",
+                "maximum": 8,
+                "minimum": 2,
+                "type": "integer"
+              },
+              "maxDistance": {
+                "description": "Maximum distance threshold for enhanced video duplicate frame matching",
+                "format": "double",
+                "maximum": 0.1,
+                "minimum": 0.001,
+                "type": "number"
+              },
+              "minMatchingFrames": {
+                "description": "Minimum matching sampled frames required to confirm a video duplicate",
+                "maximum": 8,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "enabled",
+              "frameCount",
+              "minMatchingFrames",
+              "maxDistance"
+            ],
+            "type": "object"
+          },
           "maxDistance": {
             "description": "Maximum distance threshold for duplicate detection",
             "format": "double",
             "maximum": 0.1,
             "minimum": 0.001,
             "type": "number"
+          },
+          "preferOriginalFormat": {
+            "description": "When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size",
+            "type": "boolean"
           }
         },
         "required": [
           "enabled",
-          "maxDistance"
+          "enhancedVideo",
+          "maxDistance",
+          "preferOriginalFormat"
+        ],
+        "type": "object"
+      },
+      "AdminConfigEnhancedRawImageDto": {
+        "properties": {
+          "enabled": {
+            "description": "Enhanced RAW rendering",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
         ],
         "type": "object"
       },
@@ -18093,6 +19888,20 @@
         ],
         "type": "object"
       },
+      "AdminConfigForkJobSettingsDto": {
+        "properties": {
+          "concurrency": {
+            "description": "Concurrency",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "concurrency"
+        ],
+        "type": "object"
+      },
       "AdminConfigGeneratedFullsizeImageDto": {
         "properties": {
           "enabled": {
@@ -18149,10 +19958,287 @@
         ],
         "type": "object"
       },
+      "AdminConfigIdentityInjectionDto": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "description": "Inject named-face data into description prompts",
+            "type": "boolean"
+          },
+          "maxNames": {
+            "default": 5,
+            "description": "Maximum named persons to inject into a single prompt",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minFaceConfidence": {
+            "default": 0.7,
+            "description": "Minimum face-recognition confidence required to inject a name",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "AdminConfigImageDescriptionDto": {
+        "properties": {
+          "acceleration": {
+            "$ref": "#/components/schemas/MachineLearningHardwareAcceleration",
+            "default": "auto",
+            "description": "Hardware acceleration backend to use"
+          },
+          "device": {
+            "description": "Hardware device to use",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Whether the task is enabled",
+            "type": "boolean"
+          },
+          "fallbackModelName": {
+            "description": "Name of the fallback model to use",
+            "type": "string"
+          },
+          "lastConfigChangeAt": {
+            "default": null,
+            "description": "ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth).",
+            "nullable": true,
+            "type": "string"
+          },
+          "modelName": {
+            "description": "Name of the model to use",
+            "type": "string"
+          },
+          "pendingRequeueAt": {
+            "default": null,
+            "description": "ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent \"re-queue pending\" banner.",
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt": {
+            "$ref": "#/components/schemas/AdminConfigImageDescriptionPromptDto",
+            "default": {
+              "advanced": {
+                "enabled": false,
+                "placeholderValidation": "strict",
+                "rawPromptTemplate": ""
+              },
+              "customInstructions": "",
+              "customVocabulary": [],
+              "forbiddenInferences": [
+                "diagnoses",
+                "medication names",
+                "procedures",
+                "pregnancy",
+                "disability"
+              ],
+              "identityInjection": {
+                "enabled": true,
+                "maxNames": 5,
+                "minFaceConfidence": 0.7
+              },
+              "lookFor": [
+                "brands",
+                "signage",
+                "screens",
+                "documents",
+                "uniforms",
+                "tools",
+                "vehicles",
+                "animals",
+                "food",
+                "landmarks"
+              ],
+              "medicalIndicators": [
+                "bandage",
+                "cast",
+                "crutches",
+                "exam-table",
+                "hospital",
+                "iv-line",
+                "lab-result",
+                "medical",
+                "medical-monitor",
+                "medical-paperwork",
+                "mobility-aid",
+                "pill-organizer",
+                "prescription",
+                "syringe",
+                "ultrasound",
+                "wheelchair",
+                "wound",
+                "x-ray"
+              ],
+              "nsfwIndicators": [
+                "adult-nudity",
+                "bare-buttocks",
+                "bondage",
+                "explicit",
+                "exposed-genitals",
+                "naked",
+                "nsfw",
+                "nudity",
+                "restraint",
+                "sex-toy",
+                "sexual-activity"
+              ],
+              "sentenceCountTarget": 3,
+              "style": "balanced"
+            }
+          }
+        },
+        "required": [
+          "device",
+          "enabled",
+          "fallbackModelName",
+          "modelName"
+        ],
+        "type": "object"
+      },
+      "AdminConfigImageDescriptionPromptDto": {
+        "properties": {
+          "advanced": {
+            "$ref": "#/components/schemas/AdminConfigAdvancedPromptDto",
+            "default": {
+              "enabled": false,
+              "placeholderValidation": "strict",
+              "rawPromptTemplate": ""
+            },
+            "description": "Advanced raw-prompt-editor configuration"
+          },
+          "customInstructions": {
+            "default": "",
+            "description": "Free-form additional natural-language instructions appended to the description prompt. Example: \"If you see a car, identify the make and model. If people are playing a sport, name the sport.\"",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "customVocabulary": {
+            "default": [],
+            "description": "Tag values the model should prefer when applicable",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "forbiddenInferences": {
+            "default": [
+              "diagnoses",
+              "medication names",
+              "procedures",
+              "pregnancy",
+              "disability"
+            ],
+            "description": "Categories the model must not infer (diagnoses, medications, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "identityInjection": {
+            "$ref": "#/components/schemas/AdminConfigIdentityInjectionDto",
+            "default": {
+              "enabled": true,
+              "maxNames": 5,
+              "minFaceConfidence": 0.7
+            },
+            "description": "Named-face injection configuration"
+          },
+          "lookFor": {
+            "default": [
+              "brands",
+              "signage",
+              "screens",
+              "documents",
+              "uniforms",
+              "tools",
+              "vehicles",
+              "animals",
+              "food",
+              "landmarks"
+            ],
+            "description": "Additional categories the model should note when visibly supported (brands, sports equipment, etc.)",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "medicalIndicators": {
+            "default": [
+              "bandage",
+              "cast",
+              "crutches",
+              "exam-table",
+              "hospital",
+              "iv-line",
+              "lab-result",
+              "medical",
+              "medical-monitor",
+              "medical-paperwork",
+              "mobility-aid",
+              "pill-organizer",
+              "prescription",
+              "syringe",
+              "ultrasound",
+              "wheelchair",
+              "wound",
+              "x-ray"
+            ],
+            "description": "Allow-list of medical indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "nsfwIndicators": {
+            "default": [
+              "adult-nudity",
+              "bare-buttocks",
+              "bondage",
+              "explicit",
+              "exposed-genitals",
+              "naked",
+              "nsfw",
+              "nudity",
+              "restraint",
+              "sex-toy",
+              "sexual-activity"
+            ],
+            "description": "Allow-list of explicit NSFW indicator terms permitted in the description",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sentenceCountTarget": {
+            "default": 3,
+            "description": "Target number of sentences in the description",
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "style": {
+            "default": "balanced",
+            "description": "Description verbosity preset",
+            "enum": [
+              "terse",
+              "balanced",
+              "rich"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AdminConfigImageDto": {
         "properties": {
           "colorspace": {
             "$ref": "#/components/schemas/Colorspace"
+          },
+          "enhancedRaw": {
+            "$ref": "#/components/schemas/AdminConfigEnhancedRawImageDto"
           },
           "extractEmbedded": {
             "description": "Extract embedded",
@@ -18259,11 +20345,29 @@
           "faceDetection": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
+          "imageDescription": {
+            "$ref": "#/components/schemas/AdminConfigForkJobSettingsDto",
+            "default": {
+              "concurrency": 2
+            }
+          },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/AdminConfigForkJobSettingsDto",
+            "default": {
+              "concurrency": 2
+            }
+          },
           "integrityCheck": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
           "library": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
+          },
+          "mediaHealth": {
+            "$ref": "#/components/schemas/AdminConfigForkJobSettingsDto",
+            "default": {
+              "concurrency": 2
+            }
           },
           "metadataExtraction": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
@@ -18273,6 +20377,12 @@
           },
           "notifications": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
+          },
+          "nsfwDetection": {
+            "$ref": "#/components/schemas/AdminConfigForkJobSettingsDto",
+            "default": {
+              "concurrency": 2
+            }
           },
           "ocr": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
@@ -18290,6 +20400,9 @@
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
           "videoConversion": {
+            "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
+          },
+          "videoDuplicateDetection": {
             "$ref": "#/components/schemas/AdminConfigJobSettingsDto"
           },
           "workflow": {
@@ -18311,6 +20424,7 @@
           "smartSearch",
           "thumbnailGeneration",
           "videoConversion",
+          "videoDuplicateDetection",
           "workflow"
         ],
         "type": "object"
@@ -18373,6 +20487,17 @@
         ],
         "type": "object"
       },
+      "AdminConfigLocalFeaturesDto": {
+        "properties": {
+          "askSearch": {
+            "$ref": "#/components/schemas/AdminConfigAskSearchDto"
+          }
+        },
+        "required": [
+          "askSearch"
+        ],
+        "type": "object"
+      },
       "AdminConfigLoggingDto": {
         "properties": {
           "enabled": {
@@ -18431,8 +20556,101 @@
           "facialRecognition": {
             "$ref": "#/components/schemas/AdminConfigFacialRecognitionDto"
           },
+          "imageDescription": {
+            "$ref": "#/components/schemas/AdminConfigImageDescriptionDto",
+            "default": {
+              "acceleration": "auto",
+              "device": "AUTO",
+              "enabled": true,
+              "fallbackModelName": "microsoft/Florence-2-base-ft",
+              "lastConfigChangeAt": null,
+              "modelName": "Qwen/Qwen2.5-VL-3B-Instruct",
+              "pendingRequeueAt": null,
+              "prompt": {
+                "advanced": {
+                  "enabled": false,
+                  "placeholderValidation": "strict",
+                  "rawPromptTemplate": ""
+                },
+                "customInstructions": "",
+                "customVocabulary": [],
+                "forbiddenInferences": [
+                  "diagnoses",
+                  "medication names",
+                  "procedures",
+                  "pregnancy",
+                  "disability"
+                ],
+                "identityInjection": {
+                  "enabled": true,
+                  "maxNames": 5,
+                  "minFaceConfidence": 0.7
+                },
+                "lookFor": [
+                  "brands",
+                  "signage",
+                  "screens",
+                  "documents",
+                  "uniforms",
+                  "tools",
+                  "vehicles",
+                  "animals",
+                  "food",
+                  "landmarks"
+                ],
+                "medicalIndicators": [
+                  "bandage",
+                  "cast",
+                  "crutches",
+                  "exam-table",
+                  "hospital",
+                  "iv-line",
+                  "lab-result",
+                  "medical",
+                  "medical-monitor",
+                  "medical-paperwork",
+                  "mobility-aid",
+                  "pill-organizer",
+                  "prescription",
+                  "syringe",
+                  "ultrasound",
+                  "wheelchair",
+                  "wound",
+                  "x-ray"
+                ],
+                "nsfwIndicators": [
+                  "adult-nudity",
+                  "bare-buttocks",
+                  "bondage",
+                  "explicit",
+                  "exposed-genitals",
+                  "naked",
+                  "nsfw",
+                  "nudity",
+                  "restraint",
+                  "sex-toy",
+                  "sexual-activity"
+                ],
+                "sentenceCountTarget": 3,
+                "style": "balanced"
+              }
+            }
+          },
+          "nsfwDetection": {
+            "$ref": "#/components/schemas/AdminConfigNsfwDetectionDto",
+            "default": {
+              "device": "AUTO",
+              "enabled": false,
+              "hideFromLibrary": false,
+              "modelName": "onnx-community/nsfw_image_detection-ONNX",
+              "threshold": 0.85
+            }
+          },
           "ocr": {
             "$ref": "#/components/schemas/AdminConfigOcrDto"
+          },
+          "runpod": {
+            "$ref": "#/components/schemas/AdminConfigRunPodDto"
           },
           "urls": {
             "description": "ML service URLs",
@@ -18551,6 +20769,41 @@
         },
         "required": [
           "smtp"
+        ],
+        "type": "object"
+      },
+      "AdminConfigNsfwDetectionDto": {
+        "properties": {
+          "device": {
+            "description": "Hardware device to use",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Whether the task is enabled",
+            "type": "boolean"
+          },
+          "hideFromLibrary": {
+            "description": "Hide NSFW assets from library views unless the session has PIN-elevated access",
+            "type": "boolean"
+          },
+          "modelName": {
+            "description": "Name of the model to use",
+            "type": "string"
+          },
+          "threshold": {
+            "description": "Minimum score required to mark an image as NSFW",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0.01,
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "enabled",
+          "hideFromLibrary",
+          "modelName",
+          "threshold"
         ],
         "type": "object"
       },
@@ -18727,6 +20980,26 @@
         ],
         "type": "object"
       },
+      "AdminConfigPhysicalDeduplicationDto": {
+        "properties": {
+          "enabled": {
+            "description": "Enabled",
+            "type": "boolean"
+          },
+          "masterUserId": {
+            "description": "Master user ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "masterUserId"
+        ],
+        "type": "object"
+      },
       "AdminConfigReverseGeocodingDto": {
         "properties": {
           "enabled": {
@@ -18736,6 +21009,184 @@
         },
         "required": [
           "enabled"
+        ],
+        "type": "object"
+      },
+      "AdminConfigRunPodDto": {
+        "properties": {
+          "apiKey": {
+            "description": "RunPod API key (write-only; empty preserves the existing key)",
+            "type": "string"
+          },
+          "apiKeyConfigured": {
+            "description": "Read-only indicator that a key is currently stored. Set by the server; ignored on write.",
+            "type": "boolean"
+          },
+          "autoBackfillOnLaunch": {
+            "description": "Auto-run ML backfill on pod ready (Pod mode)",
+            "type": "boolean"
+          },
+          "autoStopEnabled": {
+            "description": "Auto-stop when idle (Pod mode)",
+            "type": "boolean"
+          },
+          "autoStopGraceMinutes": {
+            "description": "Idle minutes before auto-stop (Pod mode)",
+            "maximum": 1440,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "containerDiskGb": {
+            "description": "Container disk size (GB) (Pod mode)",
+            "maximum": 2000,
+            "minimum": 10,
+            "type": "integer"
+          },
+          "dataPrivacyAcknowledged": {
+            "description": "User accepted that image previews leave the network",
+            "type": "boolean"
+          },
+          "defaultGpuTypeId": {
+            "description": "Preferred GPU type ID (Pod mode)",
+            "minLength": 1,
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled",
+            "type": "boolean"
+          },
+          "hfToken": {
+            "default": "",
+            "description": "HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token)",
+            "type": "string"
+          },
+          "hfTokenConfigured": {
+            "description": "Read-only indicator that an HF token is currently stored. Set by the server; ignored on write.",
+            "type": "boolean"
+          },
+          "imageName": {
+            "description": "Container image to launch",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "description": "Hard runtime ceiling (hours) (Pod mode)",
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mode": {
+            "default": "disabled",
+            "description": "disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients.",
+            "enum": [
+              "disabled",
+              "pod",
+              "serverless"
+            ],
+            "type": "string"
+          },
+          "provisionTimeoutMinutes": {
+            "default": 5,
+            "description": "How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode)",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "serverless": {
+            "$ref": "#/components/schemas/AdminConfigRunPodServerlessDto",
+            "default": {
+              "executionTimeoutMs": 600000,
+              "gpuTypeIds": [
+                "AMPERE_48",
+                "ADA_48_PRO",
+                "AMPERE_80"
+              ],
+              "idleTimeoutSeconds": 30,
+              "scalerType": "REQUEST_COUNT",
+              "scalerValue": 4,
+              "workersMax": 3,
+              "workersMin": 0
+            }
+          },
+          "volumeGb": {
+            "description": "Persistent volume size (GB) (Pod mode)",
+            "maximum": 2000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "apiKey",
+          "autoBackfillOnLaunch",
+          "autoStopEnabled",
+          "autoStopGraceMinutes",
+          "containerDiskGb",
+          "dataPrivacyAcknowledged",
+          "defaultGpuTypeId",
+          "enabled",
+          "imageName",
+          "maxRuntimeHours",
+          "volumeGb"
+        ],
+        "type": "object"
+      },
+      "AdminConfigRunPodServerlessDto": {
+        "properties": {
+          "executionTimeoutMs": {
+            "description": "Max time per request (ms)",
+            "maximum": 3600000,
+            "minimum": 5000,
+            "type": "integer"
+          },
+          "gpuTypeIds": {
+            "description": "Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required.",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "idleTimeoutSeconds": {
+            "description": "Seconds before an idle worker scales down",
+            "maximum": 3600,
+            "minimum": 5,
+            "type": "integer"
+          },
+          "scalerType": {
+            "description": "Worker autoscaler strategy",
+            "enum": [
+              "QUEUE_DELAY",
+              "REQUEST_COUNT"
+            ],
+            "type": "string"
+          },
+          "scalerValue": {
+            "description": "Scaler threshold (queue seconds or request count)",
+            "maximum": 60,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workersMax": {
+            "description": "Max concurrent workers",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workersMin": {
+            "description": "Always-warm workers (0 = scale to zero)",
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "executionTimeoutMs",
+          "gpuTypeIds",
+          "idleTimeoutSeconds",
+          "scalerType",
+          "scalerValue",
+          "workersMax",
+          "workersMin"
         ],
         "type": "object"
       },
@@ -18758,6 +21209,97 @@
           "externalDomain",
           "loginPageMessage",
           "publicUsers"
+        ],
+        "type": "object"
+      },
+      "AdminConfigSmartAlbumBuiltInDto": {
+        "properties": {
+          "documents": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          },
+          "food": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          },
+          "nature": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          },
+          "pets": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          },
+          "screenshots": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          },
+          "travel": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumKindDto"
+          }
+        },
+        "required": [
+          "documents",
+          "food",
+          "nature",
+          "pets",
+          "screenshots",
+          "travel"
+        ],
+        "type": "object"
+      },
+      "AdminConfigSmartAlbumKindDto": {
+        "properties": {
+          "clipQueries": {
+            "description": "CLIP query phrases used when no tag trigger matches",
+            "items": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Whether this smart album is active",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "User-visible album name",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "tagTriggers": {
+            "description": "Tags that mark an asset as belonging to this album",
+            "items": {
+              "maxLength": 256,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "threshold": {
+            "description": "CLIP similarity threshold",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "clipQueries",
+          "enabled",
+          "name",
+          "tagTriggers",
+          "threshold"
+        ],
+        "type": "object"
+      },
+      "AdminConfigSmartAlbumsDto": {
+        "properties": {
+          "builtIn": {
+            "$ref": "#/components/schemas/AdminConfigSmartAlbumBuiltInDto"
+          },
+          "enabled": {
+            "description": "Master smart-album enabled toggle",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "builtIn",
+          "enabled"
         ],
         "type": "object"
       },
@@ -18926,6 +21468,33 @@
         ],
         "type": "object"
       },
+      "AdminConfigZeroShotTaggingDto": {
+        "properties": {
+          "enabled": {
+            "description": "Whether zero-shot auto-tagging is enabled",
+            "type": "boolean"
+          },
+          "maxTags": {
+            "description": "Maximum number of zero-shot tags applied per asset",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minSimilarity": {
+            "description": "Cosine similarity above which a label is applied as a tag",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "maxTags",
+          "minSimilarity"
+        ],
+        "type": "object"
+      },
       "AdminOnboardingUpdateDto": {
         "properties": {
           "isOnboarded": {
@@ -18935,6 +21504,20 @@
         },
         "required": [
           "isOnboarded"
+        ],
+        "type": "object"
+      },
+      "AlbumDescendantCountResponseDto": {
+        "properties": {
+          "count": {
+            "description": "Number of descendant albums (children, grandchildren, etc.)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
         ],
         "type": "object"
       },
@@ -19000,6 +21583,11 @@
             "description": "Has shared link",
             "type": "boolean"
           },
+          "icon": {
+            "description": "Icon key (null = default folder icon)",
+            "nullable": true,
+            "type": "string"
+          },
           "id": {
             "description": "Album ID",
             "format": "uuid",
@@ -19018,9 +21606,19 @@
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
           },
+          "parentId": {
+            "description": "Parent album ID for nesting (null = top-level)",
+            "nullable": true,
+            "type": "string"
+          },
           "shared": {
             "description": "Is shared album",
             "type": "boolean"
+          },
+          "sortOrder": {
+            "description": "Sibling display position. Lower values appear first.",
+            "nullable": true,
+            "type": "number"
           },
           "startDate": {
             "description": "Start date (earliest asset)",
@@ -19041,9 +21639,12 @@
           "createdAt",
           "description",
           "hasSharedLink",
+          "icon",
           "id",
           "isActivityEnabled",
+          "parentId",
           "shared",
+          "sortOrder",
           "updatedAt"
         ],
         "type": "object"
@@ -19342,6 +21943,349 @@
         },
         "type": "object"
       },
+      "AskSearchDto": {
+        "properties": {
+          "language": {
+            "description": "Search language code",
+            "type": "string"
+          },
+          "page": {
+            "description": "Page number",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "Natural language Ask Search query",
+            "minLength": 1,
+            "type": "string"
+          },
+          "size": {
+            "description": "Number of results to return",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "AskSearchPlanDto": {
+        "properties": {
+          "filters": {
+            "description": "Structured filters applied to the search",
+            "properties": {
+              "albumIds": {
+                "description": "Filter by album IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "checksum": {
+                "description": "Filter by file checksum",
+                "type": "string"
+              },
+              "city": {
+                "description": "Filter by city name",
+                "nullable": true,
+                "type": "string"
+              },
+              "country": {
+                "description": "Filter by country name",
+                "nullable": true,
+                "type": "string"
+              },
+              "createdAfter": {
+                "description": "Filter by creation date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "createdBefore": {
+                "description": "Filter by creation date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "description": {
+                "description": "Filter by description text",
+                "type": "string"
+              },
+              "encodedVideoPath": {
+                "description": "Filter by encoded video file path",
+                "type": "string"
+              },
+              "id": {
+                "description": "Filter by asset ID",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              "imageEnrichment": {
+                "$ref": "#/components/schemas/ImageEnrichmentFilter"
+              },
+              "isEncoded": {
+                "description": "Filter by encoded status",
+                "type": "boolean"
+              },
+              "isFavorite": {
+                "description": "Filter by favorite status",
+                "type": "boolean"
+              },
+              "isMotion": {
+                "description": "Filter by motion photo status",
+                "type": "boolean"
+              },
+              "isNotInAlbum": {
+                "description": "Filter assets not in any album",
+                "type": "boolean"
+              },
+              "isOffline": {
+                "description": "Filter by offline status",
+                "type": "boolean"
+              },
+              "lensModel": {
+                "description": "Filter by lens model",
+                "nullable": true,
+                "type": "string"
+              },
+              "libraryId": {
+                "description": "Library ID to filter by",
+                "format": "uuid",
+                "nullable": true,
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              "make": {
+                "description": "Filter by camera make",
+                "nullable": true,
+                "type": "string"
+              },
+              "model": {
+                "description": "Filter by camera model",
+                "nullable": true,
+                "type": "string"
+              },
+              "ocr": {
+                "description": "Filter by OCR text content",
+                "type": "string"
+              },
+              "order": {
+                "$ref": "#/components/schemas/AssetOrder",
+                "default": "desc",
+                "description": "Sort order"
+              },
+              "originalFileName": {
+                "description": "Filter by original file name",
+                "type": "string"
+              },
+              "originalPath": {
+                "description": "Filter by original file path",
+                "type": "string"
+              },
+              "page": {
+                "description": "Page number",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personIds": {
+                "description": "Filter by person IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "previewPath": {
+                "description": "Filter by preview file path",
+                "type": "string"
+              },
+              "rating": {
+                "description": "Filter by rating [1-5], or null for unrated",
+                "maximum": 5,
+                "minimum": 1,
+                "nullable": true,
+                "type": "integer",
+                "x-immich-history": [
+                  {
+                    "version": "v1",
+                    "state": "Added"
+                  },
+                  {
+                    "version": "v2",
+                    "state": "Stable"
+                  },
+                  {
+                    "version": "v2.6.0",
+                    "state": "Updated",
+                    "description": "Using -1 as a rating is deprecated and will be removed in the next major version."
+                  },
+                  {
+                    "version": "v3",
+                    "state": "Updated",
+                    "description": "Using -1 as a rating is no longer valid."
+                  }
+                ],
+                "x-immich-state": "Stable"
+              },
+              "size": {
+                "description": "Number of results to return",
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "state": {
+                "description": "Filter by state/province name",
+                "nullable": true,
+                "type": "string"
+              },
+              "suppressedOnly": {
+                "description": "Return only suppressed content. Requires an elevated session.",
+                "type": "boolean"
+              },
+              "tagIds": {
+                "description": "Filter by tag IDs",
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "takenAfter": {
+                "description": "Filter by taken date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "takenBefore": {
+                "description": "Filter by taken date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "thumbnailPath": {
+                "description": "Filter by thumbnail file path",
+                "type": "string"
+              },
+              "trashedAfter": {
+                "description": "Filter by trash date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "trashedBefore": {
+                "description": "Filter by trash date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/AssetTypeEnum"
+              },
+              "updatedAfter": {
+                "description": "Filter by update date (after)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "updatedBefore": {
+                "description": "Filter by update date (before)",
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "visibility": {
+                "$ref": "#/components/schemas/AssetVisibility"
+              },
+              "withDeleted": {
+                "description": "Include deleted assets",
+                "type": "boolean"
+              },
+              "withExif": {
+                "description": "Include EXIF data in response",
+                "type": "boolean"
+              },
+              "withPeople": {
+                "description": "Include people data in response",
+                "type": "boolean"
+              },
+              "withStacked": {
+                "description": "Include stacked assets",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "mode": {
+            "description": "Search mode used to answer the query",
+            "enum": [
+              "smart",
+              "metadata"
+            ],
+            "type": "string"
+          },
+          "normalizedQuery": {
+            "description": "Normalized query text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filters",
+          "mode",
+          "normalizedQuery"
+        ],
+        "type": "object"
+      },
+      "AskSearchResponseDto": {
+        "properties": {
+          "explanation": {
+            "description": "Short explanation of how the query was interpreted",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/AskSearchPlanDto"
+          },
+          "query": {
+            "description": "Original Ask Search query",
+            "type": "string"
+          },
+          "results": {
+            "$ref": "#/components/schemas/SearchResponseDto"
+          },
+          "warnings": {
+            "description": "Unsupported or ambiguous parts of the query",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "explanation",
+          "plan",
+          "query",
+          "results",
+          "warnings"
+        ],
+        "type": "object"
+      },
       "AssetBulkDeleteDto": {
         "properties": {
           "force": {
@@ -19463,7 +22407,7 @@
       "AssetBulkUploadCheckItem": {
         "properties": {
           "checksum": {
-            "description": "Base64 or hex encoded SHA1 hash",
+            "description": "Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets.",
             "type": "string"
           },
           "id": {
@@ -19572,7 +22516,17 @@
         "enum": [
           "crop",
           "rotate",
-          "mirror"
+          "mirror",
+          "trim",
+          "straighten",
+          "adjust",
+          "filter",
+          "effect",
+          "autoEnhance",
+          "stabilize",
+          "textOverlay",
+          "audio",
+          "speed"
         ],
         "type": "string"
       },
@@ -19591,9 +22545,33 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/StraightenParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
+              },
+              {
+                "$ref": "#/components/schemas/LookParameters"
+              },
+              {
+                "$ref": "#/components/schemas/ToggleParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TextOverlayParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AudioParameters"
+              },
+              {
+                "$ref": "#/components/schemas/SpeedParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply"
           }
         },
         "required": [
@@ -19623,9 +22601,33 @@
               },
               {
                 "$ref": "#/components/schemas/MirrorParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/StraightenParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
+              },
+              {
+                "$ref": "#/components/schemas/LookParameters"
+              },
+              {
+                "$ref": "#/components/schemas/ToggleParameters"
+              },
+              {
+                "$ref": "#/components/schemas/TextOverlayParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AudioParameters"
+              },
+              {
+                "$ref": "#/components/schemas/SpeedParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, or mirror)"
+            "description": "List of edit actions to apply"
           }
         },
         "required": [
@@ -19638,7 +22640,7 @@
       "AssetEditsCreateDto": {
         "properties": {
           "edits": {
-            "description": "List of edit actions to apply (crop, rotate, or mirror)",
+            "description": "List of edit actions to apply",
             "items": {
               "$ref": "#/components/schemas/AssetEditActionItemDto"
             },
@@ -19963,6 +22965,50 @@
         "required": [
           "assetId",
           "success"
+        ],
+        "type": "object"
+      },
+      "AssetImageEnrichmentAction": {
+        "description": "Image enrichment repair action",
+        "enum": [
+          "rerun-image-description",
+          "rerun-nsfw-detection",
+          "accept-nsfw-result",
+          "mark-nsfw",
+          "mark-safe",
+          "clear-generated-description",
+          "clear-generated-tags"
+        ],
+        "type": "string"
+      },
+      "AssetImageEnrichmentActionRequestDto": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/AssetImageEnrichmentAction"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "AssetImageEnrichmentResponseDto": {
+        "properties": {
+          "assetId": {
+            "description": "Asset ID",
+            "type": "string"
+          },
+          "description": {
+            "$ref": "#/components/schemas/ImageDescriptionEnrichmentResponseDto"
+          },
+          "nsfwDetection": {
+            "$ref": "#/components/schemas/NsfwDetectionEnrichmentResponseDto"
+          }
+        },
+        "required": [
+          "assetId",
+          "description",
+          "nsfwDetection"
         ],
         "type": "object"
       },
@@ -20374,7 +23420,7 @@
       "AssetResponseDto": {
         "properties": {
           "checksum": {
-            "description": "Base64 encoded SHA1 hash",
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
             "type": "string"
           },
           "createdAt": {
@@ -20680,10 +23726,25 @@
         "enum": [
           "mp3",
           "aac",
+          "libopus",
           "opus",
           "pcm_s16le"
         ],
         "type": "string"
+      },
+      "AudioParameters": {
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          },
+          "volume": {
+            "description": "Audio volume multiplier",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "type": "object"
       },
       "AuthStatusResponseDto": {
         "properties": {
@@ -20721,6 +23782,339 @@
             "$ref": "#/components/schemas/UserAvatarColor"
           }
         },
+        "type": "object"
+      },
+      "BestPhotoAssetResponseDto": {
+        "properties": {
+          "bestPhotoScore": {
+            "$ref": "#/components/schemas/BestPhotoScoreDto"
+          },
+          "checksum": {
+            "description": "Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "The UTC timestamp when the asset was originally uploaded to Immich.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "duplicateId": {
+            "description": "Duplicate group ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "duration": {
+            "description": "Video/gif duration in milliseconds (null for static images)",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "exifInfo": {
+            "$ref": "#/components/schemas/ExifResponseDto"
+          },
+          "fileCreatedAt": {
+            "description": "The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "fileModifiedAt": {
+            "description": "The UTC timestamp when the file was last modified on the filesystem. This reflects the last time the physical file was changed, which may be different from when the photo was originally taken.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hasMetadata": {
+            "description": "Whether asset has metadata",
+            "type": "boolean"
+          },
+          "height": {
+            "description": "Asset height",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "isArchived": {
+            "description": "Is archived",
+            "type": "boolean"
+          },
+          "isEdited": {
+            "description": "Is edited",
+            "type": "boolean",
+            "x-immich-history": [
+              {
+                "version": "v2.5.0",
+                "state": "Added"
+              },
+              {
+                "version": "v2.5.0",
+                "state": "Beta"
+              }
+            ],
+            "x-immich-state": "Beta"
+          },
+          "isFavorite": {
+            "description": "Is favorite",
+            "type": "boolean"
+          },
+          "isOffline": {
+            "description": "Is offline",
+            "type": "boolean"
+          },
+          "isTrashed": {
+            "description": "Is trashed",
+            "type": "boolean"
+          },
+          "libraryId": {
+            "description": "Library ID",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string",
+            "x-immich-history": [
+              {
+                "version": "v1",
+                "state": "Added"
+              },
+              {
+                "version": "v1",
+                "state": "Deprecated"
+              }
+            ],
+            "x-immich-state": "Deprecated"
+          },
+          "livePhotoVideoId": {
+            "description": "Live photo video ID",
+            "nullable": true,
+            "type": "string"
+          },
+          "localDateTime": {
+            "description": "The local date and time when the photo/video was taken, derived from EXIF metadata. This represents the photographer's local time regardless of timezone, stored as a timezone-agnostic timestamp. Used for timeline grouping by \"local\" days and months.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "originalFileName": {
+            "description": "Original file name",
+            "type": "string"
+          },
+          "originalMimeType": {
+            "description": "Original MIME type",
+            "type": "string"
+          },
+          "originalPath": {
+            "description": "Original file path",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/UserResponseDto"
+          },
+          "ownerId": {
+            "description": "Owner user ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonResponseDto"
+            },
+            "type": "array"
+          },
+          "resized": {
+            "description": "Is resized",
+            "type": "boolean",
+            "x-immich-history": [
+              {
+                "version": "v1",
+                "state": "Added"
+              },
+              {
+                "version": "v1.113.0",
+                "state": "Deprecated"
+              }
+            ],
+            "x-immich-state": "Deprecated"
+          },
+          "stack": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AssetStackResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagResponseDto"
+            },
+            "type": "array"
+          },
+          "thumbhash": {
+            "description": "Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "updatedAt": {
+            "description": "The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          },
+          "width": {
+            "description": "Asset width",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bestPhotoScore",
+          "checksum",
+          "createdAt",
+          "duration",
+          "fileCreatedAt",
+          "fileModifiedAt",
+          "hasMetadata",
+          "height",
+          "id",
+          "isArchived",
+          "isEdited",
+          "isFavorite",
+          "isOffline",
+          "isTrashed",
+          "localDateTime",
+          "originalFileName",
+          "originalPath",
+          "ownerId",
+          "thumbhash",
+          "type",
+          "updatedAt",
+          "visibility",
+          "width"
+        ],
+        "type": "object"
+      },
+      "BestPhotoScoreDto": {
+        "properties": {
+          "aestheticScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "bestFrameTimestampMs": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "computedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "diversityScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "frameMetadata": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "frameScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "score": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "scoreVersion": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "subjectScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "technicalScore": {
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "aestheticScore",
+          "bestFrameTimestampMs",
+          "computedAt",
+          "diversityScore",
+          "frameMetadata",
+          "frameScore",
+          "metadata",
+          "score",
+          "scoreVersion",
+          "subjectScore",
+          "technicalScore"
+        ],
+        "type": "object"
+      },
+      "BestPhotosResponseDto": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BestPhotoAssetResponseDto"
+            },
+            "type": "array"
+          },
+          "nextPage": {
+            "nullable": true,
+            "type": "string"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "items",
+          "nextPage",
+          "total"
+        ],
         "type": "object"
       },
       "BulkIdErrorReason": {
@@ -21005,6 +24399,16 @@
                 "description": "Sending an empty string is deprecated; send null instead. Empty strings will no longer be coerced to null in v4."
               }
             ]
+          },
+          "icon": {
+            "description": "Optional icon key (see album-icons.ts)",
+            "type": "string"
+          },
+          "parentId": {
+            "description": "Parent album ID for nesting (omit for top-level)",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
           }
         },
         "required": [
@@ -21648,6 +25052,205 @@
         ],
         "type": "integer"
       },
+      "ImageDescriptionEnrichmentResponseDto": {
+        "properties": {
+          "appliedDescription": {
+            "type": "boolean"
+          },
+          "appliedTags": {
+            "type": "boolean"
+          },
+          "context": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "people": {
+            "items": {
+              "properties": {
+                "activity": {
+                  "type": "string"
+                },
+                "apparent_age_group": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "count",
+                "apparent_age_group",
+                "activity",
+                "confidence"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "skipReason": {
+            "description": "Machine-readable reason when status === \"skipped\"",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "success",
+              "failed",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "visibleText": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "appliedDescription",
+          "appliedTags",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ImageDescriptionRequeueEstimateDto": {
+        "properties": {
+          "activeBackend": {
+            "description": "Configured hardware acceleration backend (e.g. \"auto\", \"cuda\")",
+            "type": "string"
+          },
+          "activeModel": {
+            "description": "Configured image description model name",
+            "type": "string"
+          },
+          "estimatedTotalSeconds": {
+            "description": "Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions).",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "rollingAvgSeconds": {
+            "description": "Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started.",
+            "format": "double",
+            "minimum": 0,
+            "type": "number"
+          },
+          "totalAssets": {
+            "description": "Total eligible image assets",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withDescription": {
+            "description": "Number of eligible assets that currently have a description (will be re-run on force-requeue).",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withoutDescription": {
+            "description": "Number of eligible assets that currently have no description.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeBackend",
+          "activeModel",
+          "estimatedTotalSeconds",
+          "rollingAvgSeconds",
+          "totalAssets",
+          "withDescription",
+          "withoutDescription"
+        ],
+        "type": "object"
+      },
+      "ImageDescriptionRequeueResponseDto": {
+        "properties": {
+          "queued": {
+            "description": "Whether the queue-all job was newly enqueued (false = already in-flight)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "type": "object"
+      },
+      "ImageEnrichmentFilter": {
+        "description": "Filter by private image enrichment state",
+        "enum": [
+          "nsfw",
+          "nsfw-review",
+          "nsfw-reviewed",
+          "nsfw-overridden",
+          "image-description-failed",
+          "nsfw-detection-failed",
+          "missing-image-description",
+          "missing-nsfw-detection"
+        ],
+        "type": "string"
+      },
+      "ImageEnrichmentReview": {
+        "properties": {
+          "action": {
+            "enum": [
+              "accepted",
+              "marked-safe",
+              "marked-nsfw"
+            ],
+            "type": "string"
+          },
+          "isNsfw": {
+            "type": "boolean"
+          },
+          "reviewedAt": {
+            "description": "Review timestamp",
+            "type": "string"
+          },
+          "reviewedBy": {
+            "description": "Reviewer user ID",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "isNsfw",
+          "reviewedAt",
+          "reviewedBy"
+        ],
+        "type": "object"
+      },
       "ImageFormat": {
         "description": "Image format",
         "enum": [
@@ -21741,13 +25344,17 @@
       "JobName": {
         "description": "Job name",
         "enum": [
+          "ForkSchemaBackfill",
           "AssetDelete",
           "AssetDeleteCheck",
           "AssetDetectFacesQueueAll",
           "AssetDetectFaces",
           "AssetDetectDuplicatesQueueAll",
           "AssetDetectDuplicates",
+          "AssetGenerateVideoDuplicateFramesQueueAll",
+          "AssetGenerateVideoDuplicateFrames",
           "AssetEditThumbnailGeneration",
+          "AssetVideoEditGeneration",
           "AssetEncodeVideoQueueAll",
           "AssetEncodeVideo",
           "AssetEmptyTrash",
@@ -21756,6 +25363,12 @@
           "AssetFileMigration",
           "AssetGenerateThumbnailsQueueAll",
           "AssetGenerateThumbnails",
+          "BestPhotosScoreQueueAll",
+          "BestPhotosScore",
+          "MediaHealthScanMissing",
+          "MediaHealthLocateMissing",
+          "MediaHealthScanCorrupt",
+          "MediaHealthDeleteCorrupt",
           "AuditTableCleanup",
           "DatabaseBackup",
           "FacialRecognitionQueueAll",
@@ -21792,10 +25405,17 @@
           "SmartSearch",
           "StorageTemplateMigration",
           "StorageTemplateMigrationSingle",
+          "PhysicalDeduplicationMigrationDryRun",
+          "PhysicalDeduplicationMigrationApply",
           "TagCleanup",
           "VersionCheck",
           "OcrQueueAll",
           "Ocr",
+          "ImageDescriptionQueueAll",
+          "ImageDescription",
+          "NsfwDetectionQueueAll",
+          "NsfwDetection",
+          "SmartAlbumReevaluateAll",
           "WorkflowAssetTrigger",
           "IntegrityUntrackedFilesQueueAll",
           "IntegrityUntrackedFiles",
@@ -21940,6 +25560,135 @@
       "LicenseResponseDto": {
         "$ref": "#/components/schemas/UserLicense"
       },
+      "LivePhotoCandidateDto": {
+        "properties": {
+          "confidence": {
+            "$ref": "#/components/schemas/LivePhotoMatchConfidence"
+          },
+          "matchReason": {
+            "description": "Why these two assets are believed to be a separated live photo pair",
+            "type": "string"
+          },
+          "photo": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          },
+          "video": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          }
+        },
+        "required": [
+          "confidence",
+          "matchReason",
+          "photo",
+          "video"
+        ],
+        "type": "object"
+      },
+      "LivePhotoCandidatesResponseDto": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoCandidateDto"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total number of candidate pairs found",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidates",
+          "total"
+        ],
+        "type": "object"
+      },
+      "LivePhotoMatchConfidence": {
+        "enum": [
+          "high",
+          "low"
+        ],
+        "type": "string"
+      },
+      "LivePhotoRelinkDto": {
+        "properties": {
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoRelinkItemDto"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "pairs"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkItemDto": {
+        "properties": {
+          "photoId": {
+            "description": "Still image asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "videoId": {
+            "description": "Motion video asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photoId",
+          "videoId"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkResponseDto": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LivePhotoRelinkResultDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "LivePhotoRelinkResultDto": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "photoId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "videoId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photoId",
+          "success",
+          "videoId"
+        ],
+        "type": "object"
+      },
       "LogLevel": {
         "description": "Log level",
         "enum": [
@@ -22038,6 +25787,76 @@
         "required": [
           "redirectUri",
           "successful"
+        ],
+        "type": "object"
+      },
+      "LookParameters": {
+        "properties": {
+          "intensity": {
+            "default": 100,
+            "description": "Filter or effect intensity",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "name": {
+            "description": "Filter or effect name",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "MachineLearningHardwareAcceleration": {
+        "description": "Machine learning hardware acceleration backend",
+        "enum": [
+          "auto",
+          "openvino",
+          "cuda"
+        ],
+        "type": "string"
+      },
+      "MachineLearningHardwareResponseDto": {
+        "properties": {
+          "cudaDeviceCount": {
+            "description": "Available PyTorch CUDA device count",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "openvinoDeviceIds": {
+            "description": "Available OpenVINO device IDs",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "preferredAcceleration": {
+            "$ref": "#/components/schemas/MachineLearningHardwareAcceleration",
+            "description": "Detected preferred hardware acceleration"
+          },
+          "providers": {
+            "description": "Available ONNX Runtime providers",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "torchCudaAvailable": {
+            "description": "Whether PyTorch CUDA is available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cudaDeviceCount",
+          "openvinoDeviceIds",
+          "preferredAcceleration",
+          "providers",
+          "torchCudaAvailable"
         ],
         "type": "object"
       },
@@ -22149,6 +25968,9 @@
           "memory-cleanup",
           "memory-create",
           "backup-database",
+          "best-photos-backfill",
+          "physical-deduplication-dry-run",
+          "physical-deduplication-apply",
           "integrity-missing-files",
           "integrity-untracked-files",
           "integrity-checksum-mismatch",
@@ -22229,6 +26051,379 @@
           "state"
         ],
         "type": "object"
+      },
+      "MediaHealthBucketDto": {
+        "properties": {
+          "count": {
+            "description": "Number of findings in the bucket",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthItemDto"
+            },
+            "type": "array"
+          },
+          "timeBucket": {
+            "description": "Timeline bucket date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "items",
+          "timeBucket"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkActionDto": {
+        "properties": {
+          "ids": {
+            "description": "Media health finding IDs",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkResponseDto": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthBulkResultDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "MediaHealthBulkResultDto": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "success"
+        ],
+        "type": "object"
+      },
+      "MediaHealthCandidateDto": {
+        "properties": {
+          "candidatePath": {
+            "description": "Candidate file path",
+            "type": "string"
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "healthId": {
+            "description": "Media health finding ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Candidate ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "resolution": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          },
+          "visualMatchScore": {
+            "description": "Visual match score from 0 to 1",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "candidatePath",
+          "checkedAt",
+          "evidence",
+          "healthId",
+          "id",
+          "resolution",
+          "status",
+          "visualMatchScore"
+        ],
+        "type": "object"
+      },
+      "MediaHealthCategory": {
+        "description": "Media health category",
+        "enum": [
+          "missing",
+          "corrupt"
+        ],
+        "type": "string"
+      },
+      "MediaHealthDeleteCorruptDto": {
+        "properties": {
+          "confirmText": {
+            "description": "Typed confirmation text",
+            "type": "string"
+          },
+          "ids": {
+            "description": "Media health finding IDs",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmText",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "MediaHealthItemDto": {
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/AssetResponseDto"
+          },
+          "assetId": {
+            "description": "Asset ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthCandidateDto"
+            },
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/MediaHealthCategory"
+          },
+          "checkedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "dismissedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "id": {
+            "description": "Media health finding ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "originalFileName": {
+            "description": "Original media filename",
+            "type": "string"
+          },
+          "originalPath": {
+            "description": "Original media path",
+            "type": "string"
+          },
+          "resolution": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "resolvedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/MediaHealthSeverity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MediaHealthStatus"
+          }
+        },
+        "required": [
+          "asset",
+          "assetId",
+          "candidates",
+          "category",
+          "checkedAt",
+          "dismissedAt",
+          "evidence",
+          "id",
+          "originalFileName",
+          "originalPath",
+          "resolution",
+          "resolvedAt",
+          "severity",
+          "status"
+        ],
+        "type": "object"
+      },
+      "MediaHealthListResponseDto": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/MediaHealthBucketDto"
+            },
+            "type": "array"
+          },
+          "run": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaHealthRunResponseDto"
+              }
+            ],
+            "nullable": true
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "buckets",
+          "run",
+          "total"
+        ],
+        "type": "object"
+      },
+      "MediaHealthRunResponseDto": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/MediaHealthCategory"
+          },
+          "checkedAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "foundAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Media health run ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "description": "Run status",
+            "type": "string"
+          },
+          "totalAssets": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "checkedAssets",
+          "error",
+          "finishedAt",
+          "foundAssets",
+          "id",
+          "startedAt",
+          "status",
+          "totalAssets"
+        ],
+        "type": "object"
+      },
+      "MediaHealthScanResponseDto": {
+        "properties": {
+          "runId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "type": "object"
+      },
+      "MediaHealthSeverity": {
+        "description": "Media health severity",
+        "enum": [
+          "info",
+          "warning",
+          "critical"
+        ],
+        "type": "string"
+      },
+      "MediaHealthStatus": {
+        "description": "Media health status",
+        "enum": [
+          "found",
+          "missing",
+          "candidate",
+          "relinked",
+          "dismissed",
+          "resolved",
+          "unsupported_raw",
+          "corrupt_suspect",
+          "corrupt_confirmed",
+          "trash_queued",
+          "trashed",
+          "delete_queued",
+          "deleted"
+        ],
+        "type": "string"
       },
       "MemoriesResponse": {
         "properties": {
@@ -22568,6 +26763,9 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/ImageEnrichmentFilter"
+          },
           "isEncoded": {
             "description": "Filter by encoded status",
             "type": "boolean"
@@ -22684,6 +26882,10 @@
             "description": "Filter by state/province name",
             "nullable": true,
             "type": "string"
+          },
+          "suppressedOnly": {
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "type": "boolean"
           },
           "tagIds": {
             "description": "Filter by tag IDs",
@@ -22957,6 +27159,54 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "NsfwDetectionEnrichmentResponseDto": {
+        "properties": {
+          "appliedTags": {
+            "type": "boolean"
+          },
+          "effectiveIsNsfw": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "isNsfw": {
+            "type": "boolean"
+          },
+          "labels": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object"
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ImageEnrichmentReview"
+          },
+          "score": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "success",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appliedTags",
+          "effectiveIsNsfw",
+          "status"
+        ],
         "type": "object"
       },
       "OAuthAuthorizeResponseDto": {
@@ -23287,6 +27537,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23493,6 +27744,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23624,6 +27876,7 @@
           },
           "name": {
             "description": "Person name",
+            "maxLength": 256,
             "type": "string"
           }
         },
@@ -23887,6 +28140,27 @@
         ],
         "type": "object"
       },
+      "PrivacyResponse": {
+        "description": "Privacy preferences",
+        "properties": {
+          "suppression": {
+            "$ref": "#/components/schemas/SuppressionResponse"
+          }
+        },
+        "required": [
+          "suppression"
+        ],
+        "type": "object"
+      },
+      "PrivacyUpdate": {
+        "description": "Privacy preferences",
+        "properties": {
+          "suppression": {
+            "$ref": "#/components/schemas/SuppressionUpdate"
+          }
+        },
+        "type": "object"
+      },
       "PublicConfigDto": {
         "description": "Configuration properties that are visible to everyone",
         "properties": {
@@ -24095,6 +28369,7 @@
           "facialRecognition",
           "smartSearch",
           "duplicateDetection",
+          "videoDuplicateDetection",
           "backgroundTask",
           "storageTemplateMigration",
           "migration",
@@ -24104,6 +28379,10 @@
           "notifications",
           "backupDatabase",
           "ocr",
+          "imageEnrichment",
+          "imageDescription",
+          "nsfwDetection",
+          "mediaHealth",
           "workflow",
           "integrityCheck",
           "editor"
@@ -24240,10 +28519,19 @@
           "facialRecognition": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "imageDescription": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "integrityCheck": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
           "library": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
+          "mediaHealth": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
           "metadataExtraction": {
@@ -24253,6 +28541,9 @@
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
           "notifications": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
+          "nsfwDetection": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
           "ocr": {
@@ -24276,6 +28567,9 @@
           "videoConversion": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "videoDuplicateDetection": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "workflow": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           }
@@ -24287,11 +28581,15 @@
           "editor",
           "faceDetection",
           "facialRecognition",
+          "imageDescription",
+          "imageEnrichment",
           "integrityCheck",
           "library",
+          "mediaHealth",
           "metadataExtraction",
           "migration",
           "notifications",
+          "nsfwDetection",
           "ocr",
           "search",
           "sidecar",
@@ -24299,6 +28597,7 @@
           "storageTemplateMigration",
           "thumbnailGeneration",
           "videoConversion",
+          "videoDuplicateDetection",
           "workflow"
         ],
         "type": "object"
@@ -24337,6 +28636,9 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
             "type": "string"
+          },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/ImageEnrichmentFilter"
           },
           "isEncoded": {
             "description": "Filter by encoded status",
@@ -24431,6 +28733,10 @@
             "description": "Filter by state/province name",
             "nullable": true,
             "type": "string"
+          },
+          "suppressedOnly": {
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "type": "boolean"
           },
           "tagIds": {
             "description": "Filter by tag IDs",
@@ -24646,6 +28952,207 @@
         },
         "required": [
           "angle"
+        ],
+        "type": "object"
+      },
+      "RunPodBackfillResultDto": {
+        "properties": {
+          "enqueued": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enqueued",
+          "skipped"
+        ],
+        "type": "object"
+      },
+      "RunPodConnectionResultDto": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "RunPodConnectionTestDto": {
+        "properties": {
+          "apiKey": {
+            "description": "API key to verify (overrides the stored key for the test)",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunPodGpuTypeDto": {
+        "properties": {
+          "communityCloud": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "memoryInGb": {
+            "type": "number"
+          },
+          "pricePerHour": {
+            "nullable": true,
+            "type": "number"
+          },
+          "secureCloud": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "displayName",
+          "id",
+          "memoryInGb"
+        ],
+        "type": "object"
+      },
+      "RunPodProvisionDto": {
+        "properties": {
+          "acknowledgeDataPrivacy": {
+            "description": "User confirms image previews will be sent to RunPod (must be true to launch)",
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "gpuCount": {
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "gpuTypeId": {
+            "description": "RunPod GPU type ID, e.g. \"NVIDIA RTX A5000\"",
+            "minLength": 1,
+            "type": "string"
+          },
+          "imageName": {
+            "description": "Override the configured image",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "acknowledgeDataPrivacy",
+          "gpuTypeId"
+        ],
+        "type": "object"
+      },
+      "RunPodStateDto": {
+        "properties": {
+          "endpointId": {
+            "type": "string"
+          },
+          "endpointUrl": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "estimatedCostUsd": {
+            "type": "number"
+          },
+          "gpuTypeId": {
+            "type": "string"
+          },
+          "idleTimeoutSeconds": {
+            "description": "Serverless idle timeout; may be null when not yet provisioned.",
+            "nullable": true,
+            "type": "number"
+          },
+          "imageName": {
+            "type": "string"
+          },
+          "instanceTag": {
+            "type": "string"
+          },
+          "lastBusyAt": {
+            "type": "string"
+          },
+          "maxRuntimeHours": {
+            "type": "number"
+          },
+          "mlUrl": {
+            "type": "string"
+          },
+          "podCreatedAt": {
+            "type": "string"
+          },
+          "podId": {
+            "type": "string"
+          },
+          "pricePerHour": {
+            "type": "number"
+          },
+          "runningSince": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "idle",
+              "provisioning",
+              "starting",
+              "running",
+              "stopping",
+              "stopped",
+              "error",
+              "serverless-provisioning",
+              "serverless-ready"
+            ],
+            "type": "string"
+          },
+          "stoppedAt": {
+            "type": "string"
+          },
+          "templateId": {
+            "type": "string"
+          },
+          "unhealthySince": {
+            "type": "string"
+          },
+          "workerReady": {
+            "type": "boolean"
+          },
+          "workersMax": {
+            "description": "Serverless workersMax; may be null when not yet provisioned.",
+            "nullable": true,
+            "type": "number"
+          },
+          "workersMin": {
+            "description": "Serverless workersMin; may be null when not yet provisioned.",
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "status"
         ],
         "type": "object"
       },
@@ -24876,6 +29383,10 @@
             "description": "ImageMagick version",
             "type": "string"
           },
+          "libraw": {
+            "description": "LibRaw/dcraw_emu version",
+            "type": "string"
+          },
           "libvips": {
             "description": "libvips version",
             "type": "string"
@@ -24969,6 +29480,10 @@
       },
       "ServerConfigDto": {
         "properties": {
+          "defaultImageDescriptionRawPromptTemplate": {
+            "description": "Canonical default for the image-description advanced raw prompt template",
+            "type": "string"
+          },
           "externalDomain": {
             "description": "External domain URL",
             "type": "string"
@@ -25030,6 +29545,7 @@
           }
         },
         "required": [
+          "defaultImageDescriptionRawPromptTemplate",
           "externalDomain",
           "isInitialized",
           "isOnboarded",
@@ -25063,12 +29579,24 @@
             "description": "Whether facial recognition is enabled",
             "type": "boolean"
           },
+          "imageDescription": {
+            "description": "Whether image description and tag generation is enabled",
+            "type": "boolean"
+          },
           "importFaces": {
             "description": "Whether face import is enabled",
             "type": "boolean"
           },
           "map": {
             "description": "Whether map feature is enabled",
+            "type": "boolean"
+          },
+          "nsfwDetection": {
+            "description": "Whether NSFW detection is enabled",
+            "type": "boolean"
+          },
+          "nsfwHiding": {
+            "description": "Whether NSFW-tagged assets are hidden from non-elevated library views",
             "type": "boolean"
           },
           "oauth": {
@@ -25085,6 +29613,10 @@
           },
           "passwordLogin": {
             "description": "Whether password login is enabled",
+            "type": "boolean"
+          },
+          "physicalDeduplication": {
+            "description": "Whether physical file deduplication is enabled",
             "type": "boolean"
           },
           "realtimeTranscoding": {
@@ -25117,12 +29649,16 @@
           "duplicateDetection",
           "email",
           "facialRecognition",
+          "imageDescription",
           "importFaces",
           "map",
+          "nsfwDetection",
+          "nsfwHiding",
           "oauth",
           "oauthAutoLaunch",
           "ocr",
           "passwordLogin",
+          "physicalDeduplication",
           "realtimeTranscoding",
           "reverseGeocoding",
           "search",
@@ -25787,6 +30323,56 @@
         ],
         "type": "object"
       },
+      "SmartAlbumReevaluateEstimateDto": {
+        "properties": {
+          "totalAssets": {
+            "description": "Total image assets that will be evaluated (currently equals withDescription)",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "withDescription": {
+            "description": "Image assets with a successfully completed description",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "totalAssets",
+          "withDescription"
+        ],
+        "type": "object"
+      },
+      "SmartAlbumReevaluateRequestDto": {
+        "properties": {
+          "kind": {
+            "description": "Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind.",
+            "enum": [
+              "travel",
+              "documents",
+              "screenshots",
+              "food",
+              "pets",
+              "nature"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SmartAlbumReevaluateResponseDto": {
+        "properties": {
+          "queued": {
+            "description": "Whether the re-evaluate job was newly enqueued (false = already in-flight)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
+        ],
+        "type": "object"
+      },
       "SmartSearchDto": {
         "properties": {
           "albumIds": {
@@ -25821,6 +30407,9 @@
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
             "type": "string"
+          },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/ImageEnrichmentFilter"
           },
           "isEncoded": {
             "description": "Filter by encoded status",
@@ -25936,6 +30525,10 @@
             "nullable": true,
             "type": "string"
           },
+          "suppressedOnly": {
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "type": "boolean"
+          },
           "tagIds": {
             "description": "Filter by tag IDs",
             "items": {
@@ -26013,6 +30606,32 @@
           "manual"
         ],
         "type": "string"
+      },
+      "SpeedParameters": {
+        "properties": {
+          "endMs": {
+            "description": "Speed segment end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "rate": {
+            "description": "Playback speed multiplier",
+            "maximum": 4,
+            "minimum": 0.25,
+            "type": "number"
+          },
+          "startMs": {
+            "description": "Speed segment start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rate"
+        ],
+        "type": "object"
       },
       "StackCreateDto": {
         "properties": {
@@ -26111,6 +30730,9 @@
             "description": "Filter by description text",
             "type": "string"
           },
+          "imageEnrichment": {
+            "$ref": "#/components/schemas/ImageEnrichmentFilter"
+          },
           "isEncoded": {
             "description": "Filter by encoded status",
             "type": "boolean"
@@ -26199,6 +30821,10 @@
             "nullable": true,
             "type": "string"
           },
+          "suppressedOnly": {
+            "description": "Return only suppressed content. Requires an elevated session.",
+            "type": "boolean"
+          },
           "tagIds": {
             "description": "Filter by tag IDs",
             "items": {
@@ -26271,6 +30897,82 @@
           "backups"
         ],
         "type": "string"
+      },
+      "StraightenParameters": {
+        "properties": {
+          "angle": {
+            "description": "Straighten angle in degrees",
+            "maximum": 45,
+            "minimum": -45,
+            "type": "number"
+          }
+        },
+        "required": [
+          "angle"
+        ],
+        "type": "object"
+      },
+      "SuppressionResponse": {
+        "properties": {
+          "personIds": {
+            "description": "Person IDs to suppress from locked browsing sessions",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SuppressionScope",
+            "description": "Whether suppression applies only to owned assets or all visible assets"
+          },
+          "tagIds": {
+            "description": "Tag IDs to suppress from locked browsing sessions",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "personIds",
+          "scope",
+          "tagIds"
+        ],
+        "type": "object"
+      },
+      "SuppressionScope": {
+        "enum": [
+          "owned",
+          "visible"
+        ],
+        "type": "string"
+      },
+      "SuppressionUpdate": {
+        "properties": {
+          "personIds": {
+            "description": "Person IDs to suppress from locked browsing sessions",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SuppressionScope",
+            "description": "Whether suppression applies only to owned assets or all visible assets"
+          },
+          "tagIds": {
+            "description": "Tag IDs to suppress from locked browsing sessions",
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       },
       "SyncAckDeleteDto": {
         "properties": {
@@ -28356,6 +33058,58 @@
         ],
         "type": "object"
       },
+      "TextOverlayParameters": {
+        "properties": {
+          "color": {
+            "default": "#ffffff",
+            "description": "Text color in hex format",
+            "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$",
+            "type": "string"
+          },
+          "endMs": {
+            "description": "Overlay end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "size": {
+            "default": 0.06,
+            "description": "Font size as a percentage of video height",
+            "maximum": 0.2,
+            "minimum": 0.02,
+            "type": "number"
+          },
+          "startMs": {
+            "description": "Overlay start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "x": {
+            "description": "Horizontal position as a percentage of video width",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "y": {
+            "description": "Vertical position as a percentage of video height",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "text",
+          "x",
+          "y"
+        ],
+        "type": "object"
+      },
       "TimeBucketAssetResponseDto": {
         "properties": {
           "city": {
@@ -28370,13 +33124,6 @@
             "description": "Array of country names extracted from EXIF GPS data",
             "items": {
               "nullable": true,
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "createdAt": {
-            "description": "Array of UTC timestamps when each asset was originally uploaded to Immich",
-            "items": {
               "type": "string"
             },
             "type": "array"
@@ -28509,7 +33256,6 @@
           }
         },
         "required": [
-          "createdAt",
           "duration",
           "fileCreatedAt",
           "id",
@@ -28525,6 +33271,14 @@
           "visibility"
         ],
         "type": "object"
+      },
+      "TimeBucketDateType": {
+        "description": "Date source for timeline bucket grouping",
+        "enum": [
+          "added",
+          "taken"
+        ],
+        "type": "string"
       },
       "TimeBucketsResponseDto": {
         "properties": {
@@ -28545,6 +33299,15 @@
           "count",
           "timeBucket"
         ],
+        "type": "object"
+      },
+      "ToggleParameters": {
+        "properties": {
+          "enabled": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "ToneMapping": {
@@ -28593,6 +33356,27 @@
         ],
         "type": "object"
       },
+      "TrimParameters": {
+        "properties": {
+          "endMs": {
+            "description": "Trim end time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "startMs": {
+            "description": "Trim start time in milliseconds",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "endMs",
+          "startMs"
+        ],
+        "type": "object"
+      },
       "UpdateAlbumDto": {
         "properties": {
           "albumName": {
@@ -28621,12 +33405,28 @@
               }
             ]
           },
+          "icon": {
+            "description": "Icon key (null = clear / use default folder icon)",
+            "nullable": true,
+            "type": "string"
+          },
           "isActivityEnabled": {
             "description": "Enable activity feed",
             "type": "boolean"
           },
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
+          },
+          "parentId": {
+            "description": "Parent album ID for nesting (null = move to top-level, omit = no change)",
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "sortOrder": {
+            "description": "Sibling display position. Lower values appear first. Computed by the client as a midpoint.",
+            "type": "number"
           }
         },
         "type": "object"
@@ -29477,6 +34277,9 @@
           "people": {
             "$ref": "#/components/schemas/PeopleResponse"
           },
+          "privacy": {
+            "$ref": "#/components/schemas/PrivacyResponse"
+          },
           "purchase": {
             "$ref": "#/components/schemas/PurchaseResponse"
           },
@@ -29501,6 +34304,7 @@
           "folders",
           "memories",
           "people",
+          "privacy",
           "purchase",
           "ratings",
           "recentlyAdded",
@@ -29534,6 +34338,9 @@
           },
           "people": {
             "$ref": "#/components/schemas/PeopleUpdate"
+          },
+          "privacy": {
+            "$ref": "#/components/schemas/PrivacyUpdate"
           },
           "purchase": {
             "$ref": "#/components/schemas/PurchaseUpdate"

@@ -18,6 +18,7 @@ import { BaseService } from 'src/services/base.service';
 import { addAssets, removeAssets } from 'src/utils/asset.util';
 import { updateLockedColumns } from 'src/utils/database';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
+import { findOrFail } from 'src/utils/misc';
 import { upsertTags } from 'src/utils/tag';
 
 @Injectable()

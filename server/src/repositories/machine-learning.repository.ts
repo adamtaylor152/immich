@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { Duration } from 'luxon';
 import { readFile } from 'node:fs/promises';
 import { MachineLearningConfig } from 'src/dtos/config.dto';
-import { CLIPConfig } from 'src/dtos/model-config.dto';
 import { MachineLearningHardwareAcceleration } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 

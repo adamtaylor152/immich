@@ -24,10 +24,9 @@ describe('AssetViewerNavBar component', () => {
   const additionalProps = {
     preAction: () => {},
     onAction: () => {},
-    onPlaySlideshow: () => {},
     onClose: () => {},
-    playOriginalVideo: false,
-    setPlayOriginalVideo: () => Promise.resolve(),
+    isPlayingOriginalVideo: false,
+    setPlayOriginalVideo: () => {},
   };
 
   beforeAll(() => {

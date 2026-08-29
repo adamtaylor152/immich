@@ -39,7 +39,7 @@ describe('fork schema authority cutover', () => {
   afterAll(async () => db.destroy());
 
   it('keeps ready writes visible to a previous-fork public projection while dual-writing the sidecar', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(user).execute();
 
     await new SmartAlbumRepository(db).ensureForUser(user.id, [{ kind: 'travel', name: 'Travel' }]);

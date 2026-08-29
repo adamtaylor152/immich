@@ -478,10 +478,7 @@ export class ThumbnailConfig extends BaseConfig {
     super(config);
   }
 
-  static create(
-    config: ConfigFFmpegDto,
-    interfacesOrStartTime: VideoInterfaces | number = 0,
-  ): VideoCodecSWConfig {
+  static create(config: ConfigFFmpegDto, interfacesOrStartTime: VideoInterfaces | number = 0): VideoCodecSWConfig {
     const startTime = typeof interfacesOrStartTime === 'number' ? interfacesOrStartTime : 0;
     return new ThumbnailConfig(config, startTime);
   }

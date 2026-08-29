@@ -44,7 +44,14 @@ describe(WorkflowExecutionService.name, () => {
 
     const [, inProcessOptions] = mocks.plugin.load.mock.calls[0]!;
     const [, workerOptions] = mocks.plugin.load.mock.calls[1]!;
-    const officialHostAbi = ['addAssetsToAlbum', 'addAssetsToAlbums', 'createAlbum', 'httpRequest', 'searchAlbums'];
+    const officialHostAbi = [
+      'addAssetsToAlbum',
+      'addAssetsToAlbums',
+      'bulkTagAssets',
+      'createAlbum',
+      'httpRequest',
+      'searchAlbums',
+    ];
     // albumAddAssets is a fork-legacy alias the un-ported plugin-core wasm still imports.
     // Official plugins only import from the official set, so the superset preserves the ABI.
     const hostFunctions = [...officialHostAbi, 'albumAddAssets'].toSorted();
@@ -107,6 +114,7 @@ describe(WorkflowExecutionService.name, () => {
     mocks.workflow.getForWorkflowRun.mockResolvedValue({
       id: workflowId,
       name: 'webhook workflow',
+      logging: false,
       trigger: WorkflowTrigger.AssetCreate,
       steps: [
         {

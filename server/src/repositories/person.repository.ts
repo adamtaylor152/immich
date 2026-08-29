@@ -10,7 +10,14 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonGroupTable } from 'src/schema/tables/person-group.table';
 import { PersonTable } from 'src/schema/tables/person.table';
-import { asUuid, dummy, inSharedAlbum, removeUndefinedKeys, withFilePath, withHiddenContentFilter } from 'src/utils/database';
+import {
+  asUuid,
+  dummy,
+  inSharedAlbum,
+  removeUndefinedKeys,
+  withFilePath,
+  withHiddenContentFilter,
+} from 'src/utils/database';
 import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 
@@ -415,7 +422,7 @@ export class PersonRepository {
                 .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
                 .on('asset.deletedAt', 'is', null),
             )
-            .whereRef('asset_face.personId', '=', 'person.id')
+            .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .$call((qb) => withHiddenContentFilter(qb, options)),

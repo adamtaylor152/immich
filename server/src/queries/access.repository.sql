@@ -453,7 +453,7 @@ where
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
       where
-        "asset_face"."personId" = "person"."id"
+        "asset_face"."personGroupId" = "person"."personGroupId"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
     )
@@ -465,7 +465,7 @@ where
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
       where
-        "asset_face"."personId" = "person"."id"
+        "asset_face"."personGroupId" = "person"."personGroupId"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
         and not (

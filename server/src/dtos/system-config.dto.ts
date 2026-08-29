@@ -1,11 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
-import {
-  AdminConfigSchema,
-  ConfigFFmpegDto,
-  ConfigTemplateStorageOptionDto,
-  mapAdminConfig,
-  type SystemConfig,
-} from 'src/dtos/config.dto';
+import { AdminConfigSchema, mapAdminConfig, type SystemConfig } from 'src/dtos/config.dto';
 import { MachineLearningHardwareAccelerationSchema } from 'src/enum';
 import z from 'zod';
 
@@ -15,9 +9,13 @@ import z from 'zod';
 // /system-config fork endpoints (image-description re-queue, smart albums,
 // ML hardware detection).
 
-export { SystemConfigDto, SystemConfigSmtpDto } from 'src/dtos/config.dto';
+export {
+  SystemConfigDto,
+  ConfigFFmpegDto as SystemConfigFFmpegDto,
+  SystemConfigSmtpDto,
+  ConfigTemplateStorageOptionDto as SystemConfigTemplateStorageOptionDto,
+} from 'src/dtos/config.dto';
 export { ReleaseChannel } from 'src/enum';
-export { ConfigFFmpegDto as SystemConfigFFmpegDto, ConfigTemplateStorageOptionDto as SystemConfigTemplateStorageOptionDto };
 
 /** Full admin config schema — used by the fork's config repositories for validation. */
 export const SystemConfigSchema = AdminConfigSchema;

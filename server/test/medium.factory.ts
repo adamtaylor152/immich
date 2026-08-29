@@ -486,7 +486,6 @@ const newRealRepository = <T extends BaseServiceDeps[number]>(key: T, db: Kysely
     case IntegrityRepository:
     case MemoryRepository:
     case DownloadRepository:
-    case DuplicateRepository:
     case ForkSchemaRepository:
     case LibraryRepository:
     case NotificationRepository:
@@ -521,7 +520,12 @@ const newRealRepository = <T extends BaseServiceDeps[number]>(key: T, db: Kysely
     }
 
     case MapRepository: {
-      return new key(new ConfigRepository(), new SystemMetadataRepository(db), LoggingRepository.create(), db);
+      return new key(
+        new ConfigRepository(),
+        new SystemMetadataRepository(db),
+        LoggingRepository.create(),
+        db as unknown as ConstructorParameters<typeof MapRepository>[3],
+      ) as InstanceType<T>;
     }
 
     case MediaRepository:
@@ -762,6 +766,11 @@ const sessionInsert = ({
   };
 };
 
+const userWithClusterGroup = async (db: Kysely<DB>, user: Partial<Insertable<UserTable>> = {}) => {
+  const clusterGroup = await db.insertInto('cluster_group').defaultValues().returningAll().executeTakeFirstOrThrow();
+  return userInsert({ ...user, clusterGroupId: user.clusterGroupId ?? clusterGroup.id });
+};
+
 const userInsert = (user: Partial<Insertable<UserTable>> & { clusterGroupId: string }) => {
   const id = user.id || newUuid();
 
@@ -885,6 +894,7 @@ export const mediumFactory = {
   sessionInsert,
   syncStream,
   userInsert,
+  userWithClusterGroup,
   memoryInsert,
   loginDetails,
   loginResponse,

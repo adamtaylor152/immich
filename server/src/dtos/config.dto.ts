@@ -75,6 +75,14 @@ const AdminConfigJobSettingsSchema = z
   .object({ concurrency: z.int().min(1).describe('Concurrency') })
   .meta({ id: 'AdminConfigJobSettingsDto' });
 
+// Fork job entries need schema-level defaults so configs saved before these
+// queues existed still validate. A distinct schema id is required: reusing
+// AdminConfigJobSettingsSchema inside .default() would put the original object
+// (id kept) next to its visibility clone (same id) and break OpenAPI generation.
+const ForkJobSettingsSchema = z
+  .object({ concurrency: z.int().min(1).describe('Concurrency') })
+  .meta({ id: 'AdminConfigForkJobSettingsDto' });
+
 const AdminConfigMachineLearningTaskSchema = z.object({
   enabled: z.boolean().describe('Whether the task is enabled').meta({ visibility: User }),
 });
@@ -678,10 +686,10 @@ const AdminConfigSchemaWithVisibility = z
         library: AdminConfigJobSettingsSchema,
         notifications: AdminConfigJobSettingsSchema,
         ocr: AdminConfigJobSettingsSchema,
-        imageEnrichment: AdminConfigJobSettingsSchema.default({ concurrency: 2 }),
-        imageDescription: AdminConfigJobSettingsSchema.default({ concurrency: 2 }),
-        nsfwDetection: AdminConfigJobSettingsSchema.default({ concurrency: 2 }),
-        mediaHealth: AdminConfigJobSettingsSchema.default({ concurrency: 2 }),
+        imageEnrichment: ForkJobSettingsSchema.default({ concurrency: 2 }),
+        imageDescription: ForkJobSettingsSchema.default({ concurrency: 2 }),
+        nsfwDetection: ForkJobSettingsSchema.default({ concurrency: 2 }),
+        mediaHealth: ForkJobSettingsSchema.default({ concurrency: 2 }),
         workflow: AdminConfigJobSettingsSchema,
         editor: AdminConfigJobSettingsSchema,
         integrityCheck: AdminConfigJobSettingsSchema,

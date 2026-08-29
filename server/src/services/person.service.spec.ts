@@ -1295,7 +1295,7 @@ describe(PersonService.name, () => {
       mocks.person.getStatistics.mockResolvedValue({ assets: 3 });
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.personGroupId]));
       await expect(sut.getStatistics(auth, person.personGroupId)).resolves.toEqual({ assets: 3 });
-      expect(mocks.person.getStatistics).toHaveBeenCalledWith(person.personGroupId, auth.user.id);
+      expect(mocks.person.getStatistics).toHaveBeenCalledWith(person.personGroupId, auth.user.id, {});
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.personGroupId]));
     });
 

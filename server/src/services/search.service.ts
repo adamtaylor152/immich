@@ -590,6 +590,6 @@ export class SearchService extends BaseService {
       }),
     );
 
-    return people.flatMap((person) => (person ? [person.id] : []));
+    return people.flatMap((person) => (person ? [person.personGroupId] : []));
   }
 }

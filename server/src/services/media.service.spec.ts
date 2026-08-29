@@ -1,8 +1,7 @@
 import { ShallowDehydrateObject } from 'kysely';
 import { OutputInfo } from 'sharp';
-import { defaults, type SystemConfig } from 'src/dtos/config.dto';
 import { Exif } from 'src/database';
-import { SystemConfig } from 'src/dtos/config.dto';
+import { defaults, type SystemConfig } from 'src/dtos/config.dto';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import {
   AssetFileType,

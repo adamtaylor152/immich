@@ -74,10 +74,10 @@ describe(PersonService.name, () => {
         value: nsfwMetadata(true),
       });
 
-      await ctx.newAssetFace({ personId: safePerson.id, assetId: safeAsset.id });
-      await ctx.newAssetFace({ personId: nsfwOnlyPerson.id, assetId: nsfwAsset.id });
-      await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedSafeAsset.id });
-      await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedNsfwAsset.id });
+      await ctx.newAssetFace({ personGroupId: safePerson.personGroupId, assetId: safeAsset.id });
+      await ctx.newAssetFace({ personGroupId: nsfwOnlyPerson.personGroupId, assetId: nsfwAsset.id });
+      await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedSafeAsset.id });
+      await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedNsfwAsset.id });
 
       const auth = factory.auth({ user });
       const hiddenAuth = { ...auth, hideNsfwAssets: true };
@@ -86,9 +86,9 @@ describe(PersonService.name, () => {
         expect.objectContaining({
           total: 3,
           people: expect.arrayContaining([
-            expect.objectContaining({ id: safePerson.id }),
-            expect.objectContaining({ id: nsfwOnlyPerson.id }),
-            expect.objectContaining({ id: mixedPerson.id }),
+            expect.objectContaining({ id: safePerson.personGroupId }),
+            expect.objectContaining({ id: nsfwOnlyPerson.personGroupId }),
+            expect.objectContaining({ id: mixedPerson.personGroupId }),
           ]),
         }),
       );
@@ -97,12 +97,12 @@ describe(PersonService.name, () => {
       expect(hiddenResponse.total).toBe(2);
       expect(hiddenResponse.people).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: safePerson.id }),
-          expect.objectContaining({ id: mixedPerson.id }),
+          expect.objectContaining({ id: safePerson.personGroupId }),
+          expect.objectContaining({ id: mixedPerson.personGroupId }),
         ]),
       );
       expect(hiddenResponse.people).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: nsfwOnlyPerson.id })]),
+        expect.arrayContaining([expect.objectContaining({ id: nsfwOnlyPerson.personGroupId })]),
       );
     });
 
@@ -123,19 +123,21 @@ describe(PersonService.name, () => {
         value: nsfwMetadata(true),
       });
 
-      await ctx.newAssetFace({ personId: nsfwOnlyPerson.id, assetId: nsfwAsset.id });
-      await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedSafeAsset.id });
-      await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedNsfwAsset.id });
+      await ctx.newAssetFace({ personGroupId: nsfwOnlyPerson.personGroupId, assetId: nsfwAsset.id });
+      await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedSafeAsset.id });
+      await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedNsfwAsset.id });
 
       const auth = factory.auth({ user });
       const hiddenAuth = { ...auth, hideNsfwAssets: true };
 
-      await expect(sut.getById(hiddenAuth, nsfwOnlyPerson.id)).rejects.toThrow('Not found or no person.read access');
-      await expect(sut.getById(hiddenAuth, mixedPerson.id)).resolves.toEqual(
-        expect.objectContaining({ id: mixedPerson.id }),
+      await expect(sut.getById(hiddenAuth, nsfwOnlyPerson.personGroupId)).rejects.toThrow(
+        'Not found or no person.read access',
       );
-      await expect(sut.getStatistics(auth, mixedPerson.id)).resolves.toEqual({ assets: 2 });
-      await expect(sut.getStatistics(hiddenAuth, mixedPerson.id)).resolves.toEqual({ assets: 1 });
+      await expect(sut.getById(hiddenAuth, mixedPerson.personGroupId)).resolves.toEqual(
+        expect.objectContaining({ id: mixedPerson.personGroupId }),
+      );
+      await expect(sut.getStatistics(auth, mixedPerson.personGroupId)).resolves.toEqual({ assets: 2 });
+      await expect(sut.getStatistics(hiddenAuth, mixedPerson.personGroupId)).resolves.toEqual({ assets: 1 });
     });
 
     it('should not serve person thumbnails generated from private NSFW feature faces', async () => {
@@ -147,21 +149,31 @@ describe(PersonService.name, () => {
 
       await ctx.newMetadata({ assetId: nsfwAsset.id, key: AssetMetadataKey.MlEnrichment, value: nsfwMetadata(true) });
 
-      const { assetFace: safeFace } = await ctx.newAssetFace({ personId: person.id, assetId: safeAsset.id });
-      const { assetFace: nsfwFace } = await ctx.newAssetFace({ personId: person.id, assetId: nsfwAsset.id });
-      await ctx.get(PersonRepository).update({ id: person.id, faceAssetId: nsfwFace.id });
+      const { assetFace: safeFace } = await ctx.newAssetFace({
+        personGroupId: person.personGroupId,
+        assetId: safeAsset.id,
+      });
+      const { assetFace: nsfwFace } = await ctx.newAssetFace({
+        personGroupId: person.personGroupId,
+        assetId: nsfwAsset.id,
+      });
+      await ctx
+        .get(PersonRepository)
+        .update({ ownerId: person.ownerId, personGroupId: person.personGroupId, faceAssetId: nsfwFace.id });
 
       const auth = factory.auth({ user });
       const hiddenAuth = { ...auth, hideNsfwAssets: true };
 
-      await expect(sut.getThumbnail(auth, person.id)).resolves.toEqual(
+      await expect(sut.getThumbnail(auth, person.personGroupId)).resolves.toEqual(
         expect.objectContaining({ path: '/person/thumbnail.jpg' }),
       );
-      await expect(sut.getThumbnail(hiddenAuth, person.id)).rejects.toThrow();
+      await expect(sut.getThumbnail(hiddenAuth, person.personGroupId)).rejects.toThrow();
 
-      await ctx.get(PersonRepository).update({ id: person.id, faceAssetId: safeFace.id });
+      await ctx
+        .get(PersonRepository)
+        .update({ ownerId: person.ownerId, personGroupId: person.personGroupId, faceAssetId: safeFace.id });
 
-      await expect(sut.getThumbnail(hiddenAuth, person.id)).resolves.toEqual(
+      await expect(sut.getThumbnail(hiddenAuth, person.personGroupId)).resolves.toEqual(
         expect.objectContaining({ path: '/person/thumbnail.jpg' }),
       );
     });

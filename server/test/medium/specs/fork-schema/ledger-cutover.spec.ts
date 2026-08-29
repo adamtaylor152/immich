@@ -259,7 +259,7 @@ describe('fork schema ledger cutover', () => {
     await sql`TRUNCATE immich_fork.backfill_progress`.execute(db);
     await sql`TRUNCATE public.workflow_step, public.workflow, public.plugin_method, public.plugin CASCADE`.execute(db);
     await db.deleteFrom('user').execute();
-    const workflowOwner = mediumFactory.userInsert();
+    const workflowOwner = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(workflowOwner).execute();
     await sql`
       INSERT INTO public.plugin
@@ -417,7 +417,7 @@ describe('fork schema ledger cutover', () => {
     const pathB = join(root, 'unverified-b.jpg');
     const bytesA = Buffer.from('verified bytes');
     const bytesB = Buffer.from('different replacement bytes');
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath: pathA,
@@ -499,7 +499,7 @@ describe('fork schema ledger cutover', () => {
     const pathB = join(root, 'unverified-b.jpg');
     const bytesA = Buffer.from('verified inner bytes');
     const bytesB = Buffer.from('different inner replacement bytes');
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath: pathA,

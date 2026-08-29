@@ -5,7 +5,7 @@ import NumberRangeInput from '$lib/components/shared-components/NumberRangeInput
 
 describe('NumberRangeInput component', () => {
   const user = userEvent.setup();
-  let sut: RenderResult<NumberRangeInput>;
+  let sut: RenderResult<typeof NumberRangeInput>;
   let input: HTMLInputElement;
   let onInput: Mock;
   let onKeyDown: Mock;

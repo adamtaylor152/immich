@@ -2,15 +2,15 @@
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import { SettingInputFieldType } from '$lib/constants';
-  import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+  import type { AdminConfigMachineLearningDto } from '@immich/sdk';
   import { Button, IconButton } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
   import { t } from 'svelte-i18n';
 
   interface Props {
-    workingConfig: SystemConfigMachineLearningDto;
-    savedConfig: SystemConfigMachineLearningDto;
+    workingConfig: AdminConfigMachineLearningDto;
+    savedConfig: AdminConfigMachineLearningDto;
     disabled: boolean;
     managedRunPodUrl: string;
   }

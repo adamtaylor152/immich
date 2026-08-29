@@ -6,7 +6,7 @@ import { AssetVisibility, DatabaseLock, ImmichWorker, JobName, JobStatus, QueueN
 import { ArgOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { ZeroShotTaggingService } from 'src/services/zero-shot-tagging.service';
-import { JobItem, JobOf } from 'src/types';
+import { JobOf } from 'src/types';
 import { batched, getCLIPModelInfo, isSmartSearchEnabled } from 'src/utils/misc';
 
 @Injectable()

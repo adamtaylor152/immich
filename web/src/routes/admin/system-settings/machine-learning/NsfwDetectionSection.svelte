@@ -3,13 +3,13 @@
   import SettingInputField from '$lib/components/shared-components/settings/SettingInputField.svelte';
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import { SettingInputFieldType } from '$lib/constants';
-  import type { NsfwDetectionConfig, SystemConfigMachineLearningDto } from '@immich/sdk';
+  import type { AdminConfigNsfwDetectionDto, AdminConfigMachineLearningDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
 
   interface Props {
-    workingConfig: SystemConfigMachineLearningDto;
-    nsfwDetection: NsfwDetectionConfig;
-    savedNsfwDetection: NsfwDetectionConfig;
+    workingConfig: AdminConfigMachineLearningDto;
+    nsfwDetection: AdminConfigNsfwDetectionDto;
+    savedNsfwDetection: AdminConfigNsfwDetectionDto;
     disabled: boolean;
   }
 

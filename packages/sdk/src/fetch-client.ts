@@ -112,6 +112,10 @@ export type AdminConfigFFmpegDto = {
     /** Two pass */
     twoPass: boolean;
 };
+export type AdminConfigEnhancedRawImageDto = {
+    /** Enhanced RAW rendering */
+    enabled: boolean;
+};
 export type AdminConfigGeneratedFullsizeImageDto = {
     /** Enabled */
     enabled: boolean;
@@ -132,6 +136,7 @@ export type AdminConfigGeneratedImageDto = {
 };
 export type AdminConfigImageDto = {
     colorspace: Colorspace;
+    enhancedRaw?: AdminConfigEnhancedRawImageDto;
     /** Extract embedded */
     extractEmbedded: boolean;
     fullsize: AdminConfigGeneratedFullsizeImageDto;
@@ -167,17 +172,22 @@ export type AdminConfigJobDto = {
     backgroundTask: AdminConfigJobSettingsDto;
     editor: AdminConfigJobSettingsDto;
     faceDetection: AdminConfigJobSettingsDto;
+    imageDescription: AdminConfigJobSettingsDto;
+    imageEnrichment: AdminConfigJobSettingsDto;
     integrityCheck: AdminConfigJobSettingsDto;
     library: AdminConfigJobSettingsDto;
+    mediaHealth: AdminConfigJobSettingsDto;
     metadataExtraction: AdminConfigJobSettingsDto;
     migration: AdminConfigJobSettingsDto;
     notifications: AdminConfigJobSettingsDto;
+    nsfwDetection: AdminConfigJobSettingsDto;
     ocr: AdminConfigJobSettingsDto;
     search: AdminConfigJobSettingsDto;
     sidecar: AdminConfigJobSettingsDto;
     smartSearch: AdminConfigJobSettingsDto;
     thumbnailGeneration: AdminConfigJobSettingsDto;
     videoConversion: AdminConfigJobSettingsDto;
+    videoDuplicateDetection: AdminConfigJobSettingsDto;
     workflow: AdminConfigJobSettingsDto;
 };
 export type AdminConfigLibraryScanDto = {
@@ -194,6 +204,15 @@ export type AdminConfigLibraryDto = {
     scan: AdminConfigLibraryScanDto;
     watch: AdminConfigLibraryWatchDto;
 };
+export type AdminConfigAskSearchDto = {
+    /** Enable local Ask Photos-style search */
+    enabled: boolean;
+    /** Maximum number of Ask Search results */
+    maxResults: number;
+};
+export type AdminConfigLocalFeaturesDto = {
+    askSearch: AdminConfigAskSearchDto;
+};
 export type AdminConfigLoggingDto = {
     /** Enabled */
     enabled: boolean;
@@ -205,17 +224,38 @@ export type AdminConfigMachineLearningAvailabilityChecksDto = {
     interval: number;
     timeout: number;
 };
+export type AdminConfigZeroShotTaggingDto = {
+    /** Whether zero-shot auto-tagging is enabled */
+    enabled: boolean;
+    /** Maximum number of zero-shot tags applied per asset */
+    maxTags: number;
+    /** Cosine similarity above which a label is applied as a tag */
+    minSimilarity: number;
+};
 export type AdminConfigClipDto = {
     /** Whether the task is enabled */
     enabled: boolean;
     /** Name of the model to use */
     modelName: string;
+    zeroShotTagging: AdminConfigZeroShotTaggingDto;
 };
 export type AdminConfigDuplicateDetectionDto = {
     /** Whether the task is enabled */
     enabled: boolean;
+    enhancedVideo: {
+        /** Whether enhanced video duplicate detection is enabled */
+        enabled: boolean;
+        /** Number of video frames to sample for duplicate confirmation */
+        frameCount: number;
+        /** Maximum distance threshold for enhanced video duplicate frame matching */
+        maxDistance: number;
+        /** Minimum matching sampled frames required to confirm a video duplicate */
+        minMatchingFrames: number;
+    };
     /** Maximum distance threshold for duplicate detection */
     maxDistance: number;
+    /** When suggesting which duplicate to keep, prefer native camera originals (RAW, then HEIC/HEIF) over re-encoded formats such as JPG, regardless of file size */
+    preferOriginalFormat: boolean;
 };
 export type AdminConfigFacialRecognitionDto = {
     /** Whether the task is enabled */
@@ -229,6 +269,73 @@ export type AdminConfigFacialRecognitionDto = {
     /** Name of the model to use */
     modelName: string;
 };
+export type AdminConfigAdvancedPromptDto = {
+    /** Use a raw prompt template instead of the structured fields */
+    enabled?: boolean;
+    /** Whether missing {schema} placeholder fails save (strict) or warns (warn) */
+    placeholderValidation?: PlaceholderValidation;
+    /** Raw prompt template with {names}, {schema}, {vocabulary}, {style_hint} placeholders */
+    rawPromptTemplate?: string;
+};
+export type AdminConfigIdentityInjectionDto = {
+    /** Inject named-face data into description prompts */
+    enabled?: boolean;
+    /** Maximum named persons to inject into a single prompt */
+    maxNames?: number;
+    /** Minimum face-recognition confidence required to inject a name */
+    minFaceConfidence?: number;
+};
+export type AdminConfigImageDescriptionPromptDto = {
+    /** Advanced raw-prompt-editor configuration */
+    advanced?: AdminConfigAdvancedPromptDto;
+    /** Free-form additional natural-language instructions appended to the description prompt. Example: "If you see a car, identify the make and model. If people are playing a sport, name the sport." */
+    customInstructions?: string;
+    /** Tag values the model should prefer when applicable */
+    customVocabulary?: string[];
+    /** Categories the model must not infer (diagnoses, medications, etc.) */
+    forbiddenInferences?: string[];
+    /** Named-face injection configuration */
+    identityInjection?: AdminConfigIdentityInjectionDto;
+    /** Additional categories the model should note when visibly supported (brands, sports equipment, etc.) */
+    lookFor?: string[];
+    /** Allow-list of medical indicator terms permitted in the description */
+    medicalIndicators?: string[];
+    /** Allow-list of explicit NSFW indicator terms permitted in the description */
+    nsfwIndicators?: string[];
+    /** Target number of sentences in the description */
+    sentenceCountTarget?: number;
+    /** Description verbosity preset */
+    style?: Style;
+};
+export type AdminConfigImageDescriptionDto = {
+    /** Hardware acceleration backend to use */
+    acceleration?: MachineLearningHardwareAcceleration;
+    /** Hardware device to use */
+    device: string;
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Name of the fallback model to use */
+    fallbackModelName: string;
+    /** ISO timestamp of the last meaningful imageDescription config change. Set server-side; ignored on inbound writes (server is the source of truth). */
+    lastConfigChangeAt?: string | null;
+    /** Name of the model to use */
+    modelName: string;
+    /** ISO timestamp set when an admin defers a re-queue from the cost modal. Cleared when the re-queue actually dispatches. Drives the persistent "re-queue pending" banner. */
+    pendingRequeueAt?: string | null;
+    prompt?: AdminConfigImageDescriptionPromptDto;
+};
+export type AdminConfigNsfwDetectionDto = {
+    /** Hardware device to use */
+    device: string;
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Hide NSFW assets from library views unless the session has PIN-elevated access */
+    hideFromLibrary: boolean;
+    /** Name of the model to use */
+    modelName: string;
+    /** Minimum score required to mark an image as NSFW */
+    threshold: number;
+};
 export type AdminConfigOcrDto = {
     /** Whether the task is enabled */
     enabled: boolean;
@@ -241,6 +348,57 @@ export type AdminConfigOcrDto = {
     /** Name of the model to use */
     modelName: string;
 };
+export type AdminConfigRunPodServerlessDto = {
+    /** Max time per request (ms) */
+    executionTimeoutMs: number;
+    /** Ranked GPU pool IDs the endpoint can use (cheapest first). At least one required. */
+    gpuTypeIds: string[];
+    /** Seconds before an idle worker scales down */
+    idleTimeoutSeconds: number;
+    /** Worker autoscaler strategy */
+    scalerType: ScalerType;
+    /** Scaler threshold (queue seconds or request count) */
+    scalerValue: number;
+    /** Max concurrent workers */
+    workersMax: number;
+    /** Always-warm workers (0 = scale to zero) */
+    workersMin: number;
+};
+export type AdminConfigRunPodDto = {
+    /** RunPod API key (write-only; empty preserves the existing key) */
+    apiKey: string;
+    /** Read-only indicator that a key is currently stored. Set by the server; ignored on write. */
+    apiKeyConfigured?: boolean;
+    /** Auto-run ML backfill on pod ready (Pod mode) */
+    autoBackfillOnLaunch: boolean;
+    /** Auto-stop when idle (Pod mode) */
+    autoStopEnabled: boolean;
+    /** Idle minutes before auto-stop (Pod mode) */
+    autoStopGraceMinutes: number;
+    /** Container disk size (GB) (Pod mode) */
+    containerDiskGb: number;
+    /** User accepted that image previews leave the network */
+    dataPrivacyAcknowledged: boolean;
+    /** Preferred GPU type ID (Pod mode) */
+    defaultGpuTypeId: string;
+    /** Enabled */
+    enabled: boolean;
+    /** HuggingFace token forwarded to worker as HF_TOKEN (write-only; empty preserves the existing token) */
+    hfToken?: string;
+    /** Read-only indicator that an HF token is currently stored. Set by the server; ignored on write. */
+    hfTokenConfigured?: boolean;
+    /** Container image to launch */
+    imageName: string;
+    /** Hard runtime ceiling (hours) (Pod mode) */
+    maxRuntimeHours: number;
+    /** disabled = off, pod = manually launched dedicated GPU, serverless = auto-managed scale-to-zero endpoint. Optional for back-compat with legacy clients. */
+    mode?: Mode;
+    /** How long to wait for the pod to reach RUNNING + healthy /ping before giving up (Pod mode) */
+    provisionTimeoutMinutes?: number;
+    serverless?: AdminConfigRunPodServerlessDto;
+    /** Persistent volume size (GB) (Pod mode) */
+    volumeGb: number;
+};
 export type AdminConfigMachineLearningDto = {
     availabilityChecks: AdminConfigMachineLearningAvailabilityChecksDto;
     clip: AdminConfigClipDto;
@@ -248,7 +406,10 @@ export type AdminConfigMachineLearningDto = {
     /** Enabled */
     enabled: boolean;
     facialRecognition: AdminConfigFacialRecognitionDto;
+    imageDescription?: AdminConfigImageDescriptionDto;
+    nsfwDetection?: AdminConfigNsfwDetectionDto;
     ocr: AdminConfigOcrDto;
+    runpod?: AdminConfigRunPodDto;
     /** ML service URLs */
     urls: string[];
 };
@@ -361,6 +522,12 @@ export type AdminConfigPasswordLoginDto = {
     /** Enabled */
     enabled: boolean;
 };
+export type AdminConfigPhysicalDeduplicationDto = {
+    /** Enabled */
+    enabled: boolean;
+    /** Master user ID */
+    masterUserId: string | null;
+};
 export type AdminConfigReverseGeocodingDto = {
     /** Enabled */
     enabled: boolean;
@@ -372,6 +539,31 @@ export type AdminConfigServerDto = {
     loginPageMessage: string;
     /** Public users */
     publicUsers: boolean;
+};
+export type AdminConfigSmartAlbumKindDto = {
+    /** CLIP query phrases used when no tag trigger matches */
+    clipQueries: string[];
+    /** Whether this smart album is active */
+    enabled: boolean;
+    /** User-visible album name */
+    name: string;
+    /** Tags that mark an asset as belonging to this album */
+    tagTriggers: string[];
+    /** CLIP similarity threshold */
+    threshold: number;
+};
+export type AdminConfigSmartAlbumBuiltInDto = {
+    documents: AdminConfigSmartAlbumKindDto;
+    food: AdminConfigSmartAlbumKindDto;
+    nature: AdminConfigSmartAlbumKindDto;
+    pets: AdminConfigSmartAlbumKindDto;
+    screenshots: AdminConfigSmartAlbumKindDto;
+    travel: AdminConfigSmartAlbumKindDto;
+};
+export type AdminConfigSmartAlbumsDto = {
+    builtIn: AdminConfigSmartAlbumBuiltInDto;
+    /** Master smart-album enabled toggle */
+    enabled: boolean;
 };
 export type AdminConfigStorageTemplateDto = {
     /** Enabled */
@@ -413,6 +605,7 @@ export type AdminConfigDto = {
     integrityChecks: AdminConfigIntegrityChecksDto;
     job: AdminConfigJobDto;
     library: AdminConfigLibraryDto;
+    localFeatures?: AdminConfigLocalFeaturesDto;
     logging: AdminConfigLoggingDto;
     machineLearning: AdminConfigMachineLearningDto;
     map: AdminConfigMapDto;
@@ -422,8 +615,10 @@ export type AdminConfigDto = {
     notifications: AdminConfigNotificationsDto;
     oauth: AdminConfigOAuthDto;
     passwordLogin: AdminConfigPasswordLoginDto;
+    physicalDeduplication?: AdminConfigPhysicalDeduplicationDto;
     reverseGeocoding: AdminConfigReverseGeocodingDto;
     server: AdminConfigServerDto;
+    smartAlbums?: AdminConfigSmartAlbumsDto;
     storageTemplate: AdminConfigStorageTemplateDto;
     templates: AdminConfigTemplatesDto;
     theme: AdminConfigThemeDto;
@@ -689,6 +884,17 @@ export type PeopleResponse = {
     /** Whether people appear in web sidebar */
     sidebarWeb: boolean;
 };
+export type SuppressionResponse = {
+    /** Person IDs to suppress from locked browsing sessions */
+    personIds: string[];
+    /** Whether suppression applies only to owned assets or all visible assets */
+    scope: SuppressionScope;
+    /** Tag IDs to suppress from locked browsing sessions */
+    tagIds: string[];
+};
+export type PrivacyResponse = {
+    suppression: SuppressionResponse;
+};
 export type PurchaseResponse = {
     /** Date until which to hide buy button */
     hideBuyButtonUntil: string;
@@ -723,6 +929,7 @@ export type UserPreferencesResponseDto = {
     folders: FoldersResponse;
     memories: MemoriesResponse;
     people: PeopleResponse;
+    privacy: PrivacyResponse;
     purchase: PurchaseResponse;
     ratings: RatingsResponse;
     recentlyAdded: RecentlyAddedResponse;
@@ -775,6 +982,17 @@ export type PeopleUpdate = {
     /** Whether people appear in web sidebar */
     sidebarWeb?: boolean;
 };
+export type SuppressionUpdate = {
+    /** Person IDs to suppress from locked browsing sessions */
+    personIds?: string[];
+    /** Whether suppression applies only to owned assets or all visible assets */
+    scope?: SuppressionScope;
+    /** Tag IDs to suppress from locked browsing sessions */
+    tagIds?: string[];
+};
+export type PrivacyUpdate = {
+    suppression?: SuppressionUpdate;
+};
 export type PurchaseUpdate = {
     /** Date until which to hide buy button */
     hideBuyButtonUntil?: string;
@@ -810,6 +1028,7 @@ export type UserPreferencesUpdateDto = {
     folders?: FoldersUpdate;
     memories?: MemoriesUpdate;
     people?: PeopleUpdate;
+    privacy?: PrivacyUpdate;
     purchase?: PurchaseUpdate;
     ratings?: RatingsUpdate;
     recentlyAdded?: RecentlyAddedUpdate;
@@ -872,6 +1091,8 @@ export type AlbumResponseDto = {
     endDate?: string;
     /** Has shared link */
     hasSharedLink: boolean;
+    /** Icon key (null = default folder icon) */
+    icon: string | null;
     /** Album ID */
     id: string;
     /** Activity feed enabled */
@@ -879,8 +1100,12 @@ export type AlbumResponseDto = {
     /** Last modified asset timestamp */
     lastModifiedAssetTimestamp?: string;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = top-level) */
+    parentId: string | null;
     /** Is shared album */
     shared: boolean;
+    /** Sibling display position. Lower values appear first. */
+    sortOrder: number | null;
     /** Start date (earliest asset) */
     startDate?: string;
     /** Last update date */
@@ -900,6 +1125,10 @@ export type CreateAlbumDto = {
     assetIds?: string[];
     /** Album description */
     description?: string | null;
+    /** Optional icon key (see album-icons.ts) */
+    icon?: string;
+    /** Parent album ID for nesting (omit for top-level) */
+    parentId?: string;
 };
 export type AlbumsAddAssetsDto = {
     /** Album IDs */
@@ -927,9 +1156,15 @@ export type UpdateAlbumDto = {
     albumThumbnailAssetId?: string;
     /** Album description */
     description?: string | null;
+    /** Icon key (null = clear / use default folder icon) */
+    icon?: string | null;
     /** Enable activity feed */
     isActivityEnabled?: boolean;
     order?: AssetOrder;
+    /** Parent album ID for nesting (null = move to top-level, omit = no change) */
+    parentId?: string | null;
+    /** Sibling display position. Lower values appear first. Computed by the client as a midpoint. */
+    sortOrder?: number;
 };
 export type BulkIdsDto = {
     /** IDs to process */
@@ -942,6 +1177,10 @@ export type BulkIdResponseDto = {
     id: string;
     /** Whether operation succeeded */
     success: boolean;
+};
+export type AlbumDescendantCountResponseDto = {
+    /** Number of descendant albums (children, grandchildren, etc.) */
+    count: number;
 };
 export type MapMarkerResponseDto = {
     /** City name */
@@ -1090,7 +1329,7 @@ export type AssetBulkUpdateDto = {
     visibility?: AssetVisibility;
 };
 export type AssetBulkUploadCheckItem = {
-    /** Base64 or hex encoded SHA1 hash */
+    /** Base64 or hex encoded checksum. SHA-256 (32 bytes / 64 hex / 44 base64) for new uploads; SHA-1 (20 bytes / 40 hex / 28 base64) accepted for legacy assets. */
     checksum: string;
     /** Client-side identifier echoed in the response to match results to inputs (e.g. filename) */
     id: string;
@@ -1259,7 +1498,7 @@ export type TagResponseDto = {
     value: string;
 };
 export type AssetResponseDto = {
-    /** Base64 encoded SHA1 hash */
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
     checksum: string;
     /** The UTC timestamp when the asset was originally uploaded to Immich. */
     createdAt: string;
@@ -1351,12 +1590,74 @@ export type RotateParameters = {
 export type MirrorParameters = {
     axis: MirrorAxis;
 };
+export type TrimParameters = {
+    /** Trim end time in milliseconds */
+    endMs: number;
+    /** Trim start time in milliseconds */
+    startMs: number;
+};
+export type StraightenParameters = {
+    /** Straighten angle in degrees */
+    angle: number;
+};
+export type AdjustParameters = {
+    blackPoint?: number;
+    blueTone?: number;
+    brightness?: number;
+    contrast?: number;
+    hdr?: number;
+    highlights?: number;
+    saturation?: number;
+    shadows?: number;
+    skinTone?: number;
+    tint?: number;
+    vignette?: number;
+    warmth?: number;
+    whitePoint?: number;
+};
+export type LookParameters = {
+    /** Filter or effect intensity */
+    intensity?: number;
+    /** Filter or effect name */
+    name: string;
+};
+export type ToggleParameters = {
+    enabled?: boolean;
+};
+export type TextOverlayParameters = {
+    /** Text color in hex format */
+    color?: string;
+    /** Overlay end time in milliseconds */
+    endMs?: number;
+    /** Font size as a percentage of video height */
+    size?: number;
+    /** Overlay start time in milliseconds */
+    startMs?: number;
+    text: string;
+    /** Horizontal position as a percentage of video width */
+    x: number;
+    /** Vertical position as a percentage of video height */
+    y: number;
+};
+export type AudioParameters = {
+    muted?: boolean;
+    /** Audio volume multiplier */
+    volume?: number;
+};
+export type SpeedParameters = {
+    /** Speed segment end time in milliseconds */
+    endMs?: number;
+    /** Playback speed multiplier */
+    rate: number;
+    /** Speed segment start time in milliseconds */
+    startMs?: number;
+};
 export type AssetEditActionItemResponseDto = {
     action: AssetEditAction;
     /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsResponseDto = {
     /** Asset ID these edits belong to */
@@ -1366,12 +1667,65 @@ export type AssetEditsResponseDto = {
 };
 export type AssetEditActionItemDto = {
     action: AssetEditAction;
-    /** List of edit actions to apply (crop, rotate, or mirror) */
-    parameters: CropParameters | RotateParameters | MirrorParameters;
+    /** List of edit actions to apply */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | StraightenParameters | AdjustParameters | LookParameters | ToggleParameters | TextOverlayParameters | AudioParameters | SpeedParameters;
 };
 export type AssetEditsCreateDto = {
-    /** List of edit actions to apply (crop, rotate, or mirror) */
+    /** List of edit actions to apply */
     edits: AssetEditActionItemDto[];
+};
+export type ImageDescriptionEnrichmentResponseDto = {
+    appliedDescription: boolean;
+    appliedTags: boolean;
+    context?: string;
+    description?: string;
+    environment?: string;
+    error?: string;
+    modelName?: string;
+    objects?: string[];
+    people?: {
+        activity: string;
+        apparent_age_group: string;
+        confidence: string;
+        count: number;
+    }[];
+    /** Machine-readable reason when status === "skipped" */
+    skipReason?: string;
+    status: Status;
+    tags?: string[];
+    updatedAt?: string;
+    visibleText?: string[];
+};
+export type ImageEnrichmentReview = {
+    action: Action;
+    isNsfw: boolean;
+    /** Review timestamp */
+    reviewedAt: string;
+    /** Reviewer user ID */
+    reviewedBy: string;
+};
+export type NsfwDetectionEnrichmentResponseDto = {
+    appliedTags: boolean;
+    effectiveIsNsfw: boolean;
+    error?: string;
+    isNsfw?: boolean;
+    labels?: {
+        [key: string]: number;
+    };
+    modelName?: string;
+    review?: ImageEnrichmentReview;
+    score?: number;
+    status: Status2;
+    updatedAt?: string;
+};
+export type AssetImageEnrichmentResponseDto = {
+    /** Asset ID */
+    assetId: string;
+    description: ImageDescriptionEnrichmentResponseDto;
+    nsfwDetection: NsfwDetectionEnrichmentResponseDto;
+};
+export type AssetImageEnrichmentActionRequestDto = {
+    action: AssetImageEnrichmentAction;
 };
 export type AssetMetadataResponseDto = {
     /** Metadata key */
@@ -1498,6 +1852,89 @@ export type AuthStatusResponseDto = {
 export type ValidateAccessTokenResponseDto = {
     /** Authentication status */
     authStatus: boolean;
+};
+export type BestPhotoScoreDto = {
+    aestheticScore: number | null;
+    bestFrameTimestampMs: number | null;
+    computedAt: string;
+    diversityScore: number | null;
+    frameMetadata: {
+        [key: string]: any;
+    } | null;
+    frameScore: number | null;
+    metadata: {
+        [key: string]: any;
+    } | null;
+    score: number;
+    scoreVersion: number;
+    subjectScore: number | null;
+    technicalScore: number | null;
+};
+export type BestPhotoAssetResponseDto = {
+    bestPhotoScore: BestPhotoScoreDto;
+    /** Base64-encoded file checksum. SHA-256 (44 chars) for assets uploaded after the SHA-256 transition; SHA-1 (28 chars) for legacy assets. Use the asset `checksumAlgorithm` field to disambiguate when length-based detection is insufficient. */
+    checksum: string;
+    /** The UTC timestamp when the asset was originally uploaded to Immich. */
+    createdAt: string;
+    /** Duplicate group ID */
+    duplicateId?: string | null;
+    /** Video/gif duration in milliseconds (null for static images) */
+    duration: number | null;
+    exifInfo?: ExifResponseDto;
+    /** The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken. */
+    fileCreatedAt: string;
+    /** The UTC timestamp when the file was last modified on the filesystem. This reflects the last time the physical file was changed, which may be different from when the photo was originally taken. */
+    fileModifiedAt: string;
+    /** Whether asset has metadata */
+    hasMetadata: boolean;
+    /** Asset height */
+    height: number | null;
+    /** Asset ID */
+    id: string;
+    /** Is archived */
+    isArchived: boolean;
+    /** Is edited */
+    isEdited: boolean;
+    /** Is favorite */
+    isFavorite: boolean;
+    /** Is offline */
+    isOffline: boolean;
+    /** Is trashed */
+    isTrashed: boolean;
+    /** Library ID */
+    libraryId?: string | null;
+    /** Live photo video ID */
+    livePhotoVideoId?: string | null;
+    /** The local date and time when the photo/video was taken, derived from EXIF metadata. This represents the photographer's local time regardless of timezone, stored as a timezone-agnostic timestamp. Used for timeline grouping by "local" days and months. */
+    localDateTime: string;
+    /** Original file name */
+    originalFileName: string;
+    /** Original MIME type */
+    originalMimeType?: string;
+    /** Original file path */
+    originalPath: string;
+    owner?: UserResponseDto;
+    /** Owner user ID */
+    ownerId: string;
+    people?: PersonResponseDto[];
+    /** Is resized */
+    resized?: boolean;
+    stack?: (AssetStackResponseDto) | null;
+    tags?: TagResponseDto[];
+    /** Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting. */
+    thumbhash: string | null;
+    "type": AssetTypeEnum;
+    /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
+    updatedAt: string;
+    visibility: AssetVisibility;
+    /** Asset width */
+    width: number | null;
+};
+export type BestPhotosResponseDto = {
+    count: number;
+    items: BestPhotoAssetResponseDto[];
+    nextPage: string | null;
+    total: number;
 };
 export type ClusterGroupRequestResponseDto = {
     /** Cluster group the user is invited to join */
@@ -1746,11 +2183,15 @@ export type QueuesResponseLegacyDto = {
     editor: QueueResponseLegacyDto;
     faceDetection: QueueResponseLegacyDto;
     facialRecognition: QueueResponseLegacyDto;
+    imageDescription: QueueResponseLegacyDto;
+    imageEnrichment: QueueResponseLegacyDto;
     integrityCheck: QueueResponseLegacyDto;
     library: QueueResponseLegacyDto;
+    mediaHealth: QueueResponseLegacyDto;
     metadataExtraction: QueueResponseLegacyDto;
     migration: QueueResponseLegacyDto;
     notifications: QueueResponseLegacyDto;
+    nsfwDetection: QueueResponseLegacyDto;
     ocr: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
@@ -1758,6 +2199,7 @@ export type QueuesResponseLegacyDto = {
     storageTemplateMigration: QueueResponseLegacyDto;
     thumbnailGeneration: QueueResponseLegacyDto;
     videoConversion: QueueResponseLegacyDto;
+    videoDuplicateDetection: QueueResponseLegacyDto;
     workflow: QueueResponseLegacyDto;
 };
 export type JobCreateDto = {
@@ -1834,6 +2276,36 @@ export type ValidateLibraryResponseDto = {
     /** Validation results for import paths */
     importPaths?: ValidateLibraryImportPathResponseDto[];
 };
+export type LivePhotoCandidateDto = {
+    confidence: LivePhotoMatchConfidence;
+    /** Why these two assets are believed to be a separated live photo pair */
+    matchReason: string;
+    photo: AssetResponseDto;
+    video: AssetResponseDto;
+};
+export type LivePhotoCandidatesResponseDto = {
+    candidates: LivePhotoCandidateDto[];
+    /** Total number of candidate pairs found */
+    total: number;
+};
+export type LivePhotoRelinkItemDto = {
+    /** Still image asset ID */
+    photoId: string;
+    /** Motion video asset ID */
+    videoId: string;
+};
+export type LivePhotoRelinkDto = {
+    pairs: LivePhotoRelinkItemDto[];
+};
+export type LivePhotoRelinkResultDto = {
+    error?: string;
+    photoId: string;
+    success: boolean;
+    videoId: string;
+};
+export type LivePhotoRelinkResponseDto = {
+    results: LivePhotoRelinkResultDto[];
+};
 export type MapReverseGeocodeResponseDto = {
     /** City name */
     city: string | null;
@@ -1841,6 +2313,95 @@ export type MapReverseGeocodeResponseDto = {
     country: string | null;
     /** State/Province name */
     state: string | null;
+};
+export type MediaHealthCandidateDto = {
+    /** Candidate file path */
+    candidatePath: string;
+    checkedAt: string;
+    evidence: {
+        [key: string]: any;
+    };
+    /** Media health finding ID */
+    healthId: string;
+    /** Candidate ID */
+    id: string;
+    resolution: {
+        [key: string]: any;
+    };
+    status: MediaHealthStatus;
+    /** Visual match score from 0 to 1 */
+    visualMatchScore: number | null;
+};
+export type MediaHealthItemDto = {
+    asset: AssetResponseDto;
+    /** Asset ID */
+    assetId: string;
+    candidates: MediaHealthCandidateDto[];
+    category: MediaHealthCategory;
+    checkedAt: string;
+    dismissedAt: string | null;
+    evidence: {
+        [key: string]: any;
+    };
+    /** Media health finding ID */
+    id: string;
+    /** Original media filename */
+    originalFileName: string;
+    /** Original media path */
+    originalPath: string;
+    resolution: {
+        [key: string]: any;
+    };
+    resolvedAt: string | null;
+    severity: MediaHealthSeverity;
+    status: MediaHealthStatus;
+};
+export type MediaHealthBucketDto = {
+    /** Number of findings in the bucket */
+    count: number;
+    items: MediaHealthItemDto[];
+    /** Timeline bucket date */
+    timeBucket: string;
+};
+export type MediaHealthRunResponseDto = {
+    category: MediaHealthCategory;
+    checkedAssets: number;
+    error: string | null;
+    finishedAt: string | null;
+    foundAssets: number;
+    /** Media health run ID */
+    id: string;
+    startedAt: string;
+    /** Run status */
+    status: string;
+    totalAssets: number;
+};
+export type MediaHealthListResponseDto = {
+    buckets: MediaHealthBucketDto[];
+    run: (MediaHealthRunResponseDto) | null;
+    total: number;
+};
+export type MediaHealthDeleteCorruptDto = {
+    /** Typed confirmation text */
+    confirmText: string;
+    /** Media health finding IDs */
+    ids: string[];
+};
+export type MediaHealthBulkResultDto = {
+    error?: string;
+    id: string;
+    status?: MediaHealthStatus;
+    success: boolean;
+};
+export type MediaHealthBulkResponseDto = {
+    results: MediaHealthBulkResultDto[];
+};
+export type MediaHealthScanResponseDto = {
+    runId: string;
+};
+export type MediaHealthBulkActionDto = {
+    /** Media health finding IDs */
+    ids: string[];
 };
 export type OnThisDayDto = {
     /** Year for on this day memory */
@@ -2144,6 +2705,210 @@ export type QueueJobResponseDto = {
     /** Job creation timestamp */
     timestamp: number;
 };
+export type RunPodBackfillResultDto = {
+    enqueued: string[];
+    skipped: string[];
+};
+export type RunPodConnectionTestDto = {
+    /** API key to verify (overrides the stored key for the test) */
+    apiKey?: string;
+};
+export type RunPodConnectionResultDto = {
+    message?: string;
+    ok: boolean;
+};
+export type RunPodStateDto = {
+    endpointId?: string;
+    endpointUrl?: string;
+    errorMessage?: string;
+    estimatedCostUsd?: number;
+    gpuTypeId?: string;
+    /** Serverless idle timeout; may be null when not yet provisioned. */
+    idleTimeoutSeconds?: number | null;
+    imageName?: string;
+    instanceTag?: string;
+    lastBusyAt?: string;
+    maxRuntimeHours?: number;
+    mlUrl?: string;
+    podCreatedAt?: string;
+    podId?: string;
+    pricePerHour?: number;
+    runningSince?: string;
+    status: Status3;
+    stoppedAt?: string;
+    templateId?: string;
+    unhealthySince?: string;
+    workerReady?: boolean;
+    /** Serverless workersMax; may be null when not yet provisioned. */
+    workersMax?: number | null;
+    /** Serverless workersMin; may be null when not yet provisioned. */
+    workersMin?: number | null;
+};
+export type RunPodGpuTypeDto = {
+    communityCloud?: boolean;
+    displayName: string;
+    id: string;
+    memoryInGb: number;
+    pricePerHour?: number | null;
+    secureCloud?: boolean;
+};
+export type RunPodProvisionDto = {
+    /** User confirms image previews will be sent to RunPod (must be true to launch) */
+    acknowledgeDataPrivacy: true;
+    gpuCount?: number;
+    /** RunPod GPU type ID, e.g. "NVIDIA RTX A5000" */
+    gpuTypeId: string;
+    /** Override the configured image */
+    imageName?: string;
+    maxRuntimeHours?: number;
+};
+export type AskSearchDto = {
+    /** Search language code */
+    language?: string;
+    /** Page number */
+    page?: number;
+    /** Natural language Ask Search query */
+    query: string;
+    /** Number of results to return */
+    size?: number;
+};
+export type AskSearchPlanDto = {
+    /** Structured filters applied to the search */
+    filters: {
+        /** Filter by album IDs */
+        albumIds?: string[];
+        /** Filter by file checksum */
+        checksum?: string;
+        /** Filter by city name */
+        city?: string | null;
+        /** Filter by country name */
+        country?: string | null;
+        /** Filter by creation date (after) */
+        createdAfter?: string;
+        /** Filter by creation date (before) */
+        createdBefore?: string;
+        /** Filter by description text */
+        description?: string;
+        /** Filter by encoded video file path */
+        encodedVideoPath?: string;
+        /** Filter by asset ID */
+        id?: string;
+        imageEnrichment?: ImageEnrichmentFilter;
+        /** Filter by encoded status */
+        isEncoded?: boolean;
+        /** Filter by favorite status */
+        isFavorite?: boolean;
+        /** Filter by motion photo status */
+        isMotion?: boolean;
+        /** Filter assets not in any album */
+        isNotInAlbum?: boolean;
+        /** Filter by offline status */
+        isOffline?: boolean;
+        /** Filter by lens model */
+        lensModel?: string | null;
+        /** Library ID to filter by */
+        libraryId?: string | null;
+        /** Filter by camera make */
+        make?: string | null;
+        /** Filter by camera model */
+        model?: string | null;
+        /** Filter by OCR text content */
+        ocr?: string;
+        /** Sort order */
+        order?: AssetOrder;
+        /** Filter by original file name */
+        originalFileName?: string;
+        /** Filter by original file path */
+        originalPath?: string;
+        /** Page number */
+        page?: number;
+        /** Filter by person IDs */
+        personIds?: string[];
+        /** Filter by preview file path */
+        previewPath?: string;
+        /** Filter by rating [1-5], or null for unrated */
+        rating?: number | null;
+        /** Number of results to return */
+        size?: number;
+        /** Filter by state/province name */
+        state?: string | null;
+        /** Return only suppressed content. Requires an elevated session. */
+        suppressedOnly?: boolean;
+        /** Filter by tag IDs */
+        tagIds?: string[] | null;
+        /** Filter by taken date (after) */
+        takenAfter?: string;
+        /** Filter by taken date (before) */
+        takenBefore?: string;
+        /** Filter by thumbnail file path */
+        thumbnailPath?: string;
+        /** Filter by trash date (after) */
+        trashedAfter?: string;
+        /** Filter by trash date (before) */
+        trashedBefore?: string;
+        "type"?: AssetTypeEnum;
+        /** Filter by update date (after) */
+        updatedAfter?: string;
+        /** Filter by update date (before) */
+        updatedBefore?: string;
+        visibility?: AssetVisibility;
+        /** Include deleted assets */
+        withDeleted?: boolean;
+        /** Include EXIF data in response */
+        withExif?: boolean;
+        /** Include people data in response */
+        withPeople?: boolean;
+        /** Include stacked assets */
+        withStacked?: boolean;
+    };
+    /** Search mode used to answer the query */
+    mode: Mode2;
+    /** Normalized query text */
+    normalizedQuery: string;
+};
+export type SearchFacetCountResponseDto = {
+    /** Number of assets with this facet value */
+    count: number;
+    /** Facet value */
+    value: string;
+};
+export type SearchFacetResponseDto = {
+    counts: SearchFacetCountResponseDto[];
+    /** Facet field name */
+    fieldName: string;
+};
+export type SearchAlbumResponseDto = {
+    /** Number of albums in this page */
+    count: number;
+    facets: SearchFacetResponseDto[];
+    items: AlbumResponseDto[];
+    /** Total number of matching albums */
+    total: number;
+};
+export type SearchAssetResponseDto = {
+    /** Number of assets in this page */
+    count: number;
+    facets: SearchFacetResponseDto[];
+    items: AssetResponseDto[];
+    /** Next page token */
+    nextPage: string | null;
+    /** Total number of matching assets */
+    total: number;
+};
+export type SearchResponseDto = {
+    albums: SearchAlbumResponseDto;
+    assets: SearchAssetResponseDto;
+};
+export type AskSearchResponseDto = {
+    /** Short explanation of how the query was interpreted */
+    explanation: string;
+    plan: AskSearchPlanDto;
+    /** Original Ask Search query */
+    query: string;
+    results: SearchResponseDto;
+    /** Unsupported or ambiguous parts of the query */
+    warnings: string[];
+};
 export type SearchExploreItem = {
     data: AssetResponseDto;
     /** Explore value */
@@ -2173,6 +2938,7 @@ export type MetadataSearchDto = {
     encodedVideoPath?: string;
     /** Filter by asset ID */
     id?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2211,6 +2977,8 @@ export type MetadataSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2238,39 +3006,6 @@ export type MetadataSearchDto = {
     /** Include stacked assets */
     withStacked?: boolean;
 };
-export type SearchFacetCountResponseDto = {
-    /** Number of assets with this facet value */
-    count: number;
-    /** Facet value */
-    value: string;
-};
-export type SearchFacetResponseDto = {
-    counts: SearchFacetCountResponseDto[];
-    /** Facet field name */
-    fieldName: string;
-};
-export type SearchAlbumResponseDto = {
-    /** Number of albums in this page */
-    count: number;
-    facets: SearchFacetResponseDto[];
-    items: AlbumResponseDto[];
-    /** Total number of matching albums */
-    total: number;
-};
-export type SearchAssetResponseDto = {
-    /** Number of assets in this page */
-    count: number;
-    facets: SearchFacetResponseDto[];
-    items: AssetResponseDto[];
-    /** Next page token */
-    nextPage: string | null;
-    /** Total number of matching assets */
-    total: number;
-};
-export type SearchResponseDto = {
-    albums: SearchAlbumResponseDto;
-    assets: SearchAssetResponseDto;
-};
 export type PlacesResponseDto = {
     /** Administrative level 1 name (state/province) */
     admin1name?: string;
@@ -2294,6 +3029,7 @@ export type RandomSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2322,6 +3058,8 @@ export type RandomSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2358,6 +3096,7 @@ export type SmartSearchDto = {
     createdAfter?: string;
     /** Filter by creation date (before) */
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2394,6 +3133,8 @@ export type SmartSearchDto = {
     size?: number;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2428,6 +3169,7 @@ export type StatisticsSearchDto = {
     createdBefore?: string;
     /** Filter by description text */
     description?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     /** Filter by encoded status */
     isEncoded?: boolean;
     /** Filter by favorite status */
@@ -2454,6 +3196,8 @@ export type StatisticsSearchDto = {
     rating?: number | null;
     /** Filter by state/province name */
     state?: string | null;
+    /** Return only suppressed content. Requires an elevated session. */
+    suppressedOnly?: boolean;
     /** Filter by tag IDs */
     tagIds?: string[] | null;
     /** Filter by taken date (after) */
@@ -2490,6 +3234,8 @@ export type ServerAboutResponseDto = {
     ffmpeg?: string;
     /** ImageMagick version */
     imagemagick?: string;
+    /** LibRaw/dcraw_emu version */
+    libraw?: string;
     /** libvips version */
     libvips?: string;
     /** Whether the server is licensed */
@@ -2530,6 +3276,8 @@ export type ServerApkLinksDto = {
     x86_64: string;
 };
 export type ServerConfigDto = {
+    /** Canonical default for the image-description advanced raw prompt template */
+    defaultImageDescriptionRawPromptTemplate: string;
     /** External domain URL */
     externalDomain: string;
     /** Whether the server has been initialized */
@@ -2566,10 +3314,16 @@ export type ServerFeaturesDto = {
     email: boolean;
     /** Whether facial recognition is enabled */
     facialRecognition: boolean;
+    /** Whether image description and tag generation is enabled */
+    imageDescription: boolean;
     /** Whether face import is enabled */
     importFaces: boolean;
     /** Whether map feature is enabled */
     map: boolean;
+    /** Whether NSFW detection is enabled */
+    nsfwDetection: boolean;
+    /** Whether NSFW-tagged assets are hidden from non-elevated library views */
+    nsfwHiding: boolean;
     /** Whether OAuth is enabled */
     oauth: boolean;
     /** Whether OAuth auto-launch is enabled */
@@ -2578,6 +3332,8 @@ export type ServerFeaturesDto = {
     ocr: boolean;
     /** Whether password login is enabled */
     passwordLogin: boolean;
+    /** Whether physical file deduplication is enabled */
+    physicalDeduplication: boolean;
     /** Whether real-time transcoding is enabled */
     realtimeTranscoding: boolean;
     /** Whether reverse geocoding is enabled */
@@ -2827,6 +3583,52 @@ export type SyncStreamDto = {
     /** Sync request types */
     types: SyncRequestType[];
 };
+export type ImageDescriptionRequeueResponseDto = {
+    /** Whether the queue-all job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type ImageDescriptionRequeueEstimateDto = {
+    /** Configured hardware acceleration backend (e.g. "auto", "cuda") */
+    activeBackend: string;
+    /** Configured image description model name */
+    activeModel: string;
+    /** Estimated wall-clock time to re-describe every eligible asset (force mode: every asset is re-processed, not just those without descriptions). */
+    estimatedTotalSeconds: number;
+    /** Average seconds per asset, computed as a rolling mean of the most recent 100 completed image-description jobs. Falls back to a 1.5s default when no jobs have completed since the server started. */
+    rollingAvgSeconds: number;
+    /** Total eligible image assets */
+    totalAssets: number;
+    /** Number of eligible assets that currently have a description (will be re-run on force-requeue). */
+    withDescription: number;
+    /** Number of eligible assets that currently have no description. */
+    withoutDescription: number;
+};
+export type MachineLearningHardwareResponseDto = {
+    /** Available PyTorch CUDA device count */
+    cudaDeviceCount: number;
+    /** Available OpenVINO device IDs */
+    openvinoDeviceIds: string[];
+    /** Detected preferred hardware acceleration */
+    preferredAcceleration: MachineLearningHardwareAcceleration;
+    /** Available ONNX Runtime providers */
+    providers: string[];
+    /** Whether PyTorch CUDA is available */
+    torchCudaAvailable: boolean;
+};
+export type SmartAlbumReevaluateRequestDto = {
+    /** Optional built-in kind to scope the re-evaluation to. Omit to re-evaluate every enabled kind. */
+    kind?: Kind;
+};
+export type SmartAlbumReevaluateResponseDto = {
+    /** Whether the re-evaluate job was newly enqueued (false = already in-flight) */
+    queued: boolean;
+};
+export type SmartAlbumReevaluateEstimateDto = {
+    /** Total image assets that will be evaluated (currently equals withDescription) */
+    totalAssets: number;
+    /** Image assets with a successfully completed description */
+    withDescription: number;
+};
 export type SystemConfigTemplateStorageOptionDto = {
     /** Available day format options for storage template */
     dayOptions: string[];
@@ -2888,8 +3690,6 @@ export type TimeBucketAssetResponseDto = {
     city?: (string | null)[];
     /** Array of country names extracted from EXIF GPS data */
     country?: (string | null)[];
-    /** Array of UTC timestamps when each asset was originally uploaded to Immich */
-    createdAt: string[];
     /** Array of video/gif durations in milliseconds (null for static images) */
     duration: (number | null)[];
     /** Array of file creation timestamps in UTC */
@@ -4064,12 +4864,13 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
 /**
  * List all albums
  */
-export function getAllAlbums({ assetId, id, isOwned, isShared, name }: {
+export function getAllAlbums({ assetId, id, isOwned, isShared, name, suppressedOnly }: {
     assetId?: string;
     id?: string;
     isOwned?: boolean;
     isShared?: boolean;
     name?: string;
+    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
@@ -4079,7 +4880,8 @@ export function getAllAlbums({ assetId, id, isOwned, isShared, name }: {
         id,
         isOwned,
         isShared,
-        name
+        name,
+        suppressedOnly
     }))}`, {
         ...opts
     }));
@@ -4139,17 +4941,19 @@ export function deleteAlbum({ id }: {
 /**
  * Retrieve an album
  */
-export function getAlbumInfo({ id, key, slug }: {
+export function getAlbumInfo({ id, key, slug, suppressedOnly }: {
     id: string;
     key?: string;
     slug?: string;
+    suppressedOnly?: boolean;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumResponseDto;
     }>(`/albums/${encodeURIComponent(id)}${QS.query(QS.explode({
         key,
-        slug
+        slug,
+        suppressedOnly
     }))}`, {
         ...opts
     }));
@@ -4201,6 +5005,19 @@ export function addAssetsToAlbum({ id, bulkIdsDto }: {
         method: "PUT",
         body: bulkIdsDto
     })));
+}
+/**
+ * Count descendant albums
+ */
+export function getAlbumDescendantCount({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AlbumDescendantCountResponseDto;
+    }>(`/albums/${encodeURIComponent(id)}/descendant-count`, {
+        ...opts
+    }));
 }
 /**
  * Retrieve album map markers
@@ -4624,6 +5441,35 @@ export function editAsset({ id, assetEditsCreateDto }: {
     })));
 }
 /**
+ * Get image enrichment metadata
+ */
+export function getAssetImageEnrichment({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetImageEnrichmentResponseDto;
+    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, {
+        ...opts
+    }));
+}
+/**
+ * Update image enrichment metadata
+ */
+export function updateAssetImageEnrichment({ id, assetImageEnrichmentActionRequestDto }: {
+    id: string;
+    assetImageEnrichmentActionRequestDto: AssetImageEnrichmentActionRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AssetImageEnrichmentResponseDto;
+    }>(`/assets/${encodeURIComponent(id)}/image-enrichment`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: assetImageEnrichmentActionRequestDto
+    })));
+}
+/**
  * Get asset metadata
  */
 export function getAssetMetadata({ id }: {
@@ -4970,6 +5816,27 @@ export function validateAccessToken(opts?: Oazapfts.RequestOpts) {
     }>("/auth/validateToken", {
         ...opts,
         method: "POST"
+    }));
+}
+/**
+ * Retrieve best photos
+ */
+export function getBestPhotos({ includeArchived, limit, minScore, page }: {
+    includeArchived?: boolean;
+    limit?: number;
+    minScore?: number;
+    page?: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BestPhotosResponseDto;
+    }>(`/best-photos${QS.query(QS.explode({
+        includeArchived,
+        limit,
+        minScore,
+        page
+    }))}`, {
+        ...opts
     }));
 }
 /**
@@ -5371,6 +6238,32 @@ export function validate({ id, validateLibraryDto }: {
     })));
 }
 /**
+ * List live photo relink candidates
+ */
+export function getLivePhotoCandidates(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: LivePhotoCandidatesResponseDto;
+    }>("/live-photo/candidates", {
+        ...opts
+    }));
+}
+/**
+ * Relink live photos
+ */
+export function relinkLivePhotos({ livePhotoRelinkDto }: {
+    livePhotoRelinkDto: LivePhotoRelinkDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: LivePhotoRelinkResponseDto;
+    }>("/live-photo/relink", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: livePhotoRelinkDto
+    })));
+}
+/**
  * Retrieve map markers
  */
 export function getMapMarkers({ fileCreatedAfter, fileCreatedBefore, isArchived, isFavorite, withPartners, withSharedAlbums }: {
@@ -5410,6 +6303,106 @@ export function reverseGeocode({ lat, lon }: {
         lon
     }))}`, {
         ...opts
+    }));
+}
+/**
+ * List media health findings
+ */
+export function list({ category, size, status }: {
+    category?: MediaHealthCategory;
+    size?: number;
+    status?: MediaHealthStatus;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MediaHealthListResponseDto;
+    }>(`/media-health${QS.query(QS.explode({
+        category,
+        size,
+        status
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Move confirmed corrupt media to trash
+ */
+export function deleteCorrupt({ mediaHealthDeleteCorruptDto }: {
+    mediaHealthDeleteCorruptDto: MediaHealthDeleteCorruptDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MediaHealthBulkResponseDto;
+    }>("/media-health/corrupt", oazapfts.json({
+        ...opts,
+        method: "DELETE",
+        body: mediaHealthDeleteCorruptDto
+    })));
+}
+/**
+ * Start corrupt media scan
+ */
+export function startCorruptScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/corrupt/scan", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Dismiss media health findings
+ */
+export function dismiss({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/media-health/dismiss", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Locate missing media
+ */
+export function locateMissing({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/missing/locate", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Relink missing media
+ */
+export function relinkMissing({ mediaHealthBulkActionDto }: {
+    mediaHealthBulkActionDto: MediaHealthBulkActionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthBulkResponseDto;
+    }>("/media-health/missing/relink", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: mediaHealthBulkActionDto
+    })));
+}
+/**
+ * Start missing media scan
+ */
+export function startMissingScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: MediaHealthScanResponseDto;
+    }>("/media-health/missing/scan", {
+        ...opts,
+        method: "POST"
     }));
 }
 /**
@@ -6129,6 +7122,145 @@ export function getQueueJobs({ name, status }: {
     }));
 }
 /**
+ * Enqueue all ML backfill jobs
+ */
+export function backfill(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodBackfillResultDto;
+    }>("/runpod/backfill", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Test RunPod connection
+ */
+export function testConnection({ runPodConnectionTestDto }: {
+    runPodConnectionTestDto: RunPodConnectionTestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodConnectionResultDto;
+    }>("/runpod/connect", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: runPodConnectionTestDto
+    })));
+}
+/**
+ * Tear down the serverless endpoint
+ */
+export function teardownServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/endpoint", {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Set up (or verify) the serverless endpoint
+ */
+export function setupServerlessEndpoint(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/endpoint/setup", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * List RunPod GPU types
+ */
+export function listGpus(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodGpuTypeDto[];
+    }>("/runpod/gpus", {
+        ...opts
+    }));
+}
+/**
+ * Provision a RunPod pod
+ */
+export function provision({ runPodProvisionDto }: {
+    runPodProvisionDto: RunPodProvisionDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: RunPodStateDto;
+    }>("/runpod/pods", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: runPodProvisionDto
+    })));
+}
+/**
+ * Terminate the current RunPod pod
+ */
+export function terminate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current", {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Get current RunPod state
+ */
+export function getCurrent(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current", {
+        ...opts
+    }));
+}
+/**
+ * Resume the current RunPod pod
+ */
+export function start(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current/start", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Stop the current RunPod pod
+ */
+export function stop(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: RunPodStateDto;
+    }>("/runpod/pods/current/stop", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Ask Search
+ */
+export function askSearch({ askSearchDto }: {
+    askSearchDto: AskSearchDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: AskSearchResponseDto;
+    }>("/search/ask", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: askSearchDto
+    })));
+}
+/**
  * Retrieve assets by city
  */
 export function getAssetsByCity(opts?: Oazapfts.RequestOpts) {
@@ -6153,12 +7285,13 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, imageEnrichment, isEncoded, isFavorite, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, state, suppressedOnly, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
     createdAfter?: string;
     createdBefore?: string;
+    imageEnrichment?: ImageEnrichmentFilter;
     isEncoded?: boolean;
     isFavorite?: boolean;
     isMotion?: boolean;
@@ -6174,6 +7307,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     rating?: number | null;
     size?: number;
     state?: string | null;
+    suppressedOnly?: boolean;
     tagIds?: string[] | null;
     takenAfter?: string;
     takenBefore?: string;
@@ -6195,6 +7329,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         country,
         createdAfter,
         createdBefore,
+        imageEnrichment,
         isEncoded,
         isFavorite,
         isMotion,
@@ -6210,6 +7345,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         rating,
         size,
         state,
+        suppressedOnly,
         tagIds,
         takenAfter,
         takenBefore,
@@ -6901,6 +8037,79 @@ export function getConfigDefaults(opts?: Oazapfts.RequestOpts) {
     }));
 }
 /**
+ * Defer image description re-queue
+ */
+export function deferImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/system-config/image-description/defer-requeue", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Trigger image description re-queue
+ */
+export function triggerImageDescriptionRequeue(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: ImageDescriptionRequeueResponseDto;
+    } | {
+        status: 400;
+    }>("/system-config/image-description/requeue", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Estimate image description re-queue cost
+ */
+export function getImageDescriptionRequeueEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: ImageDescriptionRequeueEstimateDto;
+    }>("/system-config/image-description/requeue-estimate", {
+        ...opts
+    }));
+}
+/**
+ * Get machine learning hardware
+ */
+export function getMachineLearningHardware(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: MachineLearningHardwareResponseDto;
+    }>("/system-config/machine-learning/hardware", {
+        ...opts
+    }));
+}
+/**
+ * Trigger smart-album re-evaluate
+ */
+export function triggerSmartAlbumReevaluate({ smartAlbumReevaluateRequestDto }: {
+    smartAlbumReevaluateRequestDto?: SmartAlbumReevaluateRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: SmartAlbumReevaluateResponseDto;
+    } | {
+        status: 400;
+    }>("/system-config/smart-albums/reevaluate", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: smartAlbumReevaluateRequestDto
+    })));
+}
+/**
+ * Estimate smart-album re-evaluate cost
+ */
+export function getSmartAlbumReevaluateEstimate(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: SmartAlbumReevaluateEstimateDto;
+    }>("/system-config/smart-albums/reevaluate-estimate", {
+        ...opts
+    }));
+}
+/**
  * Get storage template options
  */
 export function getStorageTemplateOptions(opts?: Oazapfts.RequestOpts) {
@@ -7087,9 +8296,10 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBucket({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, timeBucket, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
+    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
@@ -7097,6 +8307,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
     orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
+    suppressedOnly?: boolean;
     tagId?: string;
     timeBucket: string;
     userId?: string;
@@ -7111,6 +8322,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
     }>(`/timeline/bucket${QS.query(QS.explode({
         albumId,
         bbox,
+        dateType,
         isFavorite,
         isTrashed,
         key,
@@ -7118,6 +8330,7 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
         orderBy,
         personId,
         slug,
+        suppressedOnly,
         tagId,
         timeBucket,
         userId,
@@ -7132,9 +8345,10 @@ export function getTimeBucket({ albumId, bbox, isFavorite, isTrashed, key, order
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, order, orderBy, personId, slug, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, dateType, isFavorite, isTrashed, key, order, orderBy, personId, slug, suppressedOnly, tagId, userId, visibility, withCoordinates, withPartners, withStacked }: {
     albumId?: string;
     bbox?: string;
+    dateType?: TimeBucketDateType;
     isFavorite?: boolean;
     isTrashed?: boolean;
     key?: string;
@@ -7142,6 +8356,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
     orderBy?: AssetOrderBy;
     personId?: string;
     slug?: string;
+    suppressedOnly?: boolean;
     tagId?: string;
     userId?: string;
     visibility?: AssetVisibility;
@@ -7155,6 +8370,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
     }>(`/timeline/buckets${QS.query(QS.explode({
         albumId,
         bbox,
+        dateType,
         isFavorite,
         isTrashed,
         key,
@@ -7162,6 +8378,7 @@ export function getTimeBuckets({ albumId, bbox, isFavorite, isTrashed, key, orde
         orderBy,
         personId,
         slug,
+        suppressedOnly,
         tagId,
         userId,
         visibility,
@@ -7593,6 +8810,7 @@ export enum TranscodeHWAccel {
 export enum AudioCodec {
     Mp3 = "mp3",
     Aac = "aac",
+    Libopus = "libopus",
     Opus = "opus",
     PcmS16Le = "pcm_s16le"
 }
@@ -7649,6 +8867,29 @@ export enum LogLevel {
     Error = "error",
     Fatal = "fatal"
 }
+export enum MachineLearningHardwareAcceleration {
+    Auto = "auto",
+    Openvino = "openvino",
+    Cuda = "cuda"
+}
+export enum PlaceholderValidation {
+    Strict = "strict",
+    Warn = "warn"
+}
+export enum Style {
+    Terse = "terse",
+    Balanced = "balanced",
+    Rich = "rich"
+}
+export enum Mode {
+    Disabled = "disabled",
+    Pod = "pod",
+    Serverless = "serverless"
+}
+export enum ScalerType {
+    QueueDelay = "QUEUE_DELAY",
+    RequestCount = "REQUEST_COUNT"
+}
 export enum ReleaseChannel {
     Stable = "stable",
     ReleaseCandidate = "releaseCandidate"
@@ -7703,6 +8944,10 @@ export enum CalendarHeatmapType {
 export enum AssetOrder {
     Asc = "asc",
     Desc = "desc"
+}
+export enum SuppressionScope {
+    Owned = "owned",
+    Visible = "visible"
 }
 export enum AssetVisibility {
     Archive = "archive",
@@ -7926,11 +9171,46 @@ export enum AssetTypeEnum {
 export enum AssetEditAction {
     Crop = "crop",
     Rotate = "rotate",
-    Mirror = "mirror"
+    Mirror = "mirror",
+    Trim = "trim",
+    Straighten = "straighten",
+    Adjust = "adjust",
+    Filter = "filter",
+    Effect = "effect",
+    AutoEnhance = "autoEnhance",
+    Stabilize = "stabilize",
+    TextOverlay = "textOverlay",
+    Audio = "audio",
+    Speed = "speed"
 }
 export enum MirrorAxis {
     Horizontal = "horizontal",
     Vertical = "vertical"
+}
+export enum Status {
+    Missing = "missing",
+    Success = "success",
+    Failed = "failed",
+    Skipped = "skipped"
+}
+export enum Action {
+    Accepted = "accepted",
+    MarkedSafe = "marked-safe",
+    MarkedNsfw = "marked-nsfw"
+}
+export enum Status2 {
+    Missing = "missing",
+    Success = "success",
+    Failed = "failed"
+}
+export enum AssetImageEnrichmentAction {
+    RerunImageDescription = "rerun-image-description",
+    RerunNsfwDetection = "rerun-nsfw-detection",
+    AcceptNsfwResult = "accept-nsfw-result",
+    MarkNsfw = "mark-nsfw",
+    MarkSafe = "mark-safe",
+    ClearGeneratedDescription = "clear-generated-description",
+    ClearGeneratedTags = "clear-generated-tags"
 }
 export enum AssetMediaSize {
     Original = "original",
@@ -7950,6 +9230,9 @@ export enum ManualJobName {
     MemoryCleanup = "memory-cleanup",
     MemoryCreate = "memory-create",
     BackupDatabase = "backup-database",
+    BestPhotosBackfill = "best-photos-backfill",
+    PhysicalDeduplicationDryRun = "physical-deduplication-dry-run",
+    PhysicalDeduplicationApply = "physical-deduplication-apply",
     IntegrityMissingFiles = "integrity-missing-files",
     IntegrityUntrackedFiles = "integrity-untracked-files",
     IntegrityChecksumMismatch = "integrity-checksum-mismatch",
@@ -7968,6 +9251,7 @@ export enum QueueName {
     FacialRecognition = "facialRecognition",
     SmartSearch = "smartSearch",
     DuplicateDetection = "duplicateDetection",
+    VideoDuplicateDetection = "videoDuplicateDetection",
     BackgroundTask = "backgroundTask",
     StorageTemplateMigration = "storageTemplateMigration",
     Migration = "migration",
@@ -7977,6 +9261,10 @@ export enum QueueName {
     Notifications = "notifications",
     BackupDatabase = "backupDatabase",
     Ocr = "ocr",
+    ImageEnrichment = "imageEnrichment",
+    ImageDescription = "imageDescription",
+    NsfwDetection = "nsfwDetection",
+    MediaHealth = "mediaHealth",
     Workflow = "workflow",
     IntegrityCheck = "integrityCheck",
     Editor = "editor"
@@ -7987,6 +9275,34 @@ export enum QueueCommand {
     Resume = "resume",
     Empty = "empty",
     ClearFailed = "clear-failed"
+}
+export enum LivePhotoMatchConfidence {
+    High = "high",
+    Low = "low"
+}
+export enum MediaHealthCategory {
+    Missing = "missing",
+    Corrupt = "corrupt"
+}
+export enum MediaHealthStatus {
+    Found = "found",
+    Missing = "missing",
+    Candidate = "candidate",
+    Relinked = "relinked",
+    Dismissed = "dismissed",
+    Resolved = "resolved",
+    UnsupportedRaw = "unsupported_raw",
+    CorruptSuspect = "corrupt_suspect",
+    CorruptConfirmed = "corrupt_confirmed",
+    TrashQueued = "trash_queued",
+    Trashed = "trashed",
+    DeleteQueued = "delete_queued",
+    Deleted = "deleted"
+}
+export enum MediaHealthSeverity {
+    Info = "info",
+    Warning = "warning",
+    Critical = "critical"
 }
 export enum MemorySearchOrder {
     Asc = "asc",
@@ -8017,13 +9333,17 @@ export enum QueueJobStatus {
     Paused = "paused"
 }
 export enum JobName {
+    ForkSchemaBackfill = "ForkSchemaBackfill",
     AssetDelete = "AssetDelete",
     AssetDeleteCheck = "AssetDeleteCheck",
     AssetDetectFacesQueueAll = "AssetDetectFacesQueueAll",
     AssetDetectFaces = "AssetDetectFaces",
     AssetDetectDuplicatesQueueAll = "AssetDetectDuplicatesQueueAll",
     AssetDetectDuplicates = "AssetDetectDuplicates",
+    AssetGenerateVideoDuplicateFramesQueueAll = "AssetGenerateVideoDuplicateFramesQueueAll",
+    AssetGenerateVideoDuplicateFrames = "AssetGenerateVideoDuplicateFrames",
     AssetEditThumbnailGeneration = "AssetEditThumbnailGeneration",
+    AssetVideoEditGeneration = "AssetVideoEditGeneration",
     AssetEncodeVideoQueueAll = "AssetEncodeVideoQueueAll",
     AssetEncodeVideo = "AssetEncodeVideo",
     AssetEmptyTrash = "AssetEmptyTrash",
@@ -8032,6 +9352,12 @@ export enum JobName {
     AssetFileMigration = "AssetFileMigration",
     AssetGenerateThumbnailsQueueAll = "AssetGenerateThumbnailsQueueAll",
     AssetGenerateThumbnails = "AssetGenerateThumbnails",
+    BestPhotosScoreQueueAll = "BestPhotosScoreQueueAll",
+    BestPhotosScore = "BestPhotosScore",
+    MediaHealthScanMissing = "MediaHealthScanMissing",
+    MediaHealthLocateMissing = "MediaHealthLocateMissing",
+    MediaHealthScanCorrupt = "MediaHealthScanCorrupt",
+    MediaHealthDeleteCorrupt = "MediaHealthDeleteCorrupt",
     AuditTableCleanup = "AuditTableCleanup",
     DatabaseBackup = "DatabaseBackup",
     FacialRecognitionQueueAll = "FacialRecognitionQueueAll",
@@ -8068,10 +9394,17 @@ export enum JobName {
     SmartSearch = "SmartSearch",
     StorageTemplateMigration = "StorageTemplateMigration",
     StorageTemplateMigrationSingle = "StorageTemplateMigrationSingle",
+    PhysicalDeduplicationMigrationDryRun = "PhysicalDeduplicationMigrationDryRun",
+    PhysicalDeduplicationMigrationApply = "PhysicalDeduplicationMigrationApply",
     TagCleanup = "TagCleanup",
     VersionCheck = "VersionCheck",
     OcrQueueAll = "OcrQueueAll",
     Ocr = "Ocr",
+    ImageDescriptionQueueAll = "ImageDescriptionQueueAll",
+    ImageDescription = "ImageDescription",
+    NsfwDetectionQueueAll = "NsfwDetectionQueueAll",
+    NsfwDetection = "NsfwDetection",
+    SmartAlbumReevaluateAll = "SmartAlbumReevaluateAll",
     WorkflowAssetTrigger = "WorkflowAssetTrigger",
     IntegrityUntrackedFilesQueueAll = "IntegrityUntrackedFilesQueueAll",
     IntegrityUntrackedFiles = "IntegrityUntrackedFiles",
@@ -8083,6 +9416,31 @@ export enum JobName {
     IntegrityChecksumFilesRefresh = "IntegrityChecksumFilesRefresh",
     IntegrityDeleteReportType = "IntegrityDeleteReportType",
     IntegrityDeleteReports = "IntegrityDeleteReports"
+}
+export enum Status3 {
+    Idle = "idle",
+    Provisioning = "provisioning",
+    Starting = "starting",
+    Running = "running",
+    Stopping = "stopping",
+    Stopped = "stopped",
+    Error = "error",
+    ServerlessProvisioning = "serverless-provisioning",
+    ServerlessReady = "serverless-ready"
+}
+export enum ImageEnrichmentFilter {
+    Nsfw = "nsfw",
+    NsfwReview = "nsfw-review",
+    NsfwReviewed = "nsfw-reviewed",
+    NsfwOverridden = "nsfw-overridden",
+    ImageDescriptionFailed = "image-description-failed",
+    NsfwDetectionFailed = "nsfw-detection-failed",
+    MissingImageDescription = "missing-image-description",
+    MissingNsfwDetection = "missing-nsfw-detection"
+}
+export enum Mode2 {
+    Smart = "smart",
+    Metadata = "metadata"
 }
 export enum SearchSuggestionType {
     Country = "country",
@@ -8190,6 +9548,18 @@ export enum SyncRequestType {
     AssetFacesV1 = "AssetFacesV1",
     AssetFacesV2 = "AssetFacesV2",
     UserMetadataV1 = "UserMetadataV1"
+}
+export enum Kind {
+    Travel = "travel",
+    Documents = "documents",
+    Screenshots = "screenshots",
+    Food = "food",
+    Pets = "pets",
+    Nature = "nature"
+}
+export enum TimeBucketDateType {
+    Added = "added",
+    Taken = "taken"
 }
 export enum AssetOrderBy {
     TakenAt = "takenAt",

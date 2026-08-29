@@ -20,7 +20,7 @@ import {
 } from 'src/enum';
 import { AssetDuplicateResult } from 'src/repositories/search.repository';
 import { BaseService } from 'src/services/base.service';
-import { JobOf } from 'src/types';
+import { JobItem, JobOf } from 'src/types';
 import { suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { ThumbnailConfig } from 'src/utils/media';

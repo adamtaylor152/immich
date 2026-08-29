@@ -239,7 +239,7 @@ export class SystemConfigService extends BaseService {
     // or no completions yet). This reflects the user's actual hardware/model,
     // unlike the prior hardcoded 1.5s.
     const avgMs = this.jobRepository.getRollingAvgMs(JobName.ImageDescription);
-    const rollingAvgSeconds = avgMs == null ? DEFAULT_SECONDS_PER_ASSET : avgMs / 1000;
+    const rollingAvgSeconds = avgMs === null ? DEFAULT_SECONDS_PER_ASSET : avgMs / 1000;
     const estimatedTotalSeconds = stats.totalAssets * rollingAvgSeconds;
 
     return {

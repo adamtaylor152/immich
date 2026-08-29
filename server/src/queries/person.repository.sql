@@ -72,6 +72,47 @@ where
   "person"."ownerId" = $1
   and "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
   and "person"."isHidden" = $2
 group by
   "person"."ownerId",
@@ -230,6 +271,10 @@ select
       "asset_file"."assetId" = "asset"."id"
       and "asset_file"."type" = 'preview'
       and "asset_file"."isEdited" = false
+    order by
+      "asset_file"."createdAt" desc
+    limit
+      $1
   ) as "previewPath"
 from
   "person"
@@ -237,8 +282,8 @@ from
   inner join "asset" on "asset_face"."assetId" = "asset"."id"
   left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
 where
-  "person"."ownerId" = $1
-  and "person"."personGroupId" = $2
+  "person"."ownerId" = $2
+  and "person"."personGroupId" = $3
   and "asset_face"."deletedAt" is null
 
 -- PersonRepository.reassignFace
@@ -271,6 +316,59 @@ from
 where
   "person"."ownerId" = $1
   and f_unaccent ("person"."name") %> f_unaccent ($2)
+  and exists (
+    select
+    from
+      "asset_face"
+      inner join "asset" on "asset"."id" = "asset_face"."assetId"
+      and "asset"."visibility" = 'timeline'
+      and "asset"."deletedAt" is null
+    where
+      "asset_face"."personGroupId" = "person"."personGroupId"
+      and "asset_face"."deletedAt" is null
+      and "asset_face"."isVisible" is true
+      and not (
+        case
+          when "asset"."id" is null then false
+          when coalesce(
+            (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ),
+            'inactive'
+          ) in ('legacy', 'dual-write', 'ready') then exists (
+            select
+              1
+            from
+              asset as nsfw_asset
+            where
+              nsfw_asset.id = "asset"."id"
+              and nsfw_asset.is_nsfw = true
+          )
+          when (
+            select
+              phase
+            from
+              immich_fork.state
+            where
+              id = 1
+          ) = 'active' then not exists (
+            select
+              1
+            from
+              immich_fork.asset_privacy as privacy_asset
+            where
+              privacy_asset."assetId" = "asset"."id"
+              and privacy_asset."isNsfw" = false
+          )
+          else false
+        end
+      )
+  )
 order by
   f_unaccent ("person"."name") <->>> f_unaccent ($3)
 limit
@@ -315,6 +413,47 @@ where
   "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
   and "asset_face"."personGroupId" = $3
+  and not (
+    case
+      when "asset"."id" is null then false
+      when coalesce(
+        (
+          select
+            phase
+          from
+            immich_fork.state
+          where
+            id = 1
+        ),
+        'inactive'
+      ) in ('legacy', 'dual-write', 'ready') then exists (
+        select
+          1
+        from
+          asset as nsfw_asset
+        where
+          nsfw_asset.id = "asset"."id"
+          and nsfw_asset.is_nsfw = true
+      )
+      when (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ) = 'active' then not exists (
+        select
+          1
+        from
+          immich_fork.asset_privacy as privacy_asset
+        where
+          privacy_asset."assetId" = "asset"."id"
+          and privacy_asset."isNsfw" = false
+      )
+      else false
+    end
+  )
 
 -- PersonRepository.getNumberOfPeople
 select
@@ -345,6 +484,47 @@ where
           "asset"."id" = "asset_face"."assetId"
           and "asset"."visibility" = 'timeline'
           and "asset"."deletedAt" is null
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write', 'ready') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              when (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ) = 'active' then not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+              else false
+            end
+          )
       )
   )
   and "person"."ownerId" = $3

@@ -23,7 +23,7 @@ class SearchManager {
   }
 
   async submit() {
-    await goto(Route.search(this.#toQuery()));
+    await goto(Route.search(this.toQuery()));
   }
 
   #fromQuery(searchQuery: MetadataSearchDto | SmartSearchDto): SearchFilter {
@@ -75,10 +75,11 @@ class SearchManager {
             ? MediaType.Video
             : MediaType.All,
       rating: searchQuery.rating,
+      imageEnrichment: searchQuery.imageEnrichment ?? '',
     };
   }
 
-  #toQuery(): MetadataSearchDto | SmartSearchDto {
+  toQuery(): MetadataSearchDto | SmartSearchDto {
     let type: AssetTypeEnum | undefined = undefined;
     if (this.filter.mediaType === MediaType.Image) {
       type = AssetTypeEnum.Image;
@@ -114,6 +115,7 @@ class SearchManager {
       tagIds: this.filter.tagIds === null ? null : this.filter.tagIds.size > 0 ? [...this.filter.tagIds] : undefined,
       type,
       rating: this.filter.rating,
+      imageEnrichment: this.filter.imageEnrichment || undefined,
     };
   }
 

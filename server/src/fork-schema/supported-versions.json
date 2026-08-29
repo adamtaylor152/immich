@@ -18,7 +18,13 @@
   },
   "postCertifiedUpstreamMigrations": [
     "1784986754473-ConvertUserPasswordEmptyStringToNull",
-    "1784986754474-AlbumDescriptionNullable"
+    "1784986754474-AlbumDescriptionNullable",
+    "1786385711807-AlbumOwnerDeleteTrigger",
+    "1786741078327-AddWorkflowLogsTable",
+    "1786972746371-AssetOcrUpdatedAtTrigger",
+    "1786972746372-AssetOcrSyncReset",
+    "1787148183729-ClusterGroups",
+    "1787148183730-DeleteMismatchedMemoryAssets"
   ],
   "upstreamMigrations": [
     "1744910873969-InitialMigration",
@@ -110,6 +116,12 @@
     "1784647658615-AddOAuthBearerTokenToSession",
     "1784836013770-MinFacePreferenceMigration",
     "1784986754473-ConvertUserPasswordEmptyStringToNull",
-    "1784986754474-AlbumDescriptionNullable"
+    "1784986754474-AlbumDescriptionNullable",
+    "1786385711807-AlbumOwnerDeleteTrigger",
+    "1786741078327-AddWorkflowLogsTable",
+    "1786972746371-AssetOcrUpdatedAtTrigger",
+    "1786972746372-AssetOcrSyncReset",
+    "1787148183729-ClusterGroups",
+    "1787148183730-DeleteMismatchedMemoryAssets"
   ]
 }

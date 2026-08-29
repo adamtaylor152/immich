@@ -77,7 +77,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
   });
 
   it('copies exact legacy rows idempotently, verifies every table, and quarantines missing assets', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     const orphanAssetId = randomUUID();
     const runId = randomUUID();
@@ -208,7 +208,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
     'uses phase-aware production writes, reads, and asset cleanup in %s',
     async (phase) => {
       await sql`UPDATE immich_fork.state SET phase = ${phase}, active = ${phase === 'active'} WHERE id = 1`.execute(db);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const asset = mediumFactory.assetInsert({ ownerId: user.id });
       await db.insertInto('user').values(user).execute();
       await db.insertInto('asset').values(asset).execute();
@@ -270,7 +270,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
 
   it.each(['inactive', 'failed'] as const)('does not mutate derived-result tables in %s', async (phase) => {
     await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(asset).execute();
@@ -320,7 +320,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
   });
 
   it('uses the Task 4 claim token fence for the real health handler', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(asset).execute();
@@ -349,7 +349,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
 
   it('removes every derived sidecar through the user-owned asset cleanup path', async () => {
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const assets = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(assets).execute();
@@ -402,7 +402,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
 
   it('fails closed when sidecar writes reference missing public or fork parents', async () => {
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(user).execute();
     const missingAssetId = randomUUID();
     const missingHealthId = randomUUID();
@@ -472,7 +472,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
     'serializes %s asset deletion against concurrent sidecar writes',
     async (mode) => {
       await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const asset = mediumFactory.assetInsert({ ownerId: user.id });
       await db.insertInto('user').values(user).execute();
       await db.insertInto('asset').values(asset).execute();
@@ -551,7 +551,7 @@ describe('health, scoring, and duplicate-frame fork sidecars', () => {
   );
 
   it('reconciles every derived table in both directions and removes stale health trees', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(asset).execute();

@@ -7,12 +7,12 @@
   import {
     getImageDescriptionRequeueEstimate,
     MachineLearningHardwareAcceleration,
-    Mode2 as RunPodMode,
-    type ImageDescriptionConfig,
+    Mode as RunPodMode,
+    type AdminConfigImageDescriptionDto,
     type ImageDescriptionRequeueEstimateDto,
-    type NsfwDetectionConfig,
-    type SystemConfigMachineLearningDto,
-    type SystemConfigRunPodServerlessDto,
+    type AdminConfigNsfwDetectionDto,
+    type AdminConfigMachineLearningDto,
+    type AdminConfigRunPodServerlessDto,
   } from '@immich/sdk';
   import { Button, modalManager, toastManager } from '@immich/ui';
   import { mdiRefresh } from '@mdi/js';
@@ -35,11 +35,11 @@
   } from './machine-learning-helpers';
 
   interface Props {
-    workingConfig: SystemConfigMachineLearningDto;
-    imageDescription: ImageDescriptionConfig;
-    savedImageDescription: ImageDescriptionConfig;
-    nsfwDetection: NsfwDetectionConfig;
-    runpodServerless: SystemConfigRunPodServerlessDto;
+    workingConfig: AdminConfigMachineLearningDto;
+    imageDescription: AdminConfigImageDescriptionDto;
+    savedImageDescription: AdminConfigImageDescriptionDto;
+    nsfwDetection: AdminConfigNsfwDetectionDto;
+    runpodServerless: AdminConfigRunPodServerlessDto;
     detectedAcceleration: MachineLearningHardwareAcceleration | undefined;
     isMachineLearningConfigEdited: boolean;
     disabled: boolean;

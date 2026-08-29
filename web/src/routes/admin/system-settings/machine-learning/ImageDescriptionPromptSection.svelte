@@ -4,7 +4,7 @@
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import { SettingInputFieldType } from '$lib/constants';
   import { serverConfigManager } from '$lib/managers/server-config-manager.svelte';
-  import { PlaceholderValidation, Style, type ImageDescriptionConfig } from '@immich/sdk';
+  import { PlaceholderValidation, Style, type AdminConfigImageDescriptionDto } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { t } from 'svelte-i18n';
   import SettingSelect from '../SettingSelect.svelte';
@@ -12,8 +12,8 @@
   import { parseLines } from './machine-learning-helpers';
 
   interface Props {
-    imageDescription: ImageDescriptionConfig;
-    savedImageDescription: ImageDescriptionConfig;
+    imageDescription: AdminConfigImageDescriptionDto;
+    savedImageDescription: AdminConfigImageDescriptionDto;
     workingMlEnabled: boolean;
     disabled: boolean;
   }

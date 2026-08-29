@@ -79,7 +79,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   it.each(['inactive', 'failed'] as const)(
     'does not mutate enrichment, config, or smart-album sidecars in %s',
     async (phase) => {
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const asset = mediumFactory.assetInsert({ ownerId: user.id });
       await db.insertInto('user').values(user).execute();
       await db.insertInto('asset').values(asset).execute();
@@ -121,7 +121,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   );
 
   it('extracts only an exactly reproduced generated description and preserves exact user text', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const exact = mediumFactory.assetInsert({ ownerId: user.id });
     const mismatch = mediumFactory.assetInsert({ ownerId: user.id });
     const wrongHash = mediumFactory.assetInsert({ ownerId: user.id });
@@ -237,7 +237,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   });
 
   it('preserves ambiguous descriptions byte-for-byte and reviews generated tags without an applied hash', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const duplicate = mediumFactory.assetInsert({ ownerId: user.id });
     const blanks = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
@@ -288,7 +288,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
     'initializes enrichment on asset creation in %s and cleans asset references on deletion',
     async (phase) => {
       await sql`UPDATE immich_fork.state SET phase = ${phase} WHERE id = 1`.execute(db);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       await db.insertInto('user').values(user).execute();
       const asset = await new AssetRepository(db).create(mediumFactory.assetInsert({ ownerId: user.id }));
       const sidecar = await new ForkEnrichmentRepository(db).get(asset.id);
@@ -318,7 +318,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
 
   it('cleans every asset sidecar during owned-asset bulk deletion', async () => {
     await sql`UPDATE immich_fork.state SET phase = 'ready' WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(user).execute();
     const inserts = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
     const repository = new AssetRepository(db);
@@ -333,7 +333,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
 
   it('cleans rules for an album subtree and all albums owned by a deleted user', async () => {
     await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const root = mediumFactory.albumInsert({});
     const child = mediumFactory.albumInsert({ parentId: root.id });
     await db.insertInto('user').values(user).execute();
@@ -378,7 +378,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   });
 
   it('keeps generated descriptions and tags sidecar-only after cutover', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(asset).execute();
@@ -462,7 +462,7 @@ describe('enrichment, configuration, and automation fork sidecars', () => {
   });
 
   it('backfills RunPod configuration and automation without changing official album membership', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     const album = mediumFactory.albumInsert({});
     await db.insertInto('user').values(user).execute();

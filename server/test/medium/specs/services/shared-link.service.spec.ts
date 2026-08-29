@@ -189,7 +189,7 @@ describe(SharedLinkService.name, () => {
     await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [tagSuppressed.id] });
 
     const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Private Person' });
-    await ctx.newAssetFace({ assetId: faceSuppressed.id, personId: person.id });
+    await ctx.newAssetFace({ assetId: faceSuppressed.id, personGroupId: person.personGroupId });
 
     const sharedLink = await ctx.get(SharedLinkRepository).create({
       key: randomBytes(16),
@@ -204,7 +204,7 @@ describe(SharedLinkService.name, () => {
       userId: user.id,
       includeNsfw: false,
       tagIds: [tag.id],
-      personIds: [person.id],
+      personIds: [person.personGroupId],
       scope: 'owned',
     };
     const hiddenResponse = await sut.getMine({ user, sharedLink, hideNsfwAssets: true, hiddenContent }, []);

@@ -65,7 +65,7 @@ describe(SyncEntityType.PersonV1, () => {
       {
         ack: expect.any(String),
         data: {
-          personId: person.personGroupId,
+          personGroupId: person.personGroupId,
         },
         type: 'PersonDeleteV1',
       },
@@ -132,12 +132,12 @@ describe(SyncEntityType.PersonV1, () => {
       value: nsfwMetadata(false, { action: 'marked-nsfw', isNsfw: true }),
     });
 
-    await ctx.newAssetFace({ personId: safePerson.id, assetId: safeAsset.id });
-    await ctx.newAssetFace({ personId: nsfwOnlyPerson.id, assetId: nsfwAsset.id });
-    await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedSafeAsset.id });
-    await ctx.newAssetFace({ personId: mixedPerson.id, assetId: mixedNsfwAsset.id });
-    await ctx.newAssetFace({ personId: reviewSafePerson.id, assetId: markedSafeAsset.id });
-    await ctx.newAssetFace({ personId: reviewNsfwPerson.id, assetId: markedNsfwAsset.id });
+    await ctx.newAssetFace({ personGroupId: safePerson.personGroupId, assetId: safeAsset.id });
+    await ctx.newAssetFace({ personGroupId: nsfwOnlyPerson.personGroupId, assetId: nsfwAsset.id });
+    await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedSafeAsset.id });
+    await ctx.newAssetFace({ personGroupId: mixedPerson.personGroupId, assetId: mixedNsfwAsset.id });
+    await ctx.newAssetFace({ personGroupId: reviewSafePerson.personGroupId, assetId: markedSafeAsset.id });
+    await ctx.newAssetFace({ personGroupId: reviewNsfwPerson.personGroupId, assetId: markedNsfwAsset.id });
 
     const hiddenResponse = await ctx.syncStream({ ...auth, hideNsfwAssets: true }, [SyncRequestType.PeopleV1]);
     const hiddenPersonIds = hiddenResponse
@@ -145,9 +145,16 @@ describe(SyncEntityType.PersonV1, () => {
       .map(({ data }) => data.id);
 
     expect(hiddenPersonIds).toEqual(
-      expect.arrayContaining([noFacePerson.id, safePerson.id, mixedPerson.id, reviewSafePerson.id]),
+      expect.arrayContaining([
+        noFacePerson.personGroupId,
+        safePerson.personGroupId,
+        mixedPerson.personGroupId,
+        reviewSafePerson.personGroupId,
+      ]),
     );
-    expect(hiddenPersonIds).not.toEqual(expect.arrayContaining([nsfwOnlyPerson.id, reviewNsfwPerson.id]));
+    expect(hiddenPersonIds).not.toEqual(
+      expect.arrayContaining([nsfwOnlyPerson.personGroupId, reviewNsfwPerson.personGroupId]),
+    );
 
     const elevatedResponse = await ctx.syncStream(auth, [SyncRequestType.PeopleV1]);
     const elevatedPersonIds = elevatedResponse
@@ -156,12 +163,12 @@ describe(SyncEntityType.PersonV1, () => {
 
     expect(elevatedPersonIds).toEqual(
       expect.arrayContaining([
-        noFacePerson.id,
-        safePerson.id,
-        nsfwOnlyPerson.id,
-        mixedPerson.id,
-        reviewSafePerson.id,
-        reviewNsfwPerson.id,
+        noFacePerson.personGroupId,
+        safePerson.personGroupId,
+        nsfwOnlyPerson.personGroupId,
+        mixedPerson.personGroupId,
+        reviewSafePerson.personGroupId,
+        reviewNsfwPerson.personGroupId,
       ]),
     );
   });

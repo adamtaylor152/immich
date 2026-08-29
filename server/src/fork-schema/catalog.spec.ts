@@ -89,7 +89,9 @@ describe('catalog manifests', () => {
     expect(getCatalogTableLocks(originalOfficial)).toEqual(
       [...official.tables, ...forkTables].map(({ identity }) => identity).toSorted(),
     );
-    expect(getCatalogTableLocks(fork)).toHaveLength(102);
+    // 97 public (v3.1.0 + cluster_group, cluster_group_request, person_group,
+    // person_group_audit, workflow_log from the post-certified residue) + 10 fork
+    expect(getCatalogTableLocks(fork)).toHaveLength(107);
     expect(getCatalogTableLocks(originalOfficial)).toHaveLength(91);
   });
 

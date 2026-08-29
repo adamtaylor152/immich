@@ -474,7 +474,7 @@ describe('certified fork return evidence', () => {
   });
 
   it('preserves smart-album matches and exclusions whose parent fork rule and upstream records exist', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     const album = mediumFactory.albumInsert({});
     const ruleId = randomUUID();
@@ -505,7 +505,7 @@ describe('certified fork return evidence', () => {
   });
 
   it('archives smart-album rules and children when only the upstream album is deleted', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     const album = mediumFactory.albumInsert({});
     const ruleId = randomUUID();
@@ -560,7 +560,7 @@ describe('certified fork return evidence', () => {
     ['physical_file missing canonical asset', 'physical_file'],
     ['physical_file null canonical asset', 'physical_file'],
   ] as const)('independently archives and deletes %s', async (predicate, sourceTable) => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     const album = mediumFactory.albumInsert({});
     const orphanAssetId = randomUUID();
@@ -873,7 +873,7 @@ describe('certified fork return evidence', () => {
       const bytes = Buffer.from('official-created-asset');
       const path = join(root, `${randomUUID()}.jpg`);
       await writeFile(path, bytes);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const asset = mediumFactory.assetInsert({
         ownerId: user.id,
         originalPath: path,
@@ -943,7 +943,7 @@ describe('certified fork return evidence', () => {
       const unclaimedPath = join(root, 'unclaimed.jpg');
       await writeFile(path, bytes);
       await writeFile(unclaimedPath, unclaimedBytes);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const claimed = mediumFactory.assetInsert({
         ownerId: user.id,
         originalPath: path,
@@ -1027,7 +1027,7 @@ describe('certified fork return evidence', () => {
   });
 
   it('holds the exact return claim through an in-flight run before allowing completion and replacement', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const assets = [
       mediumFactory.assetInsert({ ownerId: user.id, originalPath: '/claim-a.jpg' }),
       mediumFactory.assetInsert({ ownerId: user.id, originalPath: '/claim-b.jpg' }),
@@ -1220,7 +1220,7 @@ describe('certified fork return evidence', () => {
   });
 
   it('rejects a source row inserted after reconciliation instead of sealing zero work', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id });
     await db.insertInto('user').values(user).execute();
     const service = setupActivationService();

@@ -104,7 +104,7 @@ const snapshotForkCleanupSidecars = async (db: Kysely<DB>, assetIds: string[], p
 const insertSharedAssets = async (db: Kysely<DB>, root: string, bytes: Buffer) => {
   const canonicalPath = join(root, `${randomUUID()}.jpg`);
   await writeFile(canonicalPath, bytes);
-  const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+  const users = [await mediumFactory.userWithClusterGroup(db), await mediumFactory.userWithClusterGroup(db)];
   const assets = users.map((user) =>
     mediumFactory.assetInsert({
       ownerId: user.id,
@@ -197,7 +197,7 @@ describe('checksum and physical-storage normalization', () => {
     const bytes = Buffer.from('isolated test media bytes');
     const canonicalPath = join(temporaryRoot, `${randomUUID()}.jpg`);
     await writeFile(canonicalPath, bytes);
-    const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const users = [await mediumFactory.userWithClusterGroup(db), await mediumFactory.userWithClusterGroup(db)];
     const assets = [
       mediumFactory.assetInsert({
         ownerId: users[0].id,
@@ -303,7 +303,7 @@ describe('checksum and physical-storage normalization', () => {
     const outsideRoot = await mkdtemp(join(tmpdir(), 'immich-fork-outside-'));
     const outsidePath = join(outsideRoot, 'outside.jpg');
     await writeFile(outsidePath, bytes);
-    const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const users = [await mediumFactory.userWithClusterGroup(db), await mediumFactory.userWithClusterGroup(db)];
     const assets = [symlinkPath, outsidePath].map((originalPath, index) =>
       mediumFactory.assetInsert({
         ownerId: users[index].id,
@@ -326,7 +326,11 @@ describe('checksum and physical-storage normalization', () => {
     const bytes = Buffer.from('ownership is not byte equality');
     const canonicalPath = join(temporaryRoot, 'canonical.jpg');
     await writeFile(canonicalPath, bytes);
-    const users = [mediumFactory.userInsert(), mediumFactory.userInsert(), mediumFactory.userInsert()];
+    const users = [
+      await mediumFactory.userWithClusterGroup(db),
+      await mediumFactory.userWithClusterGroup(db),
+      await mediumFactory.userWithClusterGroup(db),
+    ];
     const duplicate = mediumFactory.assetInsert({
       ownerId: users[1].id,
       originalPath: canonicalPath,
@@ -585,7 +589,7 @@ describe('checksum and physical-storage normalization', () => {
     ['owner-wide', 'failed'],
   ] as const)('does not mutate fork cleanup sidecars during %s deletion in %s', async (mode, phase) => {
     await sql`UPDATE immich_fork.state SET phase = ${phase}, active = false WHERE id = 1`.execute(db);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const assets = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
     await db.insertInto('user').values(user).execute();
     await db.insertInto('asset').values(assets).execute();
@@ -608,7 +612,7 @@ describe('checksum and physical-storage normalization', () => {
     'cleans every fork cleanup sidecar during %s deletion in ready',
     async (mode) => {
       await sql`UPDATE immich_fork.state SET phase = 'ready', active = false WHERE id = 1`.execute(db);
-      const user = mediumFactory.userInsert();
+      const user = await mediumFactory.userWithClusterGroup(db);
       const assets = [mediumFactory.assetInsert({ ownerId: user.id }), mediumFactory.assetInsert({ ownerId: user.id })];
       await db.insertInto('user').values(user).execute();
       await db.insertInto('asset').values(assets).execute();
@@ -640,7 +644,7 @@ describe('checksum and physical-storage normalization', () => {
       const bytes = Buffer.from('normalization delete race');
       const canonicalPath = join(temporaryRoot, 'delete-race.jpg');
       await writeFile(canonicalPath, bytes);
-      const users = [mediumFactory.userInsert(), mediumFactory.userInsert()];
+      const users = [await mediumFactory.userWithClusterGroup(db), await mediumFactory.userWithClusterGroup(db)];
       const assets = users.map((user) =>
         mediumFactory.assetInsert({
           ownerId: user.id,
@@ -708,7 +712,7 @@ describe('checksum and physical-storage normalization', () => {
   );
 
   it('fails the fenced progress row and leaves the asset unchanged when its original is unreadable', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const original = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath: join(temporaryRoot, 'missing.jpg'),
@@ -887,7 +891,7 @@ describe('checksum and physical-storage normalization', () => {
     const bytes = Buffer.from('readable but mismatched bytes');
     const originalPath = join(temporaryRoot, 'mismatch.jpg');
     await writeFile(originalPath, bytes);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const original = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath,
@@ -931,7 +935,7 @@ describe('checksum and physical-storage normalization', () => {
     const bytes = Buffer.from('handler and cleanup bytes');
     const originalPath = join(temporaryRoot, `${randomUUID()}.jpg`);
     await writeFile(originalPath, bytes);
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath,

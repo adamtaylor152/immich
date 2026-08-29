@@ -3,6 +3,12 @@
 -- BestPhotosRepository.getScore
 SELECT
   to_regclass('immich_fork.state')::text AS "stateTable"
+SELECT
+  phase
+FROM
+  immich_fork.state
+WHERE
+  id = 1
 select
   *
 from
@@ -13,6 +19,12 @@ where
 -- BestPhotosRepository.upsertScore
 SELECT
   to_regclass('immich_fork.state')::text AS "stateTable"
+SELECT
+  phase
+FROM
+  immich_fork.state
+WHERE
+  id = 1
 begin
 insert into
   "public"."asset_best_photo_score" (
@@ -66,6 +78,12 @@ rollback
 -- BestPhotosRepository.getBestPhotos
 SELECT
   to_regclass('immich_fork.state')::text AS "stateTable"
+SELECT
+  phase
+FROM
+  immich_fork.state
+WHERE
+  id = 1
 select
   count(*) as "count"
 from
@@ -114,6 +132,12 @@ offset
 -- BestPhotosRepository.deleteForAssets
 SELECT
   to_regclass('immich_fork.state')::text AS "stateTable"
+SELECT
+  phase
+FROM
+  immich_fork.state
+WHERE
+  id = 1
 begin
 delete from "public"."asset_best_photo_score"
 where

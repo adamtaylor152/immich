@@ -559,7 +559,7 @@ class PersonSync extends BaseSync {
                       .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
                       .on('asset.deletedAt', 'is', null),
                   )
-                  .whereRef('asset_face.personId', '=', 'person.id')
+                  .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
                   .where('asset_face.deletedAt', 'is', null)
                   .where('asset_face.isVisible', 'is', true),
               ),
@@ -573,7 +573,7 @@ class PersonSync extends BaseSync {
                     .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
                     .on('asset.deletedAt', 'is', null),
                 )
-                .whereRef('asset_face.personId', '=', 'person.id')
+                .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
                 .where('asset_face.deletedAt', 'is', null)
                 .where('asset_face.isVisible', 'is', true)
                 .$call((qb) => withHiddenContentFilter(qb, options)),

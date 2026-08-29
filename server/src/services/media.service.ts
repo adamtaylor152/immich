@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { FACE_THUMBNAIL_SIZE, JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
+import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { ImagePathOptions, StorageCore, ThumbnailPathEntity } from 'src/cores/storage.core';
 import { AssetFile } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
@@ -96,7 +96,7 @@ enum VideoEditAccelerationMode {
 
 type VideoEditCommandPlan = {
   command: TranscodeCommand;
-  config: SystemConfigFFmpegDto;
+  config: ConfigFFmpegDto;
   hasCpuVideoFilters: boolean;
   mode: VideoEditAccelerationMode;
   fallbackReason?: string;
@@ -295,7 +295,7 @@ export class MediaService extends BaseService {
         format = videoInfo?.format ?? null;
       }
 
-      if (!videoStream || !format || videoStream.timeBase == null) {
+      if (!videoStream || !format || !videoStream.timeBase) {
         throw new Error(`Missing video metadata for asset ${asset.id}`);
       }
       generated = await this.generateVideoThumbnails(
@@ -1067,7 +1067,7 @@ export class MediaService extends BaseService {
   }
 
   private getVideoEditCommandPlan(
-    config: SystemConfigFFmpegDto,
+    config: ConfigFFmpegDto,
     edits: AssetEditActionItem[],
     videoStream: VideoStreamInfo,
     audioStream: AudioStreamInfo | undefined,
@@ -1094,7 +1094,7 @@ export class MediaService extends BaseService {
   }
 
   private getVideoEditSoftwareFallbackCommandPlan(
-    config: SystemConfigFFmpegDto,
+    config: ConfigFFmpegDto,
     edits: AssetEditActionItem[],
     videoStream: VideoStreamInfo,
     audioStream: AudioStreamInfo | undefined,
@@ -1171,7 +1171,7 @@ export class MediaService extends BaseService {
   }
 
   private getVideoEditCommand(
-    config: SystemConfigFFmpegDto,
+    config: ConfigFFmpegDto,
     edits: AssetEditActionItem[],
     videoStream: VideoStreamInfo,
     audioStream: AudioStreamInfo | undefined,

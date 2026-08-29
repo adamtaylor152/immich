@@ -1011,7 +1011,7 @@ export class AssetRepository {
             qb.where((eb) => {
               // TODO this should become a shared `hasAccess` style helper once implement sharing in more places
               const isOwner = eb('asset.ownerId', '=', anyUuid(options.userIds!));
-              return options.personId ? eb.or([isOwner, inSharedAlbum(eb, auth.user.id)]) : isOwner;
+              return options.personId && auth ? eb.or([isOwner, inSharedAlbum(eb, auth.user.id)]) : isOwner;
             }),
           )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
