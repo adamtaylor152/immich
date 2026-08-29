@@ -80,14 +80,14 @@ export function computeSiblingSortOrder(
   const targetValue = target.sortOrder ?? 0;
   if (position === 'before') {
     const prev = ordered[idx - 1];
-    if (!prev || prev.sortOrder == null) {
+    if (!prev || prev.sortOrder === null || prev.sortOrder === undefined) {
       return targetValue - 1;
     }
     return (prev.sortOrder + targetValue) / 2;
   }
   // position === 'after'
   const next = ordered[idx + 1];
-  if (!next || next.sortOrder == null) {
+  if (!next || next.sortOrder === null || next.sortOrder === undefined) {
     return targetValue + 1;
   }
   return (targetValue + next.sortOrder) / 2;
