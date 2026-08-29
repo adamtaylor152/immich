@@ -644,7 +644,7 @@ select
 from
   "asset"
 where
-  "asset"."type" = 'IMAGE'
+  "asset"."type" in ('IMAGE', 'VIDEO')
   and "asset"."status" = 'active'
   and "asset"."deletedAt" is null
   and "asset"."visibility" in ('archive', 'timeline')

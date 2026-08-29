@@ -237,7 +237,11 @@ export class JobService extends BaseService {
         ];
 
         if (asset.type === AssetType.Video) {
-          jobs.push({ name: JobName.AssetEncodeVideo, data: item.data });
+          // Videos are scored for Best Photos too (via sampled frames).
+          jobs.push(
+            { name: JobName.AssetEncodeVideo, data: item.data },
+            { name: JobName.BestPhotosScore, data: item.data },
+          );
         }
 
         if (asset.type === AssetType.Image) {

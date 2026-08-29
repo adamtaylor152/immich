@@ -88,7 +88,13 @@ describe(JobService.name, () => {
       },
       {
         item: { name: JobName.AssetGenerateThumbnails, data: { id: 'asset-1', source: 'upload' } },
-        jobs: [JobName.SmartSearch, JobName.AssetDetectFaces, JobName.Ocr, JobName.AssetEncodeVideo],
+        jobs: [
+          JobName.SmartSearch,
+          JobName.AssetDetectFaces,
+          JobName.Ocr,
+          JobName.AssetEncodeVideo,
+          JobName.BestPhotosScore,
+        ],
         stub: [AssetFactory.create({ id: 'asset-1', type: AssetType.Video })],
       },
       {
@@ -216,6 +222,7 @@ describe(JobService.name, () => {
         { name: JobName.AssetDetectFaces, data: { id: asset.id, source: 'upload' } },
         { name: JobName.Ocr, data: { id: asset.id, source: 'upload' } },
         { name: JobName.AssetEncodeVideo, data: { id: asset.id, source: 'upload' } },
+        { name: JobName.BestPhotosScore, data: { id: asset.id, source: 'upload' } },
       ]);
     });
 

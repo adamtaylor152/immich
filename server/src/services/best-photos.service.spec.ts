@@ -1,13 +1,15 @@
 import { BEST_PHOTO_SCORE_VERSION } from 'src/dtos/best-photos.dto';
 import { AssetStatus, AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum';
 import { BestPhotosService } from 'src/services/best-photos.service';
+import { probeStub } from 'test/fixtures/media.stub';
 import { factory } from 'test/small.factory';
 import { vitest } from 'vitest';
 
 describe(BestPhotosService.name, () => {
-  const logger = { setContext: vitest.fn(), warn: vitest.fn() };
+  const logger = { setContext: vitest.fn(), warn: vitest.fn(), debug: vitest.fn(), error: vitest.fn() };
   const assetJobRepository = {
     getForBestPhotoScoring: vitest.fn(),
+    getForVideoDuplicateFrameJob: vitest.fn(),
     streamForBestPhotosScoring: vitest.fn(),
   };
   const bestPhotosRepository = {
@@ -15,18 +17,23 @@ describe(BestPhotosService.name, () => {
     upsertScore: vitest.fn(),
   };
   const jobRepository = { queueAll: vitest.fn() };
-  const mediaRepository = { scoreThumbnailCandidate: vitest.fn() };
+  const mediaRepository = { scoreThumbnailCandidate: vitest.fn(), transcode: vitest.fn() };
+  const configRepository = { getEnv: vitest.fn() };
+  const systemMetadataRepository = { get: vitest.fn(), readFile: vitest.fn() };
 
   let sut: BestPhotosService;
 
   beforeEach(() => {
     vitest.resetAllMocks();
+    configRepository.getEnv.mockReturnValue({});
     sut = new BestPhotosService(
       logger as never,
       assetJobRepository as never,
       bestPhotosRepository as never,
       jobRepository as never,
       mediaRepository as never,
+      configRepository as never,
+      systemMetadataRepository as never,
     );
   });
 
@@ -73,8 +80,123 @@ describe(BestPhotosService.name, () => {
 
     expect(goodScore).toBeGreaterThan(badScore);
     expect(bestPhotosRepository.upsertScore).toHaveBeenLastCalledWith(
-      expect.objectContaining({ scoreVersion: BEST_PHOTO_SCORE_VERSION }),
+      expect.objectContaining({
+        scoreVersion: BEST_PHOTO_SCORE_VERSION,
+        bestFrameTimestampMs: null,
+        frameScore: null,
+        frameMetadata: null,
+      }),
     );
+  });
+
+  describe('video scoring', () => {
+    const videoAsset = {
+      id: 'video-1',
+      ownerId: 'user-1',
+      type: AssetType.Video,
+      status: AssetStatus.Active,
+      deletedAt: null,
+      visibility: AssetVisibility.Timeline,
+      originalFileName: 'clip.mp4',
+      width: 3840,
+      height: 2160,
+      previewFile: '/preview.jpg',
+      faceCount: 0,
+    };
+
+    const videoJob = (durationMs: number) => ({
+      id: videoAsset.id,
+      ownerId: videoAsset.ownerId,
+      originalPath: '/data/library/clip.mp4',
+      visibility: AssetVisibility.Timeline,
+      videoStream: probeStub.videoStream2160p.videoStream!,
+      format: { ...probeStub.videoStream2160p.format, duration: durationMs },
+    });
+
+    it('should score a video by its best sampled frame and persist frame columns', async () => {
+      assetJobRepository.getForBestPhotoScoring.mockResolvedValue(videoAsset);
+      assetJobRepository.getForVideoDuplicateFrameJob.mockResolvedValue(videoJob(60_000));
+      mediaRepository.transcode.mockResolvedValue(void 0);
+      mediaRepository.scoreThumbnailCandidate
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(80)
+        .mockResolvedValueOnce(50)
+        .mockResolvedValueOnce(20)
+        .mockResolvedValueOnce(5);
+
+      await expect(sut.handleScore({ id: videoAsset.id })).resolves.toBe(JobStatus.Success);
+
+      // 60s clip sampled at 10s/20s/30s/40s/50s; best raw score (80) is at 20s
+      expect(mediaRepository.transcode).toHaveBeenCalledTimes(5);
+      expect(bestPhotosRepository.upsertScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetId: videoAsset.id,
+          ownerId: videoAsset.ownerId,
+          scoreVersion: BEST_PHOTO_SCORE_VERSION,
+          bestFrameTimestampMs: 20_000,
+          frameScore: (80 + 40) / 220,
+          frameMetadata: expect.objectContaining({
+            durationMs: 60_000,
+            sampledFrameCount: 5,
+            frames: expect.arrayContaining([expect.objectContaining({ timestampMs: 20_000, thumbnailScore: 80 })]),
+          }),
+        }),
+      );
+    });
+
+    it('should skip a video over the duration cap without extracting frames', async () => {
+      assetJobRepository.getForBestPhotoScoring.mockResolvedValue(videoAsset);
+      assetJobRepository.getForVideoDuplicateFrameJob.mockResolvedValue(videoJob(3_600_000));
+
+      await expect(sut.handleScore({ id: videoAsset.id })).resolves.toBe(JobStatus.Skipped);
+      expect(mediaRepository.transcode).not.toHaveBeenCalled();
+      expect(bestPhotosRepository.upsertScore).not.toHaveBeenCalled();
+    });
+
+    it('should skip a video without probed metadata', async () => {
+      assetJobRepository.getForBestPhotoScoring.mockResolvedValue(videoAsset);
+      assetJobRepository.getForVideoDuplicateFrameJob.mockResolvedValue(void 0);
+
+      await expect(sut.handleScore({ id: videoAsset.id })).resolves.toBe(JobStatus.Skipped);
+      expect(bestPhotosRepository.upsertScore).not.toHaveBeenCalled();
+    });
+
+    it('should skip gracefully when every frame extraction fails', async () => {
+      assetJobRepository.getForBestPhotoScoring.mockResolvedValue(videoAsset);
+      assetJobRepository.getForVideoDuplicateFrameJob.mockResolvedValue(videoJob(60_000));
+      mediaRepository.transcode.mockRejectedValue(new Error('ffmpeg failed'));
+
+      await expect(sut.handleScore({ id: videoAsset.id })).resolves.toBe(JobStatus.Skipped);
+      expect(bestPhotosRepository.upsertScore).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalled();
+    });
+
+    it('should pick the best frame among the frames that extract successfully', async () => {
+      assetJobRepository.getForBestPhotoScoring.mockResolvedValue(videoAsset);
+      assetJobRepository.getForVideoDuplicateFrameJob.mockResolvedValue(videoJob(60_000));
+      mediaRepository.transcode
+        .mockResolvedValueOnce(void 0)
+        .mockRejectedValueOnce(new Error('dead zone'))
+        .mockResolvedValueOnce(void 0)
+        .mockResolvedValueOnce(void 0)
+        .mockResolvedValueOnce(void 0);
+      mediaRepository.scoreThumbnailCandidate
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(60)
+        .mockResolvedValueOnce(20)
+        .mockResolvedValueOnce(5);
+
+      await expect(sut.handleScore({ id: videoAsset.id })).resolves.toBe(JobStatus.Success);
+
+      // frame at 20s failed to extract; best of the remaining (60) is at 30s
+      expect(bestPhotosRepository.upsertScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bestFrameTimestampMs: 30_000,
+          frameMetadata: expect.objectContaining({ sampledFrameCount: 5 }),
+        }),
+      );
+      expect(logger.warn).toHaveBeenCalled();
+    });
   });
 
   it('should queue single asset scoring jobs for a backfill', async () => {

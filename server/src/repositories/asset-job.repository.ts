@@ -303,7 +303,7 @@ export class AssetJobRepository {
     return this.db
       .selectFrom('asset')
       .select(['asset.id'])
-      .where('asset.type', '=', sql.lit(AssetType.Image))
+      .where('asset.type', 'in', [sql.lit(AssetType.Image), sql.lit(AssetType.Video)])
       .where('asset.status', '=', sql.lit(AssetStatus.Active))
       .where('asset.deletedAt', 'is', null)
       .$call(withDefaultVisibility)
