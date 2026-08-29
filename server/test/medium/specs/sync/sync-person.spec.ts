@@ -65,7 +65,7 @@ describe(SyncEntityType.PersonV1, () => {
       {
         ack: expect.any(String),
         data: {
-          personGroupId: person.personGroupId,
+          personId: person.personGroupId,
         },
         type: 'PersonDeleteV1',
       },

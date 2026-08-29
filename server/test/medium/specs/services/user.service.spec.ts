@@ -7,6 +7,7 @@ import { CryptoRepository } from 'src/repositories/crypto.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { SessionRepository } from 'src/repositories/session.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
@@ -29,7 +30,7 @@ const setup = (db?: Kysely<DB>) => {
 
   return newMediumService(UserService, {
     database: db || defaultDatabase,
-    real: [ClusterGroupRepository, CryptoRepository, ConfigRepository, SystemMetadataRepository, UserRepository],
+    real: [ClusterGroupRepository, CryptoRepository, ConfigRepository, SessionRepository, SystemMetadataRepository, UserRepository],
     mock: [LoggingRepository, JobRepository, EventRepository],
   });
 };

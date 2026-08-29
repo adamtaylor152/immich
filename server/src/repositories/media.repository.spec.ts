@@ -1,4 +1,4 @@
-import { mkdtempDisposableSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -330,15 +330,20 @@ describe(MediaRepository.name, () => {
         'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NHB4IiBoZWlnaHQ9IjY0cHgiIHZpZXdCb3g9IjAgMCA2NCA2NCIgdmVyc2lvbj0iMS4xIj48cmVjdCBmaWxsPSIjMzc3YjM3IiBjeD0iMzIiIGN5PSIzMiIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByPSIzMiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBzdHlsZT0iY29sb3I6ICNmZmY7IGxpbmUtaGVpZ2h0OiAxOyBmb250LWZhbWlseTogJ1JlZEhhdFRleHQnLCdPdmVycGFzcycsb3ZlcnBhc3MsaGVsdmV0aWNhLGFyaWFsLHNhbnMtc2VyaWY7ICIgZmlsbD0iI2ZmZiIgYWxpZ25tZW50LWJhc2VsaW5lPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMjgiIGZvbnQtd2VpZ2h0PSI0MDAiIGR5PSIuMWVtIj5BQTwvdGV4dD48L3N2Zz4=',
       );
       const buffer = Buffer.from(await response.arrayBuffer());
-      const dir = mkdtempDisposableSync(join(tmpdir(), 'media-repository-'));
-      const file = join(dir.path, 'test.webp');
-      await sut.generateThumbnail(
-        buffer,
-        { colorspace: Colorspace.P3, quality: 80, format: ImageFormat.Webp, processInvalidImages: false },
-        file,
-      );
+      // fs.mkdtempDisposableSync requires Node >= 24; use mkdtempSync + manual cleanup
+      const dirPath = mkdtempSync(join(tmpdir(), 'media-repository-'));
+      try {
+        const file = join(dirPath, 'test.webp');
+        await sut.generateThumbnail(
+          buffer,
+          { colorspace: Colorspace.P3, quality: 80, format: ImageFormat.Webp, processInvalidImages: false },
+          file,
+        );
 
-      expect(statSync(file).blksize).toBeGreaterThan(0);
+        expect(statSync(file).blksize).toBeGreaterThan(0);
+      } finally {
+        rmSync(dirPath, { recursive: true, force: true });
+      }
     });
   });
 });

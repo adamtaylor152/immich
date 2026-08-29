@@ -355,7 +355,7 @@ describe(DuplicateService.name, () => {
       ]);
     });
 
-    it('should ignore ids that are not members of the group', async () => {
+    it('should reject ids that are not members of the group', async () => {
       const { sut, ctx } = setup();
       const { user } = await ctx.newUser();
       const duplicateId = factory.uuid();
@@ -364,7 +364,8 @@ describe(DuplicateService.name, () => {
       await newDuplicateAsset(ctx, { ownerId: user.id, duplicateId });
       const outsider = await newDuplicateAsset(ctx, { ownerId: user.id });
 
-      // the outsider is filtered out, which leaves asset2 uncovered
+      // fork security (server.md Medium #nsfwOptions): unknown ids are rejected
+      // explicitly instead of silently filtered, so hidden ids cannot be probed
       const auth = factory.auth({ user: { id: user.id } });
       await expect(
         sut.resolve(auth, { groups: [{ duplicateId, keepAssetIds: [asset1.id], trashAssetIds: [outsider.id] }] }),
@@ -372,8 +373,8 @@ describe(DuplicateService.name, () => {
         {
           id: duplicateId,
           success: false,
-          error: BulkIdErrorReason.VALIDATION,
-          errorMessage: 'Every asset must be in either keepAssetIds or trashAssetIds',
+          error: BulkIdErrorReason.NOT_FOUND,
+          errorMessage: 'One or more assetIds are not part of this duplicate group',
         },
       ]);
 

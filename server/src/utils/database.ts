@@ -215,7 +215,7 @@ const hiddenContentAssetExists = (filter: HiddenContentFilter, assetAlias = 'ass
       select 1
       from asset_face
       where asset_face."assetId" = ${sql.ref(`${assetAlias}.id`)}
-        and asset_face."personId" = ${anyUuid(filter.personIds)}
+        and asset_face."personGroupId" = ${anyUuid(filter.personIds)}
         and asset_face."deletedAt" is null
         and asset_face."isVisible" is true
     ))`);

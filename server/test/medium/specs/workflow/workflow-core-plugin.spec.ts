@@ -382,7 +382,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetLocationFilter', () => {
+  describeIfPluginBuilt('assetLocationFilter', () => {
     it('should favorite an asset within a given radius', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id });
@@ -453,7 +453,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetFileFilter', () => {
+  describeIfPluginBuilt('assetFileFilter', () => {
     it('should match assets case-insensitively', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
@@ -548,7 +548,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetTypeFilter', () => {
+  describeIfPluginBuilt('assetTypeFilter', () => {
     it('should favorite asset if it is a video', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id, type: AssetType.Video });
@@ -572,7 +572,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetDateFilter', () => {
+  describeIfPluginBuilt('assetDateFilter', () => {
     it('should favorite assets created during the first 7 days of a specific year and month', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }, { asset: asset3 }] = await Promise.all([
@@ -647,7 +647,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('webhook', () => {
+  describeIfPluginBuilt('webhook', () => {
     it('should trigger a webhook on asset upload', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id });
