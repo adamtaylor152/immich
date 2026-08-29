@@ -177,6 +177,14 @@ describe(WorkflowRepository.name, () => {
       await expect(sut.isWorkflowEligible(locked.id, { requireEnrichment: false })).resolves.toBe(false);
     });
 
+    it('returns false for a trashed asset (deletedAt != null)', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+
+      await expect(sut.isWorkflowEligible(asset.id, { requireEnrichment: false })).resolves.toBe(false);
+    });
+
     it('respects requireEnrichment when ml-enrichment metadata is absent', async () => {
       const { ctx, sut } = setup(await getKyselyDB());
       const { user } = await ctx.newUser();

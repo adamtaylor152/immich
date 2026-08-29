@@ -9,7 +9,7 @@ import { isForkAuthoritative, isForkWriteEnabled } from 'src/fork-schema/authori
 import type { ForkSchemaPhase } from 'src/repositories/fork-schema.repository';
 import { DB } from 'src/schema';
 
-const canonicalize = (value: unknown): unknown =>
+export const canonicalize = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map((item) => canonicalize(item))
     : value && typeof value === 'object'
@@ -19,7 +19,7 @@ const canonicalize = (value: unknown): unknown =>
             .map(([key, item]) => [key, canonicalize(item)]),
         )
       : value;
-const digest = (rows: unknown) =>
+export const digest = (rows: unknown) =>
   createHash('sha256')
     .update(JSON.stringify(canonicalize(rows)))
     .digest('hex');
