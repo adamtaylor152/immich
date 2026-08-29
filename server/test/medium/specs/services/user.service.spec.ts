@@ -30,7 +30,14 @@ const setup = (db?: Kysely<DB>) => {
 
   return newMediumService(UserService, {
     database: db || defaultDatabase,
-    real: [ClusterGroupRepository, CryptoRepository, ConfigRepository, SessionRepository, SystemMetadataRepository, UserRepository],
+    real: [
+      ClusterGroupRepository,
+      CryptoRepository,
+      ConfigRepository,
+      SessionRepository,
+      SystemMetadataRepository,
+      UserRepository,
+    ],
     mock: [LoggingRepository, JobRepository, EventRepository],
   });
 };
