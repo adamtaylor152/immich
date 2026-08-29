@@ -73,7 +73,7 @@ jobs:
       contents: read
       pull-requests: write
     if: ${{ github.actor != 'dependabot[bot]' && fromJSON(needs.pre-job.outputs.should_run).mobile == true }}
-    runs-on: mich
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
