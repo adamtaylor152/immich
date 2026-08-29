@@ -278,9 +278,11 @@ describe.runIf(phase === 'current-fork-cutover')(`${lane}: locked cutover`, () =
     // (1786741078327-AddWorkflowLogsTable): the workflow rows and schema must
     // land exactly on the certified shape — the pre-cutover evidence minus
     // that one column — and nothing else may move.
-    const certifiedWorkflowRows = (before.evidence.rows.workflow as Record<string, unknown>[]).map(
-      ({ logging: _logging, ...rest }) => rest,
-    );
+    const certifiedWorkflowRows = (before.evidence.rows.workflow as Record<string, unknown>[]).map((row) => {
+      const { logging, ...rest } = row;
+      void logging;
+      return rest;
+    });
     expect(after.rowDigests.workflow).toBe(digest(certifiedWorkflowRows));
     expect(after.rowDigests.workflow_step).toBe(before.evidence.rowDigests.workflow_step);
     expect(after.rowIds.plugin).toEqual(before.evidence.rowIds.plugin);
