@@ -57,6 +57,14 @@ from
 where
   "path" in $1
 
+-- IntegrityRepository.getVideoDuplicateFramePathsByPaths
+select
+  "path"
+from
+  "asset_video_duplicate_frame"
+where
+  "path" in $1
+
 -- IntegrityRepository.getPersonThumbnailPathsByPaths
 select
   "person"."thumbnailPath"
