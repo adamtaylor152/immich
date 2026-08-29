@@ -16,7 +16,7 @@ export type EnrichmentSidecar = {
 };
 export type EnrichmentBatchResult = { count: number; digest: string };
 
-const canonicalize = (value: unknown): unknown =>
+export const canonicalize = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map((item) => canonicalize(item))
     : value && typeof value === 'object'
@@ -26,7 +26,7 @@ const canonicalize = (value: unknown): unknown =>
             .map(([k, v]) => [k, canonicalize(v)]),
         )
       : value;
-const digest = (value: unknown) =>
+export const digest = (value: unknown) =>
   createHash('sha256')
     .update(JSON.stringify(canonicalize(value)))
     .digest('hex');
