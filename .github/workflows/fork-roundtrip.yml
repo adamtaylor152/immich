@@ -12,9 +12,16 @@ on:
       - 'server/src/commands/**'
       - 'server/src/fork-schema/**'
       - 'server/src/repositories/**'
-      - 'server/src/schema/migrations/**'
+      - 'server/src/schema/**'
       - 'server/src/services/storage.service.ts'
+      - 'server/src/services/storage-template.service.ts'
+      - 'server/src/services/physical-deduplication.service.ts'
+      - 'server/src/utils/database.ts'
   workflow_dispatch:
+  # Nightly backstop against fork/main: catches cutover breakage introduced by
+  # changes outside the path filter above.
+  schedule:
+    - cron: '0 6 * * *'
 
 permissions:
   contents: read

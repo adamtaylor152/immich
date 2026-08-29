@@ -2,6 +2,8 @@ name: Test
 on:
   workflow_dispatch:
   pull_request:
+    # `labeled` lets the fork-roundtrip label opt a PR into the certification run.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main, fork/main]
 concurrency:
@@ -323,10 +325,10 @@ jobs:
   e2e-tests-server-cli:
     name: End-to-End Tests (Server & CLI)
     needs: pre-job
-    # Skip E2E on fork PRs — the runner repeatedly fails to bring the server
-    # stack up (ECONNREFUSED on :2285 + apt SSL flakes) without org-managed
-    # secrets. Push events to fork/main still exercise E2E normally.
-    if: ${{ github.event_name != 'pull_request' && (fromJSON(needs.pre-job.outputs.should_run).e2e == true || fromJSON(needs.pre-job.outputs.should_run).server == true || fromJSON(needs.pre-job.outputs.should_run).cli == true) }}
+    # E2E needs no org-managed secrets (only github.token for image pulls), so
+    # it runs on PRs too. PRs use a single runner to halve flake surface; push
+    # events to fork/main still run both architectures.
+    if: ${{ fromJSON(needs.pre-job.outputs.should_run).e2e == true || fromJSON(needs.pre-job.outputs.should_run).server == true || fromJSON(needs.pre-job.outputs.should_run).cli == true }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -335,7 +337,7 @@ jobs:
         working-directory: ./e2e
     strategy:
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest","ubuntu-24.04-arm"]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -401,10 +403,25 @@ jobs:
           name: e2e-server-docker-logs-${{ matrix.runner }}
           path: e2e/docker-compose-logs.txt
 
+  fork-roundtrip:
+    name: Fork roundtrip certification (label-gated)
+    needs: pre-job
+    # Opt-in via the `fork-roundtrip` label on server-touching PRs; the
+    # workflow also runs directly on its own path filter and nightly.
+    if: >-
+      ${{ github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'fork-roundtrip') &&
+          fromJSON(needs.pre-job.outputs.should_run).server == true }}
+    uses: ./.github/workflows/fork-roundtrip.yml
+    permissions:
+      contents: read
+      packages: read
+
   e2e-tests-web:
     name: End-to-End Tests (Web)
     needs: pre-job
-    # See e2e-tests-server-cli — same fork-PR infra limitation.
+    # Still skipped on PRs: the Playwright web E2E is the flakier half — revisit
+    # once server E2E proves stable on PRs. Push events to fork/main run it.
     if: ${{ github.event_name != 'pull_request' && (fromJSON(needs.pre-job.outputs.should_run).e2e == true || fromJSON(needs.pre-job.outputs.should_run).web == true) }}
     runs-on: ${{ matrix.runner }}
     permissions:
