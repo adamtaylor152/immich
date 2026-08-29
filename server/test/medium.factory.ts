@@ -64,6 +64,7 @@ import { TagRepository } from 'src/repositories/tag.repository';
 import { TelemetryRepository } from 'src/repositories/telemetry.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { VersionHistoryRepository } from 'src/repositories/version-history.repository';
+import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { WorkflowRepository } from 'src/repositories/workflow.repository';
 import { DB } from 'src/schema';
 import { AlbumTable } from 'src/schema/tables/album.table';
@@ -606,6 +607,10 @@ const newMockRepository = <T>(key: ClassConstructor<T>) => {
 
     case EventRepository: {
       return automock(EventRepository, { args: [undefined, undefined, { setContext: () => {} }] });
+    }
+
+    case WebsocketRepository: {
+      return automock(WebsocketRepository, { args: [undefined, { setContext: () => {} }] });
     }
 
     case JobRepository: {

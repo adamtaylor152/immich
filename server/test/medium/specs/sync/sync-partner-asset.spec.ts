@@ -234,6 +234,69 @@ describe(SyncRequestType.PartnerAssetsV2, () => {
     );
   });
 
+  it('should exclude NSFW partner assets from a non-elevated sync but include them for an elevated one', async () => {
+    const { auth, ctx } = await setup();
+    const { user: partner } = await ctx.newUser();
+    const { asset: safeAsset } = await ctx.newAsset({ ownerId: partner.id });
+    const { asset: nsfwAsset } = await ctx.newAsset({ ownerId: partner.id });
+    await ctx.newPartner({ sharedById: partner.id, sharedWithId: auth.user.id });
+    await ctx.newMetadata({
+      assetId: nsfwAsset.id,
+      key: AssetMetadataKey.MlEnrichment,
+      value: nsfwMetadata(true),
+    });
+
+    const hiddenResponse = await ctx.syncStream({ ...auth, hideNsfwAssets: true }, [SyncRequestType.PartnerAssetsV2]);
+    const hiddenIds = hiddenResponse
+      .filter(({ type }) => type === SyncEntityType.PartnerAssetV2)
+      .map(({ data }) => (data as { id: string }).id);
+    expect(hiddenIds).toContain(safeAsset.id);
+    expect(hiddenIds).not.toContain(nsfwAsset.id);
+
+    const elevatedResponse = await ctx.syncStream(auth, [SyncRequestType.PartnerAssetsV2]);
+    const elevatedIds = elevatedResponse
+      .filter(({ type }) => type === SyncEntityType.PartnerAssetV2)
+      .map(({ data }) => (data as { id: string }).id);
+    expect(elevatedIds).toContain(safeAsset.id);
+    expect(elevatedIds).toContain(nsfwAsset.id);
+  });
+
+  it('should exclude NSFW partner assets from a non-elevated backfill but include them for an elevated one', async () => {
+    const { auth, ctx } = await setup();
+    const { user: partner1 } = await ctx.newUser();
+    const { user: partner2 } = await ctx.newUser();
+    const { asset: safeBackfillAsset } = await ctx.newAsset({ ownerId: partner2.id });
+    const { asset: nsfwBackfillAsset } = await ctx.newAsset({ ownerId: partner2.id });
+    await ctx.newMetadata({
+      assetId: nsfwBackfillAsset.id,
+      key: AssetMetadataKey.MlEnrichment,
+      value: nsfwMetadata(true),
+    });
+    await wait(2);
+    await ctx.newAsset({ ownerId: partner1.id });
+    await ctx.newPartner({ sharedById: partner1.id, sharedWithId: auth.user.id });
+
+    const initialResponse = await ctx.syncStream(auth, [SyncRequestType.PartnerAssetsV2]);
+    await ctx.syncAckAll(auth, initialResponse);
+
+    // second partner share triggers a backfill of their older assets
+    await ctx.newPartner({ sharedById: partner2.id, sharedWithId: auth.user.id });
+
+    const hiddenResponse = await ctx.syncStream({ ...auth, hideNsfwAssets: true }, [SyncRequestType.PartnerAssetsV2]);
+    const hiddenIds = hiddenResponse
+      .filter(({ type }) => type === SyncEntityType.PartnerAssetBackfillV2)
+      .map(({ data }) => (data as { id: string }).id);
+    expect(hiddenIds).toContain(safeBackfillAsset.id);
+    expect(hiddenIds).not.toContain(nsfwBackfillAsset.id);
+
+    const elevatedResponse = await ctx.syncStream(auth, [SyncRequestType.PartnerAssetsV2]);
+    const elevatedIds = elevatedResponse
+      .filter(({ type }) => type === SyncEntityType.PartnerAssetBackfillV2)
+      .map(({ data }) => (data as { id: string }).id);
+    expect(elevatedIds).toContain(safeBackfillAsset.id);
+    expect(elevatedIds).toContain(nsfwBackfillAsset.id);
+  });
+
   it('should backfill partner assets when a partner shared their library with you', async () => {
     const { auth, ctx } = await setup();
 

@@ -735,6 +735,46 @@ where
   "asset_face"."personGroupId" = $1
   and "asset_face"."deletedAt" is null
   and "asset_face"."isVisible" is true
+order by
+  case
+    when "asset_face"."assetId" is null then false
+    when coalesce(
+      (
+        select
+          phase
+        from
+          immich_fork.state
+        where
+          id = 1
+      ),
+      'inactive'
+    ) in ('legacy', 'dual-write', 'ready') then exists (
+      select
+        1
+      from
+        asset as nsfw_asset
+      where
+        nsfw_asset.id = "asset_face"."assetId"
+        and nsfw_asset.is_nsfw = true
+    )
+    when (
+      select
+        phase
+      from
+        immich_fork.state
+      where
+        id = 1
+    ) = 'active' then not exists (
+      select
+        1
+      from
+        immich_fork.asset_privacy as privacy_asset
+      where
+        privacy_asset."assetId" = "asset_face"."assetId"
+        and privacy_asset."isNsfw" = false
+    )
+    else false
+  end asc
 
 -- PersonRepository.getLatestFaceDate
 select

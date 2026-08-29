@@ -14,6 +14,7 @@ import {
   asUuid,
   dummy,
   inSharedAlbum,
+  nsfwAssetIdExists,
   removeUndefinedKeys,
   withFilePath,
   withHiddenContentFilter,
@@ -712,13 +713,17 @@ export class PersonRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   getRandomFace(personGroupId: string) {
-    return this.db
-      .selectFrom('asset_face')
-      .selectAll('asset_face')
-      .where('asset_face.personGroupId', '=', personGroupId)
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', 'is', true)
-      .executeTakeFirst();
+    return (
+      this.db
+        .selectFrom('asset_face')
+        .selectAll('asset_face')
+        .where('asset_face.personGroupId', '=', personGroupId)
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', 'is', true)
+        // Prefer a non-NSFW face for person thumbnails; NSFW-only people still get one.
+        .orderBy(sql`${nsfwAssetIdExists(sql.ref('asset_face.assetId'))} asc`)
+        .executeTakeFirst()
+    );
   }
 
   @GenerateSql()
