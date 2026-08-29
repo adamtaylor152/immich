@@ -457,8 +457,8 @@ describe('core plugin', () => {
     it('should match assets case-insensitively', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
-        ctx.newAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
       ]);
 
       const workflow = await createWorkflow({
@@ -488,8 +488,8 @@ describe('core plugin', () => {
     it('should match assets by regex', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
-        ctx.newAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
       ]);
 
       const workflow = await createWorkflow({
@@ -519,8 +519,8 @@ describe('core plugin', () => {
     it('should filter assets by path if specified', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
-        ctx.newAsset({ ownerId: user.id, originalPath: '/library/folder/file1.png' }),
-        ctx.newAsset({ ownerId: user.id, originalPath: '/library/file2.png' }),
+        newEligibleAsset({ ownerId: user.id, originalPath: '/library/folder/file1.png' }),
+        newEligibleAsset({ ownerId: user.id, originalPath: '/library/file2.png' }),
       ]);
 
       const workflow = await createWorkflow({
