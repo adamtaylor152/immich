@@ -586,6 +586,43 @@ describe(SharedLinkService.name, () => {
       expect(assetIds).toEqual(expect.arrayContaining([asset1.id, asset2.id]));
     });
 
+    it('should hide NSFW assets and album thumbnail from a direct get in hidden mode', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      const { asset: visible } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: nsfw } = await ctx.newAsset({ ownerId: user.id });
+      await Promise.all([
+        ctx.newExif({ assetId: visible.id, make: 'Canon' }),
+        ctx.newExif({ assetId: nsfw.id, make: 'Canon' }),
+      ]);
+      await ctx.newMetadata({
+        assetId: nsfw.id,
+        key: AssetMetadataKey.MlEnrichment,
+        value: nsfwMetadata(true),
+      });
+
+      const { album } = await ctx.newAlbum({ ownerId: user.id, albumThumbnailAssetId: nsfw.id });
+      const sharedLinkRepo = ctx.get(SharedLinkRepository);
+      const sharedLink = await sharedLinkRepo.create({
+        key: randomBytes(16),
+        id: factory.uuid(),
+        userId: user.id,
+        albumId: album.id,
+        allowUpload: false,
+        type: SharedLinkType.Album,
+      });
+      await sharedLinkRepo.addAssets(sharedLink.id, [visible.id, nsfw.id]);
+
+      const hidden = await sut.get({ ...auth, hideNsfwAssets: true }, sharedLink.id);
+      expect(hidden.assets.map(({ id }) => id)).not.toContain(nsfw.id);
+      expect(hidden.album?.albumThumbnailAssetId).toBeNull();
+
+      const elevated = await sut.get(auth, sharedLink.id);
+      expect(elevated.album?.albumThumbnailAssetId).toBe(nsfw.id);
+    });
+
     it('should not return trashed assets for an individual shared link', async () => {
       const { sut, ctx } = setup();
       const { user } = await ctx.newUser();

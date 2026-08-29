@@ -11,7 +11,19 @@ Each entry: **summary · why deferred · what to do · acceptance criteria · po
 
 ---
 
-## P1 — Performance: denormalize `asset.is_nsfw`
+## P1 — Performance: denormalize `asset.is_nsfw` — ✅ RESOLVED
+
+**Resolution (Aug 2026).** Fully implemented: the `asset.is_nsfw` column plus
+partial index and metadata backfill shipped in migration
+`2100000000010-AddAssetIsNsfwIndex`; `AssetRepository.upsertMetadata`
+(`syncIsNsfwForItems`) keeps the boolean in sync on every `MlEnrichment`
+write; reads go through the phase-aware `nsfwAssetIdExists` in
+[server/src/utils/database.ts](server/src/utils/database.ts) (legacy/dual-write/ready
+read `asset.is_nsfw`, active reads the `immich_fork.asset_privacy` sidecar,
+fail-closed); catalog entries are certified in `fork-v2-catalog.json`.
+Remaining caveat: out-of-band `UPDATE asset_metadata` statements that bypass
+the application write path do not trigger the sync and are **unsupported**
+(documented here per the acceptance criteria).
 
 **Summary.** [`nsfwAssetIdExists`](server/src/utils/database.ts) does up to four
 `jsonb #>>` extractions, a `jsonb_array_elements_text` unnest, a per-element
@@ -194,7 +206,33 @@ divergence pain on every upstream bump, or requires a deliberate upstream PR.
 
 ---
 
-## P3d — NSFW privacy gaps in sync, shared links, notifications, person
+## P3d — NSFW privacy gaps in sync, shared links, notifications, person — ✅ RESOLVED
+
+**Resolution (Aug 2026).** All four surfaces are now gated and covered by
+medium tests:
+
+- **Partner sync delta** — gates already existed
+  (`withHiddenContentFilter` on `PartnerAssetsSync.getUpserts`/`getBackfill`);
+  added non-elevated vs elevated exclusion tests for both the full payload
+  and the backfill path in
+  `server/test/medium/specs/sync/sync-partner-asset.spec.ts`.
+- **Shared link** — gate already existed (`nsfwOptions` on
+  `SharedLinkService.get` + `applyNsfwPrivacy` thumbnail blanking); added an
+  explicit direct-`get(auth, id)` test in
+  `server/test/medium/specs/services/shared-link.service.spec.ts`.
+- **Notifications** — gate already existed
+  (`getAlbumThumbnailAttachment` + `getEmailHiddenContentFilter`); created
+  `server/test/medium/specs/services/notification.service.spec.ts` asserting
+  album-invite/update emails blank an NSFW album thumbnail and keep a safe one.
+- **Person face thumbnail selection** — this one was a real gap: fixed at the
+  root in `PersonRepository.getRandomFace` (orders candidate faces by the
+  phase-aware `nsfwAssetIdExists` ascending so a safe face wins whenever one
+  exists; NSFW-only people still get a thumbnail), benefiting both
+  `PersonService.createNewFeaturePhoto` and
+  `MediaService.handleQueueGenerateThumbnails`. Covered by
+  "does not select an NSFW asset as person thumbnail when a safe face exists"
+  in `server/test/medium/specs/repositories/person.repository.spec.ts`
+  (verified to fail without the fix).
 
 **Summary.** The fork has explicit NSFW-privacy commits for map markers
 (`9ab65954d`), duplicate activity (`9ab65954d`), shared-link contexts
