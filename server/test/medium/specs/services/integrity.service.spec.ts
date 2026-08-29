@@ -301,6 +301,38 @@ describe(IntegrityService.name, () => {
       });
     });
 
+    it('should not report sidecar asset_file paths from the asset-folder walk as untracked', async () => {
+      const { sut, ctx } = setup();
+
+      const {
+        result: { id: ownerId },
+      } = await ctx.newUser();
+
+      const { asset } = await ctx.newAsset({ ownerId, originalPath: '/upload/photo.jpg' });
+      await ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Sidecar, path: '/upload/photo.xmp' });
+
+      await sut.handleUntrackedFiles({
+        type: 'asset',
+        paths: ['/upload/photo.jpg', '/upload/photo.xmp', '/upload/untracked.jpg'],
+      });
+
+      await expect(
+        ctx.get(IntegrityRepository).getIntegrityReport(
+          {
+            limit: 100,
+          },
+          IntegrityReport.UntrackedFile,
+        ),
+      ).resolves.toEqual({
+        items: [
+          expect.objectContaining({
+            path: '/upload/untracked.jpg',
+          }),
+        ],
+        nextCursor: undefined,
+      });
+    });
+
     it('should detect untracked asset_file files', async () => {
       const { sut, ctx } = setup();
 
