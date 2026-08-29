@@ -64,10 +64,7 @@ describe('hashFile', () => {
     for (const size of [0, 1, 1024, 10_000]) {
       const file = new File([new Uint8Array(size)], 'x.bin');
       for (const algorithm of ['SHA-1', 'SHA-256'] as const) {
-        const [wasmHash, jsHash] = await Promise.all([
-          hashFileWasm(file, algorithm),
-          hashFileJs(file, algorithm),
-        ]);
+        const [wasmHash, jsHash] = await Promise.all([hashFileWasm(file, algorithm), hashFileJs(file, algorithm)]);
         expect(wasmHash).toBe(jsHash);
       }
     }
