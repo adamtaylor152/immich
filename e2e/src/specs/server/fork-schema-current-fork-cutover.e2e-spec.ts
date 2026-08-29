@@ -232,15 +232,15 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     // values from the same image.
     // The import runs asynchronously on the microservices boot, so queue
     // drain alone doesn't guarantee it has landed — poll until the manifest's
-    // 12 methods are present.
+    // 14 methods are present.
     let converged = await workflowEvidence();
-    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 12; attempt++) {
+    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 14; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 200));
       converged = await workflowEvidence();
     }
     expect(converged.rows.plugin).toHaveLength(1);
     expect(converged.rows.plugin[0]).toMatchObject({ name: 'immich-plugin-core', version: '2.0.1' });
-    expect(converged.rows.plugin_method).toHaveLength(12);
+    expect(converged.rows.plugin_method).toHaveLength(14);
     const fullState = await loadState<Record<string, unknown>>(lane);
     await saveState(lane, { ...fullState, evidence: converged });
   }, 120_000);
