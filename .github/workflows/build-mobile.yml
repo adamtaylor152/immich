@@ -66,13 +66,31 @@ jobs:
             - '.github/workflows/build-mobile.yml'
           force-events: 'workflow_call,workflow_dispatch'
 
+  # The fork has no signing keys or certificates; gate the signing jobs on
+  # secret presence so they skip cleanly instead of hanging or failing. If
+  # signing secrets are ever added to the repository, the jobs run again.
+  check-signing-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has-android: ${{ steps.check.outputs.android }}
+      has-ios: ${{ steps.check.outputs.ios }}
+    steps:
+      - name: Check signing secrets
+        id: check
+        env:
+          KEY_JKS: ${{ secrets.KEY_JKS }}
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+        run: |
+          echo "android=${KEY_JKS:+true}" >> "$GITHUB_OUTPUT"
+          echo "ios=${IOS_CERTIFICATE_P12:+true}" >> "$GITHUB_OUTPUT"
+
   build-sign-android:
     name: Build and sign Android
-    needs: pre-job
+    needs: [pre-job, check-signing-secrets]
     permissions:
       contents: read
       pull-requests: write
-    if: ${{ github.actor != 'dependabot[bot]' && fromJSON(needs.pre-job.outputs.should_run).mobile == true }}
+    if: ${{ github.actor != 'dependabot[bot]' && fromJSON(needs.pre-job.outputs.should_run).mobile == true && needs.check-signing-secrets.outputs.has-android == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -182,11 +200,11 @@ jobs:
 
   build-sign-ios:
     name: Build and sign iOS
-    needs: pre-job
+    needs: [pre-job, check-signing-secrets]
     permissions:
       contents: read
     # Run on main branch or workflow_dispatch, or on PRs/other branches (build only, no upload)
-    if: ${{ !github.event.pull_request.head.repo.fork && fromJSON(needs.pre-job.outputs.should_run).mobile == true }}
+    if: ${{ !github.event.pull_request.head.repo.fork && fromJSON(needs.pre-job.outputs.should_run).mobile == true && needs.check-signing-secrets.outputs.has-ios == 'true' }}
     runs-on: macos-26
 
     steps:
