@@ -51,4 +51,12 @@ jobs:
         run: mise //server:install
 
       - name: Verify migration ORDER
-        run: mise //server:migrations verify-order --append-only-from "${BASELINE}"
+        # The base branch has no ORDER file until the PR introducing it merges
+        # (upstream sync); fall back to a plain order verification in that case.
+        run: |
+          if [ -f "${BASELINE}" ]; then
+            mise //server:migrations verify-order --append-only-from "${BASELINE}"
+          else
+            echo "No ORDER baseline on base branch; verifying order without append-only baseline"
+            mise //server:migrations verify-order
+          fi
