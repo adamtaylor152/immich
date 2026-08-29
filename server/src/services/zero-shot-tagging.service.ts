@@ -5,6 +5,7 @@ import { CLIP_ZERO_SHOT_LABELS, CLIP_ZERO_SHOT_PROMPT } from 'src/constants/clip
 import { ZERO_SHOT_TAG_NAMESPACE } from 'src/constants/zero-shot-tag';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { BaseService } from 'src/services/base.service';
+import { dot, l2Normalize, parseEmbedding } from 'src/utils/embedding';
 import { isSmartSearchEnabled } from 'src/utils/misc';
 import { upsertTags } from 'src/utils/tag';
 
@@ -97,55 +98,6 @@ export class ZeroShotTaggingService extends BaseService {
     }
   }
 }
-
-const parseEmbedding = (raw: string | undefined | null): Float32Array | undefined => {
-  if (!raw) {
-    return;
-  }
-  // pgvector / ML service format: "[0.01, 0.02, ...]"
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
-    return;
-  }
-  const parts = trimmed.slice(1, -1).split(',');
-  const out = new Float32Array(parts.length);
-  for (let i = 0; i < parts.length; i++) {
-    // eslint-disable-next-line unicorn/prefer-number-coercion -- Number('') is 0, which would silently accept empty segments; parseFloat keeps them NaN so the guard below rejects malformed vectors.
-    const value = Number.parseFloat(parts[i]);
-    if (!Number.isFinite(value)) {
-      return;
-    }
-    out[i] = value;
-  }
-  return out;
-};
-
-const l2Normalize = (vector: Float32Array): Float32Array => {
-  let sumSq = 0;
-  for (const v of vector) {
-    sumSq += v * v;
-  }
-  const norm = Math.sqrt(sumSq);
-  if (norm === 0) {
-    return vector;
-  }
-  const out = new Float32Array(vector.length);
-  for (let i = 0; i < vector.length; i++) {
-    out[i] = vector[i] / norm;
-  }
-  return out;
-};
-
-const dot = (a: Float32Array, b: Float32Array): number => {
-  if (a.length !== b.length) {
-    return 0;
-  }
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    sum += a[i] * b[i];
-  }
-  return sum;
-};
 
 type Scored = { label: string; score: number };
 

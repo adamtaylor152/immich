@@ -8,6 +8,20 @@ import { vi } from 'vitest';
 // Build an albumIdByKind map for the given kinds.
 const albumMap = (entries: Record<string, string>) => new Map(Object.entries(entries));
 
+// pgvector-style unit vector: 512 dims, 1.0 at `index`, 0 elsewhere. Two such
+// vectors have cosine similarity 1 (same index) or 0 (different index), which
+// makes threshold assertions exact.
+const unitVector = (index: number) => `[${Array.from({ length: 512 }, (_, i) => (i === index ? 1 : 0)).join(',')}]`;
+
+// Enable smart albums with a per-test CLIP model name — the model name is part
+// of the module-level query embedding cache key, so a unique name per test
+// keeps cached embeddings from leaking between tests.
+const withClipConfig = (mocks: ServiceMocks, modelName: string) =>
+  mocks.systemMetadata.get.mockResolvedValue({
+    smartAlbums: { enabled: true },
+    machineLearning: { clip: { modelName } },
+  });
+
 describe(SmartAlbumService.name, () => {
   let sut: SmartAlbumService;
   let mocks: ServiceMocks;
@@ -122,10 +136,11 @@ describe(SmartAlbumService.name, () => {
       expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalled();
     });
 
-    it('should produce no false matches from the CLIP stub (only tag matching fires)', async () => {
+    it('should produce no false matches when the asset has no embedding (only tag matching fires)', async () => {
       mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue(undefined);
 
-      // Empty tags — no tag matches; CLIP stub must not add anything
+      // Empty tags — no tag matches; CLIP matching has no embedding to score
       await sut.evaluate({ assetId, ownerId, tags: [] });
 
       expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalled();
@@ -156,6 +171,106 @@ describe(SmartAlbumService.name, () => {
       expect(mocks.smartAlbum.isExcluded).not.toHaveBeenCalled();
       // Per-kind getSmartAlbumIdForOwnerAndKind MUST NOT be called either.
       expect(mocks.smartAlbum.getSmartAlbumIdForOwnerAndKind).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('evaluate (CLIP)', () => {
+    it('should add asset with source "clip" when similarity meets the threshold', async () => {
+      withClipConfig(mocks, 'clip-model-match');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockResolvedValue(unitVector(0)); // cosine = 1 >= 0.28
+
+      await sut.evaluate({ assetId, ownerId, tags: [] });
+
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'clip');
+      expect(mocks.machineLearning.encodeText).toHaveBeenCalledWith('vacation travel landscape', {
+        modelName: 'clip-model-match',
+      });
+    });
+
+    it('should not add asset when similarity is below the threshold', async () => {
+      withClipConfig(mocks, 'clip-model-below');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockResolvedValue(unitVector(1)); // cosine = 0 < 0.28
+
+      await sut.evaluate({ assetId, ownerId, tags: [] });
+
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalled();
+    });
+
+    it('should record source "both" when tag and CLIP both match', async () => {
+      withClipConfig(mocks, 'clip-model-both');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockResolvedValue(unitVector(0));
+
+      await sut.evaluate({ assetId, ownerId, tags: ['beach'] });
+
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'both');
+    });
+
+    it('should remove a stale clip membership when the embedding no longer matches', async () => {
+      withClipConfig(mocks, 'clip-model-stale');
+      mocks.smartAlbum.getMatchingKinds.mockResolvedValue(['travel']);
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockResolvedValue(unitVector(1)); // below threshold now
+
+      await sut.evaluate({ assetId, ownerId, tags: [] });
+
+      expect(mocks.smartAlbum.removeAssetFromSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId);
+    });
+
+    it('should keep tag matching intact and log a warning when ML encoding fails', async () => {
+      withClipConfig(mocks, 'clip-model-ml-down');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockRejectedValue(new Error('ml down'));
+
+      await expect(sut.evaluate({ assetId, ownerId, tags: ['beach'] })).resolves.not.toThrow();
+
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'tag');
+      expect(mocks.logger.warn).toHaveBeenCalled();
+    });
+
+    it('should not add anything when ML fails and no tag matches', async () => {
+      withClipConfig(mocks, 'clip-model-ml-down-2');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockRejectedValue(new Error('ml down'));
+
+      await expect(sut.evaluate({ assetId, ownerId, tags: [] })).resolves.not.toThrow();
+
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).not.toHaveBeenCalled();
+    });
+
+    it('should cache query embeddings across evaluations (one encodeText per model+query)', async () => {
+      withClipConfig(mocks, 'clip-model-cache');
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+      mocks.search.getEmbedding.mockResolvedValue({ assetId, embedding: unitVector(0) } as never);
+      mocks.machineLearning.encodeText.mockResolvedValue(unitVector(0));
+
+      await sut.evaluate({ assetId, ownerId, tags: [] });
+      await sut.evaluate({ assetId, ownerId, tags: [] });
+
+      // travel matches on its FIRST query both times — exactly one encode call.
+      expect(mocks.machineLearning.encodeText).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip CLIP matching entirely when smart search is disabled', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        smartAlbums: { enabled: true },
+        machineLearning: { enabled: false },
+      });
+      mocks.smartAlbum.getAllSmartAlbumIdsForOwner.mockResolvedValue(albumMap({ travel: travelAlbumId }));
+
+      await sut.evaluate({ assetId, ownerId, tags: ['beach'] });
+
+      expect(mocks.search.getEmbedding).not.toHaveBeenCalled();
+      expect(mocks.machineLearning.encodeText).not.toHaveBeenCalled();
+      expect(mocks.smartAlbum.addAssetToSmartAlbum).toHaveBeenCalledWith(travelAlbumId, assetId, 'tag');
     });
   });
 
