@@ -166,7 +166,7 @@ export class BestPhotosRepository {
         sql.lit(AssetVisibility.Timeline),
         ...(options.includeArchived ? [sql.lit(AssetVisibility.Archive)] : []),
       ])
-      .where('asset.type', '=', sql.lit(AssetType.Image))
+      .where('asset.type', 'in', [sql.lit(AssetType.Image), sql.lit(AssetType.Video)])
       .$if(options.minScore !== undefined, (qb) => qb.where('asset_best_photo_score.score', '>=', options.minScore!))
       .$call((qb) => withHiddenContentFilter(qb, options));
 

@@ -77,7 +77,7 @@ where
   and "asset"."deletedAt" is null
   and "asset"."status" = 'active'
   and "asset"."visibility" in ('timeline')
-  and "asset"."type" = 'IMAGE'
+  and "asset"."type" in ('IMAGE', 'VIDEO')
   and "asset_best_photo_score"."score" >= $3
 select
   "asset".*,
@@ -101,7 +101,7 @@ where
   and "asset"."deletedAt" is null
   and "asset"."status" = 'active'
   and "asset"."visibility" in ('timeline')
-  and "asset"."type" = 'IMAGE'
+  and "asset"."type" in ('IMAGE', 'VIDEO')
   and "asset_best_photo_score"."score" >= $3
 order by
   "asset_best_photo_score"."score" desc,

@@ -161,7 +161,23 @@ divergence pain on every upstream bump, or requires a deliberate upstream PR.
 
 ---
 
-## P6 — Best-photos: dead video-scoring schema
+## P6 — Best-photos: dead video-scoring schema — ✅ RESOLVED
+
+**Resolution (Aug 2026).** Option 1 implemented: videos are now scored.
+`isEligible` accepts `AssetType.Video`; `scoreVideoAsset` samples up to 5
+evenly-spread frames (reusing the ffmpeg thumbnail extraction path —
+`ThumbnailConfig.create(config, timestamp)` + `MediaRepository.transcode` —
+and the video-duplicate metadata query `getForVideoDuplicateFrameJob`),
+scores each frame with the image scorer (`scoreThumbnailCandidate`), and
+persists the winner into `bestFrameTimestampMs` / `frameScore` /
+`frameMetadata` (per-frame scores, duration). Videos over a 15-minute cost
+cap are skipped; per-frame extraction failures degrade gracefully. The
+best-photos listing (`BestPhotosRepository.getBestPhotos`) and queue-all
+stream now include videos. Covered by unit tests in
+`server/src/services/best-photos.service.spec.ts` and medium tests in
+`server/test/medium/specs/repositories/best-photos.repository.spec.ts`.
+The web best-photos page can later seek video previews to
+`bestPhotoScore.bestFrameTimestampMs` (already exposed on the DTO).
 
 **Summary.** `best_photos.service.ts` declares video-scoring columns
 (`bestFrameTimestampMs`, `frameScore`, `frameMetadata`) but

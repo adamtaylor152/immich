@@ -131,6 +131,67 @@ describe(BestPhotosRepository.name, () => {
     expect(withArchive.items.map((asset) => asset.id)).toEqual([archived.id, high.id, low.id]);
   });
 
+  it('should include scored videos and persist their best-frame columns', async () => {
+    const { assetRepository, sut, userRepository } = setup();
+    const user = await createUser(userRepository);
+    const video = await createAsset(assetRepository, user.id, { type: AssetType.Video });
+    const image = await createAsset(assetRepository, user.id);
+
+    await sut.upsertScore({
+      assetId: video.id,
+      ownerId: user.id,
+      score: 0.7,
+      aestheticScore: 0.7,
+      technicalScore: 0.7,
+      subjectScore: 0.5,
+      diversityScore: 0.5,
+      scoreVersion: 1,
+      computedAt: new Date(),
+      metadata: {},
+      bestFrameTimestampMs: 12_345,
+      frameScore: 0.66,
+      frameMetadata: { durationMs: 60_000, sampledFrameCount: 5 },
+    });
+    await sut.upsertScore({
+      assetId: image.id,
+      ownerId: user.id,
+      score: 0.4,
+      aestheticScore: 0.4,
+      technicalScore: 0.4,
+      subjectScore: 0.4,
+      diversityScore: 0.4,
+      scoreVersion: 1,
+      computedAt: new Date(),
+      metadata: {},
+      bestFrameTimestampMs: null,
+      frameScore: null,
+      frameMetadata: null,
+    });
+
+    await defaultDatabase.updateTable('asset').set({ status: AssetStatus.Active }).execute();
+
+    await expect(sut.getScore(video.id)).resolves.toEqual(
+      expect.objectContaining({
+        bestFrameTimestampMs: 12_345,
+        frameScore: 0.66,
+        frameMetadata: expect.objectContaining({ durationMs: 60_000, sampledFrameCount: 5 }),
+      }),
+    );
+
+    const page = await sut.getBestPhotos({ ownerId: user.id, page: 1, limit: 10 });
+    expect(page.total).toBe(2);
+    expect(page.items.map((asset) => asset.id)).toEqual([video.id, image.id]);
+    expect(page.items[0]).toEqual(
+      expect.objectContaining({
+        type: AssetType.Video,
+        bestPhotoBestFrameTimestampMs: 12_345,
+        bestPhotoFrameScore: 0.66,
+        bestPhotoFrameMetadata: expect.objectContaining({ sampledFrameCount: 5 }),
+      }),
+    );
+    expect(page.items[1]).toEqual(expect.objectContaining({ bestPhotoBestFrameTimestampMs: null }));
+  });
+
   it('should return the total match count separately from the current page size', async () => {
     const { assetRepository, sut, userRepository } = setup();
     const user = await createUser(userRepository);
