@@ -97,58 +97,30 @@ hardening pass.
 
 ### P3a — `WorkflowRepository.isWorkflowEligible` privacy gate
 
-**File.** `server/test/medium/specs/workflow/workflow-privacy.spec.ts` (new)
-or alongside `workflow-core-plugin.spec.ts`.
-
-**Cases.** All `HIGH` priority — this is the load-bearing guarantee that
-NSFW/hidden assets don't reach plugins:
-- returns false for `visibility = Hidden`
-- returns false for `visibility = Locked`
-- returns false for `deletedAt != null`
-- returns false when `asset_metadata.MlEnrichment` row encodes NSFW
-- returns false for non-existent `assetId`
-- returns true for a plain Timeline asset (no NSFW metadata, NSFW detection
-  disabled)
-- with `requireEnrichment = true`, returns false when MlEnrichment row missing
-  even if visibility is Timeline (proves the fail-closed at upload time)
-
-**Pointers.** [server/src/repositories/workflow.repository.ts:135](server/src/repositories/workflow.repository.ts:135);
-[server/test/medium/specs/workflow/workflow-core-plugin.spec.ts](server/test/medium/specs/workflow/workflow-core-plugin.spec.ts)
-for the harness pattern.
+**Resolved (Aug 2026).** Covered by the `isWorkflowEligible` describe in
+[server/test/medium/specs/repositories/workflow.repository.spec.ts](server/test/medium/specs/repositories/workflow.repository.spec.ts)
+— Hidden/Locked, nonexistent, NSFW-mix, requireEnrichment, and the trashed
+(`deletedAt != null`) case; the gate already filtered `deletedAt` correctly.
 
 ### P3b — Workflow plugin write-restriction
 
-**File.** `server/test/medium/specs/workflow/workflow-execution-write.spec.ts`
-(new).
-
-**Cases.** All `HIGH`:
-- a plugin returning `{ asset: { visibility: 'timeline' } }` on a `Hidden`
-  asset must leave `asset.visibility` unchanged (proves no SQL UPDATE is
-  emitted for the `visibility` column).
-- a plugin returning `{ asset: { visibility: 'timeline', isFavorite: true } }`
-  applies `isFavorite` but does not touch `visibility`.
-
-**Pointers.** [server/src/services/workflow-execution.service.ts:285](server/src/services/workflow-execution.service.ts:285)
-(the explicit `update` allow-list).
+**Resolved (Aug 2026).**
+[server/test/medium/specs/workflow/workflow-execution-write.spec.ts](server/test/medium/specs/workflow/workflow-execution-write.spec.ts)
+runs the real pipeline with a mocked `PluginRepository.callMethod` (no wasm
+needed, runs everywhere). Note: `visibility` IS deliberately in the applied-
+fields allow-list — the core plugin's archive/lock methods depend on it;
+Hidden/Locked assets are protected by the eligibility gate (a run on a Hidden
+asset is skipped before any write), and non-listed fields
+(`ownerId`/`originalPath`/`checksum`) are proven ignored.
 
 ### P3c — Physical deduplication refcount + dry-run
 
-**File.** `server/test/medium/specs/services/physical-deduplication.service.spec.ts`
-(new). No spec exists today.
-
-**Cases.** All `HIGH` (data loss risk):
-- refuses to queue `FileDelete` when the master path doesn't exist on disk
-  (proves the on-disk verification guard in commit `2601fc311`).
-- refuses to queue `FileDelete` for a generated file when the master's
-  generated file is missing on disk.
-- link creation is idempotent on retry — re-running on a corpus already
-  deduped is a no-op.
-- dry-run mode emits no `FileDelete` jobs and does not call
-  `storageRepository.unlink`.
-- when a physical_file row is still referenced by another asset, deletion is
-  suppressed (refcount check).
-
-**Pointers.** [server/src/services/physical-deduplication.service.ts](server/src/services/physical-deduplication.service.ts).
+**Resolved (Aug 2026).**
+[server/test/medium/specs/services/physical-deduplication.service.spec.ts](server/test/medium/specs/services/physical-deduplication.service.spec.ts)
+covers all five HIGH cases against a live fork-active Postgres (real
+`PhysicalFileRepository` + `ForkSchemaRepository`, storage/job mocked):
+missing master original, missing master generated file, idempotent rerun,
+dry-run emits nothing, and refcount suppression via `deleteUnreferencedPath`.
 
 ---
 

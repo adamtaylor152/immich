@@ -50,6 +50,7 @@ import { NotificationRepository } from 'src/repositories/notification.repository
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
+import { PhysicalFileRepository } from 'src/repositories/physical-file.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SessionRepository } from 'src/repositories/session.repository';
@@ -492,6 +493,7 @@ const newRealRepository = <T extends BaseServiceDeps[number]>(key: T, db: Kysely
     case OcrRepository:
     case PartnerRepository:
     case PersonRepository:
+    case PhysicalFileRepository:
     case SearchRepository:
     case SessionRepository:
     case SharedLinkRepository:
@@ -628,6 +630,10 @@ const newMockRepository = <T>(key: ClassConstructor<T>) => {
 
     case MachineLearningRepository: {
       return automock(MachineLearningRepository, { args: [{ setContext: () => {} }] });
+    }
+
+    case PluginRepository: {
+      return automock(PluginRepository, { args: [undefined, { setContext: () => {} }] });
     }
 
     case StorageRepository: {

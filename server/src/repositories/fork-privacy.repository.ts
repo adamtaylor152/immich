@@ -14,7 +14,7 @@ export type PrivacySidecar = {
 
 export type BatchResult = { count: number; digest: string };
 
-const canonicalize = (value: unknown): unknown => {
+export const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map((item) => canonicalize(item));
   }
@@ -28,7 +28,7 @@ const canonicalize = (value: unknown): unknown => {
   return value;
 };
 
-const digestRows = (rows: PrivacySidecar[]) =>
+export const digestRows = (rows: PrivacySidecar[]) =>
   createHash('sha256')
     .update(JSON.stringify(canonicalize(rows)))
     .digest('hex');
