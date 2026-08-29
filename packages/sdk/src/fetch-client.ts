@@ -168,19 +168,23 @@ export type AdminConfigJobSettingsDto = {
     /** Concurrency */
     concurrency: number;
 };
+export type AdminConfigForkJobSettingsDto = {
+    /** Concurrency */
+    concurrency: number;
+};
 export type AdminConfigJobDto = {
     backgroundTask: AdminConfigJobSettingsDto;
     editor: AdminConfigJobSettingsDto;
     faceDetection: AdminConfigJobSettingsDto;
-    imageDescription: AdminConfigJobSettingsDto;
-    imageEnrichment: AdminConfigJobSettingsDto;
+    imageDescription?: AdminConfigForkJobSettingsDto;
+    imageEnrichment?: AdminConfigForkJobSettingsDto;
     integrityCheck: AdminConfigJobSettingsDto;
     library: AdminConfigJobSettingsDto;
-    mediaHealth: AdminConfigJobSettingsDto;
+    mediaHealth?: AdminConfigForkJobSettingsDto;
     metadataExtraction: AdminConfigJobSettingsDto;
     migration: AdminConfigJobSettingsDto;
     notifications: AdminConfigJobSettingsDto;
-    nsfwDetection: AdminConfigJobSettingsDto;
+    nsfwDetection?: AdminConfigForkJobSettingsDto;
     ocr: AdminConfigJobSettingsDto;
     search: AdminConfigJobSettingsDto;
     sidecar: AdminConfigJobSettingsDto;
