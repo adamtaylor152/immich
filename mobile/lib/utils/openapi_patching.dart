@@ -19,7 +19,7 @@ final Map<String, Map<String, Object?>> openApiPatches = {
   'UserPreferencesResponseDto': {
     'download.includeEmbeddedVideos': false,
     'folders': FoldersResponse(enabled: false, sidebarWeb: false).toJson(),
-    'memories': MemoriesResponse(enabled: true, duration: 5).toJson(),
+    'memories': MemoriesResponse(enabled: true, duration: 5, sidebarWeb: false).toJson(),
     'ratings': RatingsResponse(enabled: false).toJson(),
     'people': PeopleResponse(enabled: true, sidebarWeb: false).toJson(),
     'tags': TagsResponse(enabled: false, sidebarWeb: false).toJson(),
@@ -39,8 +39,9 @@ final Map<String, Map<String, Object?>> openApiPatches = {
   },
   'UserResponseDto': {'profileChangedAt': _now},
   'AssetResponseDto': {'visibility': 'timeline', 'createdAt': _now, 'isEdited': false},
-  'UserAdminResponseDto': {'profileChangedAt': _now},
+  'UserAdminResponseDto': {'profileChangedAt': _now, 'clusterGroupId': ''},
   'LoginResponseDto': {'isOnboarded': false},
+  'ApiKeyCreateResponseDto': {'createdAt': _now, 'id': '', 'name': '', 'permissions': <String>[], 'updatedAt': _now},
   'SyncUserV1': {'profileChangedAt': _now, 'hasProfileImage': false},
   'SyncAssetV1': {'isEdited': false},
   'ServerFeaturesDto': {
@@ -106,8 +107,8 @@ final Map<String, Map<String, Object?>> openApiPatches = {
     'videoDuplicateDetection': {'concurrency': 1},
   },
   'SystemConfigNewVersionCheckDto': {'channel': 'stable'},
-  'WorkflowResponseDto': {'steps': [], 'trigger': 'AssetCreate', 'updatedAt': _now},
-  'MemoriesResponse': {'duration': 5},
+  'WorkflowResponseDto': {'steps': [], 'trigger': 'AssetCreate', 'updatedAt': _now, 'logging': false},
+  'MemoriesResponse': {'duration': 5, 'sidebarWeb': false},
 };
 
 void upgradeDto(dynamic value, String targetType) {

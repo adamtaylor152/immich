@@ -25,7 +25,7 @@ import { getKyselyDB } from 'test/utils';
 
 let isInitialized = false;
 
-class WorkflowTestContext extends MediumTestContext<WorkflowExecutionService> {
+class WorkflowTestContext extends MediumTestContext<typeof WorkflowExecutionService> {
   constructor(database: Kysely<DB>) {
     super(WorkflowExecutionService, {
       database,
@@ -382,7 +382,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetLocationFilter', () => {
+  describeIfPluginBuilt('assetLocationFilter', () => {
     it('should favorite an asset within a given radius', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id });
@@ -453,7 +453,102 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetTypeFilter', () => {
+  describeIfPluginBuilt('assetFileFilter', () => {
+    it('should match assets case-insensitively', async () => {
+      const { user } = await ctx.newUser();
+      const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
+      ]);
+
+      const workflow = await createWorkflow({
+        ownerId: user.id,
+        trigger: WorkflowTrigger.AssetCreate,
+        steps: [
+          {
+            method: 'immich-plugin-core#assetFileFilter',
+            config: { matchType: 'contains', pattern: 'File' },
+          },
+          {
+            method: 'immich-plugin-core#assetFavorite',
+          },
+        ],
+      });
+
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset1.id }),
+      ).resolves.toBeUndefined();
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset2.id }),
+      ).resolves.toBeUndefined();
+      await expect(ctx.get(AssetRepository).getById(asset1.id)).resolves.toMatchObject({ isFavorite: true });
+      await expect(ctx.get(AssetRepository).getById(asset2.id)).resolves.toMatchObject({ isFavorite: true });
+    });
+
+    it('should match assets by regex', async () => {
+      const { user } = await ctx.newUser();
+      const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'exampleFile.png' }),
+        newEligibleAsset({ ownerId: user.id, originalFileName: 'anotherfile.jpg' }),
+      ]);
+
+      const workflow = await createWorkflow({
+        ownerId: user.id,
+        trigger: WorkflowTrigger.AssetCreate,
+        steps: [
+          {
+            method: 'immich-plugin-core#assetFileFilter',
+            config: { matchType: 'regex', pattern: '.+png' },
+          },
+          {
+            method: 'immich-plugin-core#assetFavorite',
+          },
+        ],
+      });
+
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset1.id }),
+      ).resolves.toBeUndefined();
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset2.id }),
+      ).resolves.toBeUndefined();
+      await expect(ctx.get(AssetRepository).getById(asset1.id)).resolves.toMatchObject({ isFavorite: true });
+      await expect(ctx.get(AssetRepository).getById(asset2.id)).resolves.toMatchObject({ isFavorite: false });
+    });
+
+    it('should filter assets by path if specified', async () => {
+      const { user } = await ctx.newUser();
+      const [{ asset: asset1 }, { asset: asset2 }] = await Promise.all([
+        newEligibleAsset({ ownerId: user.id, originalPath: '/library/folder/file1.png' }),
+        newEligibleAsset({ ownerId: user.id, originalPath: '/library/file2.png' }),
+      ]);
+
+      const workflow = await createWorkflow({
+        ownerId: user.id,
+        trigger: WorkflowTrigger.AssetCreate,
+        steps: [
+          {
+            method: 'immich-plugin-core#assetFileFilter',
+            config: { matchType: 'contains', pattern: 'folder', usePath: true },
+          },
+          {
+            method: 'immich-plugin-core#assetFavorite',
+          },
+        ],
+      });
+
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset1.id }),
+      ).resolves.toBeUndefined();
+      await expect(
+        ctx.sut.handleAssetTrigger({ workflowId: workflow.id, assetId: asset2.id }),
+      ).resolves.toBeUndefined();
+      await expect(ctx.get(AssetRepository).getById(asset1.id)).resolves.toMatchObject({ isFavorite: true });
+      await expect(ctx.get(AssetRepository).getById(asset2.id)).resolves.toMatchObject({ isFavorite: false });
+    });
+  });
+
+  describeIfPluginBuilt('assetTypeFilter', () => {
     it('should favorite asset if it is a video', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id, type: AssetType.Video });
@@ -477,7 +572,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('assetDateFilter', () => {
+  describeIfPluginBuilt('assetDateFilter', () => {
     it('should favorite assets created during the first 7 days of a specific year and month', async () => {
       const { user } = await ctx.newUser();
       const [{ asset: asset1 }, { asset: asset2 }, { asset: asset3 }] = await Promise.all([
@@ -552,7 +647,7 @@ describe('core plugin', () => {
     });
   });
 
-  describe('webhook', () => {
+  describeIfPluginBuilt('webhook', () => {
     it('should trigger a webhook on asset upload', async () => {
       const { user } = await ctx.newUser();
       const { asset } = await newEligibleAsset({ ownerId: user.id });

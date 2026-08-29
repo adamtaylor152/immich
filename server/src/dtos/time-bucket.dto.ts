@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { BBoxSchema } from 'src/dtos/bbox.dto';
-import { AssetOrderSchema, AssetVisibilitySchema, TimeBucketDateTypeSchema } from 'src/enum';
+import { AssetOrderBySchema, AssetOrderSchema, AssetVisibilitySchema, TimeBucketDateTypeSchema } from 'src/enum';
 import { stringToBool } from 'src/validation';
 import z from 'zod';
 
@@ -25,6 +25,9 @@ const TimeBucketQueryBaseSchema = z
     ),
     dateType: TimeBucketDateTypeSchema.optional().describe(
       'Date source for timeline bucket grouping. Defaults to taken date.',
+    ),
+    orderBy: AssetOrderBySchema.optional().describe(
+      'Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)',
     ),
     visibility: AssetVisibilitySchema.optional().describe(
       'Filter by asset visibility status (ARCHIVE, TIMELINE, HIDDEN, LOCKED)',

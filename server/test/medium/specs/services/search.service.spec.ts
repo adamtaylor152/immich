@@ -86,11 +86,11 @@ describe(SearchService.name, () => {
       const { user } = await ctx.newUser();
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { person } = await ctx.newPerson({ ownerId: user.id });
-      await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      await ctx.newAssetFace({ assetId: asset.id, personGroupId: person.personGroupId });
 
       const auth = factory.auth({ user: { id: user.id } });
 
-      const result = await sut.searchStatistics(auth, { personIds: [person.id] });
+      const result = await sut.searchStatistics(auth, { personIds: [person.personGroupId] });
 
       expect(result).toEqual({ total: 1 });
     });
@@ -102,7 +102,7 @@ describe(SearchService.name, () => {
 
       const auth = factory.auth({ user: { id: user.id } });
 
-      const result = await sut.searchStatistics(auth, { personIds: [person.id] });
+      const result = await sut.searchStatistics(auth, { personIds: [person.personGroupId] });
 
       expect(result).toEqual({ total: 0 });
     });
@@ -265,7 +265,7 @@ describe(SearchService.name, () => {
       await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [tagSuppressed.id] });
 
       const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Private Person' });
-      await ctx.newAssetFace({ assetId: faceSuppressed.id, personId: person.id });
+      await ctx.newAssetFace({ assetId: faceSuppressed.id, personGroupId: person.personGroupId });
 
       await ctx.newMetadata({
         assetId: nsfwSuppressed.id,
@@ -277,7 +277,7 @@ describe(SearchService.name, () => {
         userId: user.id,
         includeNsfw: true,
         tagIds: [tag.id],
-        personIds: [person.id],
+        personIds: [person.personGroupId],
         scope: 'owned',
       };
       const hiddenAuth = {

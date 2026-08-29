@@ -1,15 +1,22 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import _ from 'lodash';
-import { defaults, SystemConfig } from 'src/config';
 import { OnEvent } from 'src/decorators';
+import {
+  AdminConfigDto,
+  defaults,
+  mapAdminConfig,
+  mapPublicConfig,
+  mapUserConfig,
+  PublicConfigDto,
+  SystemConfig,
+  UserConfigDto,
+} from 'src/dtos/config.dto';
 import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
-  mapConfig,
   SmartAlbumReevaluateEstimateDto,
   SmartAlbumReevaluateRequestDto,
   SmartAlbumReevaluateResponseDto,
-  SystemConfigDto,
 } from 'src/dtos/system-config.dto';
 import { BootstrapEventPriority, JobName, QueueName, SystemMetadataKey } from 'src/enum';
 import { ArgOf } from 'src/repositories/event.repository';
@@ -45,13 +52,31 @@ export class SystemConfigService extends BaseService {
     this.machineLearningRepository.teardown();
   }
 
-  async getSystemConfig(): Promise<SystemConfigDto> {
+  async getAdminConfig(): Promise<AdminConfigDto> {
     const config = await this.getConfig({ withCache: false });
-    return mapConfig(config);
+    return mapAdminConfig(config);
   }
 
-  getDefaults(): SystemConfigDto {
-    return mapConfig(defaults);
+  getAdminConfigDefaults(): AdminConfigDto {
+    return mapAdminConfig(defaults);
+  }
+
+  async getUserConfig(): Promise<UserConfigDto> {
+    const config = await this.getConfig({ withCache: false });
+    return mapUserConfig(config);
+  }
+
+  getUserConfigDefaults(): UserConfigDto {
+    return mapUserConfig(defaults);
+  }
+
+  async getPublicConfig(): Promise<PublicConfigDto> {
+    const config = await this.getConfig({ withCache: false });
+    return mapPublicConfig(config);
+  }
+
+  getPublicConfigDefaults(): PublicConfigDto {
+    return mapPublicConfig(defaults);
   }
 
   getMachineLearningHardware(): Promise<MachineLearningHardwareResponse> {
@@ -126,7 +151,7 @@ export class SystemConfigService extends BaseService {
     }
   }
 
-  async updateSystemConfig(dto: SystemConfigDto): Promise<SystemConfigDto> {
+  async updateAdminConfig(dto: AdminConfigDto): Promise<AdminConfigDto> {
     const { configFile } = this.configRepository.getEnv();
     if (configFile) {
       throw new BadRequestException('Cannot update configuration while IMMICH_CONFIG_FILE is in use');
@@ -196,7 +221,7 @@ export class SystemConfigService extends BaseService {
 
     await this.eventRepository.emit('ConfigUpdate', { newConfig, oldConfig });
 
-    return mapConfig(newConfig);
+    return mapAdminConfig(newConfig);
   }
 
   async getCustomCss(): Promise<string> {
@@ -214,7 +239,7 @@ export class SystemConfigService extends BaseService {
     // or no completions yet). This reflects the user's actual hardware/model,
     // unlike the prior hardcoded 1.5s.
     const avgMs = this.jobRepository.getRollingAvgMs(JobName.ImageDescription);
-    const rollingAvgSeconds = avgMs == null ? DEFAULT_SECONDS_PER_ASSET : avgMs / 1000;
+    const rollingAvgSeconds = avgMs === null ? DEFAULT_SECONDS_PER_ASSET : avgMs / 1000;
     const estimatedTotalSeconds = stats.totalAssets * rollingAvgSeconds;
 
     return {

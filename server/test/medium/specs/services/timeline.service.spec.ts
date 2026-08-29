@@ -161,7 +161,7 @@ describe(TimelineService.name, () => {
       await ctx.newTagAsset({ tagIds: [tag.id], assetIds: [tagSuppressed.id] });
 
       const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Private Person' });
-      await ctx.newAssetFace({ assetId: faceSuppressed.id, personId: person.id });
+      await ctx.newAssetFace({ assetId: faceSuppressed.id, personGroupId: person.personGroupId });
 
       await ctx.newMetadata({
         assetId: nsfwSuppressed.id,
@@ -173,7 +173,7 @@ describe(TimelineService.name, () => {
         userId: user.id,
         includeNsfw: true,
         tagIds: [tag.id],
-        personIds: [person.id],
+        personIds: [person.personGroupId],
         scope: 'owned',
       };
       const hiddenAuth = {

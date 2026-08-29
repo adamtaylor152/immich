@@ -787,7 +787,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -805,7 +805,10 @@ describe(ImageEnrichmentService.name, () => {
 
       await expect(sut.handleImageDescription({ id: assetId })).resolves.toBe(JobStatus.Success);
 
-      expect(mocks.person.getFaces).toHaveBeenCalledWith(assetId, { isVisible: true });
+      expect(mocks.person.getFaces).toHaveBeenCalledWith(assetId, {
+        isVisible: true,
+        viewingUserId: expect.any(String),
+      });
       // The prompt assembler is called with a prompt that includes the known person hint.
       expect(mocks.machineLearning.describeImage).toHaveBeenCalledWith(
         previewFile,
@@ -820,7 +823,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: null,
+          personGroupId: null,
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -852,7 +855,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -883,7 +886,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -914,7 +917,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -945,7 +948,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 0,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -976,7 +979,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,
@@ -1031,7 +1034,7 @@ describe(ImageEnrichmentService.name, () => {
         {
           id: newUuid(),
           assetId,
-          personId: newUuid(),
+          personGroupId: newUuid(),
           imageWidth: 400,
           imageHeight: 500,
           boundingBoxX1: 100,

@@ -51,7 +51,7 @@ describe('storage cutover verification', () => {
   afterAll(async () => db.destroy());
 
   const seedDatabase = async (bytes: Buffer, path: string) => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({
       ownerId: user.id,
       originalPath: path,

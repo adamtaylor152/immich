@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import {
     listGpus as listRunPodGpus,
-    Mode2 as RunPodMode,
+    Mode as RunPodMode,
     provision as provisionRunPodPod,
     start as startRunPodPod,
     stop as stopRunPodPod,
@@ -16,13 +16,13 @@
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import { Button, modalManager, toastManager } from '@immich/ui';
-  import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+  import type { AdminConfigMachineLearningDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
 
   // Optionally accept the in-progress form state so visibility of the launch
   // fieldsets reacts to dropdown changes the admin hasn't saved yet. Falls
   // back to the saved config when the parent doesn't pass anything.
-  let { workingConfig }: { workingConfig?: SystemConfigMachineLearningDto } = $props();
+  let { workingConfig }: { workingConfig?: AdminConfigMachineLearningDto } = $props();
 
   // Hand-rolled fetch instead of the SDK helper so we don't have to plumb additional
   // generated names through. Hits /api/runpod/pods/current with the existing session.

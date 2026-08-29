@@ -211,6 +211,10 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
       return setUnion(isOwner, isPartner);
     }
 
+    case Permission.AssetFileDownload: {
+      return access.assetFile.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+    }
+
     case Permission.AssetView: {
       const isOwner = await checkAssetOwnerAccess(access, auth, ids, auth.session?.hasElevatedPermission);
       const isAlbum = await checkAssetAlbumAccess(access, auth, setDifference(ids, isOwner));
@@ -247,6 +251,11 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
 
     case Permission.AssetEditDelete: {
       return await checkAssetOwnerAccess(access, auth, ids, auth.session?.hasElevatedPermission);
+    }
+
+    case Permission.AssetFileRead:
+    case Permission.AssetFileDelete: {
+      return await access.assetFile.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
     }
 
     case Permission.AlbumRead: {
@@ -384,8 +393,29 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
       return checkPersonFaceOwnerAccess(access, auth, ids);
     }
 
+    case Permission.ClusterGroupRead: {
+      const isMember = await access.clusterGroup.checkOwnerAccess(auth.user.id, ids);
+      const isInvited = await access.clusterGroup.checkInviteAccess(auth.user.id, setDifference(ids, isMember));
+      return setUnion(isMember, isInvited);
+    }
+
+    case Permission.ClusterGroupLeave:
+    case Permission.ClusterGroupRequestCreate: {
+      return access.clusterGroup.checkOwnerAccess(auth.user.id, ids);
+    }
+
+    case Permission.ClusterGroupRequestDelete: {
+      const isOwner = await access.clusterGroupRequest.checkOwnerAccess(auth.user.id, ids);
+      const isGroupMember = await access.clusterGroupRequest.checkGroupAccess(auth.user.id, ids);
+      return setUnion(isOwner, isGroupMember);
+    }
+
+    case Permission.ClusterGroupRequestRead: {
+      return access.clusterGroupRequest.checkOwnerAccess(auth.user.id, ids);
+    }
+
     case Permission.PartnerUpdate: {
-      return await access.partner.checkUpdateAccess(auth.user.id, ids);
+      return access.partner.checkUpdateAccess(auth.user.id, ids);
     }
 
     case Permission.SessionRead:
@@ -409,7 +439,8 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
 
     case Permission.WorkflowRead:
     case Permission.WorkflowUpdate:
-    case Permission.WorkflowDelete: {
+    case Permission.WorkflowDelete:
+    case Permission.WorkflowLogs: {
       return access.workflow.checkOwnerAccess(auth.user.id, ids);
     }
 

@@ -1,4 +1,5 @@
 import { Kysely, sql } from 'kysely';
+import { REVERSIBLE_POST_CERTIFIED_MIGRATIONS } from 'src/fork-schema/post-certified-residue';
 import {
   ADD_PLUGIN_METHOD_ALLOWED_HOSTS_MIGRATION,
   ADD_PLUGIN_TEMPLATES_MIGRATION,
@@ -7,6 +8,7 @@ import {
   getWorkflowCompatibilityEvidence,
   LEGACY_WORKFLOW_MIGRATION,
   OFFICIAL_WORKFLOW_MIGRATION,
+  WORKFLOW_SCHEMA_DIGESTS,
 } from 'src/fork-schema/workflow-compatibility';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -34,6 +36,18 @@ describe('workflow migration ledger alias', () => {
   afterAll(async () => db.destroy());
 
   beforeEach(async () => {
+    // A successful cutover in an earlier test reverts and de-ledgers the
+    // post-certified upstream residue (dropping workflow.logging, workflow_log,
+    // and the cluster/person-group tables); restore the current-fork baseline.
+    // The registered applies are idempotent.
+    for (const [name, { apply }] of REVERSIBLE_POST_CERTIFIED_MIGRATIONS) {
+      await apply(db);
+      await sql`
+        INSERT INTO kysely_migrations (name, timestamp)
+        VALUES (${name}, '9999-01-01T00:00:00.000Z')
+        ON CONFLICT (name) DO NOTHING
+      `.execute(db);
+    }
     await sql`TRUNCATE public.workflow_step, public.workflow, public.plugin_method, public.plugin CASCADE`.execute(db);
     await db.deleteFrom('user').execute();
     await sql`DELETE FROM public.kysely_migrations WHERE name = ANY(${workflowMarkers})`.execute(db);
@@ -49,7 +63,7 @@ describe('workflow migration ledger alias', () => {
       db,
     );
 
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     await db.insertInto('user').values(user).execute();
     await sql`
       INSERT INTO public.plugin
@@ -197,8 +211,19 @@ describe('workflow migration ledger alias', () => {
       FROM pg_catalog.pg_trigger
       WHERE tgrelid = 'public.workflow'::regclass AND tgname = 'workflow_updatedAt'
     `.execute(db);
-      expect(after.schemaDigest).toBe(before.schemaDigest);
-      expect(after.rowDigests).toEqual(before.rowDigests);
+      // The cutover reverts the post-certified residue, dropping
+      // workflow.logging: the schema lands on the certified fingerprint and the
+      // workflow row digest changes only by that column's removal.
+      expect(after.schemaStage).toBe(before.schemaStage);
+      expect(after.schemaDigest).toBe(WORKFLOW_SCHEMA_DIGESTS[after.schemaStage]);
+      expect(after.rowDigests.map(({ count, table }) => ({ count, table }))).toEqual(
+        before.rowDigests.map(({ count, table }) => ({ count, table })),
+      );
+      for (const row of after.rowDigests) {
+        if (row.table !== 'public.workflow') {
+          expect(row).toEqual(before.rowDigests.find(({ table }) => table === row.table));
+        }
+      }
       expect(after.ledger).toContainEqual({ name: finalMarker, timestamp: markerTimestamp });
       expect(triggerAfter.rows).toEqual(triggerBefore.rows);
     },

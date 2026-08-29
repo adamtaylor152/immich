@@ -1,8 +1,7 @@
 import AsyncLock from 'async-lock';
 import { load as loadYaml } from 'js-yaml';
 import * as _ from 'lodash';
-import { SystemConfig, defaults } from 'src/config';
-import { SystemConfigSchema } from 'src/dtos/system-config.dto';
+import { AdminConfigDto, SystemConfig, defaults } from 'src/dtos/config.dto';
 import { DatabaseLock, SystemMetadataKey } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { ForkSchemaRepository } from 'src/repositories/fork-schema.repository';
@@ -105,7 +104,7 @@ const buildConfig = async (repos: RepoDeps) => {
   }
 
   // validate with Zod schema
-  const result = SystemConfigSchema.safeParse(rawConfig);
+  const result = AdminConfigDto.schema.safeParse(rawConfig);
   if (!result.success) {
     const messages = ['Invalid system config: '];
     for (const issue of result.error.issues) {

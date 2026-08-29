@@ -1,0 +1,10 @@
+--- a/admin_config_advanced_prompt_dto.dart
++++ b/admin_config_advanced_prompt_dto.dart
+@@ -14,7 +14,7 @@
+   /// Returns a new [AdminConfigAdvancedPromptDto] instance.
+   AdminConfigAdvancedPromptDto({
+     this.enabled = const Optional.present(false),
+-    this.placeholderValidation = const Optional.present(const AdminConfigAdvancedPromptDtoPlaceholderValidationEnum._('strict')),
++    this.placeholderValidation = const Optional.present(AdminConfigAdvancedPromptDtoPlaceholderValidationEnum.strict),
+     this.rawPromptTemplate = const Optional.present(''),
+   });

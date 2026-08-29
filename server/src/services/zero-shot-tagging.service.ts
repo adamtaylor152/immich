@@ -93,7 +93,7 @@ export class ZeroShotTaggingService extends BaseService {
     const items: Insertable<TagAssetTable>[] = upserted.map((tag) => ({ tagId: tag.id, assetId }));
     const inserted = await this.tagRepository.upsertAssetIds(items);
     if (inserted.length > 0) {
-      await this.eventRepository.emit('AssetTag', { assetId });
+      await this.eventRepository.emit('AssetTag', { assetId, userId: ownerId });
     }
   }
 }

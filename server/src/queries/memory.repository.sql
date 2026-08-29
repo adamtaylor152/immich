@@ -212,7 +212,8 @@ select
               $1 as "one"
             from
               "asset_face"
-              inner join "person" on "person"."id" = "asset_face"."personId"
+              inner join "person" on "person"."personGroupId" = "asset_face"."personGroupId"
+              and "person"."ownerId" = "asset"."ownerId"
             where
               "asset_face"."assetId" = "asset"."id"
               and "person"."isHidden" = $2
@@ -290,6 +291,7 @@ where
     )
   )
 order by
+  "showAt" desc nulls last,
   "memoryAt" desc
 
 -- MemoryRepository.search (date filter)
@@ -354,7 +356,8 @@ select
               $1 as "one"
             from
               "asset_face"
-              inner join "person" on "person"."id" = "asset_face"."personId"
+              inner join "person" on "person"."personGroupId" = "asset_face"."personGroupId"
+              and "person"."ownerId" = "asset"."ownerId"
             where
               "asset_face"."assetId" = "asset"."id"
               and "person"."isHidden" = $2
@@ -440,6 +443,300 @@ where
     )
   )
 order by
+  "showAt" desc nulls last,
+  "memoryAt" desc
+
+-- MemoryRepository.search (upcoming filter)
+select
+  (
+    select
+      coalesce(json_agg(agg), '[]')
+    from
+      (
+        select
+          "asset".*
+        from
+          "asset"
+          inner join "memory_asset" on "asset"."id" = "memory_asset"."assetId"
+        where
+          "memory_asset"."memoriesId" = "memory"."id"
+          and "asset"."visibility" = 'timeline'
+          and "asset"."deletedAt" is null
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write', 'ready') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              when (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ) = 'active' then not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+              else false
+            end
+          )
+          and not exists (
+            select
+              $1 as "one"
+            from
+              "asset_face"
+              inner join "person" on "person"."personGroupId" = "asset_face"."personGroupId"
+              and "person"."ownerId" = "asset"."ownerId"
+            where
+              "asset_face"."assetId" = "asset"."id"
+              and "person"."isHidden" = $2
+          )
+        order by
+          "asset"."fileCreatedAt" asc
+      ) as agg
+  ) as "assets",
+  "memory".*
+from
+  "memory"
+where
+  "showAt" > $3
+  and "deletedAt" is null
+  and "ownerId" = $4
+  and (
+    not exists (
+      select
+        "memory_asset"."memoriesId"
+      from
+        "memory_asset"
+      where
+        "memory_asset"."memoriesId" = "memory"."id"
+    )
+    or exists (
+      select
+        "memory_asset"."memoriesId"
+      from
+        "memory_asset"
+        inner join "asset" on "asset"."id" = "memory_asset"."assetId"
+      where
+        "memory_asset"."memoriesId" = "memory"."id"
+        and "asset"."visibility" = 'timeline'
+        and "asset"."deletedAt" is null
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
+        )
+    )
+  )
+order by
+  "showAt" desc nulls last,
+  "memoryAt" desc
+
+-- MemoryRepository.search (not upcoming filter)
+select
+  (
+    select
+      coalesce(json_agg(agg), '[]')
+    from
+      (
+        select
+          "asset".*
+        from
+          "asset"
+          inner join "memory_asset" on "asset"."id" = "memory_asset"."assetId"
+        where
+          "memory_asset"."memoriesId" = "memory"."id"
+          and "asset"."visibility" = 'timeline'
+          and "asset"."deletedAt" is null
+          and not (
+            case
+              when "asset"."id" is null then false
+              when coalesce(
+                (
+                  select
+                    phase
+                  from
+                    immich_fork.state
+                  where
+                    id = 1
+                ),
+                'inactive'
+              ) in ('legacy', 'dual-write', 'ready') then exists (
+                select
+                  1
+                from
+                  asset as nsfw_asset
+                where
+                  nsfw_asset.id = "asset"."id"
+                  and nsfw_asset.is_nsfw = true
+              )
+              when (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ) = 'active' then not exists (
+                select
+                  1
+                from
+                  immich_fork.asset_privacy as privacy_asset
+                where
+                  privacy_asset."assetId" = "asset"."id"
+                  and privacy_asset."isNsfw" = false
+              )
+              else false
+            end
+          )
+          and not exists (
+            select
+              $1 as "one"
+            from
+              "asset_face"
+              inner join "person" on "person"."personGroupId" = "asset_face"."personGroupId"
+              and "person"."ownerId" = "asset"."ownerId"
+            where
+              "asset_face"."assetId" = "asset"."id"
+              and "person"."isHidden" = $2
+          )
+        order by
+          "asset"."fileCreatedAt" asc
+      ) as agg
+  ) as "assets",
+  "memory".*
+from
+  "memory"
+where
+  (
+    "showAt" is null
+    or "showAt" <= $3
+  )
+  and "deletedAt" is null
+  and "ownerId" = $4
+  and (
+    not exists (
+      select
+        "memory_asset"."memoriesId"
+      from
+        "memory_asset"
+      where
+        "memory_asset"."memoriesId" = "memory"."id"
+    )
+    or exists (
+      select
+        "memory_asset"."memoriesId"
+      from
+        "memory_asset"
+        inner join "asset" on "asset"."id" = "memory_asset"."assetId"
+      where
+        "memory_asset"."memoriesId" = "memory"."id"
+        and "asset"."visibility" = 'timeline'
+        and "asset"."deletedAt" is null
+        and not (
+          case
+            when "asset"."id" is null then false
+            when coalesce(
+              (
+                select
+                  phase
+                from
+                  immich_fork.state
+                where
+                  id = 1
+              ),
+              'inactive'
+            ) in ('legacy', 'dual-write', 'ready') then exists (
+              select
+                1
+              from
+                asset as nsfw_asset
+              where
+                nsfw_asset.id = "asset"."id"
+                and nsfw_asset.is_nsfw = true
+            )
+            when (
+              select
+                phase
+              from
+                immich_fork.state
+              where
+                id = 1
+            ) = 'active' then not exists (
+              select
+                1
+              from
+                immich_fork.asset_privacy as privacy_asset
+              where
+                privacy_asset."assetId" = "asset"."id"
+                and privacy_asset."isNsfw" = false
+            )
+            else false
+          end
+        )
+    )
+  )
+order by
+  "showAt" desc nulls last,
   "memoryAt" desc
 
 -- MemoryRepository.get

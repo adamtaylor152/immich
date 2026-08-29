@@ -2,12 +2,14 @@ import { ActivityService } from 'src/services/activity.service';
 import { AlbumService } from 'src/services/album.service';
 import { ApiKeyService } from 'src/services/api-key.service';
 import { ApiService } from 'src/services/api.service';
+import { AssetFileService } from 'src/services/asset-file.service';
 import { AssetMediaService } from 'src/services/asset-media.service';
 import { AssetService } from 'src/services/asset.service';
 import { AuthAdminService } from 'src/services/auth-admin.service';
 import { AuthService } from 'src/services/auth.service';
 import { BestPhotosService } from 'src/services/best-photos.service';
 import { CliService } from 'src/services/cli.service';
+import { ClusterGroupService } from 'src/services/cluster-group.service';
 import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { DatabaseService } from 'src/services/database.service';
 import { DownloadService } from 'src/services/download.service';
@@ -67,6 +69,7 @@ export const services = [
   ActivityService,
   AlbumService,
   ApiService,
+  AssetFileService,
   AssetMediaService,
   AssetService,
   AuthService,
@@ -96,6 +99,7 @@ export const services = [
   NotificationService,
   NotificationAdminService,
   OcrService,
+  ClusterGroupService,
   PartnerService,
   PersonService,
   PhysicalDeduplicationService,

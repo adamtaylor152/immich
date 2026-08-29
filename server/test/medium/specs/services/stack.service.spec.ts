@@ -29,11 +29,11 @@ const nsfwMetadata = (isNsfw: boolean) => ({
   },
 });
 
-describe(StackService.name, () => {
-  beforeEach(async () => {
-    defaultDatabase = await getKyselyDB();
-  });
+beforeAll(async () => {
+  defaultDatabase = await getKyselyDB();
+});
 
+describe(StackService.name, () => {
   describe('nsfw privacy', () => {
     it('filters hidden NSFW stack children and denies stacks with hidden NSFW primary assets', async () => {
       const { sut, ctx } = setup();
@@ -87,6 +87,23 @@ describe(StackService.name, () => {
       expect(elevatedStacks.find(({ id }) => id === safePrimaryStackId)?.assets.map(({ id }) => id)).toEqual(
         expect.arrayContaining([safePrimary.id, nsfwChild.id]),
       );
+    });
+  });
+
+  describe('create', () => {
+    it('should not stack an asset of another user', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { user: otherUser } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: otherAsset } = await ctx.newAsset({ ownerId: otherUser.id });
+
+      await expect(sut.create(factory.auth({ user }), { assetIds: [asset.id, otherAsset.id] })).rejects.toThrow(
+        'Not found or no asset.update access',
+      );
+      await expect(
+        ctx.database.selectFrom('stack').selectAll().where('ownerId', '=', user.id).execute(),
+      ).resolves.toEqual([]);
     });
   });
 });

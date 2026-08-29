@@ -22,7 +22,7 @@ const setup = (db?: Kysely<DB>) => {
 };
 
 const createUser = async (userRepository: UserRepository) => {
-  const user = mediumFactory.userInsert();
+  const user = await mediumFactory.userWithClusterGroup(defaultDatabase);
   await userRepository.create(user);
   return user;
 };

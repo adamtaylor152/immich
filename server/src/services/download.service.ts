@@ -127,7 +127,10 @@ export class DownloadService extends BaseService {
 
     void zip.finalize();
 
-    return { stream: zip.stream };
+    return {
+      stream: zip.stream,
+      disposition: dto.archiveName && `attachment; filename*=UTF-8''${encodeURIComponent(dto.archiveName)}.zip`,
+    };
   }
 
   private nsfwOptions(auth: AuthDto) {

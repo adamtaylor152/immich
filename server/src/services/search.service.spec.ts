@@ -285,7 +285,13 @@ describe(SearchService.name, () => {
       );
       expect(mocks.search.searchSmart).toHaveBeenCalledWith(
         { page: 1, size: 100 },
-        { query: 'test', embedding: '[1, 2, 3]', userIds: [authStub.user1.user.id], visibility: 'not-locked' },
+        {
+          query: 'test',
+          embedding: '[1, 2, 3]',
+          userIds: [authStub.user1.user.id],
+          viewingUserId: authStub.user1.user.id,
+          visibility: 'not-locked',
+        },
       );
     });
 
@@ -296,7 +302,14 @@ describe(SearchService.name, () => {
 
       expect(mocks.search.searchSmart).toHaveBeenCalledWith(
         { page: 1, size: 100 },
-        { query: 'test', embedding: '[1, 2, 3]', userIds: [auth.user.id], excludeNsfw: true, visibility: 'not-locked' },
+        {
+          query: 'test',
+          embedding: '[1, 2, 3]',
+          userIds: [auth.user.id],
+          viewingUserId: auth.user.id,
+          excludeNsfw: true,
+          visibility: 'not-locked',
+        },
       );
     });
 
@@ -471,7 +484,11 @@ describe(SearchService.name, () => {
     });
 
     it('should resolve people names into person filters when possible', async () => {
-      const person = PersonFactory.create({ id: 'person-1', name: 'Alice', ownerId: authStub.user1.user.id });
+      const person = PersonFactory.create({
+        personGroupId: 'person-1',
+        name: 'Alice',
+        ownerId: authStub.user1.user.id,
+      });
       mocks.person.getByName.mockResolvedValue([person]);
 
       const result = await sut.askSearch(authStub.user1, { query: 'photos of Alice in Banff' });
@@ -509,7 +526,11 @@ describe(SearchService.name, () => {
     });
 
     it('should resolve lowercase people names and warn when they cannot be resolved', async () => {
-      const person = PersonFactory.create({ id: 'person-1', name: 'Alice', ownerId: authStub.user1.user.id });
+      const person = PersonFactory.create({
+        personGroupId: 'person-1',
+        name: 'Alice',
+        ownerId: authStub.user1.user.id,
+      });
       mocks.person.getByName.mockResolvedValueOnce([person]);
 
       const resolvedResult = await sut.askSearch(authStub.user1, { query: 'photos of alice in Banff' });

@@ -4,12 +4,12 @@
   import SettingSwitch from '$lib/components/shared-components/settings/SettingSwitch.svelte';
   import { SettingInputFieldType } from '$lib/constants';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
-  import type { SystemConfigMachineLearningDto } from '@immich/sdk';
+  import type { AdminConfigMachineLearningDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
 
   interface Props {
-    workingConfig: SystemConfigMachineLearningDto;
-    savedConfig: SystemConfigMachineLearningDto;
+    workingConfig: AdminConfigMachineLearningDto;
+    savedConfig: AdminConfigMachineLearningDto;
     disabled: boolean;
   }
 

@@ -1469,7 +1469,7 @@ order by
 select
   "asset_face"."id",
   "assetId",
-  "personId",
+  "personGroupId" as "personId",
   "imageWidth",
   "imageHeight",
   "boundingBoxX1",
@@ -2535,7 +2535,7 @@ order by
 -- SyncRepository.person.getDeletes
 select
   "id",
-  "personId"
+  "personGroupId" as "personId"
 from
   "person_audit" as "person_audit"
 where
@@ -2547,7 +2547,7 @@ order by
 
 -- SyncRepository.person.getUpserts
 select
-  "person"."id",
+  "person"."personGroupId" as "id",
   "person"."createdAt",
   "person"."updatedAt",
   "person"."ownerId",
@@ -2626,7 +2626,7 @@ where
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
       where
-        "asset_face"."personId" = "person"."id"
+        "asset_face"."personGroupId" = "person"."personGroupId"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
     )
@@ -2638,7 +2638,7 @@ where
         and "asset"."visibility" = 'timeline'
         and "asset"."deletedAt" is null
       where
-        "asset_face"."personId" = "person"."id"
+        "asset_face"."personGroupId" = "person"."personGroupId"
         and "asset_face"."deletedAt" is null
         and "asset_face"."isVisible" is true
         and not (

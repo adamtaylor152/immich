@@ -33,7 +33,7 @@
   import ChangePasswordSettings from './ChangePasswordSettings.svelte';
   import DeviceList from './DeviceList.svelte';
   import OauthSettings from './OauthSettings.svelte';
-  import PartnerSettings from './PartnerSettings.svelte';
+  import SharingSettings from './SharingSettings.svelte';
   import UserApiKeyList from './UserApiKeyList.svelte';
   import UserProfileSettings from './UserProfileSettings.svelte';
 
@@ -132,15 +132,6 @@
 </SettingAccordion>
 
 <SettingAccordion
-  icon={mdiAccountGroupOutline}
-  key="partner-sharing"
-  title={$t('partner_sharing')}
-  subtitle={$t('manage_sharing_with_partners')}
->
-  <PartnerSettings />
-</SettingAccordion>
-
-<SettingAccordion
   icon={mdiLockSmart}
   key="user-pin-code-settings"
   title={$t('user_pin_code_settings')}
@@ -168,4 +159,13 @@
   autoScrollTo={true}
 >
   <UserPurchaseSettings />
+</SettingAccordion>
+
+<SettingAccordion
+  icon={mdiAccountGroupOutline}
+  key={OpenQueryParam.SHARING}
+  title={$t('sharing')}
+  subtitle={$t('manage_sharing_with_other_users')}
+>
+  <SharingSettings />
 </SettingAccordion>

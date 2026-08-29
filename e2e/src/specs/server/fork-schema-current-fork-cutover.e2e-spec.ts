@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   api,
   authHeaders,
+  digest,
   ensureAdmin,
   LATER_WORKFLOW_MIGRATIONS,
   LEGACY_WORKFLOW_MIGRATION,
@@ -232,15 +233,15 @@ describe.runIf(phase === 'current-fork-quiescent')(`${lane}: writer quiescence`,
     // values from the same image.
     // The import runs asynchronously on the microservices boot, so queue
     // drain alone doesn't guarantee it has landed — poll until the manifest's
-    // 12 methods are present.
+    // 14 methods are present.
     let converged = await workflowEvidence();
-    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 12; attempt++) {
+    for (let attempt = 0; attempt < 300 && converged.rows.plugin_method.length < 14; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 200));
       converged = await workflowEvidence();
     }
     expect(converged.rows.plugin).toHaveLength(1);
     expect(converged.rows.plugin[0]).toMatchObject({ name: 'immich-plugin-core', version: '2.0.1' });
-    expect(converged.rows.plugin_method).toHaveLength(12);
+    expect(converged.rows.plugin_method).toHaveLength(14);
     const fullState = await loadState<Record<string, unknown>>(lane);
     await saveState(lane, { ...fullState, evidence: converged });
   }, 120_000);
@@ -273,11 +274,23 @@ describe.runIf(phase === 'current-fork-cutover')(`${lane}: locked cutover`, () =
     // four table digests inside its own transaction and aborts on drift, so
     // that invariant is enforced server-side. Row ids must still be stable
     // here: they anchor the workflow_step foreign keys.
-    expect(after.rowDigests.workflow).toBe(before.evidence.rowDigests.workflow);
+    // Cutover reverts the post-certified residue, dropping workflow.logging
+    // (1786741078327-AddWorkflowLogsTable): the workflow rows and schema must
+    // land exactly on the certified shape — the pre-cutover evidence minus
+    // that one column — and nothing else may move.
+    const certifiedWorkflowRows = (before.evidence.rows.workflow as Record<string, unknown>[]).map((row) => {
+      const { logging, ...rest } = row;
+      void logging;
+      return rest;
+    });
+    expect(after.rowDigests.workflow).toBe(digest(certifiedWorkflowRows));
     expect(after.rowDigests.workflow_step).toBe(before.evidence.rowDigests.workflow_step);
     expect(after.rowIds.plugin).toEqual(before.evidence.rowIds.plugin);
     expect(after.rowIds.plugin_method).toEqual(before.evidence.rowIds.plugin_method);
-    expect(after.schemaDigest).toBe(before.evidence.schemaDigest);
+    const certifiedColumns = (before.evidence.columns as Record<string, unknown>[]).filter(
+      (column) => !(column.table_name === 'workflow' && column.column_name === 'logging'),
+    );
+    expect(after.schemaDigest).toBe(digest(certifiedColumns));
     expect(progress).toHaveLength(7);
     for (const item of progress) {
       expect(item.processed).toBe(

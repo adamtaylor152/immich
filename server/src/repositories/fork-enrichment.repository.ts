@@ -122,7 +122,10 @@ export class ForkEnrichmentRepository {
         .toArray();
       const sidecarDescription =
         generated.description ?? (textGeneratedDescriptions.length > 0 ? textGeneratedDescriptions.join('\n\n') : null);
-      const block = generated.description == null ? null : `${prefix}${generated.description}`;
+      const block =
+        generated.description === null || generated.description === undefined
+          ? null
+          : `${prefix}${generated.description}`;
       const storedHash =
         row.provenance.description?.status === 'success'
           ? row.provenance.description.appliedDescriptionHash

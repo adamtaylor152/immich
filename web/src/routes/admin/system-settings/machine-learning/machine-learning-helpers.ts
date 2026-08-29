@@ -1,4 +1,4 @@
-import { MachineLearningHardwareAcceleration, Mode2 as RunPodMode } from '@immich/sdk';
+import { MachineLearningHardwareAcceleration, Mode as RunPodMode } from '@immich/sdk';
 
 /**
  * Hardware acceleration value map keeping the SDK enum hidden behind a

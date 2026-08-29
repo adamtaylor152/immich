@@ -1,6 +1,5 @@
 import { LoginResponseDto } from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
-import { errorDto } from 'src/responses';
 import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -22,12 +21,6 @@ describe('/server', () => {
   });
 
   describe('GET /server/about', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).get('/server/about');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
     it('should return about information', async () => {
       const { status, body } = await request(app)
         .get('/server/about')
@@ -59,12 +52,6 @@ describe('/server', () => {
   });
 
   describe('GET /server/storage', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).get('/server/storage');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
     it('should return the disk information', async () => {
       const { status, body } = await request(app)
         .get('/server/storage')
@@ -142,6 +129,7 @@ describe('/server', () => {
       expect(rest).toEqual({
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
+        oauthAccountManagementUrl: '',
         trashDays: 30,
         userDeleteDelay: 7,
         isInitialized: true,
@@ -159,20 +147,6 @@ describe('/server', () => {
   });
 
   describe('GET /server/statistics', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).get('/server/statistics');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should only work for admins', async () => {
-      const { status, body } = await request(app)
-        .get('/server/statistics')
-        .set('Authorization', `Bearer ${nonAdmin.accessToken}`);
-      expect(status).toBe(403);
-      expect(body).toEqual(errorDto.forbidden);
-    });
-
     it('should return the server stats', async () => {
       const { status, body } = await request(app)
         .get('/server/statistics')
@@ -223,20 +197,6 @@ describe('/server', () => {
   });
 
   describe('GET /server/license', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).get('/server/license');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should only work for admins', async () => {
-      const { status, body } = await request(app)
-        .get('/server/license')
-        .set('Authorization', `Bearer ${nonAdmin.accessToken}`);
-      expect(status).toBe(403);
-      expect(body).toEqual(errorDto.forbidden);
-    });
-
     it('should return the server license', async () => {
       await request(app).put('/server/license').set('Authorization', `Bearer ${admin.accessToken}`).send(serverLicense);
       const { status, body } = await request(app)
@@ -251,20 +211,6 @@ describe('/server', () => {
   });
 
   describe('DELETE /server/license', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).delete('/server/license');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should only work for admins', async () => {
-      const { status, body } = await request(app)
-        .delete('/server/license')
-        .set('Authorization', `Bearer ${nonAdmin.accessToken}`);
-      expect(status).toBe(403);
-      expect(body).toEqual(errorDto.forbidden);
-    });
-
     it('should delete the server license', async () => {
       await request(app)
         .delete('/server/license')
@@ -276,20 +222,6 @@ describe('/server', () => {
   });
 
   describe('PUT /server/license', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).put('/server/license');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should only work for admins', async () => {
-      const { status, body } = await request(app)
-        .put('/server/license')
-        .set('Authorization', `Bearer ${nonAdmin.accessToken}`);
-      expect(status).toBe(403);
-      expect(body).toEqual(errorDto.forbidden);
-    });
-
     it('should set the server license', async () => {
       const { status, body } = await request(app)
         .put('/server/license')

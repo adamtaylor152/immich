@@ -70,7 +70,7 @@ const restoreOfficialPublicSchema = async (db: Kysely<DB>) => {
 };
 
 const insertAsset = async (db: Kysely<DB>) => {
-  const user = mediumFactory.userInsert();
+  const user = await mediumFactory.userWithClusterGroup(db);
   const asset = mediumFactory.assetInsert({
     checksum: ASSET_SHA1,
     checksumAlgorithm: ChecksumAlgorithm.sha1File,

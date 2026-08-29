@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:auto_route/auto_route.dart';
-import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
@@ -12,7 +11,7 @@ import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/domain/utils/event_stream.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/datetime_extensions.dart';
-import 'package:immich_mobile/extensions/translate_extensions.dart';
+import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/presentation/widgets/images/image_provider.dart';
 import 'package:immich_mobile/providers/infrastructure/current_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/remote_album.provider.dart';
@@ -91,7 +90,7 @@ class _MesmerizingSliverAppBarState extends ConsumerState<RemoteAlbumSliverAppBa
             ),
       actions: [
         IconButton(
-          onPressed: () => context.pushRoute(DriftSlideshowRoute(timeline: ref.read(timelineServiceProvider))),
+          onPressed: () => context.pushRoute(SlideshowRoute(timeline: ref.read(timelineServiceProvider))),
           icon: Icon(Icons.slideshow_outlined, color: actionIconColor, shadows: actionIconShadows),
         ),
         if (currentAlbum.isActivityEnabled && currentAlbum.isShared)
@@ -240,7 +239,6 @@ class _ExpandedBackgroundState extends ConsumerState<_ExpandedBackground> with S
                         DateRangeFormatting.formatDateRange(
                           dateRange.value!.$1.toLocal(),
                           dateRange.value!.$2.toLocal(),
-                          context.locale,
                         ),
                         style: const TextStyle(
                           color: Colors.white,
@@ -318,7 +316,7 @@ class _ItemCountTextState extends ConsumerState<_ItemCountText> {
     final assetCount = ref.watch(timelineServiceProvider.select((s) => s.totalAssets));
 
     return Text(
-      'items_count'.t(context: context, args: {"count": assetCount}),
+      context.t.items_count(count: assetCount),
       style: context.textTheme.labelLarge?.copyWith(
         color: Colors.white,
         shadows: [const Shadow(offset: Offset(0, 2), blurRadius: 12, color: Colors.black87)],

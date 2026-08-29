@@ -168,7 +168,7 @@ export class JobRepository {
       // changes.
       const startedAt = job.processedOn;
       const finishedAt = job.finishedOn;
-      if (startedAt == null || finishedAt == null || finishedAt < startedAt) {
+      if (startedAt === undefined || finishedAt === undefined || finishedAt < startedAt) {
         return;
       }
       const duration = finishedAt - startedAt;
@@ -309,7 +309,7 @@ export class JobRepository {
    */
   async hasDedupJob(name: QueueName, dedupId: string): Promise<boolean> {
     const jobId = await this.getQueue(name).getDeduplicationJobId(dedupId);
-    return jobId != null;
+    return jobId !== null && jobId !== undefined;
   }
 
   private getQueueName(name: JobName) {

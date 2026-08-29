@@ -90,7 +90,7 @@ jobs:
         id: validate
         shell: bash
         env:
-          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":["self-hosted","linux","x64","aiimmich","docker-build"],"linux/arm64":"ubuntu-24.04-arm"}' }}
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
           IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
           REPO: ${{ github.repository }}
         run: |
@@ -123,7 +123,7 @@ jobs:
         shell: bash
         env:
           PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
-          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":["self-hosted","linux","x64","aiimmich","docker-build"],"linux/arm64":"ubuntu-24.04-arm"}' }}
+          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
         run: |
           matrix=$(jq -R -c \
             --argjson runner_mapping "${RUNNER_MAPPING}" \

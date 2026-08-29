@@ -69,7 +69,7 @@ const columnsFor = (tableName: string, definitions: readonly ColumnDefinition[])
     defaultExpression,
   }));
 
-const POST_UPDATE_COLUMNS = [
+const buildPostUpdateColumns = (withWorkflowLogs: boolean) => [
   ...columnsFor('plugin', [
     ['id', 'uuid', true, 'uuid_generate_v4()'],
     ['enabled', 'boolean', true, 'true'],
@@ -103,6 +103,10 @@ const POST_UPDATE_COLUMNS = [
     ['updatedAt', 'timestamp with time zone', true, 'now()'],
     ['updateId', 'uuid', true, 'immich_uuid_v7()'],
     ['enabled', 'boolean', true, 'true'],
+    // 1786741078327-AddWorkflowLogsTable (post-certified upstream residue)
+    // appends workflow.logging. A current-fork database carries it until the
+    // cutover reverts the residue, so both shapes are known-good.
+    ...(withWorkflowLogs ? ([['logging', 'boolean', true, 'false']] as const) : []),
   ]),
   ...columnsFor('workflow_step', [
     ['id', 'uuid', true, 'uuid_generate_v4()'],
@@ -114,8 +118,8 @@ const POST_UPDATE_COLUMNS = [
   ]),
 ];
 
-const POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST = {
-  columns: POST_UPDATE_COLUMNS,
+const buildPostUpdateManifest = (postUpdateColumns: ReturnType<typeof buildPostUpdateColumns>) => ({
+  columns: postUpdateColumns,
   constraints: [
     { tableName: 'plugin', name: 'plugin_name_uq', type: 'u', definition: 'UNIQUE (name)' },
     { tableName: 'plugin', name: 'plugin_name_version_uq', type: 'u', definition: 'UNIQUE (name, version)' },
@@ -237,70 +241,83 @@ const POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST = {
         'CREATE TRIGGER "workflow_updatedAt" BEFORE UPDATE ON workflow FOR EACH ROW EXECUTE FUNCTION updated_at()',
     },
   ],
+});
+
+const buildStageManifests = (withWorkflowLogs: boolean) => {
+  const POST_UPDATE_COLUMNS = buildPostUpdateColumns(withWorkflowLogs);
+  const POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST = buildPostUpdateManifest(POST_UPDATE_COLUMNS);
+  return {
+    'post-update': POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
+    'post-plugin-templates': {
+      ...POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
+      columns: [
+        ...POST_UPDATE_COLUMNS.slice(0, 10),
+        {
+          tableName: 'plugin',
+          ordinal: 11,
+          columnName: 'templates',
+          type: 'jsonb',
+          isNotNull: true,
+          defaultExpression: null,
+        },
+        {
+          tableName: 'plugin',
+          ordinal: 12,
+          columnName: 'sha256hash',
+          type: 'bytea',
+          isNotNull: true,
+          defaultExpression: null,
+        },
+        ...POST_UPDATE_COLUMNS.slice(10),
+      ],
+    },
+    'post-allowed-hosts': {
+      ...POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
+      columns: [
+        ...POST_UPDATE_COLUMNS.slice(0, 10),
+        {
+          tableName: 'plugin',
+          ordinal: 11,
+          columnName: 'templates',
+          type: 'jsonb',
+          isNotNull: true,
+          defaultExpression: null,
+        },
+        {
+          tableName: 'plugin',
+          ordinal: 12,
+          columnName: 'sha256hash',
+          type: 'bytea',
+          isNotNull: true,
+          defaultExpression: null,
+        },
+        ...POST_UPDATE_COLUMNS.slice(10, 19),
+        {
+          tableName: 'plugin_method',
+          ordinal: 10,
+          columnName: 'allowedHosts',
+          type: 'character varying[]',
+          isNotNull: true,
+          defaultExpression: "'{}'::character varying[]",
+        },
+        ...POST_UPDATE_COLUMNS.slice(19),
+      ],
+    },
+  } satisfies Record<WorkflowSchemaStage, typeof POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST>;
 };
 
-export const WORKFLOW_SCHEMA_MANIFESTS = {
-  'post-update': POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
-  'post-plugin-templates': {
-    ...POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
-    columns: [
-      ...POST_UPDATE_COLUMNS.slice(0, 10),
-      {
-        tableName: 'plugin',
-        ordinal: 11,
-        columnName: 'templates',
-        type: 'jsonb',
-        isNotNull: true,
-        defaultExpression: null,
-      },
-      {
-        tableName: 'plugin',
-        ordinal: 12,
-        columnName: 'sha256hash',
-        type: 'bytea',
-        isNotNull: true,
-        defaultExpression: null,
-      },
-      ...POST_UPDATE_COLUMNS.slice(10),
-    ],
-  },
-  'post-allowed-hosts': {
-    ...POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST,
-    columns: [
-      ...POST_UPDATE_COLUMNS.slice(0, 10),
-      {
-        tableName: 'plugin',
-        ordinal: 11,
-        columnName: 'templates',
-        type: 'jsonb',
-        isNotNull: true,
-        defaultExpression: null,
-      },
-      {
-        tableName: 'plugin',
-        ordinal: 12,
-        columnName: 'sha256hash',
-        type: 'bytea',
-        isNotNull: true,
-        defaultExpression: null,
-      },
-      ...POST_UPDATE_COLUMNS.slice(10, 19),
-      {
-        tableName: 'plugin_method',
-        ordinal: 10,
-        columnName: 'allowedHosts',
-        type: 'character varying[]',
-        isNotNull: true,
-        defaultExpression: "'{}'::character varying[]",
-      },
-      ...POST_UPDATE_COLUMNS.slice(19),
-    ],
-  },
-} satisfies Record<WorkflowSchemaStage, typeof POST_UPDATE_WORKFLOW_SCHEMA_MANIFEST>;
+/** Certified-tag workflow schema (post-certified residue reverted). */
+export const WORKFLOW_SCHEMA_MANIFESTS = buildStageManifests(false);
+/** Current-fork workflow schema (1786741078327-AddWorkflowLogsTable applied). */
+export const WORKFLOW_SCHEMA_MANIFESTS_WITH_LOGS = buildStageManifests(true);
 
-export const WORKFLOW_SCHEMA_DIGESTS: Readonly<Record<WorkflowSchemaStage, string>> = Object.fromEntries(
-  Object.entries(WORKFLOW_SCHEMA_MANIFESTS).map(([stage, manifest]) => [stage, hash(JSON.stringify(manifest))]),
-) as Record<WorkflowSchemaStage, string>;
+const digestsFor = (manifests: ReturnType<typeof buildStageManifests>): Readonly<Record<WorkflowSchemaStage, string>> =>
+  Object.fromEntries(
+    Object.entries(manifests).map(([stage, manifest]) => [stage, hash(JSON.stringify(manifest))]),
+  ) as Record<WorkflowSchemaStage, string>;
+
+export const WORKFLOW_SCHEMA_DIGESTS = digestsFor(WORKFLOW_SCHEMA_MANIFESTS);
+export const WORKFLOW_SCHEMA_DIGESTS_WITH_LOGS = digestsFor(WORKFLOW_SCHEMA_MANIFESTS_WITH_LOGS);
 
 export type WorkflowRowDigest = { count: number; digest: string; table: `public.${(typeof WORKFLOW_TABLES)[number]}` };
 
@@ -340,7 +357,10 @@ export function classifyWorkflowCompatibility(evidence: WorkflowCompatibilityEvi
   if (evidence.schemaStage !== expectedStage) {
     throw new Error('workflow ledger/schema disagreement');
   }
-  if (evidence.schemaDigest !== WORKFLOW_SCHEMA_DIGESTS[expectedStage]) {
+  if (
+    evidence.schemaDigest !== WORKFLOW_SCHEMA_DIGESTS[expectedStage] &&
+    evidence.schemaDigest !== WORKFLOW_SCHEMA_DIGESTS_WITH_LOGS[expectedStage]
+  ) {
     throw new Error(`Unexpected workflow schema fingerprint: ${evidence.schemaDigest}`);
   }
   return {

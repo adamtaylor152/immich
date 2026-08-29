@@ -10,7 +10,7 @@
   import SmartAlbumReevaluateModal from '$lib/modals/SmartAlbumReevaluateModal.svelte';
   import { Button, modalManager, toastManager } from '@immich/ui';
   import { mdiRefresh } from '@mdi/js';
-  import { Kind, type SmartAlbumKindConfig } from '@immich/sdk';
+  import { Kind, type AdminConfigSmartAlbumKindDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
@@ -37,8 +37,8 @@
     return $t(key);
   };
 
-  const getKind = (kind: KindKey): SmartAlbumKindConfig => smartAlbums.builtIn[kind];
-  const getSavedKind = (kind: KindKey): SmartAlbumKindConfig => savedSmartAlbums.builtIn[kind];
+  const getKind = (kind: KindKey): AdminConfigSmartAlbumKindDto => smartAlbums.builtIn[kind];
+  const getSavedKind = (kind: KindKey): AdminConfigSmartAlbumKindDto => savedSmartAlbums.builtIn[kind];
 
   const tagTriggersText = $derived(
     Object.fromEntries(kindKeys.map((k) => [k, getKind(k).tagTriggers.join('\n')])) as Record<KindKey, string>,

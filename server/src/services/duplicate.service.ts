@@ -24,7 +24,7 @@ import { JobItem, JobOf } from 'src/types';
 import { suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
 import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { ThumbnailConfig } from 'src/utils/media';
-import { isDuplicateDetectionEnabled } from 'src/utils/misc';
+import { batched, isDuplicateDetectionEnabled } from 'src/utils/misc';
 
 type ResolveRequest = {
   assetUpdate: {
@@ -377,21 +377,11 @@ export class DuplicateService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    let jobs: JobItem[] = [];
-    const queueAll = async () => {
-      await this.jobRepository.queueAll(jobs);
-      jobs = [];
-    };
-
-    const assets = this.assetJobRepository.streamForSearchDuplicates(force);
-    for await (const asset of assets) {
-      jobs.push({ name: JobName.AssetDetectDuplicates, data: { id: asset.id } });
-      if (jobs.length >= JOBS_ASSET_PAGINATION_SIZE) {
-        await queueAll();
-      }
+    for await (const assets of batched(this.assetJobRepository.streamForSearchDuplicates(force))) {
+      await this.jobRepository.queueAll(
+        assets.map((asset) => ({ name: JobName.AssetDetectDuplicates, data: { id: asset.id } })),
+      );
     }
-
-    await queueAll();
 
     return JobStatus.Success;
   }

@@ -2,7 +2,7 @@ import { render } from '@testing-library/svelte';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
 import Thumbnail from '$lib/components/assets/thumbnail/Thumbnail.svelte';
 import { getTabbable } from '$lib/utils/focus-util';
-import { assetFactory } from '@test-data/factories/asset-factory';
+import { timelineAssetFactory } from '@test-data/factories/asset-factory';
 
 vi.mock('$lib/utils/navigation', () => ({
   currentUrlReplaceAssetId: vi.fn(),
@@ -34,7 +34,7 @@ describe('Thumbnail component', () => {
   });
 
   it('should only contain a single tabbable element (the container)', () => {
-    const asset = assetFactory.build({ originalPath: 'image.jpg', originalMimeType: 'image/jpeg' });
+    const asset = timelineAssetFactory.build({ isImage: true, isVideo: false });
     const { baseElement } = render(Thumbnail, {
       asset,
       selected: true,
@@ -50,7 +50,7 @@ describe('Thumbnail component', () => {
   });
 
   it('shows thumbhash while image is loading', () => {
-    const asset = assetFactory.build({ originalPath: 'image.jpg', originalMimeType: 'image/jpeg' });
+    const asset = timelineAssetFactory.build({ isImage: true, isVideo: false });
     const sut = render(Thumbnail, {
       asset,
       selected: true,

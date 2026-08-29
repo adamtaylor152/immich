@@ -1,6 +1,7 @@
 import { sha1 } from '@noble/hashes/legacy.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { createSHA1, createSHA256 } from 'hash-wasm';
 
 const HASH_CHUNK_SIZE = 5 * 1024 * 1024;
 
@@ -16,25 +17,45 @@ export const SHA256_HEX_LENGTH = 64;
 
 export type HashAlgorithm = 'SHA-1' | 'SHA-256';
 
-const createHasher = (algorithm: HashAlgorithm) => (algorithm === 'SHA-1' ? sha1.create() : sha256.create());
-
-/**
- * Streams the file through the requested hash algorithm in fixed-size chunks so we never
- * load the whole asset into memory. Defaults to SHA-256 to match the server-side checksum
- * (server still accepts SHA-1 for backward compatibility, but new uploads should use SHA-256).
- */
-export async function hashFile(file: File, algorithm: HashAlgorithm = 'SHA-256'): Promise<string> {
-  const hasher = createHasher(algorithm);
-
+const hashChunks = async (file: File, update: (chunk: Uint8Array) => void) => {
   for (let offset = 0; offset < file.size; offset += HASH_CHUNK_SIZE) {
     const slice = file.slice(offset, Math.min(offset + HASH_CHUNK_SIZE, file.size));
 
     const buffer = await slice.arrayBuffer();
 
-    hasher.update(new Uint8Array(buffer));
+    update(new Uint8Array(buffer));
   }
+};
+
+export async function hashFileWasm(file: File, algorithm: HashAlgorithm = 'SHA-256'): Promise<string> {
+  const factory = await (algorithm === 'SHA-1' ? createSHA1() : createSHA256());
+  const hasher = factory.init();
+
+  await hashChunks(file, (chunk) => hasher.update(chunk));
+
+  return hasher.digest();
+}
+
+export async function hashFileJs(file: File, algorithm: HashAlgorithm = 'SHA-256'): Promise<string> {
+  const hasher = algorithm === 'SHA-1' ? sha1.create() : sha256.create();
+
+  await hashChunks(file, (chunk) => hasher.update(chunk));
 
   return bytesToHex(hasher.digest());
+}
+
+/**
+ * Streams the file through the requested hash algorithm in fixed-size chunks so we never
+ * load the whole asset into memory. Defaults to SHA-256 to match the server-side checksum
+ * (server still accepts SHA-1 for backward compatibility, but new uploads should use SHA-256).
+ * Uses the hash-wasm implementation with a pure-JS fallback.
+ */
+export async function hashFile(file: File, algorithm: HashAlgorithm = 'SHA-256'): Promise<string> {
+  try {
+    return await hashFileWasm(file, algorithm);
+  } catch {
+    return hashFileJs(file, algorithm);
+  }
 }
 
 /**

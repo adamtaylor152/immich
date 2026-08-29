@@ -1,0 +1,11 @@
+--- a/admin_config_image_description_prompt_dto.dart
++++ b/admin_config_image_description_prompt_dto.dart
+@@ -22,7 +22,7 @@
+     this.medicalIndicators = const Optional.present(const []),
+     this.nsfwIndicators = const Optional.present(const []),
+     this.sentenceCountTarget = const Optional.present(3),
+-    this.style = const Optional.present(const AdminConfigImageDescriptionPromptDtoStyleEnum._('balanced')),
++    this.style = const Optional.present(AdminConfigImageDescriptionPromptDtoStyleEnum.balanced),
+   });
+ 
+   ///

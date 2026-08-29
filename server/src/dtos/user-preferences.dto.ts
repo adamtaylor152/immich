@@ -22,6 +22,7 @@ const MemoriesUpdateSchema = z
   .object({
     enabled: z.boolean().optional().describe('Whether memories are enabled'),
     duration: z.int().min(1).optional().describe('Memory duration in seconds'),
+    sidebarWeb: z.boolean().optional().describe('Whether memories appear in web sidebar'),
   })
   .optional()
   .meta({ id: 'MemoriesUpdate' });
@@ -161,6 +162,7 @@ const MemoriesResponseSchema = z
   .object({
     enabled: z.boolean().describe('Whether memories are enabled'),
     duration: z.int().describe('Memory duration in seconds'),
+    sidebarWeb: z.boolean().describe('Whether memories appear in web sidebar'),
   })
   .meta({ id: 'MemoriesResponse' });
 

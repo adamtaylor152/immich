@@ -56,7 +56,7 @@ describe('privacy and album fork sidecars', () => {
   });
 
   it('idempotently backfills legacy privacy review state with a canonical digest', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const reviewed = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: true });
     const withoutMetadata = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
     const review = {
@@ -147,7 +147,7 @@ describe('privacy and album fork sidecars', () => {
   });
 
   it.each(['inactive', 'failed'] as const)('does not mutate privacy or album sidecars in %s', async (phase) => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
     const album = mediumFactory.albumInsert({ icon: 'before', sortOrder: 1 });
     await db.insertInto('user').values(user).execute();
@@ -216,7 +216,7 @@ describe('privacy and album fork sidecars', () => {
   });
 
   it('uses the phase authority for production NSFW predicates and fails closed without a sidecar', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const legacyHidden = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: true });
     const sidecarHidden = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
     const missingSidecar = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: false });
@@ -318,7 +318,7 @@ describe('privacy and album fork sidecars', () => {
   });
 
   it('uses ordinal key ordering for canonical privacy digests', async () => {
-    const user = mediumFactory.userInsert();
+    const user = await mediumFactory.userWithClusterGroup(db);
     const asset = mediumFactory.assetInsert({ ownerId: user.id, is_nsfw: true });
     const suppression = { ä: 3, a: 2, Z: 1 };
     await db.insertInto('user').values(user).execute();

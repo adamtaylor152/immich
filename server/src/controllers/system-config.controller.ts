@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put } from '@nestjs/common';
 import { ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
+import { AdminConfigDto, ConfigTemplateStorageOptionDto } from 'src/dtos/config.dto';
 import {
   ImageDescriptionRequeueEstimateDto,
   ImageDescriptionRequeueResponseDto,
@@ -8,8 +9,6 @@ import {
   SmartAlbumReevaluateEstimateDto,
   SmartAlbumReevaluateRequestDto,
   SmartAlbumReevaluateResponseDto,
-  SystemConfigDto,
-  SystemConfigTemplateStorageOptionDto,
 } from 'src/dtos/system-config.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Authenticated } from 'src/middleware/auth.guard';
@@ -29,10 +28,14 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Get system configuration',
     description: 'Retrieve the current system configuration.',
-    history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
+    history: new HistoryBuilder()
+      .added('v1')
+      .beta('v1')
+      .stable('v2')
+      .deprecated('v3.2.0', { replacementId: 'getAdminConfig' }),
   })
-  getConfig(): Promise<SystemConfigDto> {
-    return this.service.getSystemConfig();
+  getConfig(): Promise<AdminConfigDto> {
+    return this.service.getAdminConfig();
   }
 
   @Get('defaults')
@@ -40,10 +43,14 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Get system configuration defaults',
     description: 'Retrieve the default values for the system configuration.',
-    history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
+    history: new HistoryBuilder()
+      .added('v1')
+      .beta('v1')
+      .stable('v2')
+      .deprecated('v3.2.0', { replacementId: 'getAdminConfigDefaults' }),
   })
-  getConfigDefaults(): SystemConfigDto {
-    return this.service.getDefaults();
+  getConfigDefaults(): AdminConfigDto {
+    return this.service.getAdminConfigDefaults();
   }
 
   @Get('machine-learning/hardware')
@@ -62,10 +69,14 @@ export class SystemConfigController {
   @Endpoint({
     summary: 'Update system configuration',
     description: 'Update the system configuration with a new system configuration.',
-    history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
+    history: new HistoryBuilder()
+      .added('v1')
+      .beta('v1')
+      .stable('v2')
+      .deprecated('v3.2.0', { replacementId: 'updateAdminConfig' }),
   })
-  updateConfig(@Body() dto: SystemConfigDto): Promise<SystemConfigDto> {
-    return this.service.updateSystemConfig(dto);
+  updateConfig(@Body() dto: AdminConfigDto): Promise<AdminConfigDto> {
+    return this.service.updateAdminConfig(dto);
   }
 
   @Get('storage-template-options')
@@ -75,7 +86,7 @@ export class SystemConfigController {
     description: 'Retrieve exemplary storage template options.',
     history: new HistoryBuilder().added('v1').beta('v1').stable('v2'),
   })
-  getStorageTemplateOptions(): SystemConfigTemplateStorageOptionDto {
+  getStorageTemplateOptions(): ConfigTemplateStorageOptionDto {
     return this.storageTemplateService.getStorageTemplateOptions();
   }
 

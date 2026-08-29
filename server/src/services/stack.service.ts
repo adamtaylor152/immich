@@ -89,7 +89,7 @@ export class StackService extends BaseService {
   private async findOrFail(id: string, options?: HiddenContentQueryOptions) {
     const stack = options ? await this.stackRepository.getById(id, options) : await this.stackRepository.getById(id);
     if (!stack) {
-      throw new Error('Asset stack not found');
+      throw new BadRequestException('Asset stack not found');
     }
 
     return stack;

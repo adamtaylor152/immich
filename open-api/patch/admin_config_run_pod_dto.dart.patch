@@ -1,0 +1,11 @@
+--- a/admin_config_run_pod_dto.dart
++++ b/admin_config_run_pod_dto.dart
+@@ -26,7 +26,7 @@
+     this.hfTokenConfigured = const Optional.absent(),
+     required this.imageName,
+     required this.maxRuntimeHours,
+-    this.mode = const Optional.present(const AdminConfigRunPodDtoModeEnum._('disabled')),
++    this.mode = const Optional.present(AdminConfigRunPodDtoModeEnum.disabled),
+     this.provisionTimeoutMinutes = const Optional.present(5),
+     this.serverless = const Optional.absent(),
+     required this.volumeGb,

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto, invalidate, onNavigate } from '$app/navigation';
+  import { navigating } from '$app/state';
   import { scrollMemoryClearer } from '$lib/actions/scroll-memory';
   import AlbumCardGroup from '$lib/components/album-page/AlbumCardGroup.svelte';
   import AlbumMap from '$lib/components/album-page/AlbumMap.svelte';
@@ -387,6 +388,9 @@
   const onAlbumUpdate = async (newAlbum: AlbumResponseDto) => {
     album = newAlbum;
 
+    // invalidating during navigation causes an infinite page load
+    await navigating.complete;
+
     await invalidate('album:data');
   };
 
@@ -565,7 +569,7 @@
           ></FavoriteAction>
         {/if}
         <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
-          <DownloadAction menuItem filename="{album.albumName}.zip" />
+          <DownloadAction menuItem filename={album.albumName} />
           {#if assetMultiSelectManager.ownedAssets.length > 0}
             <MarkNsfwAction menuItem />
             <MarkNsfwAction menuItem markSafe />

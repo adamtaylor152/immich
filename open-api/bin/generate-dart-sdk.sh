@@ -24,9 +24,9 @@ patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/asset_edi
 # enum-typed properties with defaults emit invalid `const SomeEnum._('value')`
 # constructor defaults. Rewrite them to the named enum constants. Drop these
 # patches when the upstream template is fixed.
-patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/advanced_prompt_config.dart <./patch/advanced_prompt_config.dart.patch
-patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/image_description_prompt_config.dart <./patch/image_description_prompt_config.dart.patch
-patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/system_config_run_pod_dto.dart <./patch/system_config_run_pod_dto.dart.patch
+patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/admin_config_advanced_prompt_dto.dart <./patch/admin_config_advanced_prompt_dto.dart.patch
+patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/admin_config_image_description_prompt_dto.dart <./patch/admin_config_image_description_prompt_dto.dart.patch
+patch --no-backup-if-mismatch -u ../mobile/generated/openapi/lib/model/admin_config_run_pod_dto.dart <./patch/admin_config_run_pod_dto.dart.patch
 # Don't include analysis_options.yaml for the generated openapi files
 # so that language servers can properly exclude the mobile/generated/openapi directory
 rm ../mobile/generated/openapi/analysis_options.yaml

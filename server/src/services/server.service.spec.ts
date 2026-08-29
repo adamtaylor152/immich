@@ -166,6 +166,7 @@ describe(ServerService.name, () => {
       expect(rest).toEqual({
         loginPageMessage: '',
         oauthButtonText: 'Login with OAuth',
+        oauthAccountManagementUrl: '',
         trashDays: 30,
         userDeleteDelay: 7,
         isInitialized: false,

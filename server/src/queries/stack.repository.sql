@@ -95,6 +95,8 @@ select
               else false
             end
           )
+        order by
+          "asset"."fileCreatedAt" asc
       ) as agg
   ) as "assets"
 from
@@ -264,6 +266,8 @@ select
               else false
             end
           )
+        order by
+          "asset"."fileCreatedAt" asc
       ) as agg
   ) as "assets"
 from
