@@ -67,7 +67,7 @@ services:
         BUILD_SOURCE_COMMIT: local
         BUILD_SOURCE_REF: fork-roundtrip
       secrets:
-        - GITHUB_TOKEN
+        - mise_github_token
     environment:
       <<: *server-environment
       DB_SKIP_MIGRATIONS: ${FORK_DB_SKIP_MIGRATIONS:-false}
@@ -96,5 +96,6 @@ volumes:
   upload-data:
 
 secrets:
-  GITHUB_TOKEN:
+  # server/Dockerfile mounts this as id=mise_github_token (upstream renamed it)
+  mise_github_token:
     environment: GITHUB_TOKEN

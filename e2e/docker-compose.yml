@@ -25,7 +25,7 @@ services:
         - BUILD_SOURCE_REF=e2e
         - BUILD_SOURCE_COMMIT=e2eeeeeeeeeeeeeeeeee
       secrets:
-        - GITHUB_TOKEN
+        - mise_github_token
     environment:
       DB_HOSTNAME: database
       DB_USERNAME: postgres
@@ -82,5 +82,6 @@ secrets:
   #   - or run `export GITHUB_TOKEN=$(gh auth token)` after `gh auth login`
   # Without the token mise will be rate-limited or 401 and the build fails with
   # opaque "release not found" errors deep in the layer build.
-  GITHUB_TOKEN:
+  # server/Dockerfile mounts this as id=mise_github_token (upstream renamed it)
+  mise_github_token:
     environment: GITHUB_TOKEN
