@@ -500,9 +500,11 @@ Each of the six built-in albums has an independent tag-trigger list and a confid
 
 **Threshold tuning**: start at the default `0.28`. Move to `0.25` if albums look sparse, or to `0.32` if they're noisy. Useful range is 0.2–0.4.
 
-### CLIP queries (reserved)
+### CLIP queries
 
-Each smart-album kind also has a **CLIP queries** textarea. The lines you save here are **reserved for a future release** where semantic CLIP similarity will be used in addition to tag triggers. They are not currently applied to album population. Leave the defaults or add candidates for your library — they will activate automatically when the matching infrastructure ships.
+Each smart-album kind also has a **CLIP queries** textarea. Every line is encoded with the textual CLIP model and compared against each asset's smart-search visual embedding; an asset joins the album when the cosine similarity to **any** query meets the kind's threshold. CLIP matching runs in addition to tag triggers — an asset can match by tag, by CLIP query, or both, and the membership records which one fired.
+
+CLIP matching requires **Smart Search** to be enabled (it reads the same embeddings) and a reachable machine-learning server. When the ML server is unavailable, evaluation degrades gracefully: tag-trigger matching keeps working and CLIP matching is skipped with a warning in the server log. Query embeddings are encoded once per model and cached, so re-evaluations are cheap; changing the CLIP model re-encodes them automatically.
 
 ### Status & Re-generation panel
 

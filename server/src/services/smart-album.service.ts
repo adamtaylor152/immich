@@ -5,6 +5,8 @@ import { BootstrapEventPriority, ImmichWorker, JobName, JobStatus, QueueName } f
 import { ArgOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
+import { dot, l2Normalize, parseEmbedding } from 'src/utils/embedding';
+import { isSmartSearchEnabled } from 'src/utils/misc';
 
 type BuiltInKind = keyof SystemConfig['smartAlbums']['builtIn'];
 
@@ -23,6 +25,16 @@ const tagTriggerCache = new WeakMap<SystemConfig['smartAlbums']['builtIn'], Map<
 const sanitizeForLog = (value: string): string =>
   // eslint-disable-next-line no-control-regex
   value.replaceAll(/[\u{0000}-\u{001F}\u{007F}]/gu, '?').slice(0, 64);
+
+/**
+ * Memoized textual-CLIP embeddings for smart-album `clipQueries`, keyed on
+ * `<modelName>\0<query>`. The model name is part of the key so a CLIP model
+ * change naturally invalidates every cached query (stale entries for the old
+ * model are harmless — a handful of small vectors). The promise itself is
+ * cached so concurrent evaluations share a single ML round-trip; failed
+ * promises are evicted so the next evaluation retries.
+ */
+const clipQueryCache = new Map<string, Promise<Float32Array | undefined>>();
 
 const getTagTriggerSet = (builtIn: SystemConfig['smartAlbums']['builtIn'], kind: BuiltInKind): Set<string> => {
   let perConfig = tagTriggerCache.get(builtIn);
@@ -77,8 +89,10 @@ export class SmartAlbumService extends BaseService {
    * description completes successfully — receives the asset's id, owner id,
    * and the tags emitted by the description model.
    *
-   * Tag matching is case-insensitive. CLIP query similarity is stubbed — see
-   * the TODO comment below.
+   * Tag matching is case-insensitive. CLIP query similarity compares the
+   * asset's smart_search visual embedding against each configured query
+   * phrase (encoded via the textual CLIP model) and matches when the cosine
+   * similarity meets the kind's threshold.
    *
    * Pass `onlyKind` to scope the evaluation to a single built-in kind. The
    * admin "Re-evaluate this album" button uses this to avoid touching
@@ -88,7 +102,7 @@ export class SmartAlbumService extends BaseService {
    */
   async evaluate(input: { assetId: string; ownerId: string; tags: string[]; onlyKind?: string }): Promise<void> {
     const { assetId, ownerId, tags, onlyKind } = input;
-    const { smartAlbums } = await this.getConfig({ withCache: true });
+    const { smartAlbums, machineLearning } = await this.getConfig({ withCache: true });
 
     if (!smartAlbums.enabled) {
       return;
@@ -113,6 +127,14 @@ export class SmartAlbumService extends BaseService {
     const currentKinds = new Set(await this.smartAlbumRepository.getMatchingKinds(assetId, ownerId));
     const matchedKinds = new Set<string>();
 
+    // CLIP matching requires smart search (the smart_search embedding table is
+    // only populated when it is on). The asset vector is loaded lazily — at
+    // most one DB round-trip per evaluate, and none when every enabled kind
+    // already resolves via tags-only config (empty clipQueries).
+    const clipEligible = isSmartSearchEnabled(machineLearning);
+    let assetVectorPromise: Promise<Float32Array | undefined> | undefined;
+    const getAssetVector = () => (assetVectorPromise ??= this.loadAssetVector(assetId));
+
     for (const kind of builtInKinds) {
       const kindConfig = smartAlbums.builtIn[kind];
       if (!kindConfig.enabled) {
@@ -133,16 +155,25 @@ export class SmartAlbumService extends BaseService {
       const tagTriggerLower = getTagTriggerSet(smartAlbums.builtIn, kind);
       const hasTagMatch = lowerTags.some((tag) => tagTriggerLower.has(tag));
 
-      if (hasTagMatch) {
-        matchedKinds.add(kind);
-        await this.smartAlbumRepository.addAssetToSmartAlbum(smartAlbumId, assetId, 'tag');
-      }
+      // CLIP match: cosine similarity between the asset's smart_search visual
+      // embedding and each configured query phrase (encoded via the textual
+      // CLIP model, cached per model+query). ML unavailability degrades
+      // gracefully — matchesClipQueries logs and returns false, never throws.
+      const hasClipMatch =
+        clipEligible && kindConfig.clipQueries.length > 0
+          ? await this.matchesClipQueries(
+              machineLearning.clip,
+              kindConfig.clipQueries,
+              kindConfig.threshold,
+              getAssetVector,
+            )
+          : false;
 
-      // TODO(smart-albums): CLIP query similarity matching. Requires encoding
-      // each builtIn[kind].clipQueries[i] via machineLearningRepository.encodeText,
-      // caching the resulting embeddings, then computing cosine distance against
-      // smart_search.embedding. Deferred to a follow-up PR to keep PR 6 focused
-      // on the table/service foundation. For now, only tag-based matching fires.
+      if (hasTagMatch || hasClipMatch) {
+        matchedKinds.add(kind);
+        const matchReason = hasTagMatch && hasClipMatch ? 'both' : hasTagMatch ? 'tag' : 'clip';
+        await this.smartAlbumRepository.addAssetToSmartAlbum(smartAlbumId, assetId, matchReason);
+      }
     }
 
     // Removal: for each kind the asset was previously in that no longer matches,
@@ -165,6 +196,81 @@ export class SmartAlbumService extends BaseService {
   }
 
   /**
+   * Load and L2-normalize the asset's smart_search visual embedding. Returns
+   * undefined (after logging) when the asset has no embedding yet or the read
+   * fails — CLIP matching is then skipped for this evaluation.
+   */
+  private async loadAssetVector(assetId: string): Promise<Float32Array | undefined> {
+    try {
+      const row = await this.searchRepository.getEmbedding(assetId);
+      const parsed = parseEmbedding(row?.embedding);
+      return parsed ? l2Normalize(parsed) : undefined;
+    } catch (error) {
+      this.logger.warn(
+        `Smart-album CLIP matching skipped — failed to load embedding for asset ${assetId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * True when the asset's visual embedding is within the similarity threshold
+   * of ANY configured query phrase. Query embeddings are encoded via the
+   * textual CLIP endpoint and memoized per (model, query). ML failures are
+   * logged and treated as "no match" so tag matching keeps working.
+   */
+  private async matchesClipQueries(
+    clip: SystemConfig['machineLearning']['clip'],
+    queries: string[],
+    threshold: number,
+    getAssetVector: () => Promise<Float32Array | undefined>,
+  ): Promise<boolean> {
+    const assetVector = await getAssetVector();
+    if (!assetVector) {
+      return false;
+    }
+    for (const query of queries) {
+      try {
+        const queryVector = await this.getClipQueryEmbedding(clip, query);
+        // Both vectors are unit-length, so the dot product IS the cosine
+        // similarity (equivalently 1 - pgvector's <=> cosine distance).
+        if (queryVector && dot(assetVector, queryVector) >= threshold) {
+          return true;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Smart-album CLIP matching unavailable for query "${sanitizeForLog(query)}": ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    return false;
+  }
+
+  private getClipQueryEmbedding(
+    clip: SystemConfig['machineLearning']['clip'],
+    query: string,
+  ): Promise<Float32Array | undefined> {
+    const cacheKey = `${clip.modelName}\u{0}${query}`;
+    const cached = clipQueryCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const promise = this.machineLearningRepository
+      .encodeText(query, { modelName: clip.modelName })
+      .then((raw) => {
+        const parsed = parseEmbedding(raw);
+        return parsed ? l2Normalize(parsed) : undefined;
+      })
+      .catch((error) => {
+        // Drop the failed promise so the next evaluation retries.
+        clipQueryCache.delete(cacheKey);
+        throw error;
+      });
+    clipQueryCache.set(cacheKey, promise);
+    return promise;
+  }
+
+  /**
    * When the master smartAlbums toggle flips from false → true, backfill the
    * six built-in albums for every existing user so they populate without a
    * server restart.
@@ -183,8 +289,8 @@ export class SmartAlbumService extends BaseService {
   /**
    * Bulk re-evaluate every already-described image asset against the smart-album
    * rules. Called by the admin-triggered re-evaluate endpoint. The evaluation is
-   * cheap (no ML inference — tags are already stored) so we do it inline rather
-   * than fanning out per-asset jobs.
+   * cheap (tags are already stored; CLIP query embeddings are encoded once and
+   * cached) so we do it inline rather than fanning out per-asset jobs.
    */
   @OnJob({ name: JobName.SmartAlbumReevaluateAll, queue: QueueName.BackgroundTask })
   async handleReevaluateAll(data: JobOf<JobName.SmartAlbumReevaluateAll>): Promise<JobStatus> {
