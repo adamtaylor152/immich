@@ -69,6 +69,35 @@ describe(MediaHealthRepository.name, () => {
   });
 
   describe('finding state transitions', () => {
+    it('scopes finding reads and dismissals to one owner', async () => {
+      const { ctx, sut } = setup();
+      const [{ user: firstUser }, { user: secondUser }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const [{ asset: firstAsset }, { asset: secondAsset }] = await Promise.all([
+        ctx.newAsset({ ownerId: firstUser.id }),
+        ctx.newAsset({ ownerId: secondUser.id }),
+      ]);
+      const run = await sut.createRun(MediaHealthCategory.Missing);
+      const [first, second] = await Promise.all([
+        sut.upsertFinding(findingDto(firstAsset.id, firstAsset.originalPath, run.id)),
+        sut.upsertFinding(findingDto(secondAsset.id, secondAsset.originalPath, run.id)),
+      ]);
+
+      await expect(sut.list({ ownerId: firstUser.id, size: 10 })).resolves.toEqual([
+        expect.objectContaining({ id: first.id }),
+      ]);
+      await expect(sut.getLatestRun(MediaHealthCategory.Missing, firstUser.id)).resolves.toEqual(
+        expect.objectContaining({ id: run.id }),
+      );
+      await expect(sut.getByIds([first.id, second.id], firstUser.id)).resolves.toEqual([
+        expect.objectContaining({ id: first.id }),
+      ]);
+      await sut.markDismissed([first.id, second.id], firstUser.id);
+
+      await expect(sut.getByIds([second.id])).resolves.toEqual([
+        expect.objectContaining({ id: second.id, status: MediaHealthStatus.Missing }),
+      ]);
+    });
+
     it('upserts on (assetId, category) instead of duplicating findings', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();

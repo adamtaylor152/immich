@@ -192,4 +192,26 @@ describe(PhysicalFileRepository.name, () => {
       });
     });
   });
+
+  describe('linkAssetToRecoveredOriginal', () => {
+    it('creates a locked physical reference for an untracked recovered path', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const asset = await newAssetWithSize(ctx, user.id);
+      const checksum = randomBytes(32);
+      const recoveredPath = `/data/upload/${user.id}/${randomUUID()}.jpg`;
+
+      const physical = await sut.linkAssetToRecoveredOriginal(asset.id, recoveredPath, checksum, 4321);
+      const linked = await sut.getOriginalPhysicalFile(asset.id);
+
+      expect(physical).toMatchObject({
+        canonicalAssetId: asset.id,
+        checksum,
+        path: recoveredPath,
+        sizeInBytes: 4321,
+        type: PhysicalFileType.Original,
+      });
+      expect(linked?.id).toBe(physical.id);
+    });
+  });
 });

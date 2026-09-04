@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, Selectable, sql, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import {
   AssetFileType,
   AssetStatus,
@@ -29,6 +30,12 @@ import { anyUuid, asUuid } from 'src/utils/database';
 export type MediaHealthRun = Selectable<AssetHealthRunTable>;
 export type MediaHealthFinding = Selectable<AssetHealthTable>;
 export type MediaHealthCandidate = Selectable<AssetHealthCandidateTable>;
+export type MediaHealthChecksum = {
+  assetId: string;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+};
 
 export type MediaHealthAsset = Pick<
   Selectable<AssetTable>,
@@ -136,12 +143,21 @@ export class MediaHealthRepository {
     return result;
   }
 
-  async getLatestRun(category?: MediaHealthCategory): Promise<MediaHealthRun | undefined> {
+  async getLatestRun(category?: MediaHealthCategory, ownerId?: string): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
     return this.db
       .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health_run')
       .selectAll()
+      .$if(!!ownerId, (qb) =>
+        qb.where(
+          sql<boolean>`EXISTS (
+            SELECT 1 FROM ${sql.table(readsForkSidecar(phase) ? 'immich_fork.asset_health' : 'public.asset_health')} health
+            INNER JOIN public.asset asset ON asset.id = health."assetId"
+            WHERE health."runId" = asset_health_run.id AND asset."ownerId" = ${ownerId}::uuid
+          )`,
+        ),
+      )
       .$if(!!category, (qb) => qb.where('category', '=', category!))
       .orderBy('startedAt', 'desc')
       .limit(1)
@@ -150,6 +166,7 @@ export class MediaHealthRepository {
 
   async list(options: {
     category?: MediaHealthCategory;
+    ownerId?: string;
     status?: MediaHealthStatus;
     size: number;
   }): Promise<MediaHealthFinding[]> {
@@ -158,6 +175,14 @@ export class MediaHealthRepository {
       .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health')
       .selectAll()
+      .$if(!!options.ownerId, (qb) =>
+        qb.where(
+          sql<boolean>`EXISTS (
+            SELECT 1 FROM public.asset
+            WHERE asset.id = asset_health."assetId" AND asset."ownerId" = ${options.ownerId}::uuid
+          )`,
+        ),
+      )
       .$if(!!options.category, (qb) => qb.where('category', '=', options.category!))
       .$if(!!options.status, (qb) => qb.where('status', '=', options.status!))
       .orderBy('checkedAt', 'desc')
@@ -165,7 +190,7 @@ export class MediaHealthRepository {
       .execute();
   }
 
-  async getByIds(ids: string[]): Promise<MediaHealthFinding[]> {
+  async getByIds(ids: string[], ownerId?: string): Promise<MediaHealthFinding[]> {
     if (ids.length === 0) {
       return [];
     }
@@ -175,6 +200,14 @@ export class MediaHealthRepository {
       .selectFrom('asset_health')
       .selectAll()
       .where('id', '=', anyUuid(ids))
+      .$if(!!ownerId, (qb) =>
+        qb.where(
+          sql<boolean>`EXISTS (
+            SELECT 1 FROM public.asset
+            WHERE asset.id = asset_health."assetId" AND asset."ownerId" = ${ownerId}::uuid
+          )`,
+        ),
+      )
       .execute();
   }
 
@@ -190,6 +223,46 @@ export class MediaHealthRepository {
       .where('healthId', '=', anyUuid(healthIds))
       .orderBy('visualMatchScore', 'desc')
       .execute();
+  }
+
+  async getAssetChecksums(assetIds: string[]): Promise<MediaHealthChecksum[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const result = await sql<MediaHealthChecksum>`
+      SELECT "assetId", sha1, sha256, "sizeInBytes"::float8 AS "sizeInBytes"
+      FROM immich_fork.asset_checksum
+      WHERE "assetId" = ANY(${assetIds}::uuid[])
+    `.execute(this.db);
+    return result.rows;
+  }
+
+  getInternalAssetByOriginalPath(originalPath: string): Promise<{ id: string } | undefined> {
+    return this.db
+      .withSchema('public')
+      .selectFrom('asset')
+      .select('id')
+      .where('originalPath', '=', path.normalize(originalPath))
+      .where('libraryId', 'is', null)
+      .where('isExternal', '=', false)
+      .where('deletedAt', 'is', null)
+      .where('status', '=', AssetStatus.Active)
+      .limit(1)
+      .executeTakeFirst();
+  }
+
+  async getTrackedPaths(paths: string[]): Promise<Set<string>> {
+    if (paths.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .withSchema('public')
+      .selectFrom('asset')
+      .select('originalPath')
+      .where('originalPath', 'in', paths)
+      .execute();
+    return new Set(rows.map(({ originalPath }) => originalPath));
   }
 
   async replaceCandidates(healthId: string, candidates: UpsertMediaHealthCandidate[]): Promise<void> {
@@ -360,7 +433,7 @@ export class MediaHealthRepository {
     });
   }
 
-  async markDismissed(ids: string[]): Promise<void> {
+  async markDismissed(ids: string[], ownerId?: string): Promise<void> {
     if (ids.length === 0) {
       return;
     }
@@ -374,6 +447,14 @@ export class MediaHealthRepository {
           .updateTable('asset_health')
           .set({ status: MediaHealthStatus.Dismissed, dismissedAt })
           .where('id', '=', anyUuid(ids))
+          .$if(!!ownerId, (qb) =>
+            qb.where(
+              sql<boolean>`EXISTS (
+                SELECT 1 FROM public.asset
+                WHERE asset.id = asset_health."assetId" AND asset."ownerId" = ${ownerId}::uuid
+              )`,
+            ),
+          )
           .execute();
       }
     });
@@ -397,7 +478,7 @@ export class MediaHealthRepository {
     });
   }
 
-  async *streamAssets(options: { assetIds?: string[] } = {}): AsyncGenerator<MediaHealthAsset> {
+  async *streamAssets(options: { assetIds?: string[]; ownerId?: string } = {}): AsyncGenerator<MediaHealthAsset> {
     if (options.assetIds && options.assetIds.length === 0) {
       return;
     }
@@ -455,6 +536,7 @@ export class MediaHealthRepository {
       ])
       .where('asset.deletedAt', 'is', null)
       .where('asset.status', '!=', sql.lit(AssetStatus.Deleted))
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
       .$if(!!options.assetIds, (qb) => qb.where('asset.id', '=', anyUuid(options.assetIds!)));
 
     for await (const asset of query.stream()) {
@@ -462,7 +544,7 @@ export class MediaHealthRepository {
     }
   }
 
-  getAssets(assetIds: string[]): Promise<MediaHealthAsset[]> {
+  getAssets(assetIds: string[], ownerId?: string): Promise<MediaHealthAsset[]> {
     if (assetIds.length === 0) {
       return Promise.resolve([]);
     }
@@ -490,6 +572,7 @@ export class MediaHealthRepository {
           .as('thumbnailPath'),
       ])
       .where('asset.id', '=', anyUuid(assetIds))
+      .$if(!!ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(ownerId!)))
       .execute();
   }
 

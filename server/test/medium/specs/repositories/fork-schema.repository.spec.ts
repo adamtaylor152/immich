@@ -23,6 +23,29 @@ beforeAll(async () => {
 });
 
 describe(ForkSchemaRepository.name, () => {
+  describe('hasAssetChecksum', () => {
+    it('matches either recorded digest for only the owning user', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { user: other } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const sha1 = randomBytes(20);
+      const sha256 = randomBytes(32);
+      await sut.recordAssetChecksums({
+        assetId: asset.id,
+        sha1,
+        sha256,
+        sizeInBytes: 10,
+        path: asset.originalPath,
+        source: 'upload',
+      });
+
+      await expect(sut.hasAssetChecksum(user.id, sha1, randomBytes(32))).resolves.toBe(true);
+      await expect(sut.hasAssetChecksum(user.id, randomBytes(20), sha256)).resolves.toBe(true);
+      await expect(sut.hasAssetChecksum(other.id, sha1, sha256)).resolves.toBe(false);
+    });
+  });
+
   describe('getChecksumTranslations', () => {
     it('should return nothing for an empty digest list', async () => {
       const { sut } = setup();
@@ -114,6 +137,40 @@ describe(ForkSchemaRepository.name, () => {
 
       expect(row.rows[0]?.sha1).toEqual(sha1);
       expect(JSON.parse(row.rows[0]!.evidence)).toEqual({ source: 'upload' });
+    });
+
+    it('recovery replaces ambiguous historical digests with verified bytes', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const recoveredSha1 = createHash('sha1').update('recovered').digest();
+      const recoveredSha256 = createHash('sha256').update('recovered').digest();
+
+      await sut.recordAssetChecksums({
+        assetId: asset.id,
+        sha1: randomBytes(20),
+        sha256: randomBytes(32),
+        sizeInBytes: 1,
+        path: '/old/path.jpg',
+        source: 'upload',
+      });
+      await sut.recordAssetChecksums({
+        assetId: asset.id,
+        sha1: recoveredSha1,
+        sha256: recoveredSha256,
+        sizeInBytes: 9,
+        path: '/recovered/path.jpg',
+        source: 'recovery',
+      });
+
+      const row = await sql<{ sha1: Buffer; sha256: Buffer; evidence: string }>`
+        SELECT sha1, sha256, evidence::text
+        FROM immich_fork.asset_checksum
+        WHERE "assetId" = ${asset.id}::uuid
+      `.execute(defaultDatabase);
+
+      expect(row.rows[0]).toMatchObject({ sha1: recoveredSha1, sha256: recoveredSha256 });
+      expect(JSON.parse(row.rows[0]!.evidence)).toEqual({ source: 'recovery' });
     });
   });
 });

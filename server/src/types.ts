@@ -266,11 +266,13 @@ export interface IMediaHealthScanJob extends IBaseJob {
   missingRunId?: string;
   corruptRunId?: string;
   assetIds?: string[];
+  userId?: string;
 }
 
 export interface IMediaHealthLocateJob extends IBaseJob {
   runId?: string;
   ids?: string[];
+  userId?: string;
 }
 
 export interface IMediaHealthDeleteCorruptJob extends IBaseJob {

@@ -706,6 +706,31 @@ export class PhysicalFileRepository {
     );
   }
 
+  async linkAssetToRecoveredOriginal(assetId: string, path: string, checksum: Buffer, sizeInBytes: number) {
+    return this.withPathLock(path, async (trx) => {
+      const existing = await trx.selectFrom('physical_file').selectAll().where('path', '=', path).executeTakeFirst();
+      const physicalFile = existing
+        ? await trx
+            .updateTable('physical_file')
+            .set({ checksum, sizeInBytes, type: PhysicalFileType.Original })
+            .where('id', '=', existing.id)
+            .returningAll()
+            .executeTakeFirstOrThrow()
+        : await trx
+            .insertInto('physical_file')
+            .values({ canonicalAssetId: assetId, checksum, path, sizeInBytes, type: PhysicalFileType.Original })
+            .returningAll()
+            .executeTakeFirstOrThrow();
+
+      await trx
+        .updateTable('asset')
+        .set({ physicalOriginalFileId: physicalFile.id, originalPath: physicalFile.path })
+        .where('id', '=', asUuid(assetId))
+        .execute();
+      return physicalFile;
+    });
+  }
+
   async isOriginalCanonical(assetId: string, physicalFileId: string): Promise<boolean> {
     const physicalFile = await this.getPhysicalFile(physicalFileId);
     return physicalFile?.canonicalAssetId === assetId;
