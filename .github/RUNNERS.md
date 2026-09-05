@@ -18,6 +18,52 @@ expect formerly parallel CI to queue. E2E jobs clean up only their dedicated
 Compose project and test volumes, and SQL checks use a dynamically allocated
 PostgreSQL host port.
 
+## Provisioning `aiimmich`
+
+Build the fork runner image on its Docker host:
+
+```sh
+docker build -t immich-ci-runner:noble-20260905 .github/runner
+```
+
+The pinned Noble base supplies glibc 2.39, required by the current `extism-js`
+binary. The image also installs `python` and PyYAML for the shared pre-job action.
+The upstream runner's `latest` tag currently uses Focal/glibc 2.31 and is not
+compatible with this toolchain.
+
+The dedicated `Github_ImmichBuilder` container must use host networking and
+`RUNNER_WORKDIR=/mnt/shaganappi/appdata/github_aiimmich/work`, with that exact path
+bind-mounted at the same path inside the runner. Docker actions need the shared
+workspace; test processes need access to services published on host loopback.
+This runner already has the host Docker socket: keep it restricted to trusted
+fork jobs, not arbitrary public PR code.
+
+Keep `REPO_URL=https://github.com/adamtaylor152/immich`, `RUNNER_SCOPE=repo`, and
+the existing labels. Persist runner registration separately at
+`/mnt/shaganappi/appdata/github_aiimmich/persistent_files_noble`, mounted at
+`/runner/persistent_files`, with `CONFIGURED_ACTIONS_RUNNER_FILES_DIR` pointing
+there and `DISABLE_AUTOMATIC_DEREGISTRATION=true`. Changing the work directory
+requires fresh registration; reusing the old persisted `.runner` retains `/`.
+Never commit registration tokens or credentials.
+
+After provisioning, verify the actual container before rerunning CI:
+
+```sh
+docker exec -i -e RUNNER_SMOKE_IMAGE=immich-ci-runner:noble-20260905 \
+  Github_ImmichBuilder bash -s < .github/runner/check.sh
+```
+
+The check exercises Python/PyYAML/glibc, Docker tooling, a real workspace bind
+mount and HTTP access to a dynamically published service. It removes only its
+own temporary container and directory. It does not validate the full app suite.
+
+The Unraid template must retain the same image, networking, workspace and
+registration mount settings. The initial Focal container was retained, stopped,
+as `Github_ImmichBuilder-focal-backup-d68940d75`; its template backup is
+`/mnt/shaganappi/appdata/github_aiimmich/template-focal-d68940d75.xml`.
+Never run both containers concurrently. Rollback also requires verifying the
+GitHub registration because the replacement registers with the same runner name.
+
 Release jobs accept only successful same-repository pushes to `fork/main` or
 manual dispatches on that branch. Before checkout, the GitHub API must confirm
 that the release SHA belongs to the current `fork/main` history; API failures
