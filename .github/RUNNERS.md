@@ -18,7 +18,12 @@ expect formerly parallel CI to queue. E2E jobs clean up only their dedicated
 Compose project and test volumes, and SQL checks use a dynamically allocated
 PostgreSQL host port.
 
-Run `node .github/check-runners.cjs` after installing workspace dependencies,
+Release jobs accept only successful same-repository pushes to `fork/main` or
+manual dispatches on that branch. Before checkout, the GitHub API must confirm
+that the release SHA belongs to the current `fork/main` history; API failures
+stop the release. Third-party actions are pinned to immutable commit SHAs.
+
+Run `node .github/check-runners.cjs` and `node .github/check-release.cjs` after installing workspace dependencies,
 and `actionlint -shellcheck='' -pyflakes=''` to validate runner policy and workflow
 syntax. The policy check also runs in the GitHub-files validation job.
 

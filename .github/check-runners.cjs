@@ -16,6 +16,15 @@ for (const file of fs
   const workflow = load(fs.readFileSync(path.join(workflows, file), "utf8"));
   for (const [id, job] of Object.entries(workflow.jobs)) {
     const location = `${file}: ${id}`;
+    for (const step of job.steps || []) {
+      if (step.uses && !step.uses.startsWith("./")) {
+        assert.match(
+          step.uses,
+          /@[0-9a-f]{40}$/,
+          `${location}: action must be commit-pinned`,
+        );
+      }
+    }
     if (job.uses) {
       assert.ok(
         job.uses.startsWith("./.github/workflows/"),

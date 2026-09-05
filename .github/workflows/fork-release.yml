@@ -17,7 +17,14 @@ jobs:
   release:
     name: Tag and release
     if: >-
-      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')) }}
+      ${{ github.repository == 'adamtaylor152/immich'
+          && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository)
+          && ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/fork/main')
+              || (github.event_name == 'workflow_run'
+                  && github.event.workflow_run.event == 'push'
+                  && github.event.workflow_run.conclusion == 'success'
+                  && github.event.workflow_run.head_repository.full_name == github.repository
+                  && github.event.workflow_run.head_branch == 'fork/main')) }}
     runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: write
@@ -25,16 +32,23 @@ jobs:
     steps:
       - name: Resolve target SHA
         id: sha
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          WR_SHA: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
-        run: |
-          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            echo "sha=$WR_SHA" >> "$GITHUB_OUTPUT"
-          else
-            echo "sha=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
-          fi
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const sha = context.eventName === 'workflow_run'
+              ? context.payload.workflow_run.head_sha : context.sha;
+            if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid release SHA');
+            // Do not check out triggering code until the API confirms mainline ancestry.
+            const { data: branch } = await github.rest.git.getRef({
+              ...context.repo, ref: 'heads/fork/main',
+            });
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              ...context.repo, basehead: `${sha}...${branch.object.sha}`,
+            });
+            if (!['ahead', 'identical'].includes(comparison.status)) {
+              throw new Error('Release SHA is not on fork/main');
+            }
+            core.setOutput('sha', sha);
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

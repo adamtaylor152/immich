@@ -634,7 +634,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify self-hosted runner policy
-        run: node check-runners.cjs
+        run: node check-runners.cjs && node check-release.cjs
 
       - name: Run formatter
         run: pnpm format
