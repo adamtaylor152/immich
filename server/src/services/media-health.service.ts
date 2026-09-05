@@ -57,6 +57,7 @@ import { JobOf } from 'src/types';
 import { getConfig } from 'src/utils/config';
 import { isAssetChecksumConstraint } from 'src/utils/database';
 import { asDateTimeString } from 'src/utils/date';
+import { getHiddenContentQueryOptions } from 'src/utils/hidden-content';
 import { classifyImageDecodeFailure, getErrorMessage } from 'src/utils/media-health';
 import { mimeTypes } from 'src/utils/mime-types';
 import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
@@ -95,8 +96,15 @@ export class MediaHealthService {
 
   async list(auth: AuthDto, dto: MediaHealthListQueryDto): Promise<MediaHealthListResponseDto> {
     const size = dto.size ?? MEDIA_HEALTH_PAGE_SIZE;
+    const privacy = getHiddenContentQueryOptions(auth);
     const [findings, run, user] = await Promise.all([
-      this.mediaHealthRepository.list({ category: dto.category, ownerId: auth.user.id, status: dto.status, size }),
+      this.mediaHealthRepository.list({
+        category: dto.category,
+        ownerId: auth.user.id,
+        privacy,
+        status: dto.status,
+        size,
+      }),
       this.mediaHealthRepository.getLatestRun(dto.category, auth.user.id),
       this.userRepository.get(auth.user.id, {}),
     ]);
@@ -108,6 +116,7 @@ export class MediaHealthService {
       this.mediaHealthRepository.getAssets(
         findings.map(({ assetId }) => assetId),
         auth.user.id,
+        privacy,
       ),
       this.mediaHealthRepository.getCandidatesByHealthIds(findings.map(({ id }) => id)),
     ]);
@@ -162,23 +171,38 @@ export class MediaHealthService {
   }
 
   async locateMissing(auth: AuthDto, dto: MediaHealthBulkActionDto): Promise<MediaHealthScanResponseDto> {
-    const run = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
+    const findings = await this.mediaHealthRepository.getByIds(
+      dto.ids,
+      auth.user.id,
+      getHiddenContentQueryOptions(auth),
+    );
+    const run = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing, auth.user.id);
     await this.jobRepository.queue({
       name: JobName.MediaHealthLocateMissing,
-      data: { runId: run.id, ids: dto.ids, userId: auth.user.id },
+      data: { runId: run.id, ids: findings.map(({ id }) => id), userId: auth.user.id },
     });
     return { runId: run.id };
   }
 
   async dismiss(auth: AuthDto, dto: MediaHealthBulkActionDto): Promise<void> {
-    await this.mediaHealthRepository.markDismissed(dto.ids, auth.user.id);
+    const findings = await this.mediaHealthRepository.getByIds(
+      dto.ids,
+      auth.user.id,
+      getHiddenContentQueryOptions(auth),
+    );
+    await this.mediaHealthRepository.markDismissed(
+      findings.map(({ id }) => id),
+      auth.user.id,
+    );
   }
 
   async relinkMissing(auth: AuthDto, dto: MediaHealthBulkActionDto): Promise<MediaHealthBulkResponseDto> {
-    const findings = await this.mediaHealthRepository.getByIds(dto.ids, auth.user.id);
+    const privacy = getHiddenContentQueryOptions(auth);
+    const findings = await this.mediaHealthRepository.getByIds(dto.ids, auth.user.id, privacy);
     const assets = await this.mediaHealthRepository.getAssets(
       findings.map(({ assetId }) => assetId),
       auth.user.id,
+      privacy,
     );
     const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
     const candidates = await this.mediaHealthRepository.getCandidatesByHealthIds(findings.map(({ id }) => id));
@@ -203,20 +227,7 @@ export class MediaHealthService {
       const candidate = candidates[0];
       if (!asset.isExternal) {
         const digests = await this.validateManagedCandidate(asset, candidate.candidatePath);
-        const candidateAsset = digests
-          ? await this.mediaHealthRepository.getInternalAssetByOriginalPath(candidate.candidatePath)
-          : undefined;
-        const physicalFile = candidateAsset
-          ? await this.physicalFileRepository.ensureOriginalPhysicalFile(candidateAsset.id)
-          : digests
-            ? await this.physicalFileRepository.linkAssetToRecoveredOriginal(
-                asset.id,
-                candidate.candidatePath,
-                digests.sha256,
-                digests.sizeInBytes,
-              )
-            : undefined;
-        if (!digests || !physicalFile) {
+        if (!digests) {
           results.push({
             id: finding.id,
             success: false,
@@ -225,26 +236,22 @@ export class MediaHealthService {
           continue;
         }
 
-        if (candidateAsset) {
-          await this.physicalFileRepository.linkAssetToOriginalPhysicalFile(asset.id, physicalFile);
-        }
         const stat = await this.storageRepository.stat(candidate.candidatePath);
-        await this.assetRepository.update({
-          id: asset.id,
-          checksum: digests.sha256,
-          checksumAlgorithm: ChecksumAlgorithm.sha256File,
-          fileModifiedAt: stat.mtime,
-          isOffline: false,
-          deletedAt: null,
-          status: AssetStatus.Active,
-        });
-        await this.forkSchemaRepository.recordAssetChecksums({
+        const relinked = await this.mediaHealthRepository.relinkManagedAsset({
           assetId: asset.id,
+          ownerId: auth.user.id,
+          healthId: finding.id,
+          originalPath: candidate.candidatePath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: asset.checksum,
           ...digests,
-          path: physicalFile.path,
-          source: 'recovery',
+          fileModifiedAt: stat.mtime,
         });
-        await this.markRelinked(asset, physicalFile.path, finding.id);
+        if (!relinked) {
+          results.push({ id: finding.id, success: false, error: 'Asset or finding changed during relink' });
+          continue;
+        }
+        await this.queueRelinkJobs(asset.id);
         results.push({ id: finding.id, success: true, status: MediaHealthStatus.Relinked });
         continue;
       }
@@ -284,7 +291,8 @@ export class MediaHealthService {
       throw new ForbiddenException('Elevated PIN session is required to delete corrupt media');
     }
 
-    const findings = await this.mediaHealthRepository.getByIds(dto.ids, auth.user.id);
+    const privacy = getHiddenContentQueryOptions(auth);
+    const findings = await this.mediaHealthRepository.getByIds(dto.ids, auth.user.id, privacy);
     const now = Date.now();
     const accepted = findings.filter(
       (finding) =>
@@ -300,6 +308,7 @@ export class MediaHealthService {
     const assets = await this.mediaHealthRepository.getAssets(
       accepted.map(({ assetId }) => assetId),
       auth.user.id,
+      privacy,
     );
     const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
     const queuedIds: string[] = [];
@@ -360,7 +369,7 @@ export class MediaHealthService {
   async handleLocateMissing(job: JobOf<JobName.MediaHealthLocateMissing>): Promise<JobStatus> {
     let run = job.runId;
     if (!run) {
-      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing);
+      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Missing, job.userId);
       run = created.id;
     }
     const findings = await this.mediaHealthRepository.getByIds(job.ids ?? [], job.userId);
@@ -473,7 +482,7 @@ export class MediaHealthService {
   async handleCorruptScan(job: JobOf<JobName.MediaHealthScanCorrupt>): Promise<JobStatus> {
     let run = job.runId;
     if (!run) {
-      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt);
+      const created = await this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt, job.userId);
       run = created.id;
     }
     let checkedAssets = 0;
@@ -622,8 +631,8 @@ export class MediaHealthService {
     force?: boolean,
   ): Promise<{ missingRunId: string; corruptRunId: string }> {
     const [missingRun, corruptRun] = await Promise.all([
-      this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
-      this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt),
+      this.mediaHealthRepository.createRun(MediaHealthCategory.Missing, userId),
+      this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt, userId),
     ]);
 
     try {
@@ -653,8 +662,10 @@ export class MediaHealthService {
     const isLegacyMissingOnly = !job.missingRunId && !!job.runId && !job.corruptRunId;
     const includeCorrupt = !isLegacyMissingOnly;
     const [createdMissingRun, createdCorruptRun] = await Promise.all([
-      hasMissingRun ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Missing),
-      includeCorrupt && !job.corruptRunId ? this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt) : null,
+      hasMissingRun ? null : this.mediaHealthRepository.createRun(MediaHealthCategory.Missing, job.userId),
+      includeCorrupt && !job.corruptRunId
+        ? this.mediaHealthRepository.createRun(MediaHealthCategory.Corrupt, job.userId)
+        : null,
     ]);
     const missingRunId = job.missingRunId ?? job.runId ?? createdMissingRun!.id;
     const corruptRunId = includeCorrupt ? (job.corruptRunId ?? createdCorruptRun!.id) : null;
@@ -1002,7 +1013,7 @@ export class MediaHealthService {
     const storedByAsset = new Map(stored.map((checksum) => [checksum.assetId, checksum]));
     const knownSizes = new Set(stored.map(({ sizeInBytes }) => sizeInBytes));
     const hasUnknownSize = assets.some(({ id }) => !storedByAsset.has(id));
-    const targetByAsset = new Map<string, { asset: MediaHealthAsset; sha1?: Buffer; sha256?: Buffer }>();
+    const targetByAsset = new Map<string, { asset: MediaHealthAsset; sha1: Buffer[]; sha256: Buffer[] }>();
     const sha1Targets = new Map<string, string[]>();
     const sha256Targets = new Map<string, string[]>();
 
@@ -1011,19 +1022,30 @@ export class MediaHealthService {
         return;
       }
       const key = digest.toString('hex');
-      index.set(key, [...(index.get(key) ?? []), assetId]);
+      const ids = index.get(key) ?? [];
+      if (!ids.includes(assetId)) {
+        index.set(key, [...ids, assetId]);
+      }
     };
 
     for (const asset of assets) {
       const sidecar = storedByAsset.get(asset.id);
       const target = {
         asset,
-        sha1: sidecar?.sha1 ?? (asset.checksum?.length === 20 ? asset.checksum : undefined),
-        sha256: sidecar?.sha256 ?? (asset.checksum?.length === 32 ? asset.checksum : undefined),
+        sha1: [sidecar?.sha1, asset.checksum?.length === 20 ? asset.checksum : undefined].filter(
+          (digest): digest is Buffer => !!digest,
+        ),
+        sha256: [sidecar?.sha256, asset.checksum?.length === 32 ? asset.checksum : undefined].filter(
+          (digest): digest is Buffer => !!digest,
+        ),
       };
       targetByAsset.set(asset.id, target);
-      addTarget(sha1Targets, target.sha1, asset.id);
-      addTarget(sha256Targets, target.sha256, asset.id);
+      for (const digest of target.sha1) {
+        addTarget(sha1Targets, digest, asset.id);
+      }
+      for (const digest of target.sha256) {
+        addTarget(sha256Targets, digest, asset.id);
+      }
     }
 
     const matches = new Map<string, Map<string, Set<'sha1' | 'sha256'>>>();
@@ -1100,8 +1122,8 @@ export class MediaHealthService {
         [...byPath].filter(([, algorithms]) => algorithms.has('sha256')).map(([path]) => path),
       );
       const conflict =
-        !!target.sha1 &&
-        !!target.sha256 &&
+        target.sha1.length > 0 &&
+        target.sha256.length > 0 &&
         sha1Paths.size > 0 &&
         sha256Paths.size > 0 &&
         [...sha1Paths].every((candidatePath) => !sha256Paths.has(candidatePath));
@@ -1318,16 +1340,20 @@ export class MediaHealthService {
       status: MediaHealthStatus.Relinked,
       severity: MediaHealthSeverity.Info,
       originalPath: candidatePath,
-      originalFileName: path.basename(candidatePath),
+      originalFileName: asset.originalFileName,
       evidence: { reason: 'candidate_relinked', previousPath: asset.originalPath },
       resolution: { healthId },
       checkedAt: new Date(),
       resolvedAt: new Date(),
     });
 
+    await this.queueRelinkJobs(asset.id);
+  }
+
+  private async queueRelinkJobs(assetId: string): Promise<void> {
     await this.jobRepository.queueAll([
-      { name: JobName.SidecarCheck, data: { id: asset.id, source: 'upload' } },
-      { name: JobName.AssetGenerateThumbnails, data: { id: asset.id } },
+      { name: JobName.SidecarCheck, data: { id: assetId, source: 'upload' } },
+      { name: JobName.AssetGenerateThumbnails, data: { id: assetId } },
     ]);
   }
 

@@ -13,11 +13,16 @@ import {
 import { UpdatedAtTrigger } from 'src/decorators';
 import { MediaHealthCategory, MediaHealthSeverity, MediaHealthStatus } from 'src/enum';
 import { AssetTable } from 'src/schema/tables/asset.table';
+import { UserTable } from 'src/schema/tables/user.table';
 
+@Index({ columns: ['ownerId', 'startedAt'] })
 @Table('asset_health_run')
 export class AssetHealthRunTable {
   @PrimaryGeneratedColumn()
   id!: Generated<string>;
+
+  @ForeignKeyColumn(() => UserTable, { nullable: true, onDelete: 'CASCADE', onUpdate: 'CASCADE' })
+  ownerId!: string | null;
 
   @Column()
   category!: MediaHealthCategory;

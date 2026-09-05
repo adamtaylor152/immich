@@ -217,6 +217,10 @@
       "identity": "immich_fork.asset_health_run.id"
     },
     {
+      "definition": "uuid|nullable|||",
+      "identity": "immich_fork.asset_health_run.ownerId"
+    },
+    {
       "definition": "timestamp with time zone|not null|now()||",
       "identity": "immich_fork.asset_health_run.startedAt"
     },
@@ -1403,6 +1407,10 @@
     {
       "definition": "uuid|not null|uuid_generate_v4()||",
       "identity": "public.asset_health_run.id"
+    },
+    {
+      "definition": "uuid|nullable|||",
+      "identity": "public.asset_health_run.ownerId"
     },
     {
       "definition": "timestamp with time zone|not null|now()||",
@@ -3491,6 +3499,10 @@
       "identity": "public.asset_health_run.asset_health_run_pkey"
     },
     {
+      "definition": "FOREIGN KEY (\"ownerId\") REFERENCES \"user\"(id) ON UPDATE CASCADE ON DELETE CASCADE",
+      "identity": "public.asset_health_run.asset_health_run_ownerId_fkey"
+    },
+    {
       "definition": "UNIQUE (\"assetId\", category)",
       "identity": "public.asset_health.asset_health_assetId_category_uq"
     },
@@ -4161,7 +4173,8 @@
     "0000000000040-ChecksumsAndStorage",
     "0000000000050-CutoverVerification",
     "0000000000060-SharedUpstreamPaths",
-    "0000000000070-ResetAssetSyncChecksums"
+    "0000000000070-ResetAssetSyncChecksums",
+    "0000000000080-MediaHealthRunOwner"
   ],
   "functions": [
     {
@@ -5295,6 +5308,10 @@
       "identity": "immich_fork.asset_health_candidate.asset_health_candidate_pkey"
     },
     {
+      "definition": "CREATE INDEX asset_health_run_owner_started_idx ON immich_fork.asset_health_run USING btree (\"ownerId\", \"startedAt\")",
+      "identity": "immich_fork.asset_health_run.asset_health_run_owner_started_idx"
+    },
+    {
       "definition": "CREATE UNIQUE INDEX asset_health_run_pkey ON immich_fork.asset_health_run USING btree (id)",
       "identity": "immich_fork.asset_health_run.asset_health_run_pkey"
     },
@@ -5777,6 +5794,10 @@
     {
       "definition": "CREATE UNIQUE INDEX asset_health_candidate_pkey ON public.asset_health_candidate USING btree (id)",
       "identity": "public.asset_health_candidate.asset_health_candidate_pkey"
+    },
+    {
+      "definition": "CREATE INDEX \"asset_health_run_ownerId_startedAt_idx\" ON public.asset_health_run USING btree (\"ownerId\", \"startedAt\")",
+      "identity": "public.asset_health_run.asset_health_run_ownerId_startedAt_idx"
     },
     {
       "definition": "CREATE UNIQUE INDEX asset_health_run_pkey ON public.asset_health_run USING btree (id)",

@@ -38,6 +38,7 @@ describe(MediaHealthService.name, () => {
       markResolved: vi.fn(),
       markResolvedCategories: vi.fn(),
       replaceCandidates: vi.fn(),
+      relinkManagedAsset: vi.fn(),
       relinkExternalAsset: vi.fn(),
       streamAssets: vi.fn(),
       upsertFinding: vi.fn(),
@@ -68,6 +69,7 @@ describe(MediaHealthService.name, () => {
     vi.mocked(mediaHealthRepository.getLatestRun).mockResolvedValue(undefined);
     vi.mocked(mediaHealthRepository.getAssets).mockResolvedValue([]);
     vi.mocked(mediaHealthRepository.getCandidatesByHealthIds).mockResolvedValue([]);
+    vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([]);
 
     await expect(sut.list(authStub.admin, { size: 10 })).resolves.toEqual({ buckets: [], total: 0, run: null });
     await sut.dismiss(authStub.admin, { ids: ['health-1'] });
@@ -75,15 +77,18 @@ describe(MediaHealthService.name, () => {
     expect(mediaHealthRepository.list).toHaveBeenCalledWith({
       category: undefined,
       ownerId: authStub.admin.user.id,
+      privacy: {},
       size: 10,
       status: undefined,
     });
     expect(mediaHealthRepository.getLatestRun).toHaveBeenCalledWith(undefined, authStub.admin.user.id);
-    expect(mediaHealthRepository.markDismissed).toHaveBeenCalledWith(['health-1'], authStub.admin.user.id);
+    expect(mediaHealthRepository.getByIds).toHaveBeenCalledWith(['health-1'], authStub.admin.user.id, {});
+    expect(mediaHealthRepository.markDismissed).toHaveBeenCalledWith([], authStub.admin.user.id);
   });
 
   it('queues candidate lookup only for the authenticated user', async () => {
     vi.mocked(mediaHealthRepository.createRun).mockResolvedValue({ id: 'run-1' } as never);
+    vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([{ id: 'health-1' }] as never);
 
     await expect(sut.locateMissing(authStub.admin, { ids: ['health-1'] })).resolves.toEqual({ runId: 'run-1' });
 
@@ -91,6 +96,23 @@ describe(MediaHealthService.name, () => {
       name: JobName.MediaHealthLocateMissing,
       data: { runId: 'run-1', ids: ['health-1'], userId: authStub.admin.user.id },
     });
+    expect(mediaHealthRepository.createRun).toHaveBeenCalledWith(MediaHealthCategory.Missing, authStub.admin.user.id);
+    expect(mediaHealthRepository.getByIds).toHaveBeenCalledWith(['health-1'], authStub.admin.user.id, {});
+  });
+
+  it('does not queue hidden findings from a non-elevated privacy session', async () => {
+    const auth = { ...authStub.admin, hideNsfwAssets: true };
+    vi.mocked(mediaHealthRepository.createRun).mockResolvedValue({ id: 'run-1' } as never);
+    vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([{ id: 'visible-health' }] as never);
+
+    await sut.locateMissing(auth, { ids: ['visible-health', 'hidden-health'] });
+
+    expect(mediaHealthRepository.getByIds).toHaveBeenCalledWith(['visible-health', 'hidden-health'], auth.user.id, {
+      excludeNsfw: true,
+    });
+    expect(mocks.job.queue).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ids: ['visible-health'] }) }),
+    );
   });
 
   it('redacts candidates found in another user directory', () => {
@@ -219,6 +241,52 @@ describe(MediaHealthService.name, () => {
   });
 
   describe('relinkMissing', () => {
+    it('keeps the missing asset filename when relinking to another user file', async () => {
+      const sha1 = Buffer.alloc(20, 1);
+      const sha256 = Buffer.alloc(32, 2);
+      vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([
+        { id: 'health-1', assetId: 'asset-1', category: MediaHealthCategory.Missing },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssets).mockResolvedValue([
+        {
+          id: 'asset-1',
+          ownerId: authStub.admin.user.id,
+          checksum: sha1,
+          originalPath: '/data/upload/admin_id/missing.jpg',
+          originalFileName: 'missing.jpg',
+          type: AssetType.Image,
+          isExternal: false,
+          libraryId: null,
+        },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getCandidatesByHealthIds).mockResolvedValue([
+        {
+          id: 'candidate-1',
+          healthId: 'health-1',
+          candidatePath: '/data/upload/user-2/private-name.jpg',
+          status: MediaHealthStatus.Found,
+        },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssetChecksums).mockResolvedValue([
+        { assetId: 'asset-1', sha1, sha256, sizeInBytes: 10 },
+      ]);
+      vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({ sha1, sha256, sizeInBytes: 10 });
+      vi.mocked(mocks.storage.stat).mockResolvedValue({ mtime: new Date('2026-09-04T00:00:00Z') } as never);
+      vi.mocked(mediaHealthRepository.relinkManagedAsset).mockResolvedValue(true);
+
+      await sut.relinkMissing(authStub.admin, { ids: ['health-1'] });
+
+      expect(mediaHealthRepository.relinkManagedAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetId: 'asset-1',
+          ownerId: authStub.admin.user.id,
+          healthId: 'health-1',
+          originalPath: '/data/upload/user-2/private-name.jpg',
+          originalFileName: 'missing.jpg',
+        }),
+      );
+    });
+
     it('links an owned missing asset to a foreign-user exact match without deleting the source', async () => {
       const sha1 = Buffer.alloc(20, 1);
       const sha256 = Buffer.alloc(32, 2);
@@ -251,6 +319,7 @@ describe(MediaHealthService.name, () => {
       vi.mocked(mediaHealthRepository.getInternalAssetByOriginalPath).mockResolvedValue({ id: 'asset-2' });
       vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({ sha1, sha256, sizeInBytes: 10 });
       vi.mocked(mocks.storage.stat).mockResolvedValue({ mtime: new Date('2026-09-04T00:00:00Z') } as never);
+      vi.mocked(mediaHealthRepository.relinkManagedAsset).mockResolvedValue(true);
       vi.mocked(mocks.physicalFile.ensureOriginalPhysicalFile).mockResolvedValue({
         id: 'physical-1',
         path: '/data/upload/user-2/found.jpg',
@@ -260,18 +329,9 @@ describe(MediaHealthService.name, () => {
         results: [{ id: 'health-1', success: true, status: MediaHealthStatus.Relinked }],
       });
 
-      expect(mocks.physicalFile.linkAssetToOriginalPhysicalFile).toHaveBeenCalledWith('asset-1', {
-        id: 'physical-1',
-        path: '/data/upload/user-2/found.jpg',
-      });
-      expect(mocks.forkSchema.recordAssetChecksums).toHaveBeenCalledWith({
-        assetId: 'asset-1',
-        sha1,
-        sha256,
-        sizeInBytes: 10,
-        path: '/data/upload/user-2/found.jpg',
-        source: 'recovery',
-      });
+      expect(mediaHealthRepository.relinkManagedAsset).toHaveBeenCalledWith(
+        expect.objectContaining({ assetId: 'asset-1', sha1, sha256, sizeInBytes: 10 }),
+      );
       expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.FileDelete }));
     });
 
@@ -305,6 +365,7 @@ describe(MediaHealthService.name, () => {
       vi.mocked(mediaHealthRepository.getInternalAssetByOriginalPath).mockResolvedValue(undefined);
       vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({ sha1, sha256, sizeInBytes: 10 });
       vi.mocked(mocks.storage.stat).mockResolvedValue({ mtime: new Date('2026-09-04T00:00:00Z') } as never);
+      vi.mocked(mediaHealthRepository.relinkManagedAsset).mockResolvedValue(true);
       const linkRecovered = vi.fn().mockResolvedValue({
         id: 'physical-1',
         path: '/data/upload/user-2/untracked.jpg',
@@ -317,7 +378,14 @@ describe(MediaHealthService.name, () => {
         results: [{ id: 'health-1', success: true, status: MediaHealthStatus.Relinked }],
       });
 
-      expect(linkRecovered).toHaveBeenCalledWith('asset-1', '/data/upload/user-2/untracked.jpg', sha256, 10);
+      expect(mediaHealthRepository.relinkManagedAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assetId: 'asset-1',
+          originalPath: '/data/upload/user-2/untracked.jpg',
+          sha256,
+          sizeInBytes: 10,
+        }),
+      );
       expect(mocks.job.queue).not.toHaveBeenCalledWith(expect.objectContaining({ name: JobName.FileDelete }));
     });
   });
@@ -664,6 +732,55 @@ describe(MediaHealthService.name, () => {
   });
 
   describe('handleLocateMissing', () => {
+    it('matches the public digest when sidecar evidence disagrees', async () => {
+      const publicSha1 = Buffer.alloc(20, 1);
+      const sidecarSha1 = Buffer.alloc(20, 2);
+      const sidecarSha256 = Buffer.alloc(32, 3);
+      vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([
+        { id: 'health-1', assetId: 'asset-1', category: MediaHealthCategory.Missing },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssets).mockResolvedValue([
+        {
+          id: 'asset-1',
+          ownerId: 'user-1',
+          checksum: publicSha1,
+          originalPath: '/data/upload/user-1/missing.jpg',
+          originalFileName: 'missing.jpg',
+          type: AssetType.Image,
+          isExternal: false,
+          libraryId: null,
+        },
+      ] as never);
+      vi.mocked(mediaHealthRepository.getAssetChecksums).mockResolvedValue([
+        { assetId: 'asset-1', sha1: sidecarSha1, sha256: sidecarSha256, sizeInBytes: 10 },
+      ]);
+      vi.mocked(mocks.user.getList).mockResolvedValue([{ id: 'user-2', storageLabel: null }] as never);
+      vi.mocked(mocks.storage.walk).mockReturnValue(
+        (async function* () {
+          await Promise.resolve();
+          yield ['/data/upload/user-2/found.jpg'];
+        })() as never,
+      );
+      vi.mocked(mocks.storage.stat).mockResolvedValue({ size: 10 } as never);
+      vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({
+        sha1: publicSha1,
+        sha256: Buffer.alloc(32, 9),
+        sizeInBytes: 10,
+      });
+
+      await sut.handleLocateMissing({ runId: 'run-1', ids: ['health-1'], userId: 'user-1' });
+
+      expect(mediaHealthRepository.replaceCandidates).toHaveBeenCalledWith(
+        'health-1',
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidatePath: '/data/upload/user-2/found.jpg',
+            status: MediaHealthStatus.Found,
+          }),
+        ]),
+      );
+    });
+
     it('finds managed files by either SHA-1 or SHA-256 and skips metadata files', async () => {
       const sha1 = Buffer.alloc(20, 1);
       const sha256 = Buffer.alloc(32, 2);
