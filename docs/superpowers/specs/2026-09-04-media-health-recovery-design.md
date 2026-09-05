@@ -26,6 +26,10 @@ Every candidate is re-hashed immediately before relink. Successful recovery/impo
 3. Persist opaque candidate ids. Redact candidate paths outside the requester's roots in API responses.
 4. Relink only after owner revalidation, candidate re-hash, checksum conflict rejection, and physical-file mapping under existing repository locking. Never enqueue source deletion.
 
+Managed lookup visits at most 10,000 paths and selects at most 10 GiB for hashing per run. When either limit is reached, the run reports an incomplete lookup and candidate/finding evidence records `searchTruncated`. Partial results cannot be automatically relinked because an unvisited file could reveal conflicting checksum evidence. The bounded crawl currently starts from the beginning; resumable traversal is not implemented.
+
+User-triggered lookup requests have a five-minute cooldown after the owner's latest missing-media run. Run admission is serialized in the database across API processes; requests within the cooldown return HTTP 429 without queueing another job. Lookup failures, including queue submission and traversal errors, finalize the run as failed. A candidate disappearing after hashing fails only its own entry in a bulk relink.
+
 ## Orphan flow
 
 Walk the requesting user's managed upload/library roots. Skip tracked paths and unsupported/metadata files. Hash each remaining file once. If either digest already belongs to one of that user's assets, do nothing. Otherwise create the normal internal asset record, physical-file mapping, checksum sidecar, metadata job, and asset-created event using existing repositories.

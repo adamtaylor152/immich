@@ -65,6 +65,27 @@ beforeAll(async () => {
 
 describe(MediaHealthRepository.name, () => {
   describe('scan bookkeeping', () => {
+    it('admits only one concurrent owner lookup during the cooldown, then permits another after expiry', async () => {
+      const { ctx, sut } = setup();
+      const [{ user }, { user: other }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const runs = await Promise.all([
+        sut.createRun(MediaHealthCategory.Missing, user.id, 60_000),
+        sut.createRun(MediaHealthCategory.Missing, user.id, 60_000),
+      ]);
+      const admitted = runs.filter((run) => !!run);
+      expect(admitted).toHaveLength(1);
+      await expect(sut.createRun(MediaHealthCategory.Missing, other.id, 60_000)).resolves.toBeDefined();
+      for (const schema of ['public', 'immich_fork']) {
+        await defaultDatabase
+          .withSchema(schema)
+          .updateTable('asset_health_run')
+          .set({ startedAt: new Date(Date.now() - 61_000) })
+          .where('id', '=', admitted[0]!.id)
+          .execute();
+      }
+      await expect(sut.createRun(MediaHealthCategory.Missing, user.id, 60_000)).resolves.toBeDefined();
+    });
+
     it('creates a running run and finishes it with counts and a finish time', async () => {
       const { sut } = setup();
 

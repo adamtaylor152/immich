@@ -8486,7 +8486,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8542,7 +8541,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8588,7 +8586,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8637,7 +8634,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8653,7 +8649,7 @@
     },
     "/media-health/missing/locate": {
       "post": {
-        "description": "Queue candidate discovery for missing media findings.",
+        "description": "Queue exact-checksum candidate discovery across managed user storage.",
         "operationId": "locateMissing",
         "parameters": [],
         "requestBody": {
@@ -8693,7 +8689,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8709,7 +8704,7 @@
     },
     "/media-health/missing/relink": {
       "post": {
-        "description": "Relink missing external-library assets to validated candidate files.",
+        "description": "Relink owned missing assets to validated candidate files.",
         "operationId": "relinkMissing",
         "parameters": [],
         "requestBody": {
@@ -8749,7 +8744,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",
@@ -8765,7 +8759,7 @@
     },
     "/media-health/missing/scan": {
       "post": {
-        "description": "Queue a scan that identifies missing or unreadable source files.",
+        "description": "Queue an owner-scoped scan that identifies missing files and restores supported untracked media.",
         "operationId": "startMissingScan",
         "parameters": [],
         "responses": {
@@ -8795,7 +8789,6 @@
         "tags": [
           "Media Health"
         ],
-        "x-immich-admin-only": true,
         "x-immich-history": [
           {
             "version": "v3.0.0",

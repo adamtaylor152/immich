@@ -87,11 +87,7 @@ export class IntegrityRepository {
 
   @GenerateSql({ params: [DummyValue.STRING] })
   getVideoDuplicateFramePathsByPaths(paths: string[]) {
-    return this.db
-      .selectFrom('asset_video_duplicate_frame')
-      .select('path')
-      .where('path', 'in', paths)
-      .execute();
+    return this.db.selectFrom('asset_video_duplicate_frame').select('path').where('path', 'in', paths).execute();
   }
 
   @GenerateSql({ params: [DummyValue.STRING] })

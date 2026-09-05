@@ -107,7 +107,17 @@ type HealthBackfillTables = {
 export class MediaHealthRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
-  async createRun(category: MediaHealthCategory, ownerId?: string): Promise<MediaHealthRun> {
+  async createRun(category: MediaHealthCategory, ownerId?: string): Promise<MediaHealthRun>;
+  async createRun(
+    category: MediaHealthCategory,
+    ownerId: string,
+    minimumIntervalMs: number,
+  ): Promise<MediaHealthRun | undefined>;
+  async createRun(
+    category: MediaHealthCategory,
+    ownerId?: string,
+    minimumIntervalMs = 0,
+  ): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
     const run = {
       id: randomUUID(),
@@ -121,15 +131,35 @@ export class MediaHealthRepository {
       foundAssets: 0,
       error: null,
     };
-    await this.db.transaction().execute(async (trx) => {
+    return this.db.transaction().execute(async (trx) => {
+      if (ownerId && minimumIntervalMs > 0) {
+        // Serialize admission across API processes before checking the owner's cooldown.
+        await trx
+          .selectFrom('user')
+          .select('id')
+          .where('id', '=', asUuid(ownerId))
+          .forUpdate()
+          .executeTakeFirstOrThrow();
+        const recent = await trx
+          .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
+          .selectFrom('asset_health_run')
+          .select('id')
+          .where('ownerId', '=', asUuid(ownerId))
+          .where('category', '=', category)
+          .where('startedAt', '>', new Date(Date.now() - minimumIntervalMs))
+          .executeTakeFirst();
+        if (recent) {
+          return;
+        }
+      }
       if (writesLegacy(phase)) {
         await trx.withSchema('public').insertInto('asset_health_run').values(run).execute();
       }
       if (writesForkSidecar(phase)) {
         await trx.withSchema('immich_fork').insertInto('asset_health_run').values(run).execute();
       }
+      return run;
     });
-    return run;
   }
 
   async finishRun(id: string, update: Updateable<AssetHealthRunTable>): Promise<MediaHealthRun | undefined> {
