@@ -13,7 +13,9 @@ permissions: {}
 
 jobs:
   pre-job:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     outputs:
@@ -35,8 +37,9 @@ jobs:
   mobile-dart-analyze:
     name: Run Dart Code Analysis
     needs: pre-job
-    if: ${{ fromJSON(needs.pre-job.outputs.should_run).mobile == true }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).mobile == true) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     defaults:

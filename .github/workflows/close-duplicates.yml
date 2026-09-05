@@ -10,8 +10,9 @@ permissions: {}
 jobs:
   should_run:
     # Upstream-only: issue/discussion triage for immich-app/immich.
-    if: github.repository == 'immich-app/immich'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     outputs:
       should_run: ${{ steps.should_run.outputs.run }}
     steps:
@@ -23,9 +24,10 @@ jobs:
           }}" >> "$GITHUB_OUTPUT"
 
   get_body:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: should_run
-    if: ${{ needs.should_run.outputs.should_run == 'true' }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (needs.should_run.outputs.should_run == 'true') }}
     env:
       EVENT: ${{ toJSON(github.event) }}
     outputs:
@@ -37,9 +39,10 @@ jobs:
           echo "body=$BODY" >> $GITHUB_OUTPUT
 
   get_checkbox_json:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: [get_body, should_run]
-    if: ${{ needs.should_run.outputs.should_run == 'true' }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (needs.should_run.outputs.should_run == 'true') }}
     container:
       image: ghcr.io/immich-app/mdq:main@sha256:74b93dfbf13f8ee73eb35d8d5195ff667f93f9bc55df5ae453dd43a461c821fa
     outputs:
@@ -53,9 +56,10 @@ jobs:
           echo "checked=$CHECKED" >> $GITHUB_OUTPUT
 
   close_and_comment:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: [get_checkbox_json, should_run]
-    if: ${{ needs.should_run.outputs.should_run == 'true' && needs.get_checkbox_json.outputs.checked != 'true' }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (needs.should_run.outputs.should_run == 'true' && needs.get_checkbox_json.outputs.checked != 'true') }}
     permissions:
       issues: write
       discussions: write

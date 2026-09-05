@@ -8,7 +8,7 @@ on:
         type: string
       environment:
         description: 'Target environment'
-        required: true
+        required: false
         default: 'development'
         type: string
     secrets:
@@ -48,7 +48,9 @@ permissions: {}
 
 jobs:
   pre-job:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     outputs:
@@ -70,7 +72,9 @@ jobs:
   # secret presence so they skip cleanly instead of hanging or failing. If
   # signing secrets are ever added to the repository, the jobs run again.
   check-signing-secrets:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     outputs:
       has-android: ${{ steps.check.outputs.android }}
       has-ios: ${{ steps.check.outputs.ios }}
@@ -90,8 +94,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    if: ${{ github.actor != 'dependabot[bot]' && fromJSON(needs.pre-job.outputs.should_run).mobile == true && needs.check-signing-secrets.outputs.has-android == 'true' }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]' && fromJSON(needs.pre-job.outputs.should_run).mobile == true && needs.check-signing-secrets.outputs.has-android == 'true') }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,8 +209,10 @@ jobs:
     permissions:
       contents: read
     # Run on main branch or workflow_dispatch, or on PRs/other branches (build only, no upload)
-    if: ${{ !github.event.pull_request.head.repo.fork && fromJSON(needs.pre-job.outputs.should_run).mobile == true && needs.check-signing-secrets.outputs.has-ios == 'true' }}
-    runs-on: macos-26
+    # Disabled by owner request until a matching self-hosted OS runner exists.
+    if: >-
+      ${{ false && github.repository == 'adamtaylor152/immich' }}
+    runs-on: [self-hosted, macOS]
 
     steps:
       - name: Select Xcode 26

@@ -41,8 +41,9 @@ jobs:
   bump_version:
     # Upstream-only: tags immich-app/immich's release line and pushes to main.
     # The fork manages its own fork/main and never invokes this workflow.
-    if: github.repository == 'immich-app/immich'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: [merge_translations]
     outputs:
       ref: ${{ steps.push-tag.outputs.commit_long_sha }}
@@ -116,7 +117,9 @@ jobs:
       environment: production
 
   prepare_release:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: [build_mobile, bump_version]
     permissions:
       actions: read # To download the app artifact

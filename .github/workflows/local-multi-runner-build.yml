@@ -6,10 +6,8 @@ name: 'Local multi-runner container image build'
 # as a BuildKit secret so the Dockerfile can consume it via --mount=type=secret
 # instead of an ARG (which would leak into image history).
 #
-# Fork-local runner routing: Docker-heavy linux/amd64 image builds run on the
-# `aiimmich` self-hosted runner pool. Keep matrix generation and manifest/tag
-# merge jobs on GitHub-hosted runners so release bookkeeping stays isolated
-# from the Docker host.
+# All image-build jobs use the fork's aiimmich runner, including bookkeeping.
+# ARM64 images use QEMU on the x64 host; no caller-controlled runner mapping.
 
 on:
   workflow_call:
@@ -41,9 +39,6 @@ on:
       platforms:
         description: 'Platforms to build for'
         type: string
-      runner-mapping:
-        description: 'Mapping from platforms to runners'
-        type: string
       target:
         description: 'Sets the target stage to build'
         type: string
@@ -67,67 +62,22 @@ env:
 
 jobs:
   matrix:
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: 'Generate matrix'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       key: ${{ steps.artifact-key.outputs.base }}
     steps:
-      - name: Validate runner-mapping
-        # SECURITY (defense-in-depth): the `build` job below carries a hard
-        # workflow-level `if:` guard that refuses fork-PR execution and pins
-        # to the canonical repository slugs. That guard is the primary control.
-        # This step is a *secondary* deny-list that rejects any runner-mapping
-        # whose resolved label set references a self-hosted runner *before* the
-        # matrix is generated, so a misconfigured caller surfaces as a clear
-        # validation error at the `matrix` job (GitHub-hosted, safe to fail)
-        # rather than silently relying on the `build`-job guard. The deny-list
-        # catches `self-hosted` (the canonical GitHub label) and `aiimmich`
-        # (the fork's runner-group identifier) — extend if a new self-hosted
-        # pool is added. Allow-listed GitHub-hosted runner labels (`ubuntu-*`,
-        # `pokedex-*` for the upstream cuda-rocm builder which is org-hosted)
-        # pass through unchanged.
-        id: validate
-        shell: bash
-        env:
-          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
-          IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # Flatten every label string referenced anywhere in the mapping.
-          LABELS=$(jq -r '
-            [ .. | strings ] | unique | .[]
-          ' <<< "${RUNNER_MAPPING}")
-          # `self-hosted` is the GitHub-canonical signal. `aiimmich` is the fork
-          # runner-group label — both are denied to fork-PR callers regardless
-          # of who is calling. Same-repo PR or push from the canonical slugs
-          # continue to use them.
-          if grep -qiE '^(self-hosted|aiimmich)$' <<< "${LABELS}"; then
-            if [[ "${IS_FORK_PR}" == "true" ]]; then
-              echo "::error::runner-mapping references a self-hosted runner label but caller is a fork PR. Refusing to schedule build."
-              exit 1
-            fi
-            case "${REPO}" in
-              adamtaylor152/immich|immich-app/immich) ;;
-              *)
-                echo "::error::runner-mapping references a self-hosted runner label but caller is repository '${REPO}', not a canonical immich slug. Refusing to schedule build."
-                exit 1
-                ;;
-            esac
-          fi
-          echo "runner-mapping validation passed"
-
       - name: Generate build matrix
         id: matrix
         shell: bash
         env:
           PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
-          RUNNER_MAPPING: ${{ inputs.runner-mapping || '{"linux/amd64":"ubuntu-latest","linux/arm64":"ubuntu-24.04-arm"}' }}
         run: |
           matrix=$(jq -R -c \
-            --argjson runner_mapping "${RUNNER_MAPPING}" \
-            'split(",") | map({platform: ., runner: $runner_mapping[.]})' \
+            'split(",") | map({platform: .})' \
             <<< "${PLATFORMS}")
           echo "matrix=${matrix}" | tee -a "$GITHUB_OUTPUT"
 
@@ -154,10 +104,8 @@ jobs:
     # re-fork of `adamtaylor152/immich` cannot accidentally route builds onto
     # the runner pool.
     if: >-
-      ${{ !github.event.pull_request.head.repo.fork
-          && (github.repository == 'adamtaylor152/immich'
-              || github.repository == 'immich-app/immich') }}
-    runs-on: ${{ matrix.runner }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!github.event.pull_request.head.repo.fork && (github.repository == 'adamtaylor152/immich' || github.repository == 'immich-app/immich')) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     strategy:
       fail-fast: false
       matrix:
@@ -182,6 +130,12 @@ jobs:
         run: |
           set -euo pipefail
           docker version
+
+      - name: Set up ARM64 emulation
+        if: matrix.platform == 'linux/arm64'
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -290,8 +244,9 @@ jobs:
 
   merge:
     needs: [matrix, build]
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.head.repo.fork }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!github.event.pull_request.head.repo.fork) }}
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0

@@ -15,8 +15,9 @@ permissions: {}
 jobs:
   validate-release-label:
     # Upstream-only: changelog labels are for immich-app/immich's release process.
-    if: ${{ github.repository == 'immich-app/immich' && !startsWith(github.event.pull_request.head.ref, 'mergify/merge-queue/') }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && !startsWith(github.event.pull_request.head.ref, 'mergify/merge-queue/')) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       issues: write
       pull-requests: write

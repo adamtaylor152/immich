@@ -11,9 +11,10 @@ env:
 jobs:
   checks:
     # Upstream-only: deploys docs.immich.app, a resource the fork doesn't own.
-    if: github.repository == 'immich-app/immich'
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
     name: Docs Deploy Checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       actions: read
       pull-requests: read
@@ -113,13 +114,14 @@ jobs:
 
   deploy:
     name: Docs Deploy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: checks
     permissions:
       contents: read
       actions: read
       pull-requests: write
-    if: ${{ fromJson(needs.checks.outputs.artifact).found && fromJson(needs.checks.outputs.parameters).shouldDeploy }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJson(needs.checks.outputs.artifact).found && fromJson(needs.checks.outputs.parameters).shouldDeploy) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

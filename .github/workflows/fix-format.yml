@@ -17,15 +17,14 @@ permissions: {}
 
 jobs:
   fix-formatting:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     # SECURITY: only run for PRs from the same repository. A label can be applied
     # by anyone with triage rights, but this workflow checks out the PR head ref
     # and executes `pnpm install` with credentials persisted — running that on a
     # fork's branch is a code-injection pivot (preinstall/postinstall scripts,
     # malicious .npmrc, malicious patches in patches/, etc).
     if: >-
-      ${{ github.event.label.name == 'fix:formatting'
-          && github.event.pull_request.head.repo.fork == false }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.event.label.name == 'fix:formatting' && github.event.pull_request.head.repo.fork == false) }}
     permissions:
       contents: write
       pull-requests: write

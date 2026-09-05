@@ -20,8 +20,10 @@ permissions: {}
 
 jobs:
   publish:
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: CLI Publish
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
       id-token: write
@@ -48,8 +50,10 @@ jobs:
         run: mise run ci-publish -- --tag "$NPM_TAG"
 
   docker:
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Docker
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
       packages: write

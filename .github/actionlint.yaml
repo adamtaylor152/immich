@@ -4,9 +4,8 @@
 # configured in GitHub Settings → Actions → Runner groups. Verify the
 # `aiimmich` runner group is restricted to `adamtaylor152/immich` so a
 # parallel adamtaylor152 repository cannot fan-out builds onto the host.
-# Workflow-level safety guards live in:
-#   - .github/workflows/local-multi-runner-build.yml (job-level if: guard)
-#   - .github/workflows/nsfw-unraid-docker.yml (job-level repository pin)
+# Every enabled job pins this repository and rejects external PR heads.
+# .github/check-runners.cjs checks the runner policy across all workflows.
 self-hosted-runner:
   labels:
     - aiimmich
