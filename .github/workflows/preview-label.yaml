@@ -15,7 +15,7 @@ permissions: {}
 
 jobs:
   comment-status:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     # Upstream-only: targets preview.internal.immich.build (org-managed).
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && github.event.action == 'labeled' && github.event.label.name == 'preview') }}
@@ -29,7 +29,7 @@ jobs:
           message: 'Deploying preview environment to https://pr-${{ github.event.pull_request.number }}.preview.internal.immich.build/'
 
   remove-label:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     # Upstream-only: targets preview.internal.immich.build (org-managed).
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && (github.event.action == 'closed' || github.event.pull_request.head.repo.fork) && contains(github.event.pull_request.labels.*.name, 'preview')) }}

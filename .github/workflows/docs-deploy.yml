@@ -14,7 +14,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
     name: Docs Deploy Checks
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       pull-requests: read
@@ -114,7 +114,7 @@ jobs:
 
   deploy:
     name: Docs Deploy
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     needs: checks
     permissions:
       contents: read

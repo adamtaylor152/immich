@@ -17,7 +17,7 @@ permissions: {}
 
 jobs:
   fix-formatting:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     # SECURITY: only run for PRs from the same repository. A label can be applied
     # by anyone with triage rights, but this workflow checks out the PR head ref
     # and executes `pnpm install` with credentials persisted — running that on a

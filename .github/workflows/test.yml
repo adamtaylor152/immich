@@ -14,7 +14,7 @@ jobs:
   pre-job:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -71,7 +71,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).scripts == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -94,7 +94,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).server == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -117,7 +117,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).cli == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -141,10 +141,9 @@ jobs:
   cli-unit-tests-win:
     name: Unit Test CLI (Windows)
     needs: pre-job
-    # Disabled by owner request until a matching self-hosted OS runner exists.
     if: >-
-      ${{ false && github.repository == 'adamtaylor152/immich' }}
-    runs-on: [self-hosted, Windows, X64]
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).cli == true) }}
+    runs-on: windows-latest
     permissions:
       contents: read
     defaults:
@@ -183,7 +182,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).web == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -216,7 +215,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).web == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -242,7 +241,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).i18n == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -284,7 +283,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).e2e == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -311,7 +310,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).server == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -343,10 +342,10 @@ jobs:
     name: End-to-End Tests (Server & CLI)
     needs: pre-job
     # E2E needs no org-managed secrets (only github.token for image pulls), so
-    # it runs on same-repository PRs too. Native tests use the x64 self-hosted runner.
+    # it runs on same-repository PRs too. Native tests use GitHub-hosted x64 runners.
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).e2e == true || fromJSON(needs.pre-job.outputs.should_run).server == true || fromJSON(needs.pre-job.outputs.should_run).cli == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -409,7 +408,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: e2e-server-docker-logs-aiimmich
+          name: e2e-server-docker-logs
           path: e2e/docker-compose-logs.txt
 
       - name: Remove E2E test containers and volumes
@@ -438,7 +437,7 @@ jobs:
     # once server E2E proves stable on PRs. Push events to fork/main run it.
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'pull_request' && (fromJSON(needs.pre-job.outputs.should_run).e2e == true || fromJSON(needs.pre-job.outputs.should_run).web == true)) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -466,15 +465,17 @@ jobs:
         if: ${{ !cancelled() }}
 
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install chromium --only-shell
+        run: pnpm exec playwright install --with-deps chromium --only-shell
         if: ${{ !cancelled() }}
+
+      - name: Verify Chromium can launch
+        run: node --input-type=module -e 'import { chromium } from "@playwright/test"; const browser = await chromium.launch(); await browser.close();'
 
       - name: Docker build
         id: start-docker-compose-web
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: docker compose up -d --build --renew-anon-volumes --force-recreate --remove-orphans --wait --wait-timeout 300
-        if: ${{ !cancelled() }}
 
       # Gate playwright runs on Docker Compose actually succeeding (see comment
       # on the api/cli job above) — otherwise vitest/playwright sit in a
@@ -489,7 +490,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: success() || failure()
         with:
-          name: e2e-web-test-results-aiimmich
+          name: e2e-web-test-results
           path: e2e/playwright-report/
 
       - name: Run ui tests (web)
@@ -502,7 +503,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: success() || failure()
         with:
-          name: e2e-ui-test-results-aiimmich
+          name: e2e-ui-test-results
           path: e2e/playwright-report/
 
       - name: Run maintenance tests
@@ -515,7 +516,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: success() || failure()
         with:
-          name: e2e-maintenance-isolated-test-results-aiimmich
+          name: e2e-maintenance-isolated-test-results
           path: e2e/playwright-report/
 
       - name: Capture Docker logs
@@ -527,7 +528,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: e2e-web-docker-logs-aiimmich
+          name: e2e-web-docker-logs
           path: e2e/docker-compose-logs.txt
 
       - name: Remove E2E test containers and volumes
@@ -539,7 +540,7 @@ jobs:
     name: End-to-End Tests Success
     needs: [e2e-tests-server-cli, e2e-tests-web]
     permissions: {}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (always()) }}
     steps:
@@ -551,7 +552,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).mobile == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -582,7 +583,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).machine-learning == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -607,7 +608,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run)['.github'] == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:
@@ -628,7 +629,7 @@ jobs:
       - name: Run pnpm install
         run: pnpm install --frozen-lockfile
 
-      - name: Verify self-hosted runner policy
+      - name: Verify GitHub-hosted runner policy
         run: node check-runners.cjs && node check-release.cjs
 
       - name: Run formatter
@@ -639,7 +640,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: ShellCheck
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -656,7 +657,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: OpenAPI Clients
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -698,7 +699,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: SQL Schema Checks
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     services:

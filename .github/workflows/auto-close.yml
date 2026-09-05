@@ -16,7 +16,7 @@ permissions: {}
 
 jobs:
   parse_template:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     # This upstream contribution workflow should stay inactive in downstream forks.
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && github.event.action != 'labeled' && github.event.pull_request.head.repo.fork == true) }}
@@ -47,7 +47,7 @@ jobs:
           echo "uses_template=$OK" | tee --append "$GITHUB_OUTPUT"
 
   close_template:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     needs: parse_template
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && needs.parse_template.outputs.uses_template == 'false' && github.event.pull_request.state != 'closed' && !contains(github.event.pull_request.labels.*.name, 'auto-closed:template')) }}
@@ -84,7 +84,7 @@ jobs:
         run: gh pr edit "$PR_NUMBER" --repo "${{ github.repository }}" --add-label "auto-closed:template"
 
   close_llm:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && github.event.action == 'labeled' && github.event.label.name == 'auto-closed:llm') }}
     permissions:
@@ -114,7 +114,7 @@ jobs:
               }'
 
   reopen:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     needs: parse_template
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && needs.parse_template.outputs.uses_template == 'true' && github.event.pull_request.state == 'closed' && contains(github.event.pull_request.labels.*.name, 'auto-closed:template')) }}
