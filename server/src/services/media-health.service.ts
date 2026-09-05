@@ -65,7 +65,7 @@ import { renderRawWithLibRaw } from 'src/utils/raw-renderer';
 const execFile = promisify(execFileCallback);
 const MEDIA_HEALTH_PAGE_SIZE = 100;
 const VISUAL_MATCH_THRESHOLD = 0.85;
-const MANAGED_LOOKUP_MAX_FILES = 10_000;
+const MANAGED_LOOKUP_MAX_ENTRIES = 10_000;
 const MANAGED_LOOKUP_MAX_BYTES = 10 * 1024 ** 3;
 const MANAGED_LOOKUP_COOLDOWN_MS = 5 * 60_000;
 
@@ -185,7 +185,10 @@ export class MediaHealthService {
       MANAGED_LOOKUP_COOLDOWN_MS,
     );
     if (!run) {
-      throw new HttpException('Please wait five minutes between missing-media lookups', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'A missing-media run is active or was started within the last five minutes',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     try {
       await this.jobRepository.queue({
@@ -403,9 +406,11 @@ export class MediaHealthService {
         job.userId,
       );
       const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
-      const { candidates: managedCandidates, truncated } = await this.locateManagedCandidates(
+      const { candidates: managedCandidates, continuation } = await this.locateManagedCandidates(
         assets.filter(({ isExternal }) => !isExternal),
+        job.managedSearch,
       );
+      const truncated = !!continuation;
       let checkedAssets = 0;
       let foundAssets = 0;
 
@@ -419,7 +424,7 @@ export class MediaHealthService {
           continue;
         }
         const asset = assetsById.get(finding.assetId);
-        if (!asset?.isExternal || !asset.libraryId) {
+        if (!asset?.isExternal || !asset.libraryId || continuation) {
           continue;
         }
         const set = basenamesByLibrary.get(asset.libraryId) ?? new Set<string>();
@@ -435,11 +440,11 @@ export class MediaHealthService {
           continue;
         }
 
-        checkedAssets++;
         const asset = assetsById.get(finding.assetId);
-        if (!asset) {
+        if (!asset || (asset.isExternal && continuation)) {
           continue;
         }
+        checkedAssets++;
 
         const candidates = asset.isExternal
           ? await this.locateCandidates(asset, asset.libraryId ? libraryIndexes.get(asset.libraryId) : undefined)
@@ -493,14 +498,21 @@ export class MediaHealthService {
       }
 
       await this.mediaHealthRepository.finishRun(run, {
-        status: 'completed',
+        status: continuation ? 'running' : 'completed',
+        ...(continuation && { finishedAt: null }),
         totalAssets: checkedAssets,
         checkedAssets,
         foundAssets,
         error: truncated
-          ? 'Managed media lookup incomplete: file or byte limit reached; automatic relinking is disabled'
+          ? 'Managed media lookup incomplete: continuing in another batch; automatic relinking is disabled'
           : null,
       });
+      if (continuation) {
+        await this.jobRepository.queue({
+          name: JobName.MediaHealthLocateMissing,
+          data: { ...job, runId: run, managedSearch: continuation },
+        });
+      }
       return JobStatus.Success;
     } catch (error) {
       await this.mediaHealthRepository.finishRun(run, { status: 'failed', error: getErrorMessage(error) });
@@ -1033,11 +1045,13 @@ export class MediaHealthService {
     return results;
   }
 
-  private async locateManagedCandidates(assets: MediaHealthAsset[]) {
+  private async locateManagedCandidates(
+    assets: MediaHealthAsset[],
+    progress?: JobOf<JobName.MediaHealthLocateMissing>['managedSearch'],
+  ) {
     const result = new Map<string, CandidateValidation[]>();
-    let truncated = false;
     if (assets.length === 0) {
-      return { candidates: result, truncated };
+      return { candidates: result, continuation: undefined };
     }
 
     const stored = await this.mediaHealthRepository.getAssetChecksums(assets.map(({ id }) => id));
@@ -1089,83 +1103,82 @@ export class MediaHealthService {
       }
     }
 
-    const matches = new Map<string, Map<string, Set<'sha1' | 'sha256'>>>();
-    const users = await this.userRepository.getList();
-    const pathsToCrawl = [
-      ...new Set(
-        users.flatMap((user) => [
-          StorageCore.getFolderLocation(StorageFolder.Upload, user.id),
-          StorageCore.getLibraryFolder(user),
-        ]),
-      ),
-    ];
-    if (pathsToCrawl.length === 0) {
-      return { candidates: result, truncated };
+    if (!progress) {
+      const users = await this.userRepository.getList();
+      const roots = [
+        ...new Set(
+          users.flatMap((user) => [
+            StorageCore.getFolderLocation(StorageFolder.Upload, user.id),
+            StorageCore.getLibraryFolder(user),
+          ]),
+        ),
+      ];
+      progress = { cursor: roots.toReversed().map((path) => ({ path })), matches: {} };
     }
+    const matches = new Map(
+      Object.entries(progress.matches).map(([assetId, byPath]) => [
+        assetId,
+        new Map(Object.entries(byPath).map(([path, algorithms]) => [path, new Set(algorithms)])),
+      ]),
+    );
     const originalPaths = new Set(assets.map(({ originalPath }) => originalPath));
-    let visitedFiles = 0;
     let hashedBytes = 0;
 
-    // ponytail: bounded full crawl; persist a traversal cursor if larger libraries need resumable lookup.
-    crawl: for await (const batch of this.storageRepository.walk({
-      pathsToCrawl,
-      exclusionPatterns: [],
-      includeHidden: false,
-      take: 500,
-    })) {
-      for (const candidatePath of batch) {
-        if (visitedFiles++ >= MANAGED_LOOKUP_MAX_FILES) {
-          truncated = true;
-          break crawl;
-        }
-        if (!mimeTypes.isAsset(candidatePath) || originalPaths.has(candidatePath)) {
+    for await (const candidatePath of this.storageRepository.walkWithCursor(
+      progress.cursor,
+      MANAGED_LOOKUP_MAX_ENTRIES,
+    )) {
+      if (!mimeTypes.isAsset(candidatePath) || originalPaths.has(candidatePath)) {
+        continue;
+      }
+      try {
+        const { size } = await this.storageRepository.stat(candidatePath);
+        if (!hasUnknownSize && !knownSizes.has(size)) {
           continue;
         }
-        try {
-          const { size } = await this.storageRepository.stat(candidatePath);
-          if (!hasUnknownSize && !knownSizes.has(size)) {
-            continue;
-          }
-          if (hashedBytes + size > MANAGED_LOOKUP_MAX_BYTES) {
-            truncated = true;
-            break crawl;
-          }
-          hashedBytes += size;
-        } catch (error) {
-          this.logger.debug(`Could not stat missing media candidate ${candidatePath}: ${getErrorMessage(error)}`);
+        hashedBytes += size;
+      } catch (error) {
+        this.logger.debug(`Could not stat missing media candidate ${candidatePath}: ${getErrorMessage(error)}`);
+        continue;
+      }
+      let digests: Awaited<ReturnType<CryptoRepository['hashFileDigests']>>;
+      try {
+        digests = await this.cryptoRepository.hashFileDigests(candidatePath);
+      } catch (error) {
+        this.logger.debug(`Could not hash missing media candidate ${candidatePath}: ${getErrorMessage(error)}`);
+        if (hashedBytes >= MANAGED_LOOKUP_MAX_BYTES) {
+          break;
+        }
+        continue;
+      }
+      const matched = [
+        ...(sha1Targets.get(digests.sha1.toString('hex')) ?? []).map((assetId) => ({
+          assetId,
+          algorithm: 'sha1' as const,
+        })),
+        ...(sha256Targets.get(digests.sha256.toString('hex')) ?? []).map((assetId) => ({
+          assetId,
+          algorithm: 'sha256' as const,
+        })),
+      ];
+      for (const { assetId, algorithm } of matched) {
+        const target = targetByAsset.get(assetId);
+        if (!target || mimeTypes.assetType(candidatePath) !== target.asset.type) {
           continue;
         }
-        let digests: Awaited<ReturnType<CryptoRepository['hashFileDigests']>>;
-        try {
-          digests = await this.cryptoRepository.hashFileDigests(candidatePath);
-        } catch (error) {
-          this.logger.debug(`Could not hash missing media candidate ${candidatePath}: ${getErrorMessage(error)}`);
-          continue;
-        }
-        const matched = [
-          ...(sha1Targets.get(digests.sha1.toString('hex')) ?? []).map((assetId) => ({
-            assetId,
-            algorithm: 'sha1' as const,
-          })),
-          ...(sha256Targets.get(digests.sha256.toString('hex')) ?? []).map((assetId) => ({
-            assetId,
-            algorithm: 'sha256' as const,
-          })),
-        ];
-        for (const { assetId, algorithm } of matched) {
-          const target = targetByAsset.get(assetId);
-          if (!target || mimeTypes.assetType(candidatePath) !== target.asset.type) {
-            continue;
-          }
-          const byPath = matches.get(assetId) ?? new Map<string, Set<'sha1' | 'sha256'>>();
-          const algorithms = byPath.get(candidatePath) ?? new Set<'sha1' | 'sha256'>();
-          algorithms.add(algorithm);
-          byPath.set(candidatePath, algorithms);
-          matches.set(assetId, byPath);
-        }
+        const byPath = matches.get(assetId) ?? new Map<string, Set<'sha1' | 'sha256'>>();
+        const algorithms = byPath.get(candidatePath) ?? new Set<'sha1' | 'sha256'>();
+        algorithms.add(algorithm);
+        byPath.set(candidatePath, algorithms);
+        matches.set(assetId, byPath);
+      }
+      // Finish a single file even if it exceeds the byte target, so large videos cannot stall the cursor.
+      if (hashedBytes >= MANAGED_LOOKUP_MAX_BYTES) {
+        break;
       }
     }
 
+    const truncated = progress.cursor.length > 0;
     for (const [assetId, target] of targetByAsset) {
       const byPath = matches.get(assetId) ?? new Map<string, Set<'sha1' | 'sha256'>>();
       const sha1Paths = new Set([...byPath].filter(([, algorithms]) => algorithms.has('sha1')).map(([path]) => path));
@@ -1195,7 +1208,20 @@ export class MediaHealthService {
       );
     }
 
-    return { candidates: result, truncated };
+    return {
+      candidates: result,
+      continuation: truncated
+        ? {
+            cursor: progress.cursor,
+            matches: Object.fromEntries(
+              [...matches].map(([assetId, byPath]) => [
+                assetId,
+                Object.fromEntries([...byPath].map(([path, algorithms]) => [path, [...algorithms]])),
+              ]),
+            ),
+          }
+        : undefined,
+    };
   }
 
   /** Walk the asset's library importPaths once and return matching basenames. Used when we

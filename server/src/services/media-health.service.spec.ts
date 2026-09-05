@@ -63,6 +63,19 @@ describe(MediaHealthService.name, () => {
     vi.mocked(mediaHealthRepository.getAssetChecksums).mockResolvedValue([]);
     vi.mocked(mocks.user.getList).mockResolvedValue([]);
     vi.mocked(mocks.storage.stat).mockResolvedValue({ size: 10, mtime: new Date() } as never);
+    vi.mocked(mocks.storage.walkWithCursor).mockImplementation(async function* (cursor) {
+      for await (const batch of mocks.storage.walk({
+        pathsToCrawl: cursor.map(({ path }) => path),
+        exclusionPatterns: [],
+        includeHidden: false,
+        take: 500,
+      })) {
+        for (const file of batch) {
+          yield file;
+        }
+      }
+      cursor.length = 0;
+    });
   });
 
   it('lists and dismisses only findings owned by the authenticated user', async () => {
@@ -823,9 +836,13 @@ describe(MediaHealthService.name, () => {
       });
     });
 
-    it.each(['files', 'bytes'])(
-      'reports a partial lookup and disables relinking when the %s budget is exhausted',
-      async (limit) => {
+    it.each([
+      { conflict: false, size: 10 },
+      { conflict: true, size: 10 },
+      { conflict: false, size: 11 * 1024 ** 3 },
+    ])(
+      'resumes the same lookup across users and retains earlier checksum evidence ($conflict, $size bytes)',
+      async ({ conflict, size }) => {
         const sha1 = Buffer.alloc(20, 1);
         const sha256 = Buffer.alloc(32, 2);
         vi.mocked(mediaHealthRepository.getByIds).mockResolvedValue([
@@ -841,20 +858,29 @@ describe(MediaHealthService.name, () => {
             isExternal: false,
           },
         ] as never);
+        vi.mocked(mediaHealthRepository.getAssetChecksums).mockResolvedValue([
+          { assetId: 'asset-1', sha1, sha256, sizeInBytes: size },
+        ]);
         vi.mocked(mocks.user.getList).mockResolvedValue([{ id: 'user-2', storageLabel: null }] as never);
-        vi.mocked(mocks.storage.walk).mockReturnValue(
-          (async function* () {
+        vi.mocked(mocks.storage.walkWithCursor)
+          .mockImplementationOnce(async function* (cursor) {
             await Promise.resolve();
-            yield ['/data/upload/user-2/found.jpg'];
-            yield limit === 'files'
-              ? Array.from({ length: 10_000 }, (_, i) => `/data/upload/user-2/${i}.xmp`)
-              : ['/data/upload/user-2/huge.mp4'];
-          })() as never,
-        );
-        vi.mocked(mocks.storage.stat)
-          .mockResolvedValueOnce({ size: 10 } as never)
-          .mockResolvedValue({ size: 11 * 1024 ** 3 } as never);
-        vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({ sha1, sha256, sizeInBytes: 10 });
+            cursor[0].after = 'found.jpg';
+            yield '/data/upload/user-2/found.jpg';
+          })
+          .mockImplementationOnce(async function* (cursor) {
+            await Promise.resolve();
+            yield '/data/upload/user-3/later.jpg';
+            cursor.length = 0;
+          });
+        vi.mocked(mocks.storage.stat).mockResolvedValue({ size } as never);
+        vi.mocked(mocks.crypto.hashFileDigests)
+          .mockResolvedValueOnce({ sha1, sha256: conflict ? Buffer.alloc(32, 8) : sha256, sizeInBytes: size })
+          .mockResolvedValueOnce({
+            sha1: Buffer.alloc(20, 9),
+            sha256: conflict ? sha256 : Buffer.alloc(32, 9),
+            sizeInBytes: size,
+          });
 
         await sut.handleLocateMissing({ runId: 'run-1', ids: ['health-1'], userId: 'user-1' });
 
@@ -862,7 +888,8 @@ describe(MediaHealthService.name, () => {
         expect(mediaHealthRepository.finishRun).toHaveBeenCalledWith(
           'run-1',
           expect.objectContaining({
-            status: 'completed',
+            status: 'running',
+            finishedAt: null,
             error: expect.stringContaining('incomplete'),
           }),
         );
@@ -878,6 +905,42 @@ describe(MediaHealthService.name, () => {
             resolution: { autoRelinkable: false },
           }),
         ]);
+
+        const queued = vi.mocked(mocks.job.queue).mock.calls.at(-1)![0];
+        expect(queued).toMatchObject({
+          name: JobName.MediaHealthLocateMissing,
+          data: { runId: 'run-1', userId: 'user-1' },
+        });
+        await sut.handleLocateMissing(JSON.parse(JSON.stringify(queued.data)));
+
+        expect(mocks.user.getList).toHaveBeenCalledTimes(1);
+        expect(mocks.crypto.hashFileDigests).toHaveBeenCalledTimes(2);
+        // An oversized final file yields before the walker can close its last directory frame.
+        if (size > 10 * 1024 ** 3) {
+          const finalJob = vi.mocked(mocks.job.queue).mock.calls.at(-1)![0];
+          vi.mocked(mocks.storage.walkWithCursor).mockImplementationOnce((cursor) => {
+            cursor.length = 0;
+            return (async function* () {})();
+          });
+          await sut.handleLocateMissing(JSON.parse(JSON.stringify(finalJob.data)));
+        }
+        expect(mediaHealthRepository.finishRun).toHaveBeenLastCalledWith(
+          'run-1',
+          expect.objectContaining({ status: 'completed', error: null }),
+        );
+        expect(mediaHealthRepository.upsertFinding).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            evidence: expect.objectContaining({ searchTruncated: false }),
+            resolution: { autoRelinkable: !conflict },
+          }),
+        );
+        const finalCandidates = vi.mocked(mediaHealthRepository.replaceCandidates).mock.calls.at(-1)![1];
+        expect(finalCandidates).toHaveLength(conflict ? 2 : 1);
+        expect(finalCandidates[0]).toMatchObject({
+          candidatePath: '/data/upload/user-2/found.jpg',
+          status: conflict ? MediaHealthStatus.Candidate : MediaHealthStatus.Found,
+        });
+        expect(mocks.job.queue).toHaveBeenCalledTimes(size > 10 * 1024 ** 3 ? 2 : 1);
       },
     );
 

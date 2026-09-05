@@ -146,7 +146,9 @@ export class MediaHealthRepository {
           .select('id')
           .where('ownerId', '=', asUuid(ownerId))
           .where('category', '=', category)
-          .where('startedAt', '>', new Date(Date.now() - minimumIntervalMs))
+          .where((eb) =>
+            eb.or([eb('startedAt', '>', new Date(Date.now() - minimumIntervalMs)), eb('status', '=', 'running')]),
+          )
           .executeTakeFirst();
         if (recent) {
           return;
@@ -164,7 +166,7 @@ export class MediaHealthRepository {
 
   async finishRun(id: string, update: Updateable<AssetHealthRunTable>): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
-    const values = { ...update, finishedAt: update.finishedAt ?? new Date() };
+    const values = { ...update, finishedAt: update.finishedAt === undefined ? new Date() : update.finishedAt };
     let result: MediaHealthRun | undefined;
     await this.db.transaction().execute(async (trx) => {
       if (writesLegacy(phase)) {

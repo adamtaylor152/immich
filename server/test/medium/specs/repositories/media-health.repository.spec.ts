@@ -83,7 +83,21 @@ describe(MediaHealthRepository.name, () => {
           .where('id', '=', admitted[0]!.id)
           .execute();
       }
+      await expect(sut.createRun(MediaHealthCategory.Missing, user.id, 60_000)).resolves.toBeUndefined();
+      await sut.finishRun(admitted[0]!.id, { status: 'completed' });
       await expect(sut.createRun(MediaHealthCategory.Missing, user.id, 60_000)).resolves.toBeDefined();
+    });
+
+    it('records continuation progress without marking a running lookup finished', async () => {
+      const { sut } = setup();
+      const run = await sut.createRun(MediaHealthCategory.Missing);
+      await sut.finishRun(run.id, { status: 'running', finishedAt: null, checkedAssets: 1000 });
+      await expect(sut.getLatestRun(MediaHealthCategory.Missing)).resolves.toMatchObject({
+        id: run.id,
+        status: 'running',
+        finishedAt: null,
+        checkedAssets: 1000,
+      });
     });
 
     it('creates a running run and finishes it with counts and a finish time', async () => {

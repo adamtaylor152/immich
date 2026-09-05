@@ -273,6 +273,10 @@ export interface IMediaHealthLocateJob extends IBaseJob {
   runId?: string;
   ids?: string[];
   userId?: string;
+  managedSearch?: {
+    cursor: Array<{ path: string; after?: string }>;
+    matches: Record<string, Record<string, Array<'sha1' | 'sha256'>>>;
+  };
 }
 
 export interface IMediaHealthDeleteCorruptJob extends IBaseJob {
