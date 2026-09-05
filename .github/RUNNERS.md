@@ -27,7 +27,8 @@ docker build -t immich-ci-runner:noble-20260905 .github/runner
 ```
 
 The pinned Noble base supplies glibc 2.39, required by the current `extism-js`
-binary. The image also installs `python` and PyYAML for the shared pre-job action.
+binary. The image also installs `python` and PyYAML for the shared pre-job action,
+and the GL/GLib libraries used by the ML dependencies (matching the ML Dockerfile).
 The upstream runner's `latest` tag currently uses Focal/glibc 2.31 and is not
 compatible with this toolchain.
 
@@ -63,6 +64,11 @@ as `Github_ImmichBuilder-focal-backup-d68940d75`; its template backup is
 `/mnt/shaganappi/appdata/github_aiimmich/template-focal-d68940d75.xml`.
 Never run both containers concurrently. Rollback also requires verifying the
 GitHub registration because the replacement registers with the same runner name.
+
+E2E jobs use the shared Mise action to install the project-pinned Node and pnpm
+together; the image's system Node is not the build toolchain. Medium tests drop
+`CAP_DAC_OVERRIDE` and `CAP_DAC_READ_SEARCH` when invoked as root so unreadable-file
+fixtures exercise actual permission failures instead of root bypassing them.
 
 Release jobs accept only successful same-repository pushes to `fork/main` or
 manual dispatches on that branch. Before checkout, the GitHub API must confirm

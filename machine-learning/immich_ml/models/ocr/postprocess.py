@@ -98,7 +98,8 @@ class DBPostProcess:
         mask = np.zeros((ymax - ymin + 1, xmax - xmin + 1), dtype=np.uint8)
         points = poly.reshape(1, -1, 2).astype(np.int32, copy=False)  # read-only, so aliasing a contour is fine
         cv2.fillPoly(mask, points, 1, offset=(-xmin, -ymin))  # type: ignore[call-overload]
-        return cv2.mean(probs[ymin : ymax + 1, xmin : xmax + 1], mask)[0]
+        mean = cv2.mean(probs[ymin : ymax + 1, xmin : xmax + 1], mask)
+        return mean if isinstance(mean, float) else mean[0]
 
     def unclip(self, rect: cv2.typing.RotatedRect) -> tuple[NDArray[np.float32], float]:
         width, height = rect[1]

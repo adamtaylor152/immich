@@ -331,7 +331,12 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Run ci-medium
-        run: mise run ci-medium
+        # Root otherwise bypasses chmod(000), invalidating unreadable-file tests.
+        run: |
+          if [ "$(id -u)" -eq 0 ]; then
+            exec setpriv --bounding-set=-dac_override,-dac_read_search mise run ci-medium
+          fi
+          exec mise run ci-medium
         if: ${{ !cancelled() }}
 
   e2e-tests-server-cli:
@@ -355,15 +360,10 @@ jobs:
           submodules: 'recursive'
           token: ${{ github.token }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Setup Mise
+        uses: immich-app/devtools/actions/use-mise@06a9ef925332c91be647d6256642b86b398592c8 # use-mise-action-v3.2.1
         with:
-          node-version-file: '.nvmrc'
-          cache: 'pnpm'
-          cache-dependency-path: '**/pnpm-lock.yaml'
+          github_token: ${{ github.token }}
 
       - name: Setup packages
         run: pnpm --filter @immich/sdk --filter @immich/cli install --frozen-lockfile && pnpm --filter @immich/sdk --filter @immich/cli build
@@ -452,15 +452,10 @@ jobs:
           submodules: 'recursive'
           token: ${{ github.token }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Setup Mise
+        uses: immich-app/devtools/actions/use-mise@06a9ef925332c91be647d6256642b86b398592c8 # use-mise-action-v3.2.1
         with:
-          node-version-file: '.nvmrc'
-          cache: 'pnpm'
-          cache-dependency-path: '**/pnpm-lock.yaml'
+          github_token: ${{ github.token }}
 
       - name: Run setup @immich/sdk
         run: pnpm --filter @immich/sdk install --frozen-lockfile && pnpm --filter @immich/sdk build
