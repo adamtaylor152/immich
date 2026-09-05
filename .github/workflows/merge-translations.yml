@@ -23,7 +23,7 @@ jobs:
     # Upstream-only: weblate translation pipeline targets immich-app/immich.
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       pull-requests: write

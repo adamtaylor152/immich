@@ -32,8 +32,8 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
     needs: certify-fork-roundtrip
-    # Image production and deployment bundle packaging use the local runner.
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    # Images and deployment bundles are built on GitHub-hosted runners.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
           ref: ${{ env.SOURCE_SHA }}
 
-      - name: Verify self-hosted runner tooling
+      - name: Verify Docker runner tooling
         run: |
           set -euo pipefail
           docker version
@@ -116,7 +116,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
     needs: certify-fork-roundtrip
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -129,7 +129,7 @@ jobs:
           persist-credentials: false
           ref: ${{ env.SOURCE_SHA }}
 
-      - name: Verify self-hosted runner tooling
+      - name: Verify Docker runner tooling
         run: |
           set -euo pipefail
           docker version
@@ -191,7 +191,7 @@ jobs:
       - build-machine-learning-openvino
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     environment:
       name: unraid-docker
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

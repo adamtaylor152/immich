@@ -6,8 +6,8 @@ name: 'Local multi-runner container image build'
 # as a BuildKit secret so the Dockerfile can consume it via --mount=type=secret
 # instead of an ARG (which would leak into image history).
 #
-# All image-build jobs use the fork's aiimmich runner, including bookkeeping.
-# ARM64 images use QEMU on the x64 host; no caller-controlled runner mapping.
+# All jobs use GitHub-hosted runners. Image builds use native x64/ARM64 hosts
+# with a fixed platform mapping, avoiding QEMU and caller-controlled routing.
 
 on:
   workflow_call:
@@ -65,7 +65,7 @@ jobs:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: 'Generate matrix'
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       key: ${{ steps.artifact-key.outputs.base }}
@@ -77,7 +77,10 @@ jobs:
           PLATFORMS: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
         run: |
           matrix=$(jq -R -c \
-            'split(",") | map({platform: .})' \
+            'split(",") | map(. as $platform | {platform: $platform, runner:
+              (if . == "linux/amd64" then "ubuntu-24.04"
+               elif . == "linux/arm64" then "ubuntu-24.04-arm"
+               else error("Unsupported build platform: " + .) end)})' \
             <<< "${PLATFORMS}")
           echo "matrix=${matrix}" | tee -a "$GITHUB_OUTPUT"
 
@@ -94,18 +97,10 @@ jobs:
 
   build:
     needs: matrix
-    # SECURITY: hard guard against fork PRs reaching the `aiimmich` self-hosted
-    # runner. Self-hosted runners on `pull_request` from fork heads are GitHub's
-    # number-one persistence-attack vector (an attacker writes a malicious step
-    # into their PR's Dockerfile or workflow change and it executes on the host).
-    # Even if a future caller forgets the event_name guard, this workflow refuses
-    # to schedule a build for any fork PR. The defense-in-depth `github.repository`
-    # check additionally pins execution to the canonical fork repository so a
-    # re-fork of `adamtaylor152/immich` cannot accidentally route builds onto
-    # the runner pool.
+    # Keep image publication restricted to trusted heads in this fork.
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!github.event.pull_request.head.repo.fork && (github.repository == 'adamtaylor152/immich' || github.repository == 'immich-app/immich')) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -130,12 +125,6 @@ jobs:
         run: |
           set -euo pipefail
           docker version
-
-      - name: Set up ARM64 emulation
-        if: matrix.platform == 'linux/arm64'
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
-        with:
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -244,7 +233,7 @@ jobs:
 
   merge:
     needs: [matrix, build]
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!github.event.pull_request.head.repo.fork) }}
     steps:

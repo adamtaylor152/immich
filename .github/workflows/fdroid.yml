@@ -8,7 +8,7 @@ permissions: {}
 
 jobs:
   update-index:
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!github.event.release.prerelease) }}
     permissions:

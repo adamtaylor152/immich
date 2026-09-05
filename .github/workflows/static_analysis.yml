@@ -15,7 +15,7 @@ jobs:
   pre-job:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -39,7 +39,7 @@ jobs:
     needs: pre-job
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).mobile == true) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     defaults:

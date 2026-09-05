@@ -18,7 +18,7 @@ jobs:
   pre-job:
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -50,7 +50,7 @@ jobs:
       packages: write
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).machine-learning == false && !github.event.pull_request.head.repo.fork) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         suffix: ['', '-cuda', '-cuda-runpod', '-openvino', '-armnn', '-rknn']
@@ -84,7 +84,7 @@ jobs:
       packages: write
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).server == false && !github.event.pull_request.head.repo.fork) }}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         suffix: ['']
@@ -185,7 +185,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main' || github.ref_name == 'fork/main') && (needs.server.result == 'success' || needs.retag_server.result == 'success')) }}
     steps:
@@ -210,7 +210,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (always() && github.event_name != 'pull_request' && (github.event_name == 'release' || github.ref_name == 'main' || github.ref_name == 'fork/main') && (needs.machine-learning.result == 'success' || needs.retag_ml.result == 'success')) }}
     steps:
@@ -233,7 +233,7 @@ jobs:
     name: Docker Build & Push Server Success
     needs: [server, retag_server, latest-server]
     permissions: {}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (always()) }}
     steps:
@@ -245,7 +245,7 @@ jobs:
     name: Docker Build & Push ML Success
     needs: [machine-learning, retag_ml, latest-ml]
     permissions: {}
-    runs-on: [self-hosted, Linux, X64, aiimmich]
+    runs-on: ubuntu-24.04
     if: >-
       ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (always()) }}
     steps:
