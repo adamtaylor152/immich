@@ -85,8 +85,10 @@ export type UpsertMediaHealthFinding = Omit<
 export type UpsertMediaHealthCandidate = Omit<Insertable<AssetHealthCandidateTable>, 'id' | 'createdAt' | 'updatedAt'>;
 export type RelinkManagedAsset = {
   assetId: string;
+  candidateId: string;
   ownerId: string;
   healthId: string;
+  expectedOriginalPath: string;
   originalPath: string;
   originalFileName: string;
   expectedChecksum: Buffer;
@@ -578,6 +580,7 @@ export class MediaHealthRepository {
   async relinkManagedAsset(input: RelinkManagedAsset): Promise<boolean> {
     const phase = await getForkSchemaPhase(this.db);
     const recoveredPath = path.normalize(input.originalPath);
+    const expectedOriginalPath = path.normalize(input.expectedOriginalPath);
 
     return this.db.transaction().execute(async (trx) => {
       const lockKey = createHash('sha1').update(recoveredPath).digest().readBigInt64BE(0);
@@ -597,6 +600,7 @@ export class MediaHealthRepository {
         asset.libraryId ||
         asset.deletedAt ||
         asset.status !== AssetStatus.Active ||
+        path.normalize(asset.originalPath) !== expectedOriginalPath ||
         !asset.checksum.equals(input.expectedChecksum)
       ) {
         return false;
@@ -605,11 +609,34 @@ export class MediaHealthRepository {
       const healthSchema = readsForkSidecar(phase) ? 'immich_fork' : 'public';
       const health = await (trx as Kysely<any>)
         .selectFrom(`${healthSchema}.asset_health as asset_health`)
-        .select(['assetId', 'category'])
+        .select(['assetId', 'category', 'originalPath', 'resolution', 'status'])
         .where('id', '=', asUuid(input.healthId))
         .forUpdate()
         .executeTakeFirst();
-      if (health?.assetId !== input.assetId || health.category !== MediaHealthCategory.Missing) {
+      if (
+        health?.assetId !== input.assetId ||
+        health.category !== MediaHealthCategory.Missing ||
+        health.status !== MediaHealthStatus.Found ||
+        path.normalize(health.originalPath) !== expectedOriginalPath ||
+        health.resolution?.autoRelinkable !== true
+      ) {
+        return false;
+      }
+
+      const candidates = await (trx as Kysely<any>)
+        .selectFrom(`${healthSchema}.asset_health_candidate as candidate`)
+        .select(['id', 'candidatePath', 'resolution'])
+        .where('healthId', '=', asUuid(input.healthId))
+        .where('status', '=', MediaHealthStatus.Found)
+        .forUpdate()
+        .execute();
+      const candidate = candidates[0];
+      if (
+        candidates.length !== 1 ||
+        candidate.id !== input.candidateId ||
+        path.normalize(candidate.candidatePath) !== recoveredPath ||
+        candidate.resolution?.autoRelinkable !== true
+      ) {
         return false;
       }
 

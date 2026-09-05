@@ -31,6 +31,34 @@ const findingDto = (assetId: string, originalPath: string, runId: string | null)
   checkedAt: new Date(),
 });
 
+const arrangeManagedRelink = async () => {
+  const { ctx, sut } = setup();
+  const { user } = await ctx.newUser();
+  const sha1 = Buffer.alloc(20, 1);
+  const sha256 = Buffer.alloc(32, 2);
+  const { asset } = await ctx.newAsset({ ownerId: user.id, checksum: sha1 });
+  const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
+  const finding = await sut.upsertFinding({
+    ...findingDto(asset.id, asset.originalPath, run.id),
+    status: MediaHealthStatus.Found,
+    resolution: { autoRelinkable: true },
+  });
+  const recoveredPath = `/data/upload/${user.id}/recovered.jpg`;
+  await sut.replaceCandidates(finding.id, [
+    {
+      healthId: finding.id,
+      candidatePath: recoveredPath,
+      status: MediaHealthStatus.Found,
+      visualMatchScore: 1,
+      evidence: { reason: 'checksum_match' },
+      resolution: { autoRelinkable: true },
+      checkedAt: new Date(),
+    },
+  ]);
+  const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
+  return { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user };
+};
+
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
@@ -161,14 +189,32 @@ describe(MediaHealthRepository.name, () => {
       const { asset } = await ctx.newAsset({ ownerId: user.id, checksum: sha1 });
       await ctx.newAsset({ ownerId: user.id, checksum: sha256 });
       const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
-      const finding = await sut.upsertFinding(findingDto(asset.id, asset.originalPath, run.id));
+      const finding = await sut.upsertFinding({
+        ...findingDto(asset.id, asset.originalPath, run.id),
+        status: MediaHealthStatus.Found,
+        resolution: { autoRelinkable: true },
+      });
       const recoveredPath = `/data/upload/${user.id}/recovered.jpg`;
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
 
       await expect(
         sut.relinkManagedAsset({
           assetId: asset.id,
+          candidateId: candidate.id,
           ownerId: user.id,
           healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
           originalPath: recoveredPath,
           originalFileName: asset.originalFileName,
           expectedChecksum: sha1,
@@ -190,7 +236,7 @@ describe(MediaHealthRepository.name, () => {
         defaultDatabase.selectFrom('physical_file').select('id').where('path', '=', recoveredPath).executeTakeFirst(),
       ).resolves.toBeUndefined();
       await expect(sut.getByIds([finding.id])).resolves.toEqual([
-        expect.objectContaining({ status: MediaHealthStatus.Missing, originalFileName: 'photo.jpg' }),
+        expect.objectContaining({ status: MediaHealthStatus.Found, originalFileName: 'photo.jpg' }),
       ]);
     });
 
@@ -211,9 +257,102 @@ describe(MediaHealthRepository.name, () => {
       await expect(
         sut.relinkManagedAsset({
           assetId: asset.id,
+          candidateId: 'candidate-1',
           ownerId: user.id,
           healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
           originalPath: `/data/upload/${user.id}/recovered.jpg`,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the asset path changed after candidate selection', async () => {
+      const { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ originalPath: `/data/upload/${user.id}/already-repaired.jpg` })
+        .where('id', '=', asset.id!)
+        .execute();
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the finding was dismissed after candidate selection', async () => {
+      const { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await sut.markDismissed([finding.id], user.id);
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the finding has multiple validated candidates', async () => {
+      const { asset, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+        {
+          healthId: finding.id,
+          candidatePath: `/data/upload/${user.id}/another.jpg`,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const candidates = await sut.getCandidatesByHealthIds([finding.id]);
+      const candidate = candidates.find(({ candidatePath }) => candidatePath === recoveredPath)!;
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
           originalFileName: asset.originalFileName,
           expectedChecksum: sha1,
           sha1,
@@ -237,14 +376,32 @@ describe(MediaHealthRepository.name, () => {
         originalPath: recoveredPath,
       });
       const run = await sut.createRun(MediaHealthCategory.Missing, owner.id);
-      const finding = await sut.upsertFinding(findingDto(asset.id, asset.originalPath, run.id));
+      const finding = await sut.upsertFinding({
+        ...findingDto(asset.id, asset.originalPath, run.id),
+        status: MediaHealthStatus.Found,
+        resolution: { autoRelinkable: true },
+      });
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
       const modifiedAt = new Date('2026-09-04T00:00:00Z');
 
       await expect(
         sut.relinkManagedAsset({
           assetId: asset.id,
+          candidateId: candidate.id,
           ownerId: owner.id,
           healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
           originalPath: recoveredPath,
           originalFileName: asset.originalFileName,
           expectedChecksum: sha1,

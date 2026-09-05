@@ -239,8 +239,10 @@ export class MediaHealthService {
         const stat = await this.storageRepository.stat(candidate.candidatePath);
         const relinked = await this.mediaHealthRepository.relinkManagedAsset({
           assetId: asset.id,
+          candidateId: candidate.id,
           ownerId: auth.user.id,
           healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
           originalPath: candidate.candidatePath,
           originalFileName: asset.originalFileName,
           expectedChecksum: asset.checksum,
@@ -1012,7 +1014,17 @@ export class MediaHealthService {
     const stored = await this.mediaHealthRepository.getAssetChecksums(assets.map(({ id }) => id));
     const storedByAsset = new Map(stored.map((checksum) => [checksum.assetId, checksum]));
     const knownSizes = new Set(stored.map(({ sizeInBytes }) => sizeInBytes));
-    const hasUnknownSize = assets.some(({ id }) => !storedByAsset.has(id));
+    const hasUnknownSize = assets.some((asset) => {
+      const sidecar = storedByAsset.get(asset.id);
+      if (!sidecar) {
+        return true;
+      }
+      return asset.checksum.length === 20
+        ? !asset.checksum.equals(sidecar.sha1)
+        : asset.checksum.length === 32
+          ? !asset.checksum.equals(sidecar.sha256)
+          : true;
+    });
     const targetByAsset = new Map<string, { asset: MediaHealthAsset; sha1: Buffer[]; sha256: Buffer[] }>();
     const sha1Targets = new Map<string, string[]>();
     const sha256Targets = new Map<string, string[]>();

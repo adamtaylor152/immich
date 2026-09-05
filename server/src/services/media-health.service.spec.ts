@@ -279,8 +279,10 @@ describe(MediaHealthService.name, () => {
       expect(mediaHealthRepository.relinkManagedAsset).toHaveBeenCalledWith(
         expect.objectContaining({
           assetId: 'asset-1',
+          candidateId: 'candidate-1',
           ownerId: authStub.admin.user.id,
           healthId: 'health-1',
+          expectedOriginalPath: '/data/upload/admin_id/missing.jpg',
           originalPath: '/data/upload/user-2/private-name.jpg',
           originalFileName: 'missing.jpg',
         }),
@@ -732,7 +734,7 @@ describe(MediaHealthService.name, () => {
   });
 
   describe('handleLocateMissing', () => {
-    it('matches the public digest when sidecar evidence disagrees', async () => {
+    it('matches the public digest when sidecar digest and size evidence disagree', async () => {
       const publicSha1 = Buffer.alloc(20, 1);
       const sidecarSha1 = Buffer.alloc(20, 2);
       const sidecarSha256 = Buffer.alloc(32, 3);
@@ -761,11 +763,11 @@ describe(MediaHealthService.name, () => {
           yield ['/data/upload/user-2/found.jpg'];
         })() as never,
       );
-      vi.mocked(mocks.storage.stat).mockResolvedValue({ size: 10 } as never);
+      vi.mocked(mocks.storage.stat).mockResolvedValue({ size: 20 } as never);
       vi.mocked(mocks.crypto.hashFileDigests).mockResolvedValue({
         sha1: publicSha1,
         sha256: Buffer.alloc(32, 9),
-        sizeInBytes: 10,
+        sizeInBytes: 20,
       });
 
       await sut.handleLocateMissing({ runId: 'run-1', ids: ['health-1'], userId: 'user-1' });
