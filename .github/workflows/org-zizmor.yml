@@ -17,32 +17,12 @@ concurrency:
 permissions: {}
 
 jobs:
-  zizmor:
-    name: Zizmor
-    # Skip on forks: Zizmor's impostor-commit audit needs to list tags on every
-    # referenced third-party action via the GitHub API, which the fork's runner
-    # token isn't authorized for and returns 403.
-    if: github.repository_owner == 'immich-app'
-    uses: immich-app/devtools/.github/workflows/shared-zizmor.yml@main
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    secrets: inherit
-
   zizmor-skipped:
-    # Required-check satisfaction: when the upstream `zizmor` reusable workflow
-    # is skipped (fork environment), this job posts a passing status under the
-    # EXACT same name (`Zizmor`) so any branch-protection rule listing `Zizmor`
-    # as a required check is satisfied. GitHub matches required checks by
-    # exact name string — `Zizmor (skipped on fork)` would be a DIFFERENT check
-    # and would NOT satisfy a `Zizmor` required-check rule. The mutually
-    # exclusive `if:` conditions on the two jobs (one runs only upstream, the
-    # other only on forks) guarantee exactly one runs per workflow execution,
-    # so name collision is benign and the status check is unambiguous.
+    # Preserve the existing fork-only no-op check; no upstream reusable workflow.
     name: Zizmor
-    if: github.repository_owner != 'immich-app'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository_owner != 'immich-app') }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions: {}
     steps:
       - name: Mark as skipped

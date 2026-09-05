@@ -14,7 +14,9 @@ permissions: {}
 
 jobs:
   pre-job:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     outputs:
@@ -40,8 +42,9 @@ jobs:
     needs: pre-job
     permissions:
       contents: read
-    if: ${{ fromJSON(needs.pre-job.outputs.should_run).docs == true }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (fromJSON(needs.pre-job.outputs.should_run).docs == true) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     defaults:
       run:
         working-directory: ./docs

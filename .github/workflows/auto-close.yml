@@ -16,14 +16,10 @@ permissions: {}
 
 jobs:
   parse_template:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     # This upstream contribution workflow should stay inactive in downstream forks.
     if: >-
-      ${{
-        github.repository == 'immich-app/immich'
-        && github.event.action != 'labeled'
-        && github.event.pull_request.head.repo.fork == true
-      }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && github.event.action != 'labeled' && github.event.pull_request.head.repo.fork == true) }}
     permissions:
       contents: read
     outputs:
@@ -51,15 +47,10 @@ jobs:
           echo "uses_template=$OK" | tee --append "$GITHUB_OUTPUT"
 
   close_template:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: parse_template
     if: >-
-      ${{
-        github.repository == 'immich-app/immich'
-        && needs.parse_template.outputs.uses_template == 'false'
-        && github.event.pull_request.state != 'closed'
-        && !contains(github.event.pull_request.labels.*.name, 'auto-closed:template')
-      }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && needs.parse_template.outputs.uses_template == 'false' && github.event.pull_request.state != 'closed' && !contains(github.event.pull_request.labels.*.name, 'auto-closed:template')) }}
     permissions:
       pull-requests: write
     steps:
@@ -93,13 +84,9 @@ jobs:
         run: gh pr edit "$PR_NUMBER" --repo "${{ github.repository }}" --add-label "auto-closed:template"
 
   close_llm:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     if: >-
-      ${{
-        github.repository == 'immich-app/immich'
-        && github.event.action == 'labeled'
-        && github.event.label.name == 'auto-closed:llm'
-      }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && github.event.action == 'labeled' && github.event.label.name == 'auto-closed:llm') }}
     permissions:
       pull-requests: write
     steps:
@@ -127,15 +114,10 @@ jobs:
               }'
 
   reopen:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     needs: parse_template
     if: >-
-      ${{
-        github.repository == 'immich-app/immich'
-        && needs.parse_template.outputs.uses_template == 'true'
-        && github.event.pull_request.state == 'closed'
-        && contains(github.event.pull_request.labels.*.name, 'auto-closed:template')
-      }}
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich' && needs.parse_template.outputs.uses_template == 'true' && github.event.pull_request.state == 'closed' && contains(github.event.pull_request.labels.*.name, 'auto-closed:template')) }}
     permissions:
       pull-requests: write
     steps:

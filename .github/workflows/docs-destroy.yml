@@ -11,9 +11,10 @@ env:
 jobs:
   deploy:
     # Upstream-only: destroys per-PR docs.immich.app preview subdomains.
-    if: github.repository == 'immich-app/immich'
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'immich-app/immich') }}
     name: Docs Destroy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
       pull-requests: write

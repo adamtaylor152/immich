@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { MediaHealthCategory, MediaHealthSeverity, MediaHealthStatus } from 'src/enum';
+import { AssetStatus, MediaHealthCategory, MediaHealthSeverity, MediaHealthStatus } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MediaHealthRepository, UpsertMediaHealthFinding } from 'src/repositories/media-health.repository';
 import { DB } from 'src/schema';
@@ -31,12 +31,75 @@ const findingDto = (assetId: string, originalPath: string, runId: string | null)
   checkedAt: new Date(),
 });
 
+const arrangeManagedRelink = async () => {
+  const { ctx, sut } = setup();
+  const { user } = await ctx.newUser();
+  const sha1 = Buffer.alloc(20, 1);
+  const sha256 = Buffer.alloc(32, 2);
+  const { asset } = await ctx.newAsset({ ownerId: user.id, checksum: sha1 });
+  const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
+  const finding = await sut.upsertFinding({
+    ...findingDto(asset.id, asset.originalPath, run.id),
+    status: MediaHealthStatus.Found,
+    resolution: { autoRelinkable: true },
+  });
+  const recoveredPath = `/data/upload/${user.id}/recovered.jpg`;
+  await sut.replaceCandidates(finding.id, [
+    {
+      healthId: finding.id,
+      candidatePath: recoveredPath,
+      status: MediaHealthStatus.Found,
+      visualMatchScore: 1,
+      evidence: { reason: 'checksum_match' },
+      resolution: { autoRelinkable: true },
+      checkedAt: new Date(),
+    },
+  ]);
+  const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
+  return { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user };
+};
+
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
 describe(MediaHealthRepository.name, () => {
   describe('scan bookkeeping', () => {
+    it('admits only one concurrent owner lookup during the cooldown, then permits another after expiry', async () => {
+      const { ctx, sut } = setup();
+      const [{ user }, { user: other }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const runs = await Promise.all([
+        sut.createRun(MediaHealthCategory.Missing, user.id, 60_000),
+        sut.createRun(MediaHealthCategory.Missing, user.id, 60_000),
+      ]);
+      const admitted = runs.filter((run) => !!run);
+      expect(admitted).toHaveLength(1);
+      await expect(sut.createRun(MediaHealthCategory.Missing, other.id, 60_000)).resolves.toBeDefined();
+      for (const schema of ['public', 'immich_fork']) {
+        await defaultDatabase
+          .withSchema(schema)
+          .updateTable('asset_health_run')
+          .set({ startedAt: new Date(Date.now() - 61_000) })
+          .where('id', '=', admitted[0]!.id)
+          .execute();
+      }
+      await expect(sut.createRun(MediaHealthCategory.Missing, user.id, 60_000)).resolves.toBeUndefined();
+      await sut.finishRun(admitted[0]!.id, { status: 'completed' });
+      await expect(sut.createRun(MediaHealthCategory.Missing, user.id, 60_000)).resolves.toBeDefined();
+    });
+
+    it('records continuation progress without marking a running lookup finished', async () => {
+      const { sut } = setup();
+      const run = await sut.createRun(MediaHealthCategory.Missing);
+      await sut.finishRun(run.id, { status: 'running', finishedAt: null, checkedAssets: 1000 });
+      await expect(sut.getLatestRun(MediaHealthCategory.Missing)).resolves.toMatchObject({
+        id: run.id,
+        status: 'running',
+        finishedAt: null,
+        checkedAssets: 1000,
+      });
+    });
+
     it('creates a running run and finishes it with counts and a finish time', async () => {
       const { sut } = setup();
 
@@ -66,9 +129,51 @@ describe(MediaHealthRepository.name, () => {
 
       await expect(sut.getLatestRun(MediaHealthCategory.Missing)).resolves.toMatchObject({ id: newer.id });
     });
+
+    it('returns an owner run even before it has findings and never substitutes an ownerless run', async () => {
+      const { ctx, sut } = setup();
+      const [{ user: firstUser }, { user: secondUser }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const firstRun = await sut.createRun(MediaHealthCategory.Missing, firstUser.id);
+      await sut.createRun(MediaHealthCategory.Missing, secondUser.id);
+      await sut.createRun(MediaHealthCategory.Missing);
+
+      await expect(sut.getLatestRun(MediaHealthCategory.Missing, firstUser.id)).resolves.toMatchObject({
+        id: firstRun.id,
+        ownerId: firstUser.id,
+      });
+    });
   });
 
   describe('finding state transitions', () => {
+    it('scopes finding reads and dismissals to one owner', async () => {
+      const { ctx, sut } = setup();
+      const [{ user: firstUser }, { user: secondUser }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const [{ asset: firstAsset }, { asset: secondAsset }] = await Promise.all([
+        ctx.newAsset({ ownerId: firstUser.id }),
+        ctx.newAsset({ ownerId: secondUser.id }),
+      ]);
+      const run = await sut.createRun(MediaHealthCategory.Missing, firstUser.id);
+      const [first, second] = await Promise.all([
+        sut.upsertFinding(findingDto(firstAsset.id, firstAsset.originalPath, run.id)),
+        sut.upsertFinding(findingDto(secondAsset.id, secondAsset.originalPath, run.id)),
+      ]);
+
+      await expect(sut.list({ ownerId: firstUser.id, size: 10 })).resolves.toEqual([
+        expect.objectContaining({ id: first.id }),
+      ]);
+      await expect(sut.getLatestRun(MediaHealthCategory.Missing, firstUser.id)).resolves.toEqual(
+        expect.objectContaining({ id: run.id }),
+      );
+      await expect(sut.getByIds([first.id, second.id], firstUser.id)).resolves.toEqual([
+        expect.objectContaining({ id: first.id }),
+      ]);
+      await sut.markDismissed([first.id, second.id], firstUser.id);
+
+      await expect(sut.getByIds([second.id])).resolves.toEqual([
+        expect.objectContaining({ id: second.id, status: MediaHealthStatus.Missing }),
+      ]);
+    });
+
     it('upserts on (assetId, category) instead of duplicating findings', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
@@ -85,6 +190,285 @@ describe(MediaHealthRepository.name, () => {
       expect(second.id).toBe(first.id);
       expect(second.status).toBe(MediaHealthStatus.Candidate);
       await expect(sut.getByIds([first.id])).resolves.toHaveLength(1);
+    });
+
+    it('filters hidden assets from finding and asset reads', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const [{ asset: visible }, { asset: hidden }] = await Promise.all([
+        ctx.newAsset({ ownerId: user.id, is_nsfw: false }),
+        ctx.newAsset({ ownerId: user.id, is_nsfw: true }),
+      ]);
+      const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
+      const [visibleFinding, hiddenFinding] = await Promise.all([
+        sut.upsertFinding(findingDto(visible.id, visible.originalPath, run.id)),
+        sut.upsertFinding(findingDto(hidden.id, hidden.originalPath, run.id)),
+      ]);
+
+      await expect(sut.list({ ownerId: user.id, privacy: { excludeNsfw: true }, size: 10 })).resolves.toEqual([
+        expect.objectContaining({ id: visibleFinding.id }),
+      ]);
+      await expect(
+        sut.getByIds([visibleFinding.id, hiddenFinding.id], user.id, { excludeNsfw: true }),
+      ).resolves.toEqual([expect.objectContaining({ id: visibleFinding.id })]);
+      await expect(sut.getAssets([visible.id, hidden.id], user.id, { excludeNsfw: true })).resolves.toEqual([
+        expect.objectContaining({ id: visible.id }),
+      ]);
+    });
+
+    it('rolls back every managed relink write when the asset checksum conflicts', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const sha1 = Buffer.alloc(20, 1);
+      const sha256 = Buffer.alloc(32, 2);
+      const { asset } = await ctx.newAsset({ ownerId: user.id, checksum: sha1 });
+      await ctx.newAsset({ ownerId: user.id, checksum: sha256 });
+      const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
+      const finding = await sut.upsertFinding({
+        ...findingDto(asset.id, asset.originalPath, run.id),
+        status: MediaHealthStatus.Found,
+        resolution: { autoRelinkable: true },
+      });
+      const recoveredPath = `/data/upload/${user.id}/recovered.jpg`;
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).rejects.toThrow();
+
+      await expect(
+        defaultDatabase
+          .selectFrom('asset')
+          .select(['originalPath', 'checksum'])
+          .where('id', '=', asset.id!)
+          .executeTakeFirst(),
+      ).resolves.toMatchObject({ originalPath: asset.originalPath, checksum: sha1 });
+      await expect(
+        defaultDatabase.selectFrom('physical_file').select('id').where('path', '=', recoveredPath).executeTakeFirst(),
+      ).resolves.toBeUndefined();
+      await expect(sut.getByIds([finding.id])).resolves.toEqual([
+        expect.objectContaining({ status: MediaHealthStatus.Found, originalFileName: 'photo.jpg' }),
+      ]);
+    });
+
+    it('rejects a relink when the target asset is no longer active', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const sha1 = Buffer.alloc(20, 1);
+      const sha256 = Buffer.alloc(32, 2);
+      const { asset } = await ctx.newAsset({ ownerId: user.id, checksum: sha1 });
+      const run = await sut.createRun(MediaHealthCategory.Missing, user.id);
+      const finding = await sut.upsertFinding(findingDto(asset.id, asset.originalPath, run.id));
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ status: AssetStatus.Trashed })
+        .where('id', '=', asset.id!)
+        .execute();
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: 'candidate-1',
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: `/data/upload/${user.id}/recovered.jpg`,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the asset path changed after candidate selection', async () => {
+      const { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ originalPath: `/data/upload/${user.id}/already-repaired.jpg` })
+        .where('id', '=', asset.id!)
+        .execute();
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the finding was dismissed after candidate selection', async () => {
+      const { asset, candidate, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await sut.markDismissed([finding.id], user.id);
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('rejects a relink when the finding has multiple validated candidates', async () => {
+      const { asset, finding, recoveredPath, sha1, sha256, sut, user } = await arrangeManagedRelink();
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+        {
+          healthId: finding.id,
+          candidatePath: `/data/upload/${user.id}/another.jpg`,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const candidates = await sut.getCandidatesByHealthIds([finding.id]);
+      const candidate = candidates.find(({ candidatePath }) => candidatePath === recoveredPath)!;
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: user.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: new Date(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('commits the asset, physical file, digest evidence, and finding together', async () => {
+      const { ctx, sut } = setup();
+      const [{ user: owner }, { user: candidateOwner }] = await Promise.all([ctx.newUser(), ctx.newUser()]);
+      const sha1 = Buffer.alloc(20, 1);
+      const sha256 = Buffer.alloc(32, 2);
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, checksum: sha1, originalFileName: 'photo.jpg' });
+      const recoveredPath = `/data/upload/${candidateOwner.id}/recovered.jpg`;
+      const { asset: candidateAsset } = await ctx.newAsset({
+        ownerId: candidateOwner.id,
+        checksum: sha256,
+        originalPath: recoveredPath,
+      });
+      const run = await sut.createRun(MediaHealthCategory.Missing, owner.id);
+      const finding = await sut.upsertFinding({
+        ...findingDto(asset.id, asset.originalPath, run.id),
+        status: MediaHealthStatus.Found,
+        resolution: { autoRelinkable: true },
+      });
+      await sut.replaceCandidates(finding.id, [
+        {
+          healthId: finding.id,
+          candidatePath: recoveredPath,
+          status: MediaHealthStatus.Found,
+          visualMatchScore: 1,
+          evidence: { reason: 'checksum_match' },
+          resolution: { autoRelinkable: true },
+          checkedAt: new Date(),
+        },
+      ]);
+      const [candidate] = await sut.getCandidatesByHealthIds([finding.id]);
+      const modifiedAt = new Date('2026-09-04T00:00:00Z');
+
+      await expect(
+        sut.relinkManagedAsset({
+          assetId: asset.id,
+          candidateId: candidate.id,
+          ownerId: owner.id,
+          healthId: finding.id,
+          expectedOriginalPath: asset.originalPath,
+          originalPath: recoveredPath,
+          originalFileName: asset.originalFileName,
+          expectedChecksum: sha1,
+          sha1,
+          sha256,
+          sizeInBytes: 100,
+          fileModifiedAt: modifiedAt,
+        }),
+      ).resolves.toBe(true);
+
+      const relinked = await defaultDatabase
+        .selectFrom('asset')
+        .innerJoin('physical_file', 'physical_file.id', 'asset.physicalOriginalFileId')
+        .select(['asset.originalPath', 'asset.checksum', 'asset.fileModifiedAt', 'physical_file.canonicalAssetId'])
+        .where('asset.id', '=', asset.id!)
+        .executeTakeFirstOrThrow();
+      expect(relinked).toMatchObject({
+        originalPath: recoveredPath,
+        checksum: sha256,
+        fileModifiedAt: modifiedAt,
+        canonicalAssetId: candidateAsset.id,
+      });
+      await expect(sut.getAssetChecksums([asset.id])).resolves.toEqual([
+        expect.objectContaining({ assetId: asset.id, sha1, sha256, sizeInBytes: 100 }),
+      ]);
+      await expect(sut.getByIds([finding.id])).resolves.toEqual([
+        expect.objectContaining({
+          status: MediaHealthStatus.Relinked,
+          originalPath: recoveredPath,
+          originalFileName: 'photo.jpg',
+        }),
+      ]);
     });
 
     it('markResolved moves the finding to resolved/info and stamps resolvedAt', async () => {

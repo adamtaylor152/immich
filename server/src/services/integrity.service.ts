@@ -283,16 +283,28 @@ export class IntegrityService extends BaseService {
           untrackedFiles.delete(encodedVideoPath);
         }
       }
-    } else {
-      const assets = await this.integrityRepository.getAssetFilePathsByPaths(paths);
-      for (const { path } of assets) {
-        untrackedFiles.delete(path);
-      }
+    }
+
+    // Sidecar asset_file rows point into the upload folder (both uploaded
+    // sidecars and the ones physical deduplication migrates), so the
+    // asset-folder walk must be checked against asset_file too — not just
+    // asset.originalPath — or every sidecar is reported as untracked.
+    const assetFiles = await this.integrityRepository.getAssetFilePathsByPaths(paths);
+    for (const { path } of assetFiles) {
+      untrackedFiles.delete(path);
     }
 
     const personThumbnailPaths = await this.integrityRepository.getPersonThumbnailPathsByPaths(paths);
     for (const { thumbnailPath } of personThumbnailPaths) {
       untrackedFiles.delete(thumbnailPath);
+    }
+
+    // The enhanced video duplicate check stores sampled frames in the
+    // thumbnails folder, tracked in asset_video_duplicate_frame rather than
+    // asset_file, so the walk must exempt them explicitly.
+    const framePaths = await this.integrityRepository.getVideoDuplicateFramePathsByPaths(paths);
+    for (const { path } of framePaths) {
+      untrackedFiles.delete(path);
     }
 
     if (untrackedFiles.size > 0) {

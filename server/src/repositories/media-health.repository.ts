@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, Selectable, sql, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import path from 'node:path';
 import {
   AssetFileType,
   AssetStatus,
@@ -9,6 +10,7 @@ import {
   MediaHealthCategory,
   MediaHealthSeverity,
   MediaHealthStatus,
+  PhysicalFileType,
 } from 'src/enum';
 import {
   combineVerifications,
@@ -24,11 +26,18 @@ import {
 import { DB } from 'src/schema';
 import { AssetHealthCandidateTable, AssetHealthRunTable, AssetHealthTable } from 'src/schema/tables/asset-health.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
-import { anyUuid, asUuid } from 'src/utils/database';
+import { anyUuid, asUuid, withHiddenContentFilter } from 'src/utils/database';
+import type { HiddenContentQueryOptions } from 'src/utils/hidden-content';
 
 export type MediaHealthRun = Selectable<AssetHealthRunTable>;
 export type MediaHealthFinding = Selectable<AssetHealthTable>;
 export type MediaHealthCandidate = Selectable<AssetHealthCandidateTable>;
+export type MediaHealthChecksum = {
+  assetId: string;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+};
 
 export type MediaHealthAsset = Pick<
   Selectable<AssetTable>,
@@ -74,6 +83,20 @@ export type UpsertMediaHealthFinding = Omit<
 };
 
 export type UpsertMediaHealthCandidate = Omit<Insertable<AssetHealthCandidateTable>, 'id' | 'createdAt' | 'updatedAt'>;
+export type RelinkManagedAsset = {
+  assetId: string;
+  candidateId: string;
+  ownerId: string;
+  healthId: string;
+  expectedOriginalPath: string;
+  originalPath: string;
+  originalFileName: string;
+  expectedChecksum: Buffer;
+  sha1: Buffer;
+  sha256: Buffer;
+  sizeInBytes: number;
+  fileModifiedAt: Date;
+};
 type HealthBackfillTables = {
   assetHealthRun: TableVerification;
   assetHealth: TableVerification;
@@ -84,10 +107,21 @@ type HealthBackfillTables = {
 export class MediaHealthRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
-  async createRun(category: MediaHealthCategory): Promise<MediaHealthRun> {
+  async createRun(category: MediaHealthCategory, ownerId?: string): Promise<MediaHealthRun>;
+  async createRun(
+    category: MediaHealthCategory,
+    ownerId: string,
+    minimumIntervalMs: number,
+  ): Promise<MediaHealthRun | undefined>;
+  async createRun(
+    category: MediaHealthCategory,
+    ownerId?: string,
+    minimumIntervalMs = 0,
+  ): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
     const run = {
       id: randomUUID(),
+      ownerId: ownerId ?? null,
       category,
       status: 'running',
       startedAt: new Date(),
@@ -97,20 +131,42 @@ export class MediaHealthRepository {
       foundAssets: 0,
       error: null,
     };
-    await this.db.transaction().execute(async (trx) => {
+    return this.db.transaction().execute(async (trx) => {
+      if (ownerId && minimumIntervalMs > 0) {
+        // Serialize admission across API processes before checking the owner's cooldown.
+        await trx
+          .selectFrom('user')
+          .select('id')
+          .where('id', '=', asUuid(ownerId))
+          .forUpdate()
+          .executeTakeFirstOrThrow();
+        const recent = await trx
+          .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
+          .selectFrom('asset_health_run')
+          .select('id')
+          .where('ownerId', '=', asUuid(ownerId))
+          .where('category', '=', category)
+          .where((eb) =>
+            eb.or([eb('startedAt', '>', new Date(Date.now() - minimumIntervalMs)), eb('status', '=', 'running')]),
+          )
+          .executeTakeFirst();
+        if (recent) {
+          return;
+        }
+      }
       if (writesLegacy(phase)) {
         await trx.withSchema('public').insertInto('asset_health_run').values(run).execute();
       }
       if (writesForkSidecar(phase)) {
         await trx.withSchema('immich_fork').insertInto('asset_health_run').values(run).execute();
       }
+      return run;
     });
-    return run;
   }
 
   async finishRun(id: string, update: Updateable<AssetHealthRunTable>): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
-    const values = { ...update, finishedAt: update.finishedAt ?? new Date() };
+    const values = { ...update, finishedAt: update.finishedAt === undefined ? new Date() : update.finishedAt };
     let result: MediaHealthRun | undefined;
     await this.db.transaction().execute(async (trx) => {
       if (writesLegacy(phase)) {
@@ -136,12 +192,13 @@ export class MediaHealthRepository {
     return result;
   }
 
-  async getLatestRun(category?: MediaHealthCategory): Promise<MediaHealthRun | undefined> {
+  async getLatestRun(category?: MediaHealthCategory, ownerId?: string): Promise<MediaHealthRun | undefined> {
     const phase = await getForkSchemaPhase(this.db);
     return this.db
       .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
       .selectFrom('asset_health_run')
       .selectAll()
+      .$if(!!ownerId, (qb) => qb.where('ownerId', '=', asUuid(ownerId!)))
       .$if(!!category, (qb) => qb.where('category', '=', category!))
       .orderBy('startedAt', 'desc')
       .limit(1)
@@ -150,32 +207,40 @@ export class MediaHealthRepository {
 
   async list(options: {
     category?: MediaHealthCategory;
+    ownerId?: string;
+    privacy?: HiddenContentQueryOptions;
     status?: MediaHealthStatus;
     size: number;
   }): Promise<MediaHealthFinding[]> {
     const phase = await getForkSchemaPhase(this.db);
-    return this.db
-      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
-      .selectFrom('asset_health')
-      .selectAll()
+    const schema = readsForkSidecar(phase) ? 'immich_fork' : 'public';
+    return (this.db as Kysely<any>)
+      .selectFrom(`${schema}.asset_health as asset_health`)
+      .innerJoin('public.asset as asset', 'asset.id', 'asset_health.assetId')
+      .selectAll('asset_health')
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
+      .$call((qb) => withHiddenContentFilter(qb, options.privacy))
       .$if(!!options.category, (qb) => qb.where('category', '=', options.category!))
       .$if(!!options.status, (qb) => qb.where('status', '=', options.status!))
       .orderBy('checkedAt', 'desc')
       .limit(options.size)
-      .execute();
+      .execute() as Promise<MediaHealthFinding[]>;
   }
 
-  async getByIds(ids: string[]): Promise<MediaHealthFinding[]> {
+  async getByIds(ids: string[], ownerId?: string, privacy?: HiddenContentQueryOptions): Promise<MediaHealthFinding[]> {
     if (ids.length === 0) {
       return [];
     }
     const phase = await getForkSchemaPhase(this.db);
-    return this.db
-      .withSchema(readsForkSidecar(phase) ? 'immich_fork' : 'public')
-      .selectFrom('asset_health')
-      .selectAll()
-      .where('id', '=', anyUuid(ids))
-      .execute();
+    const schema = readsForkSidecar(phase) ? 'immich_fork' : 'public';
+    return (this.db as Kysely<any>)
+      .selectFrom(`${schema}.asset_health as asset_health`)
+      .innerJoin('public.asset as asset', 'asset.id', 'asset_health.assetId')
+      .selectAll('asset_health')
+      .where('asset_health.id', '=', anyUuid(ids))
+      .$if(!!ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(ownerId!)))
+      .$call((qb) => withHiddenContentFilter(qb, privacy))
+      .execute() as Promise<MediaHealthFinding[]>;
   }
 
   async getCandidatesByHealthIds(healthIds: string[]): Promise<MediaHealthCandidate[]> {
@@ -190,6 +255,46 @@ export class MediaHealthRepository {
       .where('healthId', '=', anyUuid(healthIds))
       .orderBy('visualMatchScore', 'desc')
       .execute();
+  }
+
+  async getAssetChecksums(assetIds: string[]): Promise<MediaHealthChecksum[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const result = await sql<MediaHealthChecksum>`
+      SELECT "assetId", sha1, sha256, "sizeInBytes"::float8 AS "sizeInBytes"
+      FROM immich_fork.asset_checksum
+      WHERE "assetId" = ANY(${assetIds}::uuid[])
+    `.execute(this.db);
+    return result.rows;
+  }
+
+  getInternalAssetByOriginalPath(originalPath: string): Promise<{ id: string } | undefined> {
+    return this.db
+      .withSchema('public')
+      .selectFrom('asset')
+      .select('id')
+      .where('originalPath', '=', path.normalize(originalPath))
+      .where('libraryId', 'is', null)
+      .where('isExternal', '=', false)
+      .where('deletedAt', 'is', null)
+      .where('status', '=', AssetStatus.Active)
+      .limit(1)
+      .executeTakeFirst();
+  }
+
+  async getTrackedPaths(paths: string[]): Promise<Set<string>> {
+    if (paths.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .withSchema('public')
+      .selectFrom('asset')
+      .select('originalPath')
+      .where('originalPath', 'in', paths)
+      .execute();
+    return new Set(rows.map(({ originalPath }) => originalPath));
   }
 
   async replaceCandidates(healthId: string, candidates: UpsertMediaHealthCandidate[]): Promise<void> {
@@ -360,7 +465,7 @@ export class MediaHealthRepository {
     });
   }
 
-  async markDismissed(ids: string[]): Promise<void> {
+  async markDismissed(ids: string[], ownerId?: string): Promise<void> {
     if (ids.length === 0) {
       return;
     }
@@ -374,6 +479,14 @@ export class MediaHealthRepository {
           .updateTable('asset_health')
           .set({ status: MediaHealthStatus.Dismissed, dismissedAt })
           .where('id', '=', anyUuid(ids))
+          .$if(!!ownerId, (qb) =>
+            qb.where(
+              sql<boolean>`EXISTS (
+                SELECT 1 FROM public.asset
+                WHERE asset.id = asset_health."assetId" AND asset."ownerId" = ${ownerId}::uuid
+              )`,
+            ),
+          )
           .execute();
       }
     });
@@ -397,7 +510,7 @@ export class MediaHealthRepository {
     });
   }
 
-  async *streamAssets(options: { assetIds?: string[] } = {}): AsyncGenerator<MediaHealthAsset> {
+  async *streamAssets(options: { assetIds?: string[]; ownerId?: string } = {}): AsyncGenerator<MediaHealthAsset> {
     if (options.assetIds && options.assetIds.length === 0) {
       return;
     }
@@ -455,6 +568,7 @@ export class MediaHealthRepository {
       ])
       .where('asset.deletedAt', 'is', null)
       .where('asset.status', '!=', sql.lit(AssetStatus.Deleted))
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
       .$if(!!options.assetIds, (qb) => qb.where('asset.id', '=', anyUuid(options.assetIds!)));
 
     for await (const asset of query.stream()) {
@@ -462,7 +576,7 @@ export class MediaHealthRepository {
     }
   }
 
-  getAssets(assetIds: string[]): Promise<MediaHealthAsset[]> {
+  getAssets(assetIds: string[], ownerId?: string, privacy?: HiddenContentQueryOptions): Promise<MediaHealthAsset[]> {
     if (assetIds.length === 0) {
       return Promise.resolve([]);
     }
@@ -490,7 +604,163 @@ export class MediaHealthRepository {
           .as('thumbnailPath'),
       ])
       .where('asset.id', '=', anyUuid(assetIds))
+      .$if(!!ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(ownerId!)))
+      .$call((qb) => withHiddenContentFilter(qb, privacy))
       .execute();
+  }
+
+  async relinkManagedAsset(input: RelinkManagedAsset): Promise<boolean> {
+    const phase = await getForkSchemaPhase(this.db);
+    const recoveredPath = path.normalize(input.originalPath);
+    const expectedOriginalPath = path.normalize(input.expectedOriginalPath);
+
+    return this.db.transaction().execute(async (trx) => {
+      const lockKey = createHash('sha1').update(recoveredPath).digest().readBigInt64BE(0);
+      await sql`SELECT pg_advisory_xact_lock(${lockKey.toString()}::bigint)`.execute(trx);
+
+      const asset = await trx
+        .withSchema('public')
+        .selectFrom('asset')
+        .select(['id', 'ownerId', 'checksum', 'originalPath', 'isExternal', 'libraryId', 'deletedAt', 'status'])
+        .where('id', '=', asUuid(input.assetId))
+        .forUpdate()
+        .executeTakeFirst();
+      if (
+        !asset ||
+        asset.ownerId !== input.ownerId ||
+        asset.isExternal ||
+        asset.libraryId ||
+        asset.deletedAt ||
+        asset.status !== AssetStatus.Active ||
+        path.normalize(asset.originalPath) !== expectedOriginalPath ||
+        !asset.checksum.equals(input.expectedChecksum)
+      ) {
+        return false;
+      }
+
+      const healthSchema = readsForkSidecar(phase) ? 'immich_fork' : 'public';
+      const health = await (trx as Kysely<any>)
+        .selectFrom(`${healthSchema}.asset_health as asset_health`)
+        .select(['assetId', 'category', 'originalPath', 'resolution', 'status'])
+        .where('id', '=', asUuid(input.healthId))
+        .forUpdate()
+        .executeTakeFirst();
+      if (
+        health?.assetId !== input.assetId ||
+        health.category !== MediaHealthCategory.Missing ||
+        health.status !== MediaHealthStatus.Found ||
+        path.normalize(health.originalPath) !== expectedOriginalPath ||
+        health.resolution?.autoRelinkable !== true
+      ) {
+        return false;
+      }
+
+      const candidates = await (trx as Kysely<any>)
+        .selectFrom(`${healthSchema}.asset_health_candidate as candidate`)
+        .select(['id', 'candidatePath', 'resolution'])
+        .where('healthId', '=', asUuid(input.healthId))
+        .where('status', '=', MediaHealthStatus.Found)
+        .forUpdate()
+        .execute();
+      const candidate = candidates[0];
+      if (
+        candidates.length !== 1 ||
+        candidate.id !== input.candidateId ||
+        path.normalize(candidate.candidatePath) !== recoveredPath ||
+        candidate.resolution?.autoRelinkable !== true
+      ) {
+        return false;
+      }
+
+      const candidateAsset = await trx
+        .withSchema('public')
+        .selectFrom('asset')
+        .select('id')
+        .where('originalPath', '=', recoveredPath)
+        .where('libraryId', 'is', null)
+        .where('isExternal', '=', false)
+        .where('deletedAt', 'is', null)
+        .where('status', '=', AssetStatus.Active)
+        .executeTakeFirst();
+      const existingPhysical = await trx
+        .withSchema('public')
+        .selectFrom('physical_file')
+        .selectAll()
+        .where('path', '=', recoveredPath)
+        .executeTakeFirst();
+      const physical = existingPhysical
+        ? await trx
+            .withSchema('public')
+            .updateTable('physical_file')
+            .set({ checksum: input.sha256, sizeInBytes: input.sizeInBytes, type: PhysicalFileType.Original })
+            .where('id', '=', existingPhysical.id)
+            .returningAll()
+            .executeTakeFirstOrThrow()
+        : await trx
+            .withSchema('public')
+            .insertInto('physical_file')
+            .values({
+              canonicalAssetId: candidateAsset?.id ?? input.assetId,
+              checksum: input.sha256,
+              path: recoveredPath,
+              sizeInBytes: input.sizeInBytes,
+              type: PhysicalFileType.Original,
+            })
+            .returningAll()
+            .executeTakeFirstOrThrow();
+
+      await trx
+        .withSchema('public')
+        .updateTable('asset')
+        .set({
+          physicalOriginalFileId: physical.id,
+          originalPath: recoveredPath,
+          checksum: input.sha256,
+          checksumAlgorithm: ChecksumAlgorithm.sha256File,
+          fileModifiedAt: input.fileModifiedAt,
+          isOffline: false,
+          deletedAt: null,
+          status: AssetStatus.Active,
+        })
+        .where('id', '=', asUuid(input.assetId))
+        .executeTakeFirstOrThrow();
+
+      await sql`
+        INSERT INTO immich_fork.asset_checksum
+          ("assetId", sha1, sha256, "sizeInBytes", "verifiedPaths", "linkCount", evidence, "verifiedAt", "updatedAt")
+        VALUES (
+          ${input.assetId}::uuid, ${input.sha1}, ${input.sha256}, ${input.sizeInBytes}, ARRAY[${recoveredPath}]::text[],
+          1, '{"source":"recovery"}'::jsonb, now(), now()
+        )
+        ON CONFLICT ("assetId") DO UPDATE SET
+          sha1 = EXCLUDED.sha1, sha256 = EXCLUDED.sha256, "sizeInBytes" = EXCLUDED."sizeInBytes",
+          "verifiedPaths" = EXCLUDED."verifiedPaths", evidence = EXCLUDED.evidence,
+          "verifiedAt" = EXCLUDED."verifiedAt", "updatedAt" = EXCLUDED."updatedAt"
+      `.execute(trx);
+
+      const checkedAt = new Date();
+      for (const schema of this.writeSchemas(phase)) {
+        await trx
+          .withSchema(schema)
+          .updateTable('asset_health')
+          .set({
+            runId: null,
+            status: MediaHealthStatus.Relinked,
+            severity: MediaHealthSeverity.Info,
+            originalPath: recoveredPath,
+            originalFileName: input.originalFileName,
+            evidence: { reason: 'candidate_relinked', previousPath: asset.originalPath },
+            resolution: { healthId: input.healthId },
+            checkedAt,
+            resolvedAt: checkedAt,
+          })
+          .where('id', '=', asUuid(input.healthId))
+          .where('assetId', '=', asUuid(input.assetId))
+          .execute();
+      }
+
+      return true;
+    });
   }
 
   async relinkExternalAsset(options: {
@@ -572,7 +842,8 @@ export class MediaHealthRepository {
         ON CONFLICT (id) DO UPDATE SET
           category = EXCLUDED.category, status = EXCLUDED.status, "startedAt" = EXCLUDED."startedAt",
           "finishedAt" = EXCLUDED."finishedAt", "totalAssets" = EXCLUDED."totalAssets",
-          "checkedAssets" = EXCLUDED."checkedAssets", "foundAssets" = EXCLUDED."foundAssets", error = EXCLUDED.error
+          "checkedAssets" = EXCLUDED."checkedAssets", "foundAssets" = EXCLUDED."foundAssets", error = EXCLUDED.error,
+          "ownerId" = EXCLUDED."ownerId"
       `.execute(trx);
       if (ids.length > 0) {
         await sql`

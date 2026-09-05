@@ -1,4 +1,6 @@
 import mockfs from 'mock-fs';
+import { Dirent } from 'node:fs';
+import fs from 'node:fs/promises';
 import { CrawlOptionsDto } from 'src/dtos/library.dto';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
@@ -203,6 +205,87 @@ describe(StorageRepository.name, () => {
 
         expect(actual.toSorted()).toEqual(expected.toSorted());
       });
+    }
+  });
+
+  it('resumes bounded traversal across directories and roots without repeating files or following symlinks', async () => {
+    mockfs({
+      '/first/a/1.jpg': '',
+      '/first/a/2.xmp': '',
+      '/first/b/3.jpg': '',
+      '/first/.hidden/secret.jpg': '',
+      '/last/4.jpg': '',
+      '/first/link': mockfs.symlink({ path: '/last' }),
+    });
+    let cursor: Array<{ path: string; after?: string }> = [{ path: '/last' }, { path: '/first' }];
+    const found: string[] = [];
+    let batches = 0;
+    while (cursor.length > 0 && batches++ < 20) {
+      for await (const file of sut.walkWithCursor(cursor, 2)) {
+        found.push(file);
+      }
+      cursor = JSON.parse(JSON.stringify(cursor));
+    }
+    expect(cursor).toEqual([]);
+    expect(batches).toBeGreaterThan(1);
+    expect(found).toEqual(['/first/a/1.jpg', '/first/a/2.xmp', '/first/b/3.jpg', '/last/4.jpg']);
+  });
+
+  it('resumes immediately after the last yielded file when a consumer stops mid-directory', async () => {
+    mockfs({ '/root/1.jpg': '', '/root/2.jpg': '', '/root/3.jpg': '' });
+    const cursor = [{ path: '/root' }];
+    for await (const file of sut.walkWithCursor(cursor, 10)) {
+      expect(file).toBe('/root/1.jpg');
+      break;
+    }
+    const remaining = await Array.fromAsync(sut.walkWithCursor(cursor, 10));
+    expect(remaining).toEqual(['/root/2.jpg', '/root/3.jpg']);
+    expect(cursor).toEqual([]);
+  });
+
+  it('walks 500,000 files in bounded batches without rereading ancestors for every child directory', async () => {
+    let rootReads = 0;
+    const read = vi.spyOn(fs, 'readdir').mockImplementation(async (folder) => {
+      await Promise.resolve();
+      const root = folder === '/managed';
+      if (root) {
+        rootReads++;
+      }
+      return Array.from({ length: root ? 500 : 1000 }, (_, index) => ({
+        name: `${index.toString().padStart(4, '0')}${root ? '' : '.jpg'}`,
+        isDirectory: () => root,
+        isFile: () => !root,
+        isSymbolicLink: () => false,
+      })) as Dirent[] as never;
+    });
+    let cursor: Array<{ path: string; after?: string }> = [{ path: '/managed' }];
+    let count = 0;
+    let previous = '';
+    let ordered = true;
+    let batches = 0;
+    let maxCursorBytes = 0;
+    try {
+      while (cursor.length > 0 && batches++ < 100) {
+        let batchCount = 0;
+        for await (const file of sut.walkWithCursor(cursor, 10_000)) {
+          ordered &&= file > previous;
+          previous = file;
+          count++;
+          batchCount++;
+        }
+        expect(batchCount).toBeLessThanOrEqual(10_000);
+        const serialized = JSON.stringify(cursor);
+        maxCursorBytes = Math.max(maxCursorBytes, serialized.length);
+        cursor = JSON.parse(serialized);
+      }
+      expect(count).toBe(500_000);
+      expect(ordered).toBe(true);
+      expect(previous).toBe('/managed/0499/0999.jpg');
+      expect(cursor).toEqual([]);
+      expect(rootReads).toBeLessThanOrEqual(batches);
+      expect(maxCursorBytes).toBeLessThan(1024);
+    } finally {
+      read.mockRestore();
     }
   });
 });

@@ -825,8 +825,9 @@ export class ForkSchemaRepository {
    * that held them — but it deliberately writes no `asset_physical_file`
    * mapping, so normalization-completeness readers (which inner-join that
    * table) continue to ignore these rows until normalization runs and upserts
-   * over them. Existing rows are never overwritten: normalization evidence
-   * outranks this.
+   * over them. Upload and integrity evidence never overwrite existing rows;
+   * recovery replaces ambiguous historical digests with bytes re-verified at
+   * action time.
    */
   async recordAssetChecksums(input: {
     assetId: string;
@@ -834,7 +835,7 @@ export class ForkSchemaRepository {
     sha256: Buffer;
     sizeInBytes: number;
     path: string;
-    source: 'upload' | 'integrity';
+    source: 'upload' | 'integrity' | 'recovery';
   }): Promise<void> {
     await sql`
       INSERT INTO immich_fork.asset_checksum
@@ -850,7 +851,15 @@ export class ForkSchemaRepository {
         now(),
         now()
       )
-      ON CONFLICT ("assetId") DO NOTHING
+      ON CONFLICT ("assetId") DO UPDATE SET
+        sha1 = EXCLUDED.sha1,
+        sha256 = EXCLUDED.sha256,
+        "sizeInBytes" = EXCLUDED."sizeInBytes",
+        "verifiedPaths" = EXCLUDED."verifiedPaths",
+        evidence = EXCLUDED.evidence,
+        "verifiedAt" = EXCLUDED."verifiedAt",
+        "updatedAt" = EXCLUDED."updatedAt"
+      WHERE ${input.source} = 'recovery'
     `.execute(this.db);
   }
 
@@ -885,5 +894,17 @@ export class ForkSchemaRepository {
     `.execute(this.db);
 
     return result.rows;
+  }
+
+  async hasAssetChecksum(ownerId: string, sha1: Buffer, sha256: Buffer): Promise<boolean> {
+    const result = await sql`
+      SELECT 1
+      FROM immich_fork.asset_checksum checksum
+      INNER JOIN public.asset asset ON asset.id = checksum."assetId"
+      WHERE asset."ownerId" = ${ownerId}::uuid
+        AND (checksum.sha1 = ${sha1} OR checksum.sha256 = ${sha256})
+      LIMIT 1
+    `.execute(this.db);
+    return result.rows.length > 0;
   }
 }

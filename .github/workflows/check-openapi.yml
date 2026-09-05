@@ -20,8 +20,9 @@ jobs:
     # Breaking API changes can be acknowledged explicitly (e.g. upstream sync
     # merges that inherit upstream's own deliberate breaking changes) by adding
     # the `api-breaking-approved` label to the PR.
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'api-breaking-approved') }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (!contains(github.event.pull_request.labels.*.name, 'api-breaking-approved')) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     steps:
@@ -39,7 +40,9 @@ jobs:
           review: false
 
   check-mobile-patches:
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
     steps:

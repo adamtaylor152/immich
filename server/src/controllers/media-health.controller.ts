@@ -20,7 +20,7 @@ export class MediaHealthController {
   constructor(private service: MediaHealthService) {}
 
   @Get()
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'List media health findings',
     description: 'List missing and corrupt media health findings in timeline buckets.',
@@ -31,63 +31,63 @@ export class MediaHealthController {
   }
 
   @Post('missing/scan')
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Start missing media scan',
-    description: 'Queue a scan that identifies missing or unreadable source files.',
+    description: 'Queue an owner-scoped scan that identifies missing files and restores supported untracked media.',
     history: new HistoryBuilder().added('v3.0.0').alpha('v3.0.0'),
   })
-  startMissingScan(): Promise<MediaHealthScanResponseDto> {
-    return this.service.startMissingScan();
+  startMissingScan(@Auth() auth: AuthDto): Promise<MediaHealthScanResponseDto> {
+    return this.service.startMissingScan(auth);
   }
 
   @Post('missing/locate')
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Locate missing media',
-    description: 'Queue candidate discovery for missing media findings.',
+    description: 'Queue exact-checksum candidate discovery across managed user storage.',
     history: new HistoryBuilder().added('v3.0.0').alpha('v3.0.0'),
   })
-  locateMissing(@Body() dto: MediaHealthBulkActionDto): Promise<MediaHealthScanResponseDto> {
-    return this.service.locateMissing(dto);
+  locateMissing(@Auth() auth: AuthDto, @Body() dto: MediaHealthBulkActionDto): Promise<MediaHealthScanResponseDto> {
+    return this.service.locateMissing(auth, dto);
   }
 
   @Post('missing/relink')
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Relink missing media',
-    description: 'Relink missing external-library assets to validated candidate files.',
+    description: 'Relink owned missing assets to validated candidate files.',
     history: new HistoryBuilder().added('v3.0.0').alpha('v3.0.0'),
   })
-  relinkMissing(@Body() dto: MediaHealthBulkActionDto): Promise<MediaHealthBulkResponseDto> {
-    return this.service.relinkMissing(dto);
+  relinkMissing(@Auth() auth: AuthDto, @Body() dto: MediaHealthBulkActionDto): Promise<MediaHealthBulkResponseDto> {
+    return this.service.relinkMissing(auth, dto);
   }
 
   @Post('corrupt/scan')
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Start corrupt media scan',
     description: 'Queue an explicit scan that validates source media integrity.',
     history: new HistoryBuilder().added('v3.0.0').alpha('v3.0.0'),
   })
-  startCorruptScan(): Promise<MediaHealthScanResponseDto> {
-    return this.service.startCorruptScan();
+  startCorruptScan(@Auth() auth: AuthDto): Promise<MediaHealthScanResponseDto> {
+    return this.service.startCorruptScan(auth);
   }
 
   @Post('dismiss')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Dismiss media health findings',
     description: 'Dismiss selected media health findings without modifying assets.',
     history: new HistoryBuilder().added('v3.0.0').alpha('v3.0.0'),
   })
-  dismiss(@Body() dto: MediaHealthBulkActionDto): Promise<void> {
-    return this.service.dismiss(dto);
+  dismiss(@Auth() auth: AuthDto, @Body() dto: MediaHealthBulkActionDto): Promise<void> {
+    return this.service.dismiss(auth, dto);
   }
 
   @Delete('corrupt')
-  @Authenticated({ admin: true })
+  @Authenticated()
   @Endpoint({
     summary: 'Move confirmed corrupt media to trash',
     description: 'Move recently confirmed corrupt media findings to trash after revalidation.',

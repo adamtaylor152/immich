@@ -29,11 +29,11 @@ jobs:
 
   build-server:
     name: Build Server Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
     needs: certify-fork-roundtrip
-    # Docker-heavy fork image production runs on the local Unraid runner.
-    # The deployment bundle packaging job below stays on GitHub-hosted runners.
-    runs-on: [self-hosted, linux, x64, aiimmich, docker-build]
+    # Image production and deployment bundle packaging use the local runner.
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
       packages: write
@@ -113,9 +113,10 @@ jobs:
             BUILD_SOURCE_COMMIT=${{ env.SOURCE_SHA }}
   build-machine-learning-openvino:
     name: Build OpenVINO ML Image
-    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
     needs: certify-fork-roundtrip
-    runs-on: [self-hosted, linux, x64, aiimmich, docker-build]
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     permissions:
       contents: read
       packages: write
@@ -188,8 +189,9 @@ jobs:
     needs:
       - build-server
       - build-machine-learning-openvino
-    if: ${{ github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main' }}
-    runs-on: ubuntu-latest
+    if: >-
+      ${{ github.repository == 'adamtaylor152/immich' && (!github.event.pull_request || github.event.pull_request.head.repo.full_name == github.repository) && (github.repository == 'adamtaylor152/immich' && github.ref_name == 'fork/main') }}
+    runs-on: [self-hosted, Linux, X64, aiimmich]
     environment:
       name: unraid-docker
       url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

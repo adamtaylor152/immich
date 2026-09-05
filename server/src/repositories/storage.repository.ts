@@ -46,6 +46,8 @@ export interface DiskUsage {
   total: number;
 }
 
+export type StorageWalkCursor = Array<{ path: string; after?: string }>;
+
 @Injectable()
 export class StorageRepository {
   constructor(private logger: LoggingRepository) {
@@ -264,6 +266,57 @@ export class StorageRepository {
 
     if (batch.length > 0) {
       yield batch;
+    }
+  }
+
+  /** Resume a sorted depth-first traversal. The caller persists the mutated cursor between batches. */
+  async *walkWithCursor(cursor: StorageWalkCursor, maxEntries: number): AsyncGenerator<string> {
+    let visited = 0;
+    const directoryEntries = new Map<string, Dirent[]>();
+    while (cursor.length > 0) {
+      const directory = cursor.at(-1)!;
+      let entries = directoryEntries.get(directory.path);
+      try {
+        if (!entries) {
+          entries = await fs.readdir(directory.path, { withFileTypes: true });
+          // Keep ordering identical to the cursor's ordinal comparison, including distinct Unicode names.
+          // eslint-disable-next-line unicorn/prefer-simple-sort-comparator
+          entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+          directoryEntries.set(directory.path, entries);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
+        cursor.pop();
+        continue;
+      }
+      let descended = false;
+      for (const entry of entries) {
+        if (directory.after !== undefined && entry.name <= directory.after) {
+          continue;
+        }
+        if (visited++ >= maxEntries) {
+          return;
+        }
+        directory.after = entry.name;
+        if (entry.name.startsWith('.') || entry.isSymbolicLink()) {
+          continue;
+        }
+        const entryPath = path.join(directory.path, entry.name);
+        if (entry.isDirectory()) {
+          cursor.push({ path: entryPath });
+          descended = true;
+          break;
+        }
+        if (entry.isFile()) {
+          yield entryPath;
+        }
+      }
+      if (!descended) {
+        directoryEntries.delete(directory.path);
+        cursor.pop();
+      }
     }
   }
 

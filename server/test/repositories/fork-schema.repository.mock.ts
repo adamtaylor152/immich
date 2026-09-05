@@ -6,6 +6,7 @@ export const newForkSchemaRepositoryMock = (): Mocked<RepositoryInterface<ForkSc
   activateAfterReturnReconciliation: vitest.fn(),
   beginOrResumeReturnReconciliation: vitest.fn(),
   recordAssetChecksums: vitest.fn(),
+  hasAssetChecksum: vitest.fn((_ownerId: string, _sha1: Buffer, _sha256: Buffer) => Promise.resolve(false)),
   getChecksumTranslations: vitest.fn((_ownerId: string, _sha1Checksums: Buffer[]) => Promise.resolve([])),
   overlayConfig: vitest.fn((config) => Promise.resolve(config)),
   mirrorConfig: vitest.fn(),
